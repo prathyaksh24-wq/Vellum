@@ -31,6 +31,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Vellum identity only; separate registrations from Calendar/YouTube connectors.
+    account_google_client_id: str = Field(default="", alias="VELLUM_ACCOUNT_GOOGLE_CLIENT_ID")
+    account_google_client_secret: str = Field(default="", alias="VELLUM_ACCOUNT_GOOGLE_CLIENT_SECRET", repr=False)
+    account_github_client_id: str = Field(default="", alias="VELLUM_ACCOUNT_GITHUB_CLIENT_ID")
+    account_github_client_secret: str = Field(default="", alias="VELLUM_ACCOUNT_GITHUB_CLIENT_SECRET", repr=False)
+    account_supabase_url: str = Field(default="", alias="VELLUM_ACCOUNT_SUPABASE_URL")
+    account_supabase_publishable_key: str = Field(default="", alias="VELLUM_ACCOUNT_SUPABASE_PUBLISHABLE_KEY", repr=False)
+
     # OpenRouter
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(

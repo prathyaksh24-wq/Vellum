@@ -19,6 +19,28 @@ paths, plugin ownership, and supported chat stream events.
 
 ## Integration Rules
 
+The `accounts` capability declares Google/GitHub and hosted email identity transport.
+`GET /api/accounts/status` supplies provider readiness and saved identities to
+`api/accounts.js`; views never receive provider tokens. Interactive sign-in,
+selection, logout, local continuation and account removal have a documented App Action deferral and stricter
+local-Origin/client guards. These identities share the existing local workspace;
+they are not a hosted API authentication boundary. See `docs/accounts.md`.
+Sign-in accepts a validated local `return_url` and `open_browser` preference.
+Provider and flow contracts expose `method` (`redirect` or legacy `device`).
+Callbacks return HTTP 303 to the captured UI URL after successful verification.
+`logged_out` in account status prevents stale local-use preferences bypassing
+the sign-in screen; `/logout` preserves saved identities and `/continue-local`
+clears that flag after an explicit local-use choice.
+The welcome UI calls that choice **Continue as guest**. Email signup/sign-in use
+typed `/email/sign-up` and `/email/sign-in` requests; passwords use `SecretStr`
+and validation errors are redacted at the account router. Supabase Auth owns
+password verification and confirmed hosted user IDs. Status exposes
+`email_auth_available` and a safe unavailable reason, without service keys.
+Verification uses `/callback/email` and pending S256 PKCE state. Only identity
+metadata is retained locally, and public API responses never include hosted
+access/refresh tokens. Signed-in settings and profile menus do not offer signup;
+one Add account action remains in the profile account picker.
+
 - UI components call `window.VellumApi.*` adapter methods, not raw `fetch`.
 - Backend route handlers return typed Pydantic contracts or dictionaries built
   from contract modules under `backend/agent/contracts`.

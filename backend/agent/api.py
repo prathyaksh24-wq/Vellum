@@ -81,6 +81,7 @@ from agent.computer_use.session import ComputerUseSession, ComputerUseSessionErr
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import REPO_ROOT, get_settings
+from agent.account_api import router as account_router
 from agent.llm.context import ContextBudgetExceeded
 from agent.contracts.capabilities import public_capability_contract
 from agent.contracts.conversations import (
@@ -6955,6 +6956,7 @@ router.include_router(
     )
 )
 router.include_router(app_actions_router)
+router.include_router(account_router)
 router.include_router(browser_router)
 router.include_router(llm_routing_router)
 router.include_router(knowledge_router)

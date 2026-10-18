@@ -43,6 +43,11 @@ def build_capability_contract() -> CapabilityContract:
             canonical_entry="/design-uploads/Vellum%20Default%20Re-designed.html",
         ),
         features={
+            "accounts": FeatureContract(
+                enabled=True, source="agent.accounts",
+                endpoints={"status": "/api/accounts/status", "start": "/api/accounts/start", "poll": "/api/accounts/poll", "cancel": "/api/accounts/cancel", "select": "/api/accounts/select", "sign_out": "/api/accounts/sign-out", "logout": "/api/accounts/logout", "continue_local": "/api/accounts/continue-local", "google_callback": "/api/accounts/callback/google", "github_callback": "/api/accounts/callback/github", "email_sign_up": "/api/accounts/email/sign-up", "email_sign_in": "/api/accounts/email/sign-in", "email_callback": "/api/accounts/callback/email"},
+                notes="Google/GitHub identities and hosted email/password accounts, with local identity metadata in the OS credential store. Status reports provider and email readiness. Accounts and guests share this installation's local workspace; hosted email identity does not enable cloud data sync or authorize the local API.",
+            ),
             "automation_notifications": FeatureContract(
                 enabled=True, source="agent.automations.store",
                 endpoints={"list": "/api/automations/notifications", "read": "/api/app-actions/dispatch"},
