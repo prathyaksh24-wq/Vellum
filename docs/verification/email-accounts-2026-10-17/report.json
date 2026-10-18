@@ -1,0 +1,23 @@
+{
+  "evidence": "Production HTML with fixture account API and email confirmation; no real account or email was created.",
+  "email_password_signup": true,
+  "confirmation_before_signin": true,
+  "signup_hidden_when_signed_in": true,
+  "single_add_account_action": true,
+  "guest_visible_at_320px": true,
+  "guest_access": true,
+  "email_signin_error_and_retry": true,
+  "page_errors": [],
+  "calls": [
+    "status",
+    "email/sign-up",
+    "callback/email",
+    "status",
+    "logout",
+    "email/sign-in",
+    "email/sign-in",
+    "status",
+    "logout",
+    "continue-local"
+  ]
+}

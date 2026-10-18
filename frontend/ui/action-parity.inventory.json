@@ -1,13 +1,14 @@
 {
   "version": 1,
   "handlerFingerprints": {
+    "design/Velllum/uploads/components/accounts.jsx": {"count":22,"sha256":"cedfa886cef7d894257e056fbc268ee6ca1d75a468f7e15d481888e3c624247f"},
     "design/Velllum/uploads/components/PatternWaves.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
     "design/Velllum/uploads/components/Particles.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
     "design/Velllum/uploads/components/browser-settings.jsx": {"count":68,"sha256":"53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"},
     "design/Velllum/uploads/components/automation-notifications.jsx": {"count":11,"sha256":"50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"},
     "design/Velllum/uploads/components/music-page.jsx": {"count":55,"sha256":"bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"},
     "design/Velllum/uploads/components/browser-panel.jsx": {"count":59,"sha256":"f34ebc91657d5089cfe5e4f91f4e3cbe33229dfffc2f3d45d872f82b921a351e"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":883,"sha256":"7a7d36b7823f4d2fec6ed2fe41ba3117d7b7aed22901168cd435c5de25dd95a0"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":886,"sha256":"bb453ec1492a37776acf297d7ec6a41dbc4b36ae20d63e18521521597ee26cee"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
@@ -114,6 +115,7 @@
     {"scope":"Calendar refresh, calendar selection, event search and proposed-slot drafts","reason":"Read-only provider requests or staged form choices; confirmed event mutations use the Calendar App Actions listed above."}
   ],
   "deferred": [
+    {"surface":"Google, GitHub and hosted email account identity transport","reason":"Interactive identity authorization, saved-account selection, logout, explicit local continuation and account removal use the dedicated local-UI-only Accounts API. OAuth state, PKCE and device verification are not model tools or generic App Action arguments. The API checks loopback client, Host, exact UI Origin and a non-simple header. Generic App Action parity is deferred; account lifecycle behavior and failure outcomes have focused service, HTTP and mounted UI tests."},
     {"surface":"Main Library local notes and project cards","reason":"Legacy local collection mutations still use setLibrary/setProjects; no corresponding App Action definitions."},
     {"surface":"Agent profile enablement and settings","reason":"The specialist On/Off control and settings modal still edit local agentCfg instead of a canonical agent-setting App Action."},
     {"surface":"Chat connector selection and custom instructions","reason":"Per-chat app selection, connector-ready badges and custom instructions still update client state without a persisted App Action receipt."},
