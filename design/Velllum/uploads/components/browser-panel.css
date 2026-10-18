@@ -24,6 +24,7 @@
 .browser-address-row input{flex:1;min-width:0;border:0;outline:none!important;background:transparent;padding:8px 0;color:var(--txt);font:inherit;font-size:13px;caret-color:var(--txt)}
 .browser-screen{flex:1;min-height:0;background:#151515;display:flex;align-items:center;justify-content:center;overflow:hidden;outline-offset:-3px!important}
 .browser-screen>img{width:100%;height:100%;object-fit:contain;user-select:none;pointer-events:none}
+.browser-native-surface{position:absolute;inset:0;overflow:hidden}.browser-native-surface>img{width:100%;height:100%;object-fit:fill;pointer-events:none}
 .browser-screen{cursor:default;touch-action:none;overscroll-behavior:contain;position:relative}
 .browser-screen:has(.browser-local-pointer),.browser-screen:has(.browser-local-pointer) *{cursor:none!important}
 .browser-local-pointer{position:absolute;z-index:8;pointer-events:none}

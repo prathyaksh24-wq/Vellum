@@ -5,7 +5,32 @@ Vellum's main agent delegates interactive website, tab and download tasks to
 specialist has exclusive permission to the browser capabilities in the shared
 ToolRegistry. The main model does not receive raw browser tools.
 
+In Vellum desktop, websites render directly in Electron's Chromium
+`WebContentsView`, with native input and no frame stream. The same BrowserAgent,
+permissions, profiles, and action receipts control those registered guest tabs.
+The regular web version retains the dedicated Brave stream. See
+[Desktop browser ownership and verification](desktop.md#embedded-browser).
+
 ## Using the browser
+
+Factual questions use general web research when appropriate. Website actions,
+opening pages, and site-search instructions such as “search Wikipedia for
+Jailer 2” route to BrowserAgent without requiring the word “browser.” Search,
+click, type, and scroll follow-ups stay in an established browser chat; a new
+standalone factual question does not force browser use.
+
+Search requests use the actual site's input, autocomplete suggestions, and
+result links. The planner cannot replace a requested search with a constructed
+article or results URL, or claim completion before a typed search interaction.
+User-supplied URLs retain direct navigation. An already-open address is reused
+rather than reloaded, and opening another copy requires an explicit new-tab
+request. Explicit requests just to show search results can finish on that page;
+article lookups continue through the planner to select an observed result.
+
+Routine search fields, suggestions, and Search buttons remain routine even
+when the form also includes an image-upload field. Password/file controls and
+the existing sensitive-action checks retain their confirmation path. CAPTCHA
+pages require human takeover; the agent does not solve or bypass them.
 
 Requests such as “open Wikipedia and search for the Street Fighter movie,” “open
 YouTube,” and “visit https://example.com” reach BrowserAgent without requiring
@@ -30,7 +55,7 @@ retain the selected model for specialist execution.
 While BrowserAgent controls a website, its visible cursor travels to the actual
 page position before a click, text entry or scroll. The cursor uses the selected
 style in Settings → Browser → Cursor. Movement takes about 360 ms and follows
-the page mouse through the existing live-frame stream, including when the page
+the page mouse through the native page preload on desktop or the live-frame stream on the web, including when the page
 pixels do not change. It remains at its last position during planning and after
 navigation in the same tab. Taking over or pausing hides it; switching tabs
 starts a new position rather than carrying another tab's cursor across.

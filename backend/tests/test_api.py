@@ -2123,7 +2123,8 @@ def test_workspace_api_accepts_core_milestone_actions(monkeypatch):
     assert seen == [action["action"] for action in actions]
 
 
-def test_computer_use_session_start_and_stop(monkeypatch, tmp_path):
+@pytest.mark.parametrize('source,native_overlay', [('test', False), ('electron', True), ('tauri', True)])
+def test_computer_use_session_start_and_stop(monkeypatch, tmp_path, source, native_overlay):
     runtime = ComputerUseRuntime(
         state_path=tmp_path / "mode.json",
         event_log_path=tmp_path / "events.jsonl",
@@ -2146,14 +2147,14 @@ def test_computer_use_session_start_and_stop(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
     with TestClient(api.app) as client:
-        started = client.post("/api/computer-use/session/start", json={"source": "test", "thread_id": "frontend"})
-        stopped = client.post("/api/computer-use/session/stop", json={"source": "test", "reason": "done"})
+        started = client.post("/api/computer-use/session/start", json={"source": source, "thread_id": "frontend"})
+        stopped = client.post("/api/computer-use/session/stop", json={"source": source, "reason": "done"})
 
     assert started.status_code == 200
     assert started.json()["status"]["enabled"] is True
     assert stopped.status_code == 200
     assert stopped.json()["status"]["enabled"] is False
-    assert overlay_calls == ["start", "stop"]
+    assert overlay_calls == ([] if native_overlay else ["start", "stop"])
 
 
 def test_computer_use_desktop_demo_endpoint_removed():

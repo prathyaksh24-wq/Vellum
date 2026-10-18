@@ -41,7 +41,13 @@ Important backend modules:
 
 ## Desktop Runtime
 
-The `desktop/` directory contains the Tauri desktop shell and overlay-related surfaces. The backend also includes computer-use workspace and overlay modules for guarded local interaction. Desktop functionality is still an alpha surface.
+The `desktop/` directory contains the Electron desktop host and the computer-use
+overlay. The existing React/Vite workspace runs in a sandboxed renderer with a
+context-isolated preload. Only registered top-level Vellum windows may invoke
+the four native commands for health, workspace focus, detached conversations,
+and the click-through overlay. The existing Python backend remains the owner
+of agents, permissions, conversations, and background automations. Closing the
+desktop host does not stop that backend. See [Desktop](desktop.md).
 
 ## Agent Runtime
 

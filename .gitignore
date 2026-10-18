@@ -64,6 +64,8 @@ ui-dist/
 node_modules/
 frontend/.vite/
 desktop/dist/
+desktop/out/
+desktop/resources/ui/
 desktop/src-tauri/.cargo/config.toml
 desktop/src-tauri/target/
 .playwright-mcp/

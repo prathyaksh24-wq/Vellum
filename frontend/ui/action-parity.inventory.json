@@ -6,8 +6,8 @@
     "design/Velllum/uploads/components/browser-settings.jsx": {"count":68,"sha256":"53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"},
     "design/Velllum/uploads/components/automation-notifications.jsx": {"count":11,"sha256":"50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"},
     "design/Velllum/uploads/components/music-page.jsx": {"count":55,"sha256":"bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"},
-    "design/Velllum/uploads/components/browser-panel.jsx": {"count":59,"sha256":"f34ebc91657d5089cfe5e4f91f4e3cbe33229dfffc2f3d45d872f82b921a351e"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":883,"sha256":"7a7d36b7823f4d2fec6ed2fe41ba3117d7b7aed22901168cd435c5de25dd95a0"},
+    "design/Velllum/uploads/components/browser-panel.jsx": {"count":60,"sha256":"f506db087782b1cf82acc5abb6823f8949ee47aec1022ac8eaeb492e5e30e337"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":887,"sha256":"a7e2aae48510e03754b873024764dadb3836adeade4d2a317b9aa811003223b3"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
@@ -104,6 +104,7 @@
     {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}}
   ],
   "exemptions": [
+    {"scope":"Appearance thumbnail hover and keyboard focus previews","reason":"Ephemeral decorative rendering only; choosing a background still dispatches settings.device.update. Pausing a covered backdrop does not change the saved background."},
     {"scope":"Notification bell and popover visibility, video link navigation and run ID disclosure","reason":"Presentation and navigation only; persisted read state uses automation.notifications.read. History is supplied by automation.history."},
     {"scope":"Music page navigation, dock player disclosure/dismissal and focus retention, provider preview tabs, search categories, collection filters, display sorting, editor drafts, read-only catalog requests and queue disclosure","reason":"Ephemeral presentation and provider reads only. Dock auto-hide and player disclosure do not stop or recreate playback. Sorting preserves Spotify source positions without rewriting playlists. Playlist writes use spotify.playlist.edit with an operation-bound review. Unconnected services have explicit unavailable states. Playback selections and controls use spotify.playback.control; audio activation retains spotify.playback.session."},
     {"scope":"More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation, local address suggestions, offline panel dismissal and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},

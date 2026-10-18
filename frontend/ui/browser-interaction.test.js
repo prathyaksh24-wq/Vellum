@@ -15,7 +15,7 @@ const compile = () => compiledPanel ||= execFileSync(process.execPath, ['-e', `
 async function mountPanel(api, state) {
   window.VellumApi = {browser:api};
   Function('React','window',compile())(React,window);
-  const container = document.createElement('div'); document.body.append(container);
+  const container = document.createElement('div');container.className='body'; document.body.append(container);
   const root = createRoot(container);
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const onHide = vi.fn();
@@ -26,6 +26,28 @@ async function mountPanel(api, state) {
 const manualState = () => ({running:true,available:true,control:'user',session_id:'session',active_tab_id:'tab',downloads:[],
   tabs:[{id:'tab',active:true,title:'Fixture',url:'https://example.com/'}]});
 const sampleFrame = {frame_id:'session:tab:1',tab_id:'tab',width:900,height:700,data_url:'data:image/jpeg;base64,aQ=='};
+
+test('Electron mounts native content without opening a stream or requesting frames',async()=>{
+  const api=await autocompleteApi();
+  api.frame=vi.fn(async()=>sampleFrame);api.stream=vi.fn(()=>()=>{});
+  const native={mount:vi.fn(async data=>data.prepare_only ? {still:sampleFrame.data_url} : {}),subscribe:vi.fn(()=>()=>{})};
+  window.VellumDesktop={browser:native};
+  const panel=await mountPanel(api,{...manualState(),render_transport:'native',native_target_id:'owned-guest'});
+  try {
+    expect(native.mount).toHaveBeenCalledWith(expect.objectContaining({visible:true,target_id:'owned-guest'}));
+    expect(api.frame).not.toHaveBeenCalled();expect(api.stream).not.toHaveBeenCalled();
+    expect(panel.container.querySelector('[aria-label="Embedded browser page"]')).not.toBeNull();
+    expect(panel.container.querySelector('img[alt="Live view of the dedicated browser tab"]')).toBeNull();
+    await act(async()=>panel.container.classList.add('browser-resizing'));
+    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({prepare_only:true}));
+    expect(panel.container.querySelector('img[alt="Page beneath browser menu"]')).not.toBeNull();
+    await act(async()=>await new Promise(resolve=>setTimeout(resolve,55)));
+    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}));
+    await act(async()=>panel.container.classList.remove('browser-resizing'));
+    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({visible:true}));
+  } finally {await panel.cleanup();delete window.VellumDesktop;}
+  expect(native.mount).toHaveBeenLastCalledWith({visible:false});
+});
 
 test('a silent live stream falls back to frames so cursor updates keep arriving',async()=>{
   const api=await autocompleteApi();
@@ -83,6 +105,12 @@ test('browser divider supports keyboard resize and restores the default split',a
     expect(changed).toHaveBeenLastCalledWith(40);
     await act(async()=>handle.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})));
     expect(changed).toHaveBeenLastCalledWith(38);
+    await act(async()=>handle.dispatchEvent(new MouseEvent('pointerdown',{button:0,clientX:300,bubbles:true})));
+    expect(container.classList.contains('browser-resizing')).toBe(true);
+    await act(async()=>root.render(React.createElement(window.VellumUI.BrowserSplitter,{value:38,onChange:value=>changed(value)})));
+    expect(container.classList.contains('browser-resizing')).toBe(true);
+    await act(async()=>window.dispatchEvent(new MouseEvent('pointerup',{button:0,clientX:300,bubbles:true})));
+    expect(container.classList.contains('browser-resizing')).toBe(false);
   } finally {await act(async()=>root.unmount());container.remove();}
 });
 

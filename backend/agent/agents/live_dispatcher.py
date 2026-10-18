@@ -177,6 +177,14 @@ class LiveAgentDispatcher:
         if music_binding is not None and music_binding.executor is not None and (music_binding.executor.can_handle(message) or contextual_music):
             matched_binding = music_binding
             route_source = "music_intent"
+        # Interactive follow-ups keep the current page workflow even when their
+        # topic also matches a specialist, such as "now search for NBA".
+        if (matched_binding is None and active_agent == "BrowserAgent"
+            and self._is_contextual_followup(message, active_agent, include_common=False)):
+            previous = self.agent_catalog.try_resolve(active_agent)
+            if previous is not None and previous.executor is not None:
+                matched_binding = previous
+                route_source = "contextual"
         if matched_binding is None and state.agent_selected:
             natural_binding = self.agent_catalog.match(message)
             if natural_binding is not None and natural_binding.profile.id != active_agent:
@@ -343,7 +351,7 @@ class LiveAgentDispatcher:
             requests.append(DelegationRequest(agent_id=binding.profile.id, task=clause, parent_thread_id=thread_id))
         return requests if len({request.agent_id for request in requests}) > 1 else []
 
-    def _is_contextual_followup(self, message: str, agent_name: str) -> bool:
+    def _is_contextual_followup(self, message: str, agent_name: str, *, include_common: bool = True) -> bool:
         """Keep a natural specialist active for a clearly dependent follow-up."""
         lowered = " ".join(str(message or "").casefold().split())
         if not lowered:
@@ -355,9 +363,13 @@ class LiveAgentDispatcher:
             r"^(?:do|send|post|book|schedule|cancel)\s+(?:it|that|them)\b",
             r"^(?:yes|no|why|how|when|where|which|who|\?+)$",
         )
-        if any(re.search(pattern, lowered) for pattern in common):
+        if include_common and any(re.search(pattern, lowered) for pattern in common):
             return True
         patterns = {
+            "BrowserAgent": (
+                r"^(?:(?:and|now|then|please)\s+)*(?:search(?:\s+for)?|look\s+up)\s+",
+                r"^(?:(?:and|now|then|please)\s+)*(?:click|scroll|type|reload|refresh|go\s+back|go\s+forward)\b",
+            ),
             "DiscordAgent": (
                 r"\b(?:recent|latest|new)\s+messages?\b",
                 r"\b(?:summari[sz]e|read|show|send|reply|react)\b.*\bmessages?\b",

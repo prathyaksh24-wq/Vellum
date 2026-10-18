@@ -564,7 +564,7 @@ def _computer_use_overlay() -> DesktopActivityOverlay:
 
 
 def _computer_use_session(source: str = "ui") -> ComputerUseSession:
-    overlay = NoopOverlay() if source == "tauri" else _computer_use_overlay()
+    overlay = NoopOverlay() if source in {"tauri", "electron"} else _computer_use_overlay()
     return ComputerUseSession(runtime=computer_use_runtime, overlay=overlay)
 
 

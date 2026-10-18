@@ -3,11 +3,19 @@ import asyncio
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
-from agent.contracts.browser import BrowserFrame, BrowserStatus, BrowserAddressSuggestions, BrowserSettingsView
+from agent.contracts.browser import BrowserFrame, BrowserStatus, BrowserAddressSuggestions, BrowserSettingsView, BrowserDesktopConfiguration
 from agent.mcp.playwright_tools import browser_session
 from agent.mcp.browser_suggestions import search_completions
 
 router = APIRouter(prefix="/browser", tags=["browser"])
+
+
+@router.get('/desktop-config', response_model=BrowserDesktopConfiguration)
+def desktop_configuration(response: Response):
+    from pathlib import Path
+    from agent.config import _resolve_against_repo
+    response.headers['Cache-Control'] = 'no-store'
+    return BrowserDesktopConfiguration(workspace_root=str(_resolve_against_repo(Path('.')).resolve()))
 
 
 @router.get("/settings", response_model=BrowserSettingsView)
@@ -75,7 +83,10 @@ async def stream(socket: WebSocket):
                 if next_frame != previous:
                     await socket.send_json(next_frame.model_dump())
                     previous = next_frame
-            except ValueError:
+            except ValueError as error:
+                if 'rendered natively' in str(error):
+                    await socket.close(code=1003,reason='This desktop browser has no stream.')
+                    return
                 previous = None
             except Exception:
                 await socket.send_json({"error":"The live view disconnected. Reopen the browser session."})

@@ -17,9 +17,20 @@
   }
   function BrowserSplitter({value=38,onChange}) {
     const ref=useRef(null),drag=useRef(null);
+    const settings=useRef({value,onChange});settings.current={value,onChange};
     const [position,setPosition]=useState(value);
     useEffect(()=>setPosition(value),[value]);
-    useEffect(()=>()=>{ref.current?.parentElement?.classList.remove('browser-resizing');},[]);
+    useEffect(()=>{
+      const finish=()=>{
+        if(drag.current===null)return;
+        const x=drag.current;drag.current=null;
+        ref.current?.parentElement?.classList.remove('browser-resizing');
+        apply(x,true);
+      };
+      window.addEventListener('pointerup',finish);
+      window.addEventListener('blur',finish);
+      return ()=>{window.removeEventListener('pointerup',finish);window.removeEventListener('blur',finish);ref.current?.parentElement?.classList.remove('browser-resizing');};
+    },[]);
     const apply=(x,commit=false)=>{
       const body=ref.current?.parentElement;
       if (!body) return;
@@ -30,7 +41,7 @@
       const percent=Math.round(Math.max(280,Math.min(total-320,x-left))/total*100);
       const next=Math.max(20,Math.min(75,percent));
       body.style.setProperty('--browser-chat-share',next);setPosition(next);
-      if (commit) onChange(next);
+      if (commit) settings.current.onChange(next);
       return next;
     };
     return <div ref={ref} className="browser-splitter" role="separator" aria-label="Resize chat and browser" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="75" aria-valuenow={position} tabIndex="0"
@@ -38,6 +49,7 @@
       onPointerMove={event=>{if(drag.current!==null){drag.current=event.clientX;apply(event.clientX);}}}
       onPointerUp={event=>{if(drag.current!==null){apply(event.clientX,true);drag.current=null;event.currentTarget.parentElement.classList.remove('browser-resizing');event.currentTarget.releasePointerCapture?.(event.pointerId);}}}
       onPointerCancel={()=>{drag.current=null;ref.current.parentElement.classList.remove('browser-resizing');ref.current.parentElement.style.setProperty('--browser-chat-share',value);setPosition(value);}}
+      onLostPointerCapture={()=>{if(drag.current!==null){const x=drag.current;drag.current=null;ref.current.parentElement.classList.remove('browser-resizing');apply(x,true);}}}
       onDoubleClick={()=>onChange(38)}
       onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?38:Math.max(20,Math.min(75,position+(event.key==='ArrowLeft'?-2:2)));setPosition(next);onChange(next);}}><span/></div>;
   }
@@ -203,9 +215,12 @@
     </section>;
   }
 
-  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings}) {
+  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false}) {
     const api = window.VellumApi.browser;
+    const native = state.render_transport === 'native';
+    const nativeBridge = window.VellumDesktop?.browser;
     const [frame, setFrame] = useState(null);
+    const [nativeStill,setNativeStill] = useState('');
     const [localPointer,setLocalPointer]=useState(null);
     const [error, setError] = useState('');
     const [viewError, setViewError] = useState('');
@@ -272,6 +287,7 @@
     }, [addressOpen, addressQuery, engine.id, preferences.suggestions_enabled]);
     const manual = state.control === 'user';
     const focusAddress = (empty=false) => {
+      if (native) nativeBridge?.mount({focus_chrome:true}).catch(()=>{});
       if (empty) setAddress('');
       editingAddress.current = true;
       focusingBlankAddress.current = empty;
@@ -319,7 +335,7 @@
       if (!editingAddress.current) setAddress(displayAddress(active?.url));
     }, [active?.url, active?.id, preferences.show_full_url]);
     useEffect(() => {
-      if (home) { setFrame(null); setViewError(''); return; }
+      if (home || native) { setFrame(null); setViewError(''); return; }
       let cancelled = false, timer, reconnect, stopStream, streaming = false, lastStreamFrame = 0;
       const display = next => {
         if (cancelled || next.tab_id !== current.current.state.active_tab_id) return;
@@ -359,10 +375,59 @@
       refresh();
       document.addEventListener('visibilitychange', visibility);
       return () => { cancelled = true; clearTimeout(timer); clearTimeout(reconnect); stopStream?.(); document.removeEventListener('visibilitychange', visibility); };
-    }, [state.session_id, state.running, state.active_tab_id, home]);
+    }, [state.session_id, state.running, state.active_tab_id, home, native]);
 
     useEffect(() => {
-      if (!state.running || !state.active_tab_id || !screenRef.current || typeof ResizeObserver === 'undefined') return;
+      if (!native || !nativeBridge || !screenRef.current) return;
+      let cancelled=false,revision=0;
+      const update=async()=>{
+        const currentRevision=++revision;
+        const resizing=screenRef.current?.closest('.browser-resizing');
+        const visible=state.running && !home && !document.hidden && !suspended && !resizing && !moreOpen && !downloadsOpen && !(addressOpen && suggestions.length);
+        const rect=screenRef.current.getBoundingClientRect();
+        try {
+          if (!visible && !home && !suspended && !document.hidden) {
+            const result=await nativeBridge.mount({prepare_only:true,target_id:state.native_target_id});
+            if(cancelled || currentRevision!==revision)return;
+            if(result?.still) {
+              const image=new Image();image.src=result.still;
+              await image.decode?.().catch(()=>{});
+              if(cancelled || currentRevision!==revision)return;
+              setNativeStill(result.still);
+              await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            }
+          }
+          if(cancelled || currentRevision!==revision)return;
+          await nativeBridge.mount({visible,target_id:state.native_target_id,bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height}});
+          if (!cancelled && visible) setNativeStill('');
+        } catch(failure) {if(!cancelled)setViewError(failure.message);}
+      };
+      const observer=typeof ResizeObserver==='undefined' ? null : new ResizeObserver(update);
+      observer?.observe(screenRef.current);
+      const body=screenRef.current.closest('.body');
+      const layoutObserver=typeof MutationObserver==='undefined' ? null : new MutationObserver(update);
+      if(body)layoutObserver?.observe(body,{attributes:true,attributeFilter:['class']});
+      window.addEventListener('resize',update);
+      document.addEventListener('visibilitychange',update);
+      update();
+      return ()=>{cancelled=true;observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);document.removeEventListener('visibilitychange',update);};
+    }, [native,state.running,state.native_target_id,home,expanded,suspended,moreOpen,downloadsOpen,addressOpen,suggestions.length]);
+    useEffect(()=>()=>{if(native)nativeBridge?.mount({visible:false}).catch(()=>{});},[native,nativeBridge]);
+
+    useEffect(()=>{
+      if (!native || !nativeBridge) return;
+      return nativeBridge.subscribe(event=>{
+        if (event.type==='take_over') { if (current.current.state.control==='agent') command('take_over'); return; }
+        if (event.type!=='shortcut') return;
+        if (event.command==='address') focusAddress();
+        else if (event.command==='new_tab') newTab();
+        else if (event.command==='close_tab') closeTab(current.current.state.active_tab_id);
+        else command(event.command);
+      });
+    },[native]);
+
+    useEffect(() => {
+      if (native || !state.running || !state.active_tab_id || !screenRef.current || typeof ResizeObserver === 'undefined') return;
       let timer, last = '';
       const resize = () => {
         const rect = screenRef.current.getBoundingClientRect();
@@ -377,7 +442,7 @@
       observer.observe(screenRef.current);
       resize();
       return () => { clearTimeout(timer); observer.disconnect(); };
-    }, [state.session_id, state.running, state.active_tab_id]);
+    }, [state.session_id, state.running, state.active_tab_id, native]);
     useEffect(() => () => { clearTimeout(textTimer.current); clearTimeout(wheelTimer.current); clearTimeout(hoverTimer.current); hoverPending.current = null; }, []);
     useEffect(() => { clearTimeout(hoverTimer.current); hoverTimer.current = null; hoverPending.current = null; }, [state.active_tab_id, state.running]);
     useEffect(() => {
@@ -541,7 +606,7 @@
     return <aside className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel"
       onKeyDownCapture={shortcut} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDownloadsOpen(false); setMoreOpen(false); } }}>
       <header className="browser-heading">
-        <span className="browser-brand" title="Dedicated Brave session on this device"><BrandIcon engine={engines[1]} size={20}/></span>
+        <span className="browser-brand" title={native ? 'Vellum embedded Chromium browser' : 'Dedicated Brave session on this device'}>{native ? <Icon name="globe" size={20}/> : <BrandIcon engine={engines[1]} size={20}/>}</span>
         <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
           {state.tabs.map(tab => <div key={tab.id} className={'browser-tab' + (tab.active ? ' active' : '')}>
             <button role="tab" aria-selected={tab.active && !pendingTabs} aria-busy={tab.loading || undefined} onClick={() => command('select_tab', {tab_id:tab.id})} title={tab.url}>{tab.url === 'about:blank' ? <BrandIcon engine={engine} size={15}/> : <Icon name="globe" size={15}/>}<span>{tab.title}</span></button>
@@ -590,7 +655,7 @@
         </div>) : <p>No downloads in this session.</p>}
       </section>}
       {(error || viewError || active?.error) && <div className="browser-error" role="alert">{error || viewError || active.error}<button className="browser-link" onClick={() => onRefresh()}>Refresh</button></div>}
-      <div ref={screenRef} className={'browser-screen' + (manual ? ' manual' : '') + (home ? ' browser-screen-home' : '')} tabIndex={state.running && !home ? 0 : -1} role="region" aria-label={home ? 'Browser homepage' : manual ? 'Browser page. Click to focus a field, then type. Tab leaves the preview.' : 'Live browser page. Click to take control.'}
+      <div ref={screenRef} className={'browser-screen' + (manual ? ' manual' : '') + (home ? ' browser-screen-home' : '')} tabIndex={state.running && !home && !native ? 0 : -1} role="region" aria-label={home ? 'Browser homepage' : native ? 'Embedded browser page' : manual ? 'Browser page. Click to focus a field, then type. Tab leaves the preview.' : 'Live browser page. Click to take control.'}
         onPointerDown={click} onPointerMove={hover} onPointerLeave={() => {
           setLocalPointer(null);
           clearTimeout(hoverTimer.current); hoverTimer.current = null; hoverPending.current = null;
@@ -608,7 +673,7 @@
         }}
         onPaste={event => { if (!home && manual) { event.preventDefault(); flushText(); command('type', {text:event.clipboardData.getData('text/plain').slice(0,10000)}); } }}
         onCompositionEnd={event => { if (!home && manual && event.data) { flushText(); command('type', {text:event.data}); } }}>
-        {home ? <BrowserHome key={homeGeneration} api={api} preferences={preferences} engine={engine} engines={engines} command={command}/> : frame && state.running && frame.tab_id === state.active_tab_id ? <img src={frame.data_url} alt="Live view of the dedicated browser tab" draggable={false}/> : <div className="browser-empty"><Icon name="globe" size={32}/><h2>{active?.loading ? 'Loading page…' : 'Your browser is ready'}</h2><p>{state.reason || (active?.loading ? 'You can open another tab while this site loads.' : 'Enter a website above or ask Vellum to browse.')}</p></div>}
+        {home ? <BrowserHome key={homeGeneration} api={api} preferences={preferences} engine={engine} engines={engines} command={command}/> : native ? <div className="browser-native-surface" aria-label="Embedded browser page">{nativeStill && <img src={nativeStill} alt="Page beneath browser menu" draggable={false}/>} {!nativeBridge && <p>Open Vellum desktop to use this browser session.</p>}</div> : frame && state.running && frame.tab_id === state.active_tab_id ? <img src={frame.data_url} alt="Live view of the dedicated browser tab" draggable={false}/> : <div className="browser-empty"><Icon name="globe" size={32}/><h2>{active?.loading ? 'Loading page…' : 'Your browser is ready'}</h2><p>{state.reason || (active?.loading ? 'You can open another tab while this site loads.' : 'Enter a website above or ask Vellum to browse.')}</p></div>}
         {localPointer && (manual || home) && preferences.cursor_style && preferences.cursor_style!=='classic' && <div className="browser-local-pointer" aria-hidden="true" style={{left:localPointer.x-(preferences.cursor_hotspot_x||0),top:localPointer.y-(preferences.cursor_hotspot_y||0)}}><BrowserCursorGraphic preferences={preferences}/></div>}
         {!home && state.control==='agent' && frame?.pointer?.tab_id===state.active_tab_id && (()=>{const layout=pointerLayout(frame,screenRef.current?.clientWidth || frame.width,screenRef.current?.clientHeight || frame.height,preferences);return <div className="browser-agent-pointer-layer" role="img" aria-label={'Agent cursor: '+frame.pointer.action} style={{width:layout.width,height:layout.height}}><div className="browser-agent-pointer" style={{left:layout.x,top:layout.y}}><BrowserCursorGraphic preferences={preferences}/><span>{frame.pointer.action==='click'?'Click':frame.pointer.action==='type'?'Type':frame.pointer.action==='scroll'?'Scroll':'Agent'}</span></div></div>;})()}
       </div>

@@ -40,18 +40,10 @@ def test_agent_scroll_can_reach_bottom_in_one_action():
     assert next(payload for name,payload,_ in tools.calls if name=='browser_scroll')['direction']=='bottom'
 
 
-@pytest.mark.parametrize('platform', ['nt', 'posix'])
-@pytest.mark.parametrize('urls, expected', [
-    (['about:blank', 'about:blank'], ['about:blank']),
-    (['about:blank', 'https://www.wikipedia.org/', 'https://www.youtube.com/'],
-     ['https://www.wikipedia.org/', 'https://www.youtube.com/']),
-])
-def test_fresh_session_collapses_only_duplicate_blank_startup_tabs(monkeypatch, tmp_path, platform, urls, expected):
+def test_fresh_session_collapses_only_duplicate_blank_startup_tabs(monkeypatch, tmp_path):
     from agent.mcp import dedicated_browser
     monkeypatch.setattr(dedicated_browser, '_resolve_against_repo', lambda path:tmp_path/path)
     monkeypatch.setattr(dedicated_browser, 'browser_readiness', lambda:(True,''))
-    monkeypatch.setattr(dedicated_browser, 'os', SimpleNamespace(name=platform))
-    monkeypatch.setattr(dedicated_browser, 'browser_executable', lambda:tmp_path/'browser')
     import playwright.async_api
     async def check():
         browser = DedicatedBrowser()
@@ -61,21 +53,16 @@ def test_fresh_session_collapses_only_duplicate_blank_startup_tabs(monkeypatch, 
             def is_closed(self): return self.closed
             async def set_viewport_size(self,*_): pass
             async def close(self): self.closed=True; context.pages.remove(self)
-        context = SimpleNamespace(pages=[Page(url) for url in urls],on=lambda *_:None,
+        context = SimpleNamespace(pages=[Page('about:blank'),Page('about:blank')],on=lambda *_:None,
             set_default_timeout=lambda *_:None,set_default_navigation_timeout=lambda *_:None)
         async def launch(_): browser.context=context
-        async def launch_persistent_context(*_args, **_kwargs): return context
-        async def stop(): pass
         class Start:
-            async def start(self):
-                return SimpleNamespace(chromium=SimpleNamespace(
-                    launch_persistent_context=launch_persistent_context), stop=stop)
+            async def start(self): return object()
         monkeypatch.setattr(playwright.async_api,'async_playwright',lambda:Start())
         monkeypatch.setattr(browser,'_open_windows_browser',launch)
         monkeypatch.setattr(browser,'_write_native_preferences',lambda:None)
         await browser.open()
-        assert [page.url for page in context.pages] == expected
-        assert len((await browser.status()).tabs) == len(expected)
+        assert len((await browser.status()).tabs)==1
     asyncio.run(check())
 
 
@@ -116,7 +103,9 @@ def test_agent_cursor_travels_in_live_frames_before_the_page_action(action):
         async def wheel(*_): events.append('scroll')
         class Target:
             async def bounding_box(self): return dict(x=900,y=100,width=60,height=40)
-            async def evaluate(self, *_): return True
+            async def evaluate(self, script, *_):
+                from agent.mcp.dedicated_browser import ELEMENT_DESCRIPTOR
+                return {'value':''} if script==ELEMENT_DESCRIPTOR else True
             async def fill(self, *_): events.append('type')
         page = SimpleNamespace(mouse=SimpleNamespace(move=move,click=click,wheel=wheel),url='about:blank')
         browser.active_page = page

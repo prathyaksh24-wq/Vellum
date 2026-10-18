@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+const invoke = (command, args) => window.VellumDesktop.invoke(command, args);
 
 const status = document.querySelector("#status");
 const openVellum = document.querySelector("#openVellum");
@@ -89,7 +89,7 @@ enableComputer.addEventListener("click", async () => {
     const overlayReady = await setComputerOverlay(true);
     let result;
     try {
-      result = await postJson("/api/computer-use/session/start", { source: "tauri" });
+      result = await postJson("/api/computer-use/session/start", { source: "electron" });
     } catch (err) {
       await setComputerOverlay(false);
       throw err;
@@ -104,7 +104,7 @@ enableComputer.addEventListener("click", async () => {
 
 disableComputer.addEventListener("click", async () => {
   await runButton(disableComputer, "disabling computer use", async () => {
-    const result = await postJson("/api/computer-use/session/stop", { source: "tauri" });
+    const result = await postJson("/api/computer-use/session/stop", { source: "electron" });
     await setComputerOverlay(false);
     computerUseEnabled = false;
     return result;

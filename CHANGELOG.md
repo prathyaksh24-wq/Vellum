@@ -6,6 +6,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Browser searches visibly type into page controls and use observed suggestions/results instead of guessed destination URLs. Recognize site-search commands without a browser keyword and retain interactive follow-ups in browser chats. Reuse an already-open address, avoid accidental duplicate tabs, and stop classifying ordinary Google search controls as uploads. Give native tabs an initial usable viewport and keep a decoded page still beneath split resizing. Reduce Galaxy's rendering cost and animate Appearance previews only on hover or focus.
+
+- Replace the Tauri desktop host with Electron, preserving the shared workspace, detached conversations, guarded computer-use overlay, and independent Python backend. Embed Chromium pages directly through WebContentsView without desktop browser streaming, retaining canonical BrowserAgent control, isolated profiles, permissions, downloads, and visible cursors. Add guarded native bridges, Windows packaging, and desktop smoke tests; see `docs/desktop.md`.
+
 - Add `/compact` and focused manual compaction through chat and the composer slash menu. Assemble protected instructions, personal memory, a source-attributed task digest, retrieved originals and exact recent messages in a fixed order. Add optional bounded local summaries with extractive fallback and a read-only original-history tool; keep deleted/temporary history and generated memory exports from resurfacing as new evidence. MemoryAgent now reads its approved canonical memory packet without waiting for vault-card export.
 
 - Add 32k main-agent and 16k specialist context budgets, output/tool-schema accounting, and local extractive conversation compaction persisted in the existing graph checkpoint. Preserve saved chat history and complete current tool exchanges, guard oversized requests, and report compaction through the existing frontend activity stream.
