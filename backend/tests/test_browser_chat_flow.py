@@ -127,7 +127,12 @@ def test_browser_result_is_not_rewritten_by_another_model():
 def test_chat_model_selection_reaches_the_specialist_with_positional_arguments(monkeypatch):
     import asyncio
     from agent import api
+    from agent.llm import providers
     from agent.llm.providers import get_provider_registry
+    model = providers.ModelEntry('ollama/gemma4:12b', 'Gemma 4 12B (Local)', 'ollama', 128000, 'fast', True)
+    monkeypatch.setattr(providers, 'discover_ollama_models',
+                        lambda _base_url: providers.LocalModelInventory(reachable=True, models=(model,)))
+    get_provider_registry.cache_clear()
     seen=[]
     async def run(*args,**kwargs):
         seen.append(get_provider_registry().current_model().id)
