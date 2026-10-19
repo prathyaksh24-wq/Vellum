@@ -10,6 +10,9 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script type="text/babel" data-presets="react" src="components/v-select.jsx"></script>
 <script src="api/client.js?v=20260710-routing-actions"></script>
+<script src="api/accounts.js"></script>
+<link rel="stylesheet" href="components/accounts.css"/>
+<script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
 <script src="api/chat.js"></script>
 <script src="api/app-actions.js"></script>
 <script src="api/browser.js"></script>
@@ -3046,8 +3049,8 @@ const SEED_PROJECTS = [
 ];
 
 const PROFILE_DEFAULT = {
-  displayName: 'Pratyakksh', username: 'pratyakksh',
-  email: 'prathyaksh24@gmail.com', plan: 'Plus',
+  displayName: 'Local user', username: '',
+  email: '', plan: 'On this device',
 };
 
 /* Legacy static Skills seed removed from runtime.
@@ -3335,7 +3338,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
         </SidebarSection>
         </div>}
       </div>
-      <div className="profile-row" onClick={onProfile}>
+      <div className="profile-row" role="button" tabIndex={0} aria-label="Open account menu" onClick={onProfile} onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); onProfile(e);}}}>
         <div className="avatar">{initials(profile.displayName)}</div>
         <div className="p-meta">
           <div className="p-name">{profile.displayName}</div>
@@ -3431,7 +3434,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
         ))}
       </RailFly>
       </div>
-      <div className="avatar" style={{cursor: 'pointer'}} title={profile.displayName} onClick={onProfile}>{initials(profile.displayName)}</div>
+      <button className="avatar" style={{cursor: 'pointer'}} title={profile.displayName} aria-label="Open account menu" onClick={onProfile}>{initials(profile.displayName)}</button>
     </div>
   );
 };
@@ -6719,6 +6722,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
 
 /* Profile */
 const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalization, onAddAccount, onClose}) => {
+  const accounts = React.useContext(window.VellumUI.Accounts.Context);
   const [acctOpen, setAcctOpen] = useState(false);
   const Row = ({icon, label, hint}) => (
     <div className={'pop-row' + (hint ? ' dim' : '')} title={hint ? 'not in this preview' : undefined}>
@@ -6727,23 +6731,24 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalizat
   );
   return (
     <Popover portal className="pop select-motion" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}} onClose={onClose}>
-        <div className="pop-email">{profile.email}</div>
+        <div className="pop-email">{profile.email || 'Local workspace'}</div>
         <div className="pop-acct">
-          <div className="pop-row" onClick={() => setAcctOpen(o => !o)}>
+          <button className="pop-row" aria-expanded={acctOpen} onClick={() => setAcctOpen(o => !o)}>
             <div className="avatar">{initials(profile.displayName)}</div>
             <span className="pop-acct-meta"><span>{profile.displayName}</span><span className="pop-acct-plan">{profile.plan}</span></span>
             <span className="pop-acct-chev"><IcChevR size={14}/></span>
-          </div>
+          </button>
           {acctOpen && (
             <div className="pop-submenu" onClick={e => e.stopPropagation()}>
-              <div className="pop-email">{profile.email}</div>
-              <div className="pop-row"><div className="avatar sm">{initials(profile.displayName)}</div>{profile.displayName}<span className="ctx-check"><IcCheck size={14}/></span></div>
+              <div className="pop-email">Accounts on this device</div>
+              {accounts.state.accounts.map(account => <button className="pop-row" key={account.id} disabled={accounts.busy} onClick={async () => {if (await accounts.select(account.id)) onClose();}}><div className="avatar sm">{initials(account.display_name)}</div><span className="pop-acct-meta"><span>{account.display_name}</span><span className="pop-acct-plan">{account.email || account.username} · {({google:'Google', github:'GitHub', email:'Email'})[account.provider]}</span></span>{account.id === accounts.state.active_account_id && <span className="ctx-check"><IcCheck size={14}/></span>}</button>)}
               <div className="ctx-div"/>
-              <div className="pop-row" onClick={onAddAccount}><span className="sb-ic"><IcUserPlus size={15}/></span>Add account</div>
+              <button className="pop-row" onClick={onAddAccount}><span className="sb-ic"><IcUserPlus size={15}/></span>Add account</button>
             </div>
           )}
         </div>
         <div className="ctx-div"/>
+        {accounts.error && <div className="pop-email" role="alert">{accounts.error}</div>}
         <div className="pop-row" onClick={onPersonalization}><span className="sb-ic"><IcPenLine size={15}/></span>Personalization</div>
         <div className="pop-row" onClick={onEditProfile}>
           <span className="sb-ic"><I size={15}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></I></span>Profile
@@ -6753,7 +6758,7 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalizat
         </div>
         <div className="ctx-div"/>
         <Row icon={<IcHelp size={15}/>} label="Help" hint/>
-        <Row icon={<IcLogout size={15}/>} label="Log out" hint/>
+        {accounts.state.active_account_id && <button className="pop-row" disabled={accounts.busy} onClick={async () => {if (await accounts.logOut()) onClose();}}><span className="sb-ic"><IcLogout size={15}/></span>Log out</button>}
         <div className="ctx-hint">dim rows are not in this preview</div>
     </Popover>
   );
@@ -7678,6 +7683,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
   };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
+    {k: 'Accounts', ic: <IcUserPlus size={14}/>},
     {k: 'Appearance', ic: <IcSun size={14}/>},
     {k: 'Personalization', ic: <IcPenLine size={14}/>},
     {k: 'Configuration', ic: <I d="M12 2l8 4.6v8.8L12 20 4 15.4V6.6z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6" size={14}/>},
@@ -7705,6 +7711,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
           ))}
         </div>
         <div className="set-body">
+          {tab === 'Accounts' && <window.VellumUI.Accounts.Settings/>}
           {tab === 'General' && (
             <React.Fragment>
               <div className="set-h">General</div>
@@ -8812,7 +8819,9 @@ const App = () => {
   const [conversationLibrary, setConversationLibrary] = useState({spaces: [], smart_views: [], conversations: []});
   const [library, setLibrary] = useState(SEED_LIBRARY);
   const [projects, setProjects] = useState([]);
-  const profile = {...PROFILE_DEFAULT, ...deviceSettings.values.profile};
+  const accounts = React.useContext(window.VellumUI.Accounts.Context);
+  const signedInAccount = accounts.state.accounts.find(account => account.id === accounts.state.active_account_id);
+  const profile = signedInAccount ? {displayName:signedInAccount.display_name, username:signedInAccount.username, email:signedInAccount.email, plan:({google:'Google account', github:'GitHub account', email:'Email account'})[signedInAccount.provider]} : {...PROFILE_DEFAULT, ...deviceSettings.values.profile, plan:'Guest'};
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(readDefaultModel);
@@ -10731,10 +10740,10 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAutomatic={() => updateConversationOrganization(spacePickerChatId, {assignment: 'automatic'})}
           onClose={() => setSpacePickerChatId(null)}/>}
         {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu}
-          onEditProfile={() => { setMenu(null); setEditProfileOpen(true); }}
+          onEditProfile={() => { setMenu(null); if (signedInAccount) {setSettingsTab('Accounts'); dispatchSurfacePresentation('settings', {visible:true});} else setEditProfileOpen(true); }}
           onSettings={() => { setMenu(null); setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
-          onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
+          onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
         {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
@@ -10865,7 +10874,7 @@ try {
   document.documentElement.dataset.background = bootBackground.id;
   applyBackgroundTheme(bootBackground, bootTheme);
 } catch {}
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ReactDOM.createRoot(document.getElementById('root')).render(<window.VellumUI.Accounts.Root>{() => <App/>}</window.VellumUI.Accounts.Root>);
 </script>
 </body>
 </html>
