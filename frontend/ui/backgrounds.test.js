@@ -142,3 +142,20 @@ test.each(['pattern-waves', 'particles'])('%s uses the existing device setting r
   expect(client.dispatch.mock.calls[0][0].arguments.patch.background).toBe(id);
   expect(AppActions.createDeviceSettingsRuntime({storage, client: {}}).snapshot().values.background).toBe(id);
 });
+
+test('Appearance cards keep a thumbnail until focused and release the live renderer on blur',async()=>{
+  const html=readFileSync(resolve(uploads,'Vellum Default Re-designed.html'),'utf8');
+  const source=html.slice(html.indexOf('const BackgroundRenderer ='),html.indexOf('const IcNote ='));
+  const code=execFileSync(process.execPath,['-e',"const esbuild=require('esbuild');process.stdout.write(esbuild.transformSync(process.argv[1],{loader:'jsx'}).code)",source],{encoding:'utf8'});
+  const Card=new Function('React',`const {useState}=React;const IcCheck=()=>null;${code};return BackgroundChoiceCard;`)(React);
+  const render=vi.fn(()=>React.createElement('canvas'));
+  await act(async()=>root.render(React.createElement(Card,{entry:{id:'galaxy',label:'Galaxy',kind:'shader',component:render},selected:false,onSelect:vi.fn()})));
+  expect(render).not.toHaveBeenCalled();
+  expect(container.querySelector('img').getAttribute('src')).toBe('assets/backgrounds/previews/galaxy.png');
+  await act(async()=>container.querySelector('button').focus());
+  expect(render).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('canvas')).not.toBeNull();
+  await act(async()=>container.querySelector('button').blur());
+  expect(container.querySelector('canvas')).toBeNull();
+  expect(container.querySelector('img')).not.toBeNull();
+});

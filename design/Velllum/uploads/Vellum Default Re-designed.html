@@ -2196,6 +2196,7 @@ const GalaxyBackground = ({
   density=1,
   hueShift=140,
   disableAnimation=false,
+  paused=false,
   speed=1,
   mouseInteraction=true,
   glowIntensity=0.3,
@@ -2208,6 +2209,7 @@ const GalaxyBackground = ({
   transparent=true
 }) => {
   const ctnDom = useRef(null);
+  const pausedRef=useRef(paused);pausedRef.current=paused;
   useEffect(() => {
     let disposed = false;
     let cleanup = () => {};
@@ -2216,7 +2218,7 @@ const GalaxyBackground = ({
     loadOgl().then(({Renderer, Program, Mesh, Color, Triangle}) => {
       const ctn = ctnDom.current;
       if (disposed || !ctn) return;
-      const renderer = new Renderer({alpha:transparent, premultipliedAlpha:false, dpr:Math.min(window.devicePixelRatio || 1, 1.5)});
+      const renderer = new Renderer({alpha:transparent, premultipliedAlpha:false, antialias:false, dpr:1});
       const gl = renderer.gl;
       if (transparent) {
         gl.enable(gl.BLEND);
@@ -2237,6 +2239,7 @@ const GalaxyBackground = ({
       const resize = () => {
         const width = Math.max(1, ctn.offsetWidth);
         const height = Math.max(1, ctn.offsetHeight);
+        renderer.dpr=Math.min(window.devicePixelRatio || 1,1,Math.sqrt(600000/(width*height)));
         renderer.setSize(width, height);
         if (program) program.uniforms.uResolution.value = new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height);
       };
@@ -2284,8 +2287,9 @@ const GalaxyBackground = ({
         program.uniforms.uMouseActiveFactor.value = smoothMouseActive;
         renderer.render({scene:mesh});
       };
+      let lastFrame=-Infinity;
       const update = t => {
-        renderFrame(t);
+        if(!document.hidden && !pausedRef.current && t-lastFrame>=1000/30) {renderFrame(t);lastFrame=t;}
         animateId = requestAnimationFrame(update);
       };
       if (reducedMotion || disableAnimation) renderer.render({scene:mesh});
@@ -2375,8 +2379,9 @@ const SHADER_COMMON = `
   }
 `;
 
-const ShaderCanvas = ({fragmentShader, className='', dpr=1, controls=false}) => {
+const ShaderCanvas = ({fragmentShader, className='', dpr=1, controls=false, paused=false}) => {
   const hostRef = useRef(null);
+  const pausedRef=useRef(paused);pausedRef.current=paused;
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -2448,7 +2453,7 @@ const ShaderCanvas = ({fragmentShader, className='', dpr=1, controls=false}) => 
     };
     const reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
     const animate = milliseconds => {
-      draw(milliseconds);
+      if(!document.hidden && !pausedRef.current)draw(milliseconds);
       if (!disposed) frame = requestAnimationFrame(animate);
     };
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => draw(performance.now())) : null;
@@ -2485,7 +2490,7 @@ const LIQUID_METAL_FRAGMENT_SHADER = `
     gl_FragColor = vec4(col, 1.0);
   }
 `;
-const LiquidMetal = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={LIQUID_METAL_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+const LiquidMetal = ({className, dpr, controls, paused}) => <ShaderCanvas fragmentShader={LIQUID_METAL_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls} paused={paused}/>;
 
 const DRIFTING_CLOUDS_FRAGMENT_SHADER = `
   void main() {
@@ -2502,7 +2507,7 @@ const DRIFTING_CLOUDS_FRAGMENT_SHADER = `
     gl_FragColor = vec4(col, 1.0);
   }
 `;
-const DriftingClouds = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={DRIFTING_CLOUDS_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+const DriftingClouds = ({className, dpr, controls, paused}) => <ShaderCanvas fragmentShader={DRIFTING_CLOUDS_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls} paused={paused}/>;
 
 const GOLD_RAYS_FRAGMENT_SHADER = `
   float rayShape(vec2 uv, float rr, float freq, float sharp) {
@@ -2536,7 +2541,7 @@ const GOLD_RAYS_FRAGMENT_SHADER = `
     gl_FragColor = vec4(col, 1.0);
   }
 `;
-const GoldRays = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={GOLD_RAYS_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+const GoldRays = ({className, dpr, controls, paused}) => <ShaderCanvas fragmentShader={GOLD_RAYS_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls} paused={paused}/>;
 
 const GRAIN_PASTEL_FRAGMENT_SHADER = `
   void main() {
@@ -2559,7 +2564,7 @@ const GRAIN_PASTEL_FRAGMENT_SHADER = `
     gl_FragColor = vec4(col, 1.0);
   }
 `;
-const GrainPastel = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={GRAIN_PASTEL_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+const GrainPastel = ({className, dpr, controls, paused}) => <ShaderCanvas fragmentShader={GRAIN_PASTEL_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls} paused={paused}/>;
 
 const ROCKET_BLAST_REGISTRY_URL = 'https://www.asciistudio.space/r/rocket-blast-2.json';
 let rocketBlastFramesPromise = null;
@@ -2591,8 +2596,9 @@ const loadRocketBlastFrames = () => {
   return rocketBlastFramesPromise;
 };
 
-const RocketBlast = ({fps=30}) => {
+const RocketBlast = ({fps=30,paused=false}) => {
   const containerRef = useRef(null);
+  const pausedRef=useRef(paused);pausedRef.current=paused;
   const contentRef = useRef(null);
   const preRef = useRef(null);
   const [frames, setFrames] = useState(null);
@@ -2631,7 +2637,7 @@ const RocketBlast = ({fps=30}) => {
     pre.textContent = frames[0];
     if (reduced) return;
     const animate = time => {
-      if (document.hidden) last = time;
+      if (document.hidden || pausedRef.current) last = time;
       else if (!last || time - last >= duration) {
         index = (index + 1) % frames.length;
         pre.textContent = frames[index];
@@ -2823,23 +2829,27 @@ const BACKGROUND_INDEX = Object.fromEntries(BACKGROUND_REGISTRY.map(entry => [en
 const resolveBackground = id => BACKGROUND_INDEX[id] || BACKGROUND_INDEX.galaxy;
 const BackgroundContext = React.createContext(null);
 const useBackground = () => React.useContext(BackgroundContext);
-const BackgroundRenderer = ({entry, preview=false}) => {
+const BackgroundRenderer = ({entry, preview=false, paused=false}) => {
   const Component = entry.component;
-  return <Component preview={preview} {...(entry.props || {})} {...(preview ? (entry.previewProps || {}) : {})}/>;
+  return <Component preview={preview} {...(entry.props || {})} {...(preview ? (entry.previewProps || {}) : {})} paused={paused}/>;
 };
 const AppBackground = () => {
-  const {background} = useBackground();
-  return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><BackgroundRenderer entry={background}/></div></div>;
+  const {background,paused} = useBackground();
+  return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><BackgroundRenderer entry={background} paused={paused}/></div></div>;
 };
-const BackgroundChoiceCard = ({entry, selected, onSelect}) => (
+const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
+  const [previewing,setPreviewing]=useState(false);
+  const animate=()=>{if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)setPreviewing(true);};
+  return (
   <button type="button" role="radio" aria-checked={selected}
     className={'bg-preview-card' + (selected ? ' on' : '')}
+    onPointerEnter={animate} onPointerLeave={()=>setPreviewing(false)} onFocus={animate} onBlur={()=>setPreviewing(false)}
     onClick={() => onSelect(entry.id)}>
-    <span className="bg-live"><BackgroundRenderer entry={entry} preview/></span>
+    <span className="bg-live">{previewing || entry.kind==='image' ? <BackgroundRenderer entry={entry} preview/> : <img className="static-image-background" src={'assets/backgrounds/previews/'+entry.id+'.png'} alt="" loading="lazy" decoding="async"/>}</span>
     <span className="bg-preview-copy"><span className="bg-preview-name">{entry.label}</span><span className="bg-preview-kind">{entry.kind === 'image' ? 'static' : entry.kind}</span></span>
     {selected && <span className="bg-preview-check"><IcCheck size={13}/></span>}
   </button>
-);
+);};
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
 const IcImage = (p)=> <I {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></I>;
@@ -7593,6 +7603,18 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
 
 const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
+  const settingsNavRef = useRef(null);
+  useEffect(() => {
+    const align = () => {
+      const navigation = settingsNavRef.current;
+      if (!navigation || navigation.scrollWidth <= navigation.clientWidth) return;
+      const active = navigation.querySelector('.set-item.on');
+      if (active) navigation.scrollLeft = active.offsetLeft - navigation.offsetLeft - (navigation.clientWidth-active.offsetWidth)/2;
+    };
+    align(); window.addEventListener('resize',align);
+    return () => window.removeEventListener('resize',align);
+  }, [tab]);
+
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
@@ -7718,7 +7740,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
                   <div className="appearance-backgrounds-title">Live &amp; animated</div>
-                  <div className="appearance-backgrounds-note">Live previews · saved on this device</div>
+                  <div className="appearance-backgrounds-note">Hover to preview · saved on this device</div>
                 </div>
                 <div className="bg-preview-grid" role="radiogroup" aria-label="Live and animated application backgrounds">
                   {selectableBackgrounds.filter(entry => entry.kind !== 'image').map(entry => (
@@ -7902,7 +7924,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
                   <button className="btn" disabled={!cu} onClick={() => onCu(false)}>Stand down</button>
                 </span>
               </div>
-              <div className="set-note">Preview ? no real session starts. The desktop glow belongs to the Tauri shell.</div>
+              <div className="set-note">Preview ? no real session starts. The desktop glow belongs to the Vellum desktop app.</div>
             </React.Fragment>
           )}
           {tab === 'Shortcuts' && (
@@ -10080,7 +10102,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     ? availableAgents.find(a => a.id === activeAgentId) || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle)
     : null;
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
-  const getTauriInvoke = () => window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+  const getDesktopInvoke = () => window.VellumDesktop && window.VellumDesktop.invoke;
   conversationActionHandlersRef.current = {
     getConversation: id => chats.find(chat => chat.id === id) || null,
     upsertConversation: conversation => {
@@ -10100,7 +10122,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       else applyNewChatNavigation();
     },
     openNativeWindow: target => {
-      const invoke = getTauriInvoke();
+      const invoke = getDesktopInvoke();
       if (typeof invoke !== 'function') throw new Error('Native windows require Vellum desktop.');
       return invoke('open_conversation_window', {conversationId:target.conversation_id});
     },
@@ -10157,7 +10179,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!notify) return;
     const share = receipt.result && receipt.result.share;
     const shareReview = receipt.result && receipt.result.share_review;
-    const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getTauriInvoke() !== 'function';
+    const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getDesktopInvoke() !== 'function';
     const confirmationMessage = shareReview
       ? `${receipt.message} ${shareReview.message_count} messages, ${shareReview.attachment_count} attachments.`
       : receipt.message;
@@ -10611,7 +10633,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
   return (
-    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds}}>
+    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:settingsOpen}}>
     <div className="stage" data-ui-reference="workspace" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
       <div className="bg-orb orb1"></div>
@@ -10677,6 +10699,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           </div>
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserSplitter value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38} onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})}/>}
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
+            suspended={Boolean(settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
             onHide={hideBrowserPanel} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;

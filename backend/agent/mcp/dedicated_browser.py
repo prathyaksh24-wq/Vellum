@@ -64,6 +64,10 @@ def browser_executable() -> Path | None:
 
 
 def browser_readiness() -> tuple[bool, str]:
+    from agent.mcp.electron_browser import ElectronBridge
+    native = ElectronBridge.discover(_resolve_against_repo(Path('.desktop-runtime/browser-bridge.json')))
+    if native is not None and importlib.util.find_spec('playwright') is not None:
+        return True, ''
     if browser_executable() is None:
         return False, "Brave was not found. Install Brave or set BROWSER_EXECUTABLE_PATH to a Chromium browser."
     if importlib.util.find_spec("playwright") is None:
@@ -196,6 +200,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
         self._approved_origins = set()
         self._activity_session_started = False
         self._restore_downloads()
+        self._native = None
+        self._native_download_ids = set()
 
     def _browser_preferences(self) -> BrowserPreferences:
         if self._preferences is None:
@@ -257,6 +263,32 @@ class DedicatedBrowser(BrowserSettingsMixin):
             await self.close()
         if self.context is not None:
             return
+        if self.playwright is not None:
+            await self.close()
+        from agent.mcp.electron_browser import ElectronBridge, ElectronContext
+        self._native = ElectronBridge.discover(self._storage_path(Path('.desktop-runtime/browser-bridge.json')))
+        if self._native is not None:
+            from playwright.async_api import async_playwright
+            self._expire_site_permissions()
+            result = await self._native.call('open', preferences=self._browser_preferences().model_dump(),background=self._opening_background)
+            endpoint = urlsplit(result['cdp_endpoint'])
+            if endpoint.scheme != 'ws' or endpoint.hostname != '127.0.0.1' or not endpoint.port or not re.fullmatch(r'/devtools/browser/[a-f0-9-]+',endpoint.path):
+                raise BrowserSessionError('The embedded browser transport is invalid.')
+            self.playwright = await async_playwright().start()
+            try:
+                self._cdp_browser = await self.playwright.chromium.connect_over_cdp(result['cdp_endpoint'])
+                self._cdp_browser.on('disconnected', self._context_closed)
+                self.context = ElectronContext(self,self._native,self._cdp_browser)
+                self.session_id = uuid4().hex
+                self.control = result.get('control') if result.get('control') in {'agent','user','paused'} else 'agent'
+                await self.context.synchronize()
+                self.activity = 'Ready'
+                self._activity_session_started = True
+                self._record_activity('session_opened')
+                return
+            except BaseException:
+                await self.close()
+                raise
         history = self._read_address_history()
         if history is not None:
             self._address_history = history
@@ -375,7 +407,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
         self._pages[uuid4().hex] = page
         page.on("framenavigated", lambda frame: self._frame_navigated(page, frame))
         page.on("close", lambda: self._page_closed(page))
-        page.on("download", self._download)
+        if self._native is None:
+            page.on("download", self._download)
         page.on("dialog", self._set_dialog)
         page.on("console", lambda message: self._log(message.text))
         self.active_page = page
@@ -598,6 +631,23 @@ class DedicatedBrowser(BrowserSettingsMixin):
 
     async def status(self) -> BrowserStatus:
         ready, reason = browser_readiness()
+        native_target = ''
+        if self._native is not None and self.context is None:
+            from agent.mcp.electron_browser import ElectronBridge
+            if ElectronBridge.discover(self._storage_path(Path('.desktop-runtime/browser-bridge.json'))) is None:
+                self._native = None
+        if self._native is not None:
+            ready,reason = True,''
+            if self.context is not None:
+                await self.context.synchronize()
+                native_target = self.context.target_for_page(self.active_page)
+                await self._native.call('activate', target_id=native_target, control=self.control,
+                                        preferences=self._browser_preferences().model_dump())
+                if self.control == 'agent' and self.active_page is not None and self.active_page.url != 'about:blank':
+                    if self._pointer is None or self._pointer.tab_id != self._page_id():
+                        self._pointer = BrowserPointer(tab_id=self._page_id(),x=self._viewport['width']/2,y=self._viewport['height']/2,action='ready')
+                    await self._native.call('pointer',target_id=native_target,pointer=self._pointer.model_dump(),
+                        preferences=self._browser_preferences().model_dump(include={'cursor_style','cursor_size','cursor_image','cursor_hotspot_x','cursor_hotspot_y'}))
         tabs = []
         for index, (key, page) in enumerate(self._pages.items()):
             if not page.is_closed():
@@ -610,6 +660,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
                 if id(page) not in self._tab_loads:
                     self._remember_address(page.url, title)
         return BrowserStatus(available=ready, reason=reason, running=self.context is not None,
+            render_transport='native' if self._native is not None else 'stream',
+            browser_name='Chromium' if self._native is not None else 'Brave', native_target_id=native_target,
             presentation_requested=self.presentation_requested,
             presentation_revision=self.presentation_revision,
             control=self.control, session_id=self.session_id, active_tab_id=self._page_id(), tabs=tabs,
@@ -626,6 +678,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
         return frame.model_copy(update={"pointer":pointer})
 
     async def frame(self) -> BrowserFrame:
+        if self._native is not None:
+            raise BrowserSessionError('The desktop browser is rendered natively; it has no video stream.')
         page = self.active_page
         if page is None or page.is_closed():
             raise BrowserSessionError("Open a browser tab first.")
@@ -705,6 +759,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
         if not self._browser_preferences().agent_enabled:
             return await self.status()
         await self.open()
+        if self._native is not None and self.context is not None:
+            await self.context.synchronize()
         self.presentation_requested = True
         self.presentation_revision += 1
         if self.control == 'user':
@@ -762,7 +818,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
                 raise BrowserSessionError("The active tab changed. Resize the current browser view.")
             viewport = {"width":request.width, "height":request.height}
             if viewport != self._viewport:
-                await page.set_viewport_size(viewport)
+                if self._native is None:
+                    await page.set_viewport_size(viewport)
                 self._viewport = viewport
                 self._invalidate()
         elif operation == "hover":
@@ -935,10 +992,13 @@ class DedicatedBrowser(BrowserSettingsMixin):
         classifier for every possible website transaction.
         """
         target = self._refs.get(str(params.get('ref','')).lstrip('@'))
-        script = """el => {
+        script = r"""el => {
             if (!el) return {type:'',label:''};
             const form=el.closest('form');
-            return {type:el.getAttribute('type')||'',label:[el.getAttribute('aria-label'),el.getAttribute('name'),el.innerText,form?.getAttribute('action')].filter(Boolean).join(' ').slice(0,1000),secret:!!form?.querySelector('input[type=password],input[type=file]')};
+            const type=el.getAttribute('type')||'';
+            const label=[el.getAttribute('aria-label'),el.getAttribute('name'),el.innerText,form?.getAttribute('action')].filter(Boolean).join(' ').slice(0,1000);
+            const search=el.matches('input[type=search],input[name=q],textarea[name=q],[role=searchbox],[role=option]') || !!el.closest('[role=listbox]') || (type==='submit' && /\bsearch\b/i.test(label));
+            return {type,label,secret:!!form?.querySelector('input[type=password]') || (!search && !!form?.querySelector('input[type=file]'))};
         }"""
         if target:
             info = await target.evaluate(script)
@@ -969,7 +1029,7 @@ class DedicatedBrowser(BrowserSettingsMixin):
         The tool holds the action lock. Priming the preview lets the stream's
         read-only path keep displaying movement while that lock is held.
         """
-        if self.cached_frame() is None:
+        if self._native is None and self.cached_frame() is None:
             await self.frame()
         page, tab_id, revision = self.active_page, self._page_id(), self._revision
         previous = self._pointer if self._pointer and self._pointer.tab_id == tab_id else None
@@ -984,6 +1044,9 @@ class DedicatedBrowser(BrowserSettingsMixin):
             self._pointer = BrowserPointer(tab_id=tab_id,
                 x=start_x + (x-start_x)*progress, y=start_y + (y-start_y)*progress, action=action)
             await page.mouse.move(self._pointer.x, self._pointer.y)
+            if self._native is not None:
+                await self._native.call('pointer', target_id=self.context.target_for_page(page),
+                    pointer=self._pointer.model_dump(), preferences=self._browser_preferences().model_dump())
             # The stream samples at 40 ms, independently of page pixel changes.
             await asyncio.sleep(.04)
         if self.control != 'agent' or self.active_page is not page or self._revision != revision:
@@ -1019,6 +1082,16 @@ class DedicatedBrowser(BrowserSettingsMixin):
                     self.activity = previous_activity
 
     async def tool(self, params: dict[str, Any]) -> str:
+        if self._native is not None and self.context is not None:
+            await self.context.synchronize()
+            await self._native.call('activity', active=True)
+        try:
+            return await self._tool_owned(params)
+        finally:
+            if self._native is not None:
+                await self._native.call('activity', active=False)
+
+    async def _tool_owned(self, params: dict[str, Any]) -> str:
         self.presentation_requested = True
         action = str(params.get("action") or "snapshot").lower()
         if not self._browser_preferences().agent_enabled:
@@ -1086,7 +1159,18 @@ class DedicatedBrowser(BrowserSettingsMixin):
             else:
                 if not await self._point_at(target,"type"):
                     raise BrowserTargetChanged('This control is no longer visible. Read the page again.')
-                await target.fill(str(params.get("text", "")))
+                text = str(params.get('text', ''))
+                await target.fill('' if self._native is not None else text)
+                if self._native is not None and text:
+                    await target.type(text, delay=min(20,500/len(text)))
+                if text and not params.get('submit') and (await target.evaluate(ELEMENT_DESCRIPTOR)).get('value'):
+                    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+                    try:
+                        await page.wait_for_function("""() => Array.from(document.querySelectorAll('[role="listbox"],[role="option"],.suggestions-dropdown,.suggestions-results')).some(el => {
+                            const rect=el.getBoundingClientRect();return rect.width>0 && rect.height>0 && getComputedStyle(el).visibility!=='hidden';
+                        })""", timeout=500)
+                    except PlaywrightTimeoutError:
+                        pass
                 if params.get("submit"):
                     await target.press("Enter")
         elif action in {"back", "forward", "reload"}:

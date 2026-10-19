@@ -1,6 +1,6 @@
 # Vellum
 
-Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, a Tauri desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, coding mode, computer-use foundations, and a Hermes-compatible skills system.
+Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, an Electron desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, coding mode, computer-use foundations, and a Hermes-compatible skills system.
 
 ![CI](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/release.yml/badge.svg)
@@ -55,7 +55,7 @@ The repository currently has the alpha tag `v0.1.0-alpha.1`. It is a development
 
 ```text
 frontend/ + design uploads      Web UI and adapter contracts
-desktop/                        Tauri desktop shell and overlay surfaces
+desktop/                        Electron desktop shell and overlay surfaces
 backend/agent/api.py            FastAPI application and HTTP/WebSocket routes
 backend/agent/graph/agent.py    Main LangGraph agent
 backend/agent/llm/              Provider and routing layer
@@ -92,6 +92,16 @@ Typical Windows startup:
 ```
 
 This starts the local Honcho stack, the API through `scripts/start-api.ps1`, then the Vite UI. Use `-SkipHoncho` only when intentionally running with SQLite/FTS5 fallback memory.
+
+Desktop startup uses the same services and opens the workspace in Electron:
+
+```powershell
+.\scripts\start-desktop.ps1
+```
+
+Rust and Microsoft C++ Build Tools are not required for the desktop shell.
+See [Desktop development and packaging](docs/desktop.md) for checks and the
+current distribution and embedded-browser limitations.
 
 Honcho-only startup:
 

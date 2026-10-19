@@ -6,6 +6,14 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Keep Electron smoke failure logs limited to process status; retain detailed results locally without printing environment-derived profile paths or arbitrary exception payloads.
+
+- Make browser CI fixtures independent of installed Ollama models and exercise duplicate-tab startup on both Windows and POSIX. Update CodeQL's configured languages after removing the Tauri/Rust desktop runtime.
+
+- Browser searches visibly type into page controls and use observed suggestions/results instead of guessed destination URLs. Recognize site-search commands without a browser keyword and retain interactive follow-ups in browser chats. Reuse an already-open address, avoid accidental duplicate tabs, and stop classifying ordinary Google search controls as uploads. Give native tabs an initial usable viewport and keep a decoded page still beneath split resizing. Reduce Galaxy's rendering cost and animate Appearance previews only on hover or focus.
+
+- Replace the Tauri desktop host with Electron, preserving the shared workspace, detached conversations, guarded computer-use overlay, and independent Python backend. Embed Chromium pages directly through WebContentsView without desktop browser streaming, retaining canonical BrowserAgent control, isolated profiles, permissions, downloads, and visible cursors. Add guarded native bridges, Windows packaging, and desktop smoke tests; see `docs/desktop.md`.
+
 - Add Google/GitHub sign-in, hosted email/password signup through Supabase Auth, and Continue as guest. Return completed browser sign-in to Vellum and replace the dummy profile with saved-account add/switch/remove controls and persistent Log out. Keep identity metadata in the OS credential store and workspace data local. Publisher OAuth/Supabase settings are required; public email signup still needs custom SMTP.
 
 - Add `/compact` and focused manual compaction through chat and the composer slash menu. Assemble protected instructions, personal memory, a source-attributed task digest, retrieved originals and exact recent messages in a fixed order. Add optional bounded local summaries with extractive fallback and a read-only original-history tool; keep deleted/temporary history and generated memory exports from resurfacing as new evidence. MemoryAgent now reads its approved canonical memory packet without waiting for vault-card export.

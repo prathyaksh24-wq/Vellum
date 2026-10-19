@@ -325,9 +325,14 @@ class BrowserSettingsMixin:
             paths = {"history":["Default/History", "Default/History-journal", "Default/History-wal", "Default/History-shm"],
                      "cookies":["Default/Network/Cookies", "Default/Network/Cookies-journal", "Default/Network/Cookies-wal", "Default/Network/Cookies-shm", "Default/Cookies", "Default/Cookies-journal", "Default/Local Storage", "Default/Session Storage", "Default/IndexedDB", "Default/Service Worker"],
                      "cache":["Default/Cache", "Default/Code Cache", "Default/GPUCache", "ShaderCache", "GrShaderCache"]}
-            for category in request.data_types:
-                for relative in paths.get(category, []):
-                    self._remove_owned_path(root / "profile" / relative)
+            from agent.mcp.electron_browser import ElectronBridge
+            native = getattr(self,'_native',None) or ElectronBridge.discover(self._storage_path(Path('.desktop-runtime/browser-bridge.json')))
+            if native is not None:
+                await native.call('clear', profile_id=profile.id, data_types=request.data_types)
+            else:
+                for category in request.data_types:
+                    for relative in paths.get(category, []):
+                        self._remove_owned_path(root / "profile" / relative)
             try:
                 data = json.loads((root / "activity.json").read_text(encoding="utf-8"))
             except (OSError, ValueError):

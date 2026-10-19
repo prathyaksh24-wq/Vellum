@@ -59,9 +59,51 @@ def test_resize_during_planning_does_not_discard_a_navigation_without_element_re
     'open youtube and click on the first video u see',
     'go to reddit and search for mechanical keyboards',
     'visit https://en.wikipedia.org/wiki/Black_hole',
+    'search Wikipedia for Jailer 2',
+    'search for Jailer 2 on Wikipedia',
+    'can u search YouTube for black holes',
 ])
 def test_page_requests_do_not_require_the_word_browser(message):
     assert BrowserAgent(tool_registry=ToolRegistry()).can_handle(message)
+
+
+@pytest.mark.parametrize('message',['what is Jailer 2 about?','search for the latest Google product news','look up Jailer 2'])
+def test_factual_queries_do_not_force_a_browser_from_a_site_keyword(message):
+    assert not BrowserAgent(tool_registry=ToolRegistry()).can_handle(message)
+
+
+def test_search_followups_stay_with_an_established_browser_task():
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    dispatcher=LiveAgentDispatcher.__new__(LiveAgentDispatcher)
+    assert dispatcher._is_contextual_followup('now search for NBA','BrowserAgent')
+    assert dispatcher._is_contextual_followup('click the first result','BrowserAgent')
+    assert not dispatcher._is_contextual_followup('what is Jailer 2 about?','BrowserAgent')
+
+
+def test_browser_search_followup_precedes_topic_match_but_facts_can_change_agent(tmp_path):
+    from agent.agents.base import SpecialistResponse
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    from agent.master.state import MasterThreadStateStore
+    from agent.profiles import AgentCatalog
+
+    class Browser:
+        name = 'BrowserAgent'
+        def can_handle(self, query): return False
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status='answered', summary='Searched the current page.')
+
+    class Sports(Browser):
+        name = 'SportsAgent'
+        def can_handle(self, query): return 'NBA' in query
+
+    state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
+    catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'BrowserAgent': Browser(), 'SportsAgent': Sports()})
+    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    state.set_active_agent('browser-followup', 'BrowserAgent')
+    result = dispatcher.maybe_handle('now search for NBA', 'browser-followup')
+    assert result.agent_name == 'BrowserAgent' and result.route_source == 'contextual'
+    result = dispatcher.maybe_handle('Who won the NBA game?', 'browser-followup')
+    assert result.agent_name == 'SportsAgent'
 
 
 @pytest.mark.parametrize('message', [
@@ -86,24 +128,19 @@ def test_chat_model_selection_reaches_the_specialist_with_positional_arguments(m
     import asyncio
     from agent import api
     from agent.llm import providers
-    models = tuple(providers.ModelEntry(
-        id=model_id, label=model_id, provider='ollama', context=128_000,
-        tier='fast', open_weights=True,
-    ) for model_id in ('ollama/fixture-default', 'ollama/gemma4:12b'))
+    from agent.llm.providers import get_provider_registry
+    model = providers.ModelEntry('ollama/gemma4:12b', 'Gemma 4 12B (Local)', 'ollama', 128000, 'fast', True)
     monkeypatch.setattr(providers, 'discover_ollama_models',
-        lambda *_: providers.LocalModelInventory(reachable=True, models=models))
-    registry = providers.ProviderRegistry()
-    registry.set_active('ollama/fixture-default')
-    monkeypatch.setattr(providers, 'get_provider_registry', lambda: registry)
+                        lambda _base_url: providers.LocalModelInventory(reachable=True, models=(model,)))
+    get_provider_registry.cache_clear()
     seen=[]
     async def run(*args,**kwargs):
-        seen.append(providers.get_provider_registry().current_model().id)
+        seen.append(get_provider_registry().current_model().id)
         from types import SimpleNamespace
         return SimpleNamespace(action_receipts=[])
     monkeypatch.setattr(api,'_run_agent_scoped',run)
     asyncio.run(api._run_agent('open wikipedia','model-thread','ollama/gemma4:12b'))
     assert seen==['ollama/gemma4:12b']
-    assert registry.current_model().id == 'ollama/fixture-default'
 
 
 @pytest.mark.parametrize('message', ['what is Wikipedia?', 'how does YouTube work?', 'open the calendar settings', 'play a song on Spotify'])
@@ -208,7 +245,7 @@ def test_search_request_finishes_on_observed_results_instead_of_clicking_again()
             return result
     tools=Tools()
     steps=iter([{'action':'type','ref':'@e11','text':'streetfighter movie'}, {'action':'click','ref':'@e13'}])
-    result=BrowserAgent(tool_registry=tools,planner=lambda *_:next(steps)).answer('open wikipedia and search for the streetfighter moview')
+    result=BrowserAgent(tool_registry=tools,planner=lambda *_:next(steps)).answer('open wikipedia and search for the streetfighter moview, show the search results')
     assert result.status=='answered' and 'streetfighter movie' in result.summary
     assert sum(name=='browser.routine_action' for name,*_ in tools.calls)==2
 
@@ -221,3 +258,94 @@ def test_search_request_finishes_on_observed_results_instead_of_clicking_again()
 def test_search_completion_requires_matching_observation_and_no_remaining_actions(goal,query):
     observation='Page: movie - Search results - Example\nURL: https://example.com/?q='+query
     assert not BrowserAgent._site_search_complete(goal,observation,'movie')
+
+
+def test_search_types_into_the_page_and_clicks_a_suggestion_instead_of_guessing_an_article_url():
+    from test_browser_agent import BrowserTools
+    class Tools(BrowserTools):
+        url='about:blank'
+        text=''
+        def observation(self):
+            if '/wiki/Jailer_2' in self.url:return 'Page: Jailer 2 - Wikipedia\nURL: '+self.url
+            return ('Page: Wikipedia\nURL: '+self.url+'\n@e1 input Search Wikipedia (search) value="'+self.text+'"'
+                    +'\n@e2 a Jailer 2 (link) https://en.wikipedia.org/wiki/Jailer_2')
+        def invoke(self,name,payload,*,agent_name):
+            result=super().invoke(name,payload,agent_name=agent_name)
+            if name=='browser.session.permission':return {'permission':'allow'}
+            if name.startswith('browser.session'):
+                result.update(preferences={'agent_interactions':'allow'},tabs=[{'active':True,'url':self.url}])
+            elif name=='browser_snapshot':return self.observation()
+            elif name=='browser_navigate':self.url=payload['url'];return self.observation()
+            elif name=='browser.routine_action':
+                if payload['params']['action']=='type':self.text=payload['params']['text']
+                elif payload['params']['action']=='click':self.url='https://en.wikipedia.org/wiki/Jailer_2'
+                return {'observation':self.observation()}
+            return result
+    tools=Tools()
+    steps=iter([{'action':'navigate','url':'https://en.wikipedia.org/wiki/Jailer_2'},
+                {'action':'navigate','url':'https://www.wikipedia.org/'},
+                {'action':'type','ref':'@e1','text':'jailer'},
+                {'action':'click','ref':'@e2'}, {'action':'done','summary':'Opened the observed Jailer 2 suggestion.'}])
+    result=BrowserAgent(tool_registry=tools,planner=lambda *_:next(steps)).answer('Use the browser to search for Jailer 2 on Wikipedia')
+    assert result.status=='answered'
+    assert [payload['url'] for name,payload,_ in tools.calls if name=='browser_navigate']==['https://www.wikipedia.org/']
+    assert [payload['params']['action'] for name,payload,_ in tools.calls if name=='browser.routine_action']==['type','click']
+
+
+def test_search_cannot_claim_completion_without_a_visible_search():
+    from test_browser_agent import BrowserTools
+    tools=BrowserTools()
+    result=BrowserAgent(tool_registry=tools,planner=lambda *_:{'action':'done','summary':'Found Jailer 2.'}).answer('Search for Jailer 2 on Wikipedia')
+    assert result.status=='blocked'
+
+
+def test_search_can_open_an_explicit_user_url_without_retyping_it():
+    from test_browser_agent import BrowserTools
+    tools=BrowserTools()
+    steps=iter([{'action':'navigate','url':'https://en.wikipedia.org/wiki/Jailer_2'}, {'action':'done','summary':'Opened the supplied page.'}])
+    result=BrowserAgent(tool_registry=tools,planner=lambda *_:next(steps)).answer('Search this page https://en.wikipedia.org/wiki/Jailer_2')
+    assert result.status=='answered'
+    assert any(name=='browser_navigate' for name,*_ in tools.calls)
+
+
+def test_each_successful_action_resets_the_changing_control_retry_budget():
+    from test_browser_agent import BrowserTools
+    from agent.mcp.dedicated_browser import BrowserTargetChanged
+    class Tools(BrowserTools):
+        attempts={}
+        completed=[]
+        def invoke(self,name,payload,*,agent_name):
+            result=super().invoke(name,payload,agent_name=agent_name)
+            if name.startswith('browser.session'):result['preferences']={'agent_interactions':'allow'}
+            if name=='browser.routine_action':
+                action=payload['params']['action'];self.attempts[action]=self.attempts.get(action,0)+1
+                if self.attempts[action]==1:raise BrowserTargetChanged('The control changed before execution.')
+                self.completed.append(action)
+                return {'observation':'Observed input Search value="jailer"'}
+            return result
+    tools=Tools()
+    steps=[{'action':'type','ref':'@e1','text':'jailer'}, {'action':'click','ref':'@e2'},
+           {'action':'press_key','key':'Enter'}, {'action':'done','summary':'Opened the observed result.'}]
+    result=BrowserAgent(tool_registry=tools,planner=lambda *_:steps[len(tools.completed)]).answer('Search for Jailer 2 on Wikipedia')
+    assert result.status=='answered'
+    assert tools.completed==['type','click','press_key']
+
+
+def test_named_page_lookup_keeps_planning_from_results_so_it_can_click_the_article():
+    observation='Page: Jailer 2 - Search results - Wikipedia\nURL: https://en.wikipedia.org/w/index.php?search=Jailer+2'
+    assert not BrowserAgent._site_search_complete('Search for Jailer 2 on Wikipedia',observation,'Jailer 2')
+
+
+@pytest.mark.parametrize('step',[{'action':'navigate','url':'https://www.google.com/'},
+                                {'action':'tabs','tab_action':'new','url':'https://www.google.com/'}])
+def test_an_already_open_address_is_not_reloaded_or_duplicated(step):
+    from test_browser_agent import BrowserTools
+    class Tools(BrowserTools):
+        def invoke(self,name,payload,*,agent_name):
+            result=super().invoke(name,payload,agent_name=agent_name)
+            if name.startswith('browser.session'):result['tabs']=[{'active':True,'url':'https://www.google.com'}]
+            return result
+    tools=Tools();steps=iter([step,{'action':'done','summary':'Google is already open.'}])
+    result=BrowserAgent(tool_registry=tools,planner=lambda *_:next(steps)).answer('Open Google')
+    assert result.status=='answered'
+    assert not any(name in {'browser_navigate','browser_tabs'} for name,*_ in tools.calls)

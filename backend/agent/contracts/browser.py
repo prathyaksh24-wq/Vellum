@@ -228,6 +228,9 @@ class BrowserPointer(BaseModel):
 
 class BrowserStatus(BaseModel):
     contract_version: int = 1
+    render_transport: Literal['stream', 'native'] = 'stream'
+    browser_name: str = 'Brave'
+    native_target_id: str = ''
     available: bool
     reason: str = ""
     running: bool = False
@@ -244,6 +247,11 @@ class BrowserStatus(BaseModel):
     viewport_width: int = 1280
     viewport_height: int = 800
     preferences: BrowserPreferences = Field(default_factory=BrowserPreferences)
+
+
+class BrowserDesktopConfiguration(BaseModel):
+    contract_version: int = 1
+    workspace_root: str
 
 
 class BrowserFrame(BaseModel):
