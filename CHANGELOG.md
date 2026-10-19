@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Keep Electron smoke failure logs limited to process status; retain detailed results locally without printing environment-derived profile paths or arbitrary exception payloads.
+
 - Make browser CI fixtures independent of installed Ollama models and exercise duplicate-tab startup on both Windows and POSIX. Update CodeQL's configured languages after removing the Tauri/Rust desktop runtime.
 
 - Browser searches visibly type into page controls and use observed suggestions/results instead of guessed destination URLs. Recognize site-search commands without a browser keyword and retain interactive follow-ups in browser chats. Reuse an already-open address, avoid accidental duplicate tabs, and stop classifying ordinary Google search controls as uploads. Give native tabs an initial usable viewport and keep a decoded page still beneath split resizing. Reduce Galaxy's rendering cost and animate Appearance previews only on hover or focus.

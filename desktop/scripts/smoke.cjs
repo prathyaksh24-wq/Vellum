@@ -12,12 +12,12 @@ const child = spawn(require('electron'), [path.resolve(__dirname, '../test/smoke
 });
 let timedOut = false;
 const timeout = setTimeout(() => { timedOut = true; child.kill(); }, 30000);
-child.on('error', error => { console.error(error.message); clearTimeout(timeout); process.exitCode = 1; });
+child.on('error', () => { console.error('Electron smoke could not start.'); clearTimeout(timeout); process.exitCode = 1; });
 child.on('exit', (code, signal) => {
   clearTimeout(timeout);
   const result = existsSync(env.VELLUM_SMOKE_RESULT) ? JSON.parse(readFileSync(env.VELLUM_SMOKE_RESULT, 'utf8')) : {};
   if (timedOut || signal || code !== 0 || result.status !== 'passed') {
-    console.error('Electron smoke failed:', {code, signal, timedOut, ...result, profile: env.VELLUM_SMOKE_PROFILE});
+    console.error('Electron smoke failed:', {code, signal, timedOut});
     process.exitCode = 1;
   } else console.log('Electron smoke passed:', result.checks.join(', '));
 });
