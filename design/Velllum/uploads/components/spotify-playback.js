@@ -72,10 +72,18 @@
         throw error;
       }
     }
+    async function sampleSDK(read) {
+      let deadline;
+      try {
+        return await Promise.race([Promise.resolve().then(read), new Promise(resolve => {
+          deadline = setTimeout(resolve, 750);
+        })]);
+      } finally { clearTimeout(deadline); }
+    }
     async function readVolume() {
       if (!player?.getVolume || !enabled || disposed) return;
       const epoch = generation;
-      const volume = await player.getVolume();
+      const volume = await sampleSDK(() => player.getVolume());
       if (!enabled || disposed || epoch !== generation || !Number.isFinite(volume)) return;
       measuredVolume = Math.round(Math.max(0,Math.min(1,volume))*100);
       onPlayer({device:{id:deviceId,name:'Vellum',volume_percent:measuredVolume,supports_volume:true}});
@@ -168,6 +176,21 @@
         emit('file_preview', 'Open Vellum through its local server to enable Spotify audio. Your connection is already saved.');
         return;
       }
+      if (window.VellumDesktop?.runtime === 'electron') {
+        try {
+          if (!navigator.requestMediaKeySystemAccess) throw new Error('Protected audio unavailable');
+          await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [{
+            initDataTypes:['cenc'], audioCapabilities:[{contentType:'audio/mp4; codecs="mp4a.40.2"'}],
+            distinctiveIdentifier:'not-allowed', persistentState:'not-allowed', sessionTypes:['temporary'],
+          }]);
+        } catch (_) {
+          if (!disposed) {
+            fatal = true;
+            emit('unsupported', 'This Electron build has no usable Widevine protected audio. Open Vellum in Brave and enable its player; you can then control that player here. Keep the browser player open.');
+          }
+          return;
+        }
+      }
       try {
         const SDK = await load();
         if (disposed) return;
@@ -220,16 +243,28 @@
         emit('available');
       } catch (_) { emit('error', 'Could not load Spotify playback. Try again.'); }
     }
+    async function reuseSharedPlayer() {
+      try {
+        const state = await api.spotifyPlayer(true);
+        if (state.web_playback?.status === 'ready' && state.web_playback.device_id && state.devices?.some(device => device.id === state.web_playback.device_id && !device.is_restricted)) {
+          emit('shared', 'Using the Vellum player in your other window.'); return true;
+        }
+      } catch (_) {}
+      return false;
+    }
     function enable() {
       if (enabling) return enabling;
-      if (!player) return prepare().then(() => player ? enable() : undefined);
+      if (!player) return prepare().then(() => player ? enable() : snapshot.status === 'unsupported' ? reuseSharedPlayer() : undefined);
       // Called directly from the click handler, before any awaited action.
       const activation = player.activateElement();
       if (activation && activation.catch) activation.catch(() => emit('autoplay_required', 'Click Enable audio to allow playback.'));
       if (snapshot.status === 'ready') return Promise.resolve();
       enabling = (async () => {
         try {
-          await activation;
+          // Activation is sent during the user gesture, but the SDK iframe can
+          // defer its acknowledgement until it connects. Do not gate connection
+          // on that response; autoplay_failed remains the authoritative signal.
+          await Promise.resolve();
           await session('enable');
           if (disposed) { await session('disable'); return; }
           enabled = true; fatal = false; ready = false; generation++;
@@ -240,7 +275,9 @@
             sampled = true;
             const epoch = generation, revision = stateRevision;
             try {
-              const state = player.getCurrentState ? await player.getCurrentState() : null;
+              // SDK iframe reads can stall independently of audio. Keep the
+              // ownership heartbeat alive without inventing a playback state.
+              const state = player.getCurrentState ? await sampleSDK(() => player.getCurrentState()) : null;
               if (!enabled || disposed || epoch !== generation) return;
               if (state && revision === stateRevision) observeState(state);
               await readVolume();
@@ -262,12 +299,7 @@
           // A play request can use the existing canonical device without
           // replacing another window's live ownership lease.
           if (/already running in another window/i.test(error.message || '')) {
-            try {
-              const state = await api.spotifyPlayer(true);
-              if (state.web_playback?.status === 'ready' && state.devices?.some(device => device.id === state.web_playback.device_id && !device.is_restricted)) {
-                emit('shared', 'Using the Vellum player in your other window.'); return;
-              }
-            } catch (_) {}
+            if (await reuseSharedPlayer()) return;
           }
           emit('busy', error.message);
         }

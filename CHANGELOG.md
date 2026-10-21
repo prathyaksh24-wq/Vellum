@@ -6,6 +6,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Update Vite to the patched 7.3.7 release and retain explicit EPUB scan-consent validation when FastAPI interprets omitted boolean form fields as unchecked checkboxes.
+
+- Enable local desktop startup to use a provisioned production-signed Castlabs runtime for Spotify audio, wait for Widevine installation, and keep SDK activation/state reads from blocking connection heartbeats. Detect unavailable DRM before claiming a player and retain verified browser-device recovery. Restrict protected-media permissions to the trusted workspace and Spotify frames. Show one official Spotify playlist view when the Web API denies its songs, without duplicate headers or an empty native table. Retain UI data during the profile cutover and require final Windows package VMP signing/verification. The signed local runtime passed live audio and transport checks; installed-path runtime verification and long-session playback remain release gates.
+
 - Keep Electron smoke failure logs limited to process status; retain detailed results locally without printing environment-derived profile paths or arbitrary exception payloads.
 
 - Make browser CI fixtures independent of installed Ollama models and exercise duplicate-tab startup on both Windows and POSIX. Update CodeQL's configured languages after removing the Tauri/Rust desktop runtime.
