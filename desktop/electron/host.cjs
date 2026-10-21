@@ -49,10 +49,16 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
       return {action: 'deny'};
     });
     win.webContents.on('will-attach-webview', event => event.preventDefault());
-    win.once('ready-to-show', () => {
-      if (!showWindows) return;
+    let shown = false;
+    const showWorkspace = () => {
+      if (!showWindows || shown || closing || win.isDestroyed()) return;
+      shown = true;
       if (options.focusable === false) win.showInactive(); else win.show();
-    });
+    };
+    win.once('ready-to-show', showWorkspace);
+    // A third-party playback iframe may keep the full document load pending.
+    // Its network lifecycle must not leave the already-rendered workspace hidden.
+    win.webContents.on('dom-ready', showWorkspace);
     win.loadURL(url).catch(error => {
       if (!closing && !win.isDestroyed() && error.code !== 'ERR_ABORTED') {
         dialog.showErrorBox('Vellum could not open', error.message);
@@ -108,10 +114,24 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
 
   function configurePermissions(session) {
     const granted = new Set();
-    session.setPermissionCheckHandler((contents, permission, origin) =>
-      known(contents) && trustedWorkspace(origin + new URL(workspace).pathname, workspace) &&
-      (permission === 'fullscreen' || granted.has(contents.id + ':' + permission)));
-    session.setPermissionRequestHandler(async (contents, permission, callback, details) => {
+    const protectedAudio = (contents, origin) => {
+      if (!known(contents) || !trustedWorkspace(contents.getURL(), workspace)) return false;
+      try {
+        const url = new URL(origin);
+        return !url.username && !url.password &&
+          [new URL(workspace).origin, 'https://sdk.scdn.co', 'https://open.spotify.com'].includes(url.origin);
+      } catch { return false; }
+    };
+
+    session.setPermissionCheckHandler((contents, permission, origin) => {
+      if (permission === 'mediaKeySystem') return protectedAudio(contents,origin);
+      return known(contents) && trustedWorkspace(origin + new URL(workspace).pathname, workspace) &&
+        (permission === 'fullscreen' || granted.has(contents.id + ':' + permission));
+    });
+    session.setPermissionRequestHandler(async (contents, permission, callback, details = {}) => {
+      if (permission === 'mediaKeySystem') {
+        callback(protectedAudio(contents, details.requestingUrl)); return;
+      }
       if (!known(contents) || !trustedWorkspace(contents.getURL(), workspace) ||
           (details.requestingUrl && !trustedWorkspace(details.requestingUrl, workspace)) ||
           !['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'].includes(permission)) {
