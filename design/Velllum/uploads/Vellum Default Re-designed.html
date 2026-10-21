@@ -12,6 +12,8 @@
 <script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/accounts.js"></script>
 <link rel="stylesheet" href="components/accounts.css"/>
+<link rel="stylesheet" href="components/desktop-chrome.css"/>
+<script src="components/desktop-chrome.js"></script>
 <script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
 <script src="api/chat.js"></script>
 <script src="api/app-actions.js"></script>
@@ -6723,6 +6725,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
 /* Profile */
 const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalization, onAddAccount, onClose}) => {
   const accounts = React.useContext(window.VellumUI.Accounts.Context);
+  const orderedAccounts = [...accounts.state.accounts].sort((a,b)=>Number(b.id===accounts.state.active_account_id)-Number(a.id===accounts.state.active_account_id));
   const [acctOpen, setAcctOpen] = useState(false);
   const Row = ({icon, label, hint}) => (
     <div className={'pop-row' + (hint ? ' dim' : '')} title={hint ? 'not in this preview' : undefined}>
@@ -6741,7 +6744,7 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalizat
           {acctOpen && (
             <div className="pop-submenu" onClick={e => e.stopPropagation()}>
               <div className="pop-email">Accounts on this device</div>
-              {accounts.state.accounts.map(account => <button className="pop-row" key={account.id} disabled={accounts.busy} onClick={async () => {if (await accounts.select(account.id)) onClose();}}><div className="avatar sm">{initials(account.display_name)}</div><span className="pop-acct-meta"><span>{account.display_name}</span><span className="pop-acct-plan">{account.email || account.username} · {({google:'Google', github:'GitHub', email:'Email'})[account.provider]}</span></span>{account.id === accounts.state.active_account_id && <span className="ctx-check"><IcCheck size={14}/></span>}</button>)}
+              {orderedAccounts.map(account => <button className="pop-row" key={account.id} disabled={accounts.busy} onClick={async () => {if (await accounts.select(account.id)) onClose();}}><div className="avatar sm">{initials(account.display_name)}</div><span className="pop-acct-meta"><span>{account.display_name}</span><span className="pop-acct-plan">{account.email || account.username} · {({google:'Google', github:'GitHub', email:'Email'})[account.provider]} · {account.id === accounts.state.active_account_id?'Active':'Saved'}</span></span>{account.id === accounts.state.active_account_id && <span className="ctx-check"><IcCheck size={14}/></span>}</button>)}
               <div className="ctx-div"/>
               <button className="pop-row" onClick={onAddAccount}><span className="sb-ic"><IcUserPlus size={15}/></span>Add account</button>
             </div>

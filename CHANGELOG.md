@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Integrate Windows workspace menus into a themed, draggable title bar while preserving native caption buttons and existing menu actions. Show the active Vellum identity first in Accounts and the profile picker, with separate labels for inactive saved identities and guest access.
+
 - Keep Electron smoke failure logs limited to process status; retain detailed results locally without printing environment-derived profile paths or arbitrary exception payloads.
 
 - Make browser CI fixtures independent of installed Ollama models and exercise duplicate-tab startup on both Windows and POSIX. Update CodeQL's configured languages after removing the Tauri/Rust desktop runtime.

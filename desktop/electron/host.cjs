@@ -1,5 +1,6 @@
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
+const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 const {conversationTarget, trustedWorkspace, validateCommand} = require('./policy.cjs');
 
 function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null}) {
@@ -9,6 +10,8 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
   const overlayURL = pathToFileURL(path.join(root, 'overlay.html')).href;
   const known = contents => [...windows.values()].some(win => !win.isDestroyed() && win.webContents === contents);
   const trusted = url => trustedWorkspace(url, workspace) || url === controlsURL;
+
+  installChromeHandler(electron,{known,trusted:url=>trustedWorkspace(url,workspace),windows});
 
   function createWindow(key, url, options = {}) {
     const existing = windows.get(key);
@@ -20,16 +23,23 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
       }
       return existing;
     }
+    const customChrome=process.platform==='win32' && (key==='workspace'||key.startsWith('conversation-'));
     const win = new BrowserWindow({
       width: 1280, height: 820, minWidth: 700, minHeight: 500,
       title: 'Vellum', backgroundColor: '#10141c', show: false,
       ...options,
+      ...(customChrome?workspaceChromeOptions():{}),
       webPreferences: {
         preload: key === 'overlay' ? undefined : path.join(__dirname, 'preload.cjs'),
         contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,
         partition: 'persist:vellum-workspace',
+        additionalArguments:customChrome?['--vellum-workspace-chrome']:[],
       },
     });
+    if (customChrome) {
+      win.setAutoHideMenuBar?.(false);
+      win.setMenuBarVisibility?.(false);
+    }
     windows.set(key, win);
     let closing = false;
     win.once('close', () => { closing = true; nativeBrowser?.unmount(win); });

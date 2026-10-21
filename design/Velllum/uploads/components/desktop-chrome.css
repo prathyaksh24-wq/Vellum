@@ -1,0 +1,12 @@
+.desktop-chrome-on body{padding-top:38px}
+.desktop-chrome-on #root{height:calc(100vh - 38px)}
+.desktop-chrome-on .account-welcome{min-height:100%;height:100%}
+.desktop-titlebar{position:fixed;inset:0 0 auto;height:38px;z-index:10000;background:var(--bg,#151313);color:var(--txt,#e8e2dc);border-bottom:1px solid var(--line,rgba(255,255,255,.08));-webkit-app-region:drag;user-select:none;display:flex;align-items:center;padding-inline-start:env(titlebar-area-x,0px)}
+.desktop-menus{display:flex;align-items:center;height:100%;gap:2px;padding-inline:10px;width:env(titlebar-area-width,calc(100% - 145px));min-width:0}
+.desktop-menus button{-webkit-app-region:no-drag;flex-shrink:0;min-height:28px;border:0;border-radius:6px;padding:5px 11px;color:var(--dim,#b7adab);background:transparent;font-family:inherit;font-size:12px;line-height:18px;cursor:default}
+.desktop-menus button:first-child{font-family:var(--font-d,inherit);font-weight:500;color:var(--txt2,#f2eeee);margin-inline-end:8px}
+.desktop-menus button:hover,.desktop-menus button[aria-expanded="true"]{background:var(--hover,rgba(255,255,255,.06));color:var(--txt2,#f2eeee)}
+.desktop-menus button:focus-visible{outline:2px solid var(--ember,#988686);outline-offset:-2px;color:var(--txt2,#f2eeee)}
+.desktop-menu-feedback{position:absolute;top:40px;left:12px;-webkit-app-region:no-drag;font-size:12px;background:var(--modal,#1a1717);border-radius:6px;color:var(--txt);padding:10px 14px;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+.desktop-menu-feedback:empty{display:none}
+.desktop-chrome-on .backdrop{top:38px}

@@ -4,6 +4,10 @@ const {contextBridge, ipcRenderer} = require('electron');
 const commands = new Set(['backend_health', 'open_vellum_window', 'open_conversation_window', 'set_overlay']);
 contextBridge.exposeInMainWorld('VellumDesktop', Object.freeze({
   runtime: 'electron',
+  chrome: process.argv.includes('--vellum-workspace-chrome') ? Object.freeze({
+    openMenu(menu,x,y) { return ipcRenderer.invoke('vellum:chrome',{kind:'menu',menu,x,y}); },
+    setTheme(background,foreground) { return ipcRenderer.invoke('vellum:chrome',{kind:'theme',background,foreground}); },
+  }) : null,
   browser: Object.freeze({
     mount(data) { return ipcRenderer.invoke('vellum:browser-mount', data); },
     subscribe(callback) {

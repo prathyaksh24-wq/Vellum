@@ -124,20 +124,24 @@
 
   function AccountSettings() {
     const context = React.useContext(Context);
+    const active = context.state.accounts.find(account=>account.id===context.state.active_account_id);
+    const saved = context.state.accounts.filter(account=>account.id!==context.state.active_account_id);
+    const accountRow = (account, current) => <div className={'account-list-row'+(current?' current':'')} key={account.id}>
+      <div className="account-identity-mark" aria-hidden="true">{account.provider==='email' ? '@' : <ProviderIcon provider={account.provider}/>}</div>
+      <div className="account-list-meta"><strong>{account.display_name}</strong><small>{account.email || '@' + account.username}</small><small>{providerName(account.provider)} · {current?'Active':'Saved'}</small></div>
+      <div className="account-list-actions">{!current && <button className="btn" disabled={context.busy} onClick={()=>context.select(account.id)} aria-label={`Switch to ${account.email || account.display_name}`}>Switch</button>}
+      <button className="btn" disabled={context.busy} onClick={()=>context.signOut(account.id)} aria-label={`Remove ${account.display_name} from this device`}>Remove account</button></div>
+    </div>;
     return <section aria-label="Accounts" className="account-list">
       <h2>Accounts</h2>
-      <p className="account-note">Manage saved accounts here. To add another, open the account picker in your profile menu. All accounts on this device share its local chats and memory.</p>
+      <p className="account-note">Your Vellum sign-in is shown first. Other accounts are saved on this device and stay inactive until you switch to them.</p>
       {context.error && <p role="alert">{context.error}</p>}
-      {!context.state.accounts.length && <p className="account-note">You’re using Vellum as a guest. No account is signed in.</p>}
-      {context.state.accounts.map(account => <div className="account-list-row" key={account.id}>
-        <div className="account-list-meta"><strong>{account.display_name}</strong><small>{account.email || '@' + account.username}</small><small>{providerName(account.provider)}{account.id === context.state.active_account_id ? ' · Active' : ''}</small></div>
-        {account.id !== context.state.active_account_id && <button className="btn" disabled={context.busy} onClick={() => context.select(account.id)}>Switch</button>}
-        <button className="btn" disabled={context.busy} onClick={() => context.signOut(account.id)} aria-label={`Remove ${account.display_name} from this device`}>Remove account</button>
-      </div>)}
+      {active ? <section className="account-current" aria-label="Signed-in account"><h3>Signed in as</h3>{accountRow(active,true)}</section> : <div className="account-guest"><h3>Using Vellum as a guest</h3><p className="account-note">No account is currently signed in.</p></div>}
+      {saved.length>0 && <section className="account-saved" aria-label="Saved accounts"><h3>Saved on this device</h3>{saved.map(account=>accountRow(account,false))}</section>}
       <div className="account-settings-actions">
         {context.state.active_account_id && <button className="btn" disabled={context.busy} onClick={context.logOut}>Log out</button>}
       </div>
-      <p className="account-note">Log out returns to sign-in. Remove account forgets that identity on this device. Your local data stays here.</p>
+      <p className="account-note">Accounts share this device’s local chats and memory. Google Calendar, YouTube, and other connected services can use different accounts. Log out returns to sign-in; Remove account only forgets that saved identity.</p>
     </section>;
   }
 

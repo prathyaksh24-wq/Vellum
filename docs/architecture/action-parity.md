@@ -117,3 +117,14 @@ attachments, knowledge sources, automations, lifecycle, observability, Pets,
 coding GitHub, plugin contributions, privacy, memory, and chat streaming.
 Run the complete backend suite in CI; the local full backend suite was skipped
 at the user's request.
+
+## Window menus and account identity presentation
+
+The Windows title bar forwards only the existing Vellum, Edit, View, and Window
+menu identifiers through a dedicated native-frame bridge. Native caption/menu
+interactions retain Electron's existing handlers; web previews have no bridge.
+Theme changes and menu anchoring are transient window presentation. The account
+picker remains bound to the existing local Accounts API deferral. Sorting the
+active identity first and labeling other identities Saved changes presentation,
+while switch, logout and removal retain their existing account owners. The
+reviewed Accounts handler fingerprint is updated for its extracted row callback.

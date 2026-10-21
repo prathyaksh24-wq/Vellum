@@ -133,7 +133,7 @@ test('add account, switch and sign-out use server results with multiple accounts
   await click('Close');
   expect(api.cancel).toHaveBeenCalledOnce();
   expect(host.querySelector('dialog')).toBeNull();
-  await click('Remove account');
+  await act(async()=>host.querySelector('[aria-label="Remove Alex from this device"]').click());
   expect(api.signOut).toHaveBeenCalledWith(account.id);
 });
 
@@ -249,4 +249,24 @@ test('failed account switching keeps the active identity and displays the error'
   await render(); await click('Switch');
   expect(host.textContent).toContain('Google · Active');
   expect(host.querySelector('[role="alert"]').textContent).toContain('Credential store locked');
+});
+
+test('accounts settings puts the signed-in identity before older saved accounts', async () => {
+  state={...state,accounts:[account,emailAccount],active_account_id:emailAccount.id};
+  await render();
+  const rows=[...host.querySelectorAll('.account-list-row')];
+  expect(rows[0].textContent).toContain('Email · Active');
+  expect(rows[0].textContent).toContain(emailAccount.email);
+  expect(host.querySelector('[aria-label="Signed-in account"]').textContent).toContain(emailAccount.email);
+  expect(host.querySelector('[aria-label="Saved accounts"]').textContent).toContain('Google · Saved');
+  expect(api.select).not.toHaveBeenCalled();
+});
+
+test('saved identities do not look signed in when using the workspace as a guest', async () => {
+  localStorage.setItem('vellum-local-welcome-v1','1');
+  state={...state,accounts:[account],active_account_id:null};
+  await render();
+  expect(host.textContent).toContain('Using Vellum as a guest');
+  expect(host.querySelector('[aria-label="Signed-in account"]')).toBeNull();
+  expect(host.querySelector('[aria-label="Saved accounts"]').textContent).toContain('Google · Saved');
 });

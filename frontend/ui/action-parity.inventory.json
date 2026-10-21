@@ -1,7 +1,7 @@
 {
   "version": 1,
   "handlerFingerprints": {
-    "design/Velllum/uploads/components/accounts.jsx": {"count":22,"sha256":"cedfa886cef7d894257e056fbc268ee6ca1d75a468f7e15d481888e3c624247f"},
+    "design/Velllum/uploads/components/accounts.jsx": {"count":22,"sha256":"97844561b1105da1a36980f119654ac69b0f251d4b53a78712b2a0d2bf365a64"},
     "design/Velllum/uploads/components/PatternWaves.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
     "design/Velllum/uploads/components/Particles.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
     "design/Velllum/uploads/components/browser-settings.jsx": {"count":68,"sha256":"53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"},
@@ -105,6 +105,7 @@
     {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}}
   ],
   "exemptions": [
+    {"scope":"Windows title-bar menus, native caption controls, theme projection and current-account ordering","reason":"Native window-frame presentation forwards existing Electron menu handlers through a bounded trusted-frame bridge. Account ordering and Active/Saved labels are presentation only; switching, logout and removal retain the existing local Accounts API deferral."},
     {"scope":"Appearance thumbnail hover and keyboard focus previews","reason":"Ephemeral decorative rendering only; choosing a background still dispatches settings.device.update. Pausing a covered backdrop does not change the saved background."},
     {"scope":"Notification bell and popover visibility, video link navigation and run ID disclosure","reason":"Presentation and navigation only; persisted read state uses automation.notifications.read. History is supplied by automation.history."},
     {"scope":"Music page navigation, dock player disclosure/dismissal and focus retention, provider preview tabs, search categories, collection filters, display sorting, editor drafts, read-only catalog requests and queue disclosure","reason":"Ephemeral presentation and provider reads only. Dock auto-hide and player disclosure do not stop or recreate playback. Sorting preserves Spotify source positions without rewriting playlists. Playlist writes use spotify.playlist.edit with an operation-bound review. Unconnected services have explicit unavailable states. Playback selections and controls use spotify.playback.control; audio activation retains spotify.playback.session."},

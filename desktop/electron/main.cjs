@@ -35,14 +35,14 @@ if (!app.requestSingleInstanceLock()) {
     host = createDesktopHost(require('electron'), {workspace: workspaceURL(), nativeBrowser});
     host.configurePermissions(session.fromPartition('persist:vellum-workspace'));
     Menu.setApplicationMenu(Menu.buildFromTemplate([
-      {label: 'Vellum', submenu: [
+      {id:'vellum', label: 'Vellum', submenu: [
         {label: 'Open Vellum', click: () => host.openWorkspace()},
         {label: 'Computer controls', click: () => host.openControls()},
         {type: 'separator'}, {role: 'quit'},
       ]},
-      {role: 'editMenu'},
-      {role: 'viewMenu'},
-      {role: 'windowMenu'},
+      {id:'edit', role: 'editMenu'},
+      {id:'view', role: 'viewMenu'},
+      {id:'window', role: 'windowMenu'},
     ]));
     host.openWorkspace();
   }).catch(error => {
