@@ -208,3 +208,15 @@ PR preparation on 2026-10-21 isolated these Spotify changes on current main,
 excluding the development checkout's unrelated microphone, custom window-chrome,
 account, voice, and browser changes. No tests or builds were run in this pass,
 as explicitly requested. Earlier results above were not rerun on this PR branch.
+
+CI follow-up on 2026-10-21: run 39602431546 passed frontend build/tests, Python
+dependency audit, dependency review and secret scanning. Frontend dependency audit
+failed on Vite 7.3.6 (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw and
+GHSA-587h-7wmj-h5pm); the manifest and lockfile now select patched 7.3.7.
+Backend reported 3239 passed, 28 skipped and one failure: missing EPUB scan
+approval returned 409 instead of 422. FastAPI 0.156.8 explicitly infers False
+for omitted boolean form fields. The API now checks field presence at its HTTP
+boundary, preserving missing-field validation while still rejecting explicit
+False before ingestion. Regression coverage also distinguishes malformed input.
+No local tests or builds were run for this follow-up; GitHub checks are the
+validation source for the pushed CI fix.
