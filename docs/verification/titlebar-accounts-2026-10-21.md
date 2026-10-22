@@ -1,9 +1,10 @@
 # Title bar and account identity presentation — 2026-10-21
 
 The draft PR was isolated from the shared checkout onto main at 179def8.
-Its scope is Windows window chrome and account identity presentation only.
-Dictation, live voice, streaming, embeddings, profile migration, protected music
-playback, plugin setup and other unrelated changes are excluded.
+The initial title-bar/account commit was expanded at the user's request to include
+local Whisper dictation, recording history and settings. Live-voice migration,
+streaming, embeddings, profile migration, protected music playback, plugin setup
+and unrelated shared-checkout changes remain excluded.
 
 Windows workspace and detached-conversation windows use a 38px themed draggable
 bar. Native caption controls remain provided by Electron's title-bar overlay.

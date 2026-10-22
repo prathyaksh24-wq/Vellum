@@ -128,3 +128,15 @@ picker remains bound to the existing local Accounts API deferral. Sorting the
 active identity first and labeling other identities Saved changes presentation,
 while switch, logout and removal retain their existing account owners. The
 reviewed Accounts handler fingerprint is updated for its extracted row callback.
+
+## Dictation settings
+
+The served `dictation-settings.jsx` is included in the scanner. Saved language,
+recording retention, dictionary words and shortcut chords dispatch the existing
+Settings runtime's typed `dictation.settings.update`; recording/transcript
+removal dispatches `dictation.history.delete` with operation-bound confirmation.
+Search, language filters, paging, full-text expansion, retry, clipboard copy,
+explicit local WAV export, and unsaved preference edits are narrow non-state
+exemptions. The composer remains ordinary conversational transport. Its language
+selector was removed and shortcut help receives the saved chord. Only these
+reviewed handlers were refreshed; unrelated inventory drift is reported separately.

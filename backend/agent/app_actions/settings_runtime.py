@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
+from pydantic import ValidationError
 
 from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot, DevicePersonalizationSettings
 from agent.llm.providers import canonical_model_id
@@ -37,7 +38,12 @@ ROUTING_CREDENTIAL_REMOVE_ACTION_ID = "llm.routing.credential.remove"
 ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID = "llm.routing.credential_strategy.set"
 ROUTING_POOL_RESET_ACTION_ID = "llm.routing.pool.reset"
 
+DICTATION_SETTINGS_ACTION_ID = "dictation.settings.update"
+DICTATION_DELETE_ACTION_ID = "dictation.history.delete"
+
 SETTINGS_RUNTIME_ACTION_IDS = frozenset({
+    DICTATION_SETTINGS_ACTION_ID,
+    DICTATION_DELETE_ACTION_ID,
     DEVICE_SETTINGS_INSPECT_ACTION_ID,
     DEFAULT_MODEL_SET_ACTION_ID,
     DEVICE_SETTINGS_UPDATE_ACTION_ID,
@@ -62,6 +68,7 @@ SETTINGS_RUNTIME_ACTION_IDS = frozenset({
 })
 
 CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS = frozenset({
+    DICTATION_DELETE_ACTION_ID,
     MEMORY_SETTINGS_UPDATE_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     MEMORY_ENTRY_DELETE_ACTION_ID,
@@ -127,6 +134,7 @@ class SettingsRuntimeActionService:
         conversation_memory_importer: Callable[[int | None], dict[str, int]],
         obsidian_memory_importer: Callable[[], dict[str, Any]],
         provider_selection_resumer: Callable[[str, AppActionContext], dict[str, Any]] | None = None,
+        dictation_store_provider: Callable[[], Any] | None = None,
     ) -> None:
         self._memory_store_provider = memory_store_provider
         self._memory_creator = memory_creator
@@ -137,6 +145,7 @@ class SettingsRuntimeActionService:
         self._conversation_memory_importer = conversation_memory_importer
         self._obsidian_memory_importer = obsidian_memory_importer
         self._provider_selection_resumer = provider_selection_resumer
+        self._dictation_store_provider = dictation_store_provider
 
     def execute(
         self,
@@ -146,6 +155,27 @@ class SettingsRuntimeActionService:
         *,
         confirmed: bool = False,
     ) -> dict[str, Any]:
+        if action_id in {DICTATION_SETTINGS_ACTION_ID,DICTATION_DELETE_ACTION_ID}:
+            if self._dictation_store_provider is None:
+                raise SettingsRuntimeActionError('DICTATION_UNAVAILABLE','Dictation history is unavailable.',unavailable=True)
+            store=self._dictation_store_provider()
+            try:
+                if action_id==DICTATION_SETTINGS_ACTION_ID:
+                    settings=store.update_preferences(arguments.get('patch') or {})
+                    return {'changed':True,'dictation_settings':settings.model_dump(),'_target_kind':'dictation_settings',
+                        '_target_id':'local','_message':'Dictation settings saved.'}
+                self._require_confirmation(confirmed)
+                from agent.contracts.voice import DictationHistoryDelete
+                command=DictationHistoryDelete.model_validate(arguments)
+                count=store.delete(**command.model_dump())
+                return {'changed':bool(count),'deleted_count':count,'_target_kind':'dictation_history',
+                    '_target_id':command.entry_id or 'all','_message':f'Deleted {count} dictation'+('s.' if count!=1 else '.')}
+            except ValueError as exc:
+                message='Choose valid dictation settings or a history entry.'
+                if isinstance(exc,ValidationError):
+                    # Pydantic's full string includes private dictionary inputs.
+                    message=exc.errors(include_input=False)[0]['msg'].removeprefix('Value error, ')
+                raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS',message) from exc
         if action_id == DEFAULT_MODEL_SET_ACTION_ID:
             return self._set_default_model(arguments)
         if action_id == DEVICE_SETTINGS_UPDATE_ACTION_ID:
@@ -885,6 +915,10 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','minLength':1,'maxLength':120}}},
     }
     specs = [
+        (DICTATION_SETTINGS_ACTION_ID,'Update dictation settings','Set the local dictation language and whether completed transcripts are saved.','device','none',
+            {'patch':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'language':{'type':'string'},'save_history':{'type':'boolean'},'dictionary':{'type':'array','items':{'type':'string'},'maxItems':100},'hold_shortcut':{'type':'string'},'toggle_shortcut':{'type':'string'}}}},'settings-dictation'),
+        (DICTATION_DELETE_ACTION_ID,'Delete dictation history','Permanently delete one saved dictation, or explicitly clear all saved dictations. This does not delete sent chat messages.','device','operation_bound',
+            {'entry_id':{'type':'string','pattern':'^[a-f0-9]{32}$'},'all':{'type':'boolean'}},'settings-dictation'),
         (DEVICE_SETTINGS_INSPECT_ACTION_ID, 'Inspect device settings', 'Read current device settings, profile, personalization and previous background.', 'device', 'none', {}, 'settings-device'),
         (
             DEVICE_SETTINGS_UPDATE_ACTION_ID,

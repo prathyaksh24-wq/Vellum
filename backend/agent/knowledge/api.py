@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, StrictBool
 
@@ -242,6 +242,7 @@ async def core_context_pack(request: ContextPackRequest) -> dict[str, Any]:
 
 @router.post("/books/epub", response_model=BookImportStatus)
 async def core_import_book_epub(
+    http_request: Request,
     file: Annotated[UploadFile, File(...)],
     user_id: Annotated[str, Form(min_length=1, max_length=160)],
     rights_attestation_version: Annotated[str, Form(min_length=1, max_length=120)],
@@ -253,7 +254,20 @@ async def core_import_book_epub(
     requested_by: Annotated[str, Form(min_length=1, max_length=120)] = "user",
     local_only: Annotated[bool, Form()] = False,
 ) -> BookImportStatus:
+    # Form checkbox handling can supply False for an omitted required boolean.
+    # Preserve the missing-field contract separately from explicit refusal.
+    if "scan_approved" not in await http_request.form():
+        await file.close()
+        raise HTTPException(
+            status_code=422,
+            detail=[{
+                "type": "missing",
+                "loc": ["body", "scan_approved"],
+                "msg": "Field required",
+            }],
+        )
     if scan_approved is not True:
+        await file.close()
         raise HTTPException(status_code=409, detail="Local malware scan approval is required.")
     core = get_knowledge_core()
     max_bytes = core.book_ingestion.policy.max_asset_bytes

@@ -186,7 +186,14 @@ class MusicAgent:
         text = ' '.join(text.split("\n\n[", 1)[0].split()).rstrip(".!?")
         text = re.sub(r'\b(?:playlsit|playslist|playlis|playist|palylist|playlkist|playlits)(s?)\b', r'playlist\1', text, flags=re.I)
         text = re.sub(r'\bsogn(s?)\b', r'song\1', text, flags=re.I)
+        # Conversational openings from either dictation or typing are not titles.
+        # Strip them only before an imperative; retain words inside song names.
+        text = re.sub(r'^(?:(?:okay|ok|yeah|alright|well|so)[, ]+)+(?=(?:(?:please|can you|could you|would you)\s+)?(?:play|put|pause|resume|skip|shuffle|stop)\b)', '', text, flags=re.I)
         return re.sub(r'^(?:no+[, ]+|i meant\s+)(?=(?:remove|delete|add|save|play)\b)', '', text, flags=re.I)
+
+    @staticmethod
+    def _spoken_music_request(text: str) -> bool:
+        return bool(re.search(r'(?:\bthen\s+|[.!?]\s+)(?:(?:you know|just|please|so|okay|ok)\s+)*(?:play|put on|shuffle)\s+(?:(?:a|some|random|any|my|the|this)\s+)*(?:songs?|tracks?|tunes?|music|playlists?)\b',text,re.I))
 
     @staticmethod
     def _language_request(text: str) -> bool:
@@ -195,6 +202,11 @@ class MusicAgent:
         if explicit_provider and re.match(r'(?:play|put on|resume|pause|skip)\b',text,re.I):
             return True
         if re.match(r'^(?:(?:can|could|would) (?:you|u) )?put .+ on for me$',text,re.I):
+            return True
+        # A spoken preamble can precede the request. Route the full utterance
+        # to the typed music planner, which still decides its meaning; do not
+        # extract a fragment and execute it as a guessed command.
+        if MusicAgent._spoken_music_request(text):
             return True
         return bool(re.search(r'\b(?:songs?|tracks?|tunes?|playlists?|albums?|music|spotify|volume|shuffle|repeat)\b',text,re.I) and
             re.match(r'(?:(?:yo|hey|bro|pls|plz|please) )*+(?:play|put|spin|chuck|throw|queue|gimme|give|choose|pick|select|rewind|could|can|would|i (?:want|need|wanna))\b',text,re.I))
@@ -232,6 +244,10 @@ class MusicAgent:
         if prefix:
             clean = clean[prefix.end():]
         clauses = AppActionRuntime._split_mixed_clauses(clean, clause_start=start)
+        if (len(clauses)>1 and MusicAgent._spoken_music_request(clean)
+                and not MusicAgent._language_request(clauses[0])
+                and MusicAgent._fast_plan(clauses[0]) is None):
+            return []
         if prefix and len(clauses)>1:
             clauses = [c if music_provider_request(c)[2] else c + ' on ' + prefix[1] for c in clauses]
         return [re.sub(r'^also\s+', '', c, flags=re.I) for c in clauses] if len(clauses) > 1 else []
@@ -653,6 +669,8 @@ class MusicAgent:
     @staticmethod
     def _fast_plan(query: str) -> MusicPlan | None:
         text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?", "", MusicAgent._clean(query), flags=re.I)
+        if MusicAgent._spoken_music_request(text) and not re.match(r'(?:play|put|shuffle)\b',text,re.I):
+            return None
         text, provider, explicit_provider = music_provider_request(text)
         history = MusicAgent._history_plan(text)
         if history is not None:
@@ -766,7 +784,7 @@ class MusicAgent:
             if position is None:
                 position = int(re.match(r"\d+", label)[0])
         shuffle = True if re.search(r"\b(?:shuffle|something|soemthing|random)\b", text, re.I) else False if position else None
-        liked = re.search(r"\b(?:liked\s+songs?(?:\s+playlist)?|liked\s+playlist)(?:\s+(?:on\s+shuffle|in\s+shuffle\s+order))?\s*$", text, re.I)
+        liked = re.search(r"\b(?:liked\s+songs?(?:\s+playlist)?|liked\s+playlist|like\s+songs?\s+playlist)(?:\s+(?:on\s+shuffle|in\s+shuffle\s+order))?\s*$", text, re.I)
         if liked:
             return MusicPlan(operation="play_liked", provider=provider, shuffle=shuffle if shuffle is not None else True, position=position)
         if re.fullmatch(r"(?:(?:play|shuffle|put on)\s+)?(?:(?:something|soemthing|a\s+(?:random\s+)?song)\s+from\s+)?(?:my\s+)?liked\s+songs", text, re.I):

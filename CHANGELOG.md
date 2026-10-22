@@ -6,6 +6,14 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Update Vite to the patched 7.3.7 release and preserve explicit EPUB scan-consent validation across FastAPI checkbox handling changes.
+
+- Upgrade local dictation to pinned multilingual Whisper Large v3 Turbo, retain Small as an explicit rollback, warm each checkpoint with its actual audio feature count, and report the installed model accurately. Route conversational music requests such as “Okay play a song from my liked song playlist” through MusicAgent; preserve full spoken preambles for typed interpretation.
+- Remember trusted-workspace microphone approval in the local Electron profile, avoiding repeated prompts across dictations, new chat windows and app restarts. Keep camera and embedded-site permissions separate and retain the microphone choice through desktop profile migration.
+- Integrate dictation into the existing composer toolbar with a full-width waveform and small icon controls, without a separate divider or recorder row. Keep the text field, placeholder, image attachments and paste/drop available during recording. The square Stop control shows a centered transcription state before adding recognized text to the draft.
+- Enable local Whisper Small dictation in the composer with real microphone levels, pause/resume, cancellation and a five-minute recording limit. Done inserts an editable transcript without sending it; existing text is preserved. Use an isolated offline model worker with GPU startup verification and CPU fallback, separate from LFM2.5 voice conversations.
+- The main Vellum composer supports local LFM2.5-Audio microphone input, an editable transcription of the spoken words, and streamed speech/text replies through an isolated model worker. Press Send voice to end a recording. Cached weights load with reduced temporary memory use and reliable Windows worker cleanup. The direct-audio preview reports its limitations: live dictation, automatic interruptions, Vellum tools and memory integration are pending. The previous Moonshine/Kokoro voice routes and simulated composer voice script are removed.
+
 - Integrate Windows workspace menus into a themed, draggable title bar while preserving native caption buttons and existing menu actions. Show the active Vellum identity first in Accounts and the profile picker, with separate labels for inactive saved identities and guest access.
 
 - Keep Electron smoke failure logs limited to process status; retain detailed results locally without printing environment-derived profile paths or arbitrary exception payloads.

@@ -8,12 +8,13 @@
     "design/Velllum/uploads/components/automation-notifications.jsx": {"count":11,"sha256":"50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"},
     "design/Velllum/uploads/components/music-page.jsx": {"count":55,"sha256":"bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"},
     "design/Velllum/uploads/components/browser-panel.jsx": {"count":60,"sha256":"f506db087782b1cf82acc5abb6823f8949ee47aec1022ac8eaeb492e5e30e337"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":890,"sha256":"22c626de3ccd277b5c80059d862c1c088ad4d2d3918bf8fed088099c69b23617"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":899,"sha256":"6bcd4c6091cd87158fb93849d30010ab982e770e4fea931d079dfe0b4eef33db"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
     "design/Velllum/uploads/components/calendar-workspace.jsx": {"count":18,"sha256":"1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"},
-    "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"}
+    "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"},
+    "design/Velllum/uploads/components/dictation-settings.jsx": {"count":26,"sha256":"36f32bfa9715720bb21375443385064ed871b2dae5d525430241613301dd0b21"}
   },
   "covered": [
     {"surface":"Profile and custom instructions","name":"saved display name username and response instructions","actionId":"settings.device.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchDeviceSettings({profile:p})"}},
@@ -22,7 +23,6 @@
     {"surface":"Browser settings","name":"routine interactions under the explicit browser request","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"patch({agent_interactions:value})"}},
     {"surface":"Browser settings","name":"named profiles preferences site permissions and link destinations","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"'browser.settings.manage'"}},
     {"surface":"Browser settings","name":"confirmed profile deletion browsing data clear and download save","actionId":"browser.settings.data","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"'browser.settings.data'"}},
-
     {"surface":"Notifications","name":"mark individual or all notifications read","actionId":"automation.notifications.read","probe":{"path":"design/Velllum/uploads/components/automation-notifications.jsx","text":"onAction('automation.notifications.read'"}},
     {"surface":"Browser","name":"page hover and pointer leave","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/components/browser-panel.jsx","text":"command('hover'"}},
     {"surface":"Music","name":"confirmed playlist rename description song edits and library removal","actionId":"spotify.playlist.edit","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playlist.edit'"}},
@@ -32,7 +32,6 @@
     {"surface":"YouTube","name":"history configuration and refresh","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.refresh')"}},
     {"surface":"YouTube","name":"history URL and timezone","actionId":"youtube.history.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.configure')"}},
     {"surface":"YouTube","name":"open history in owned browser","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"API.browser.control({operation:'new_tab', url})"}},
-
     {"surface":"Browser","name":"dedicated session controls, tabs, navigation, input, downloads and homepage preferences","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/api/browser.js","text":"action_id:'browser.session.control'"}},
     {"surface":"Workspace Layout","name":"sidebar pin and rail expand","actionId":"ui.sidebar.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}"}},
     {"surface":"Workspace Layout","name":"settings visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('settings', {visible:true})"}},
@@ -102,7 +101,9 @@
     {"surface":"Spotify","name":"playback controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playback.control'"}},
     {"surface":"Spotify","name":"connect or upgrade consent","actionId":"spotify.connection.start","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})"}},
     {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}},
-    {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}}
+    {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}},
+    {"surface":"Dictation","name":"saved dictation language dictionary shortcuts and recording retention","actionId":"dictation.settings.update","probe":{"path":"design/Velllum/uploads/components/dictation-settings.jsx","text":"dictation.settings.update"}},
+    {"surface":"Dictation history","name":"confirmed recording and transcript deletion or clear history","actionId":"dictation.history.delete","probe":{"path":"design/Velllum/uploads/components/dictation-settings.jsx","text":"dictation.history.delete"}}
   ],
   "exemptions": [
     {"scope":"Windows title-bar menus, native caption controls, theme projection and current-account ordering","reason":"Native window-frame presentation forwards existing Electron menu handlers through a bounded trusted-frame bridge. Account ordering and Active/Saved labels are presentation only; switching, logout and removal retain the existing local Accounts API deferral."},
@@ -114,14 +115,15 @@
     {"scope":"draft typing and in-view search filters","reason":"No committed product state; a separate save or submit control commits the change."},
     {"scope":"tooltips, transient pickers and discard prompts","reason":"Non-persistent presentation only; the underlying committed action is reviewed separately."},
     {"scope":"book shelf rotation and page navigation","reason":"Presentation/reading gestures only; processing and compiling remain App Actions."},
-    {"scope":"Calendar refresh, calendar selection, event search and proposed-slot drafts","reason":"Read-only provider requests or staged form choices; confirmed event mutations use the Calendar App Actions listed above."}
+    {"scope":"Calendar refresh, calendar selection, event search and proposed-slot drafts","reason":"Read-only provider requests or staged form choices; confirmed event mutations use the Calendar App Actions listed above."},
+    {"scope":"Dictation history filters pagination transcript expansion retry clipboard audio export and preference drafts","reason":"Read-only local history presentation, explicit clipboard/audio exports, and unsaved dictionary or shortcut edits. Saved preferences dispatch dictation.settings.update; deletion dispatches dictation.history.delete with confirmation. Capture and draft insertion retain the conversational transport exemption."}
   ],
   "deferred": [
     {"surface":"Google, GitHub and hosted email account identity transport","reason":"Interactive identity authorization, saved-account selection, logout, explicit local continuation and account removal use the dedicated local-UI-only Accounts API. OAuth state, PKCE and device verification are not model tools or generic App Action arguments. The API checks loopback client, Host, exact UI Origin and a non-simple header. Generic App Action parity is deferred; account lifecycle behavior and failure outcomes have focused service, HTTP and mounted UI tests."},
     {"surface":"Main Library local notes and project cards","reason":"Legacy local collection mutations still use setLibrary/setProjects; no corresponding App Action definitions."},
     {"surface":"Agent profile enablement and settings","reason":"The specialist On/Off control and settings modal still edit local agentCfg instead of a canonical agent-setting App Action."},
     {"surface":"Chat connector selection and custom instructions","reason":"Per-chat app selection, connector-ready badges and custom instructions still update client state without a persisted App Action receipt."},
-    {"surface":"Dictation and experimental dev mode","reason":"Composer dictation is currently a local presentation toggle, and the dev-mode shortcut is session-only; neither has a runtime action contract."},
+    {"surface":"Dictation capture and experimental dev mode","reason":"Local microphone capture, pause/resume, Done, Cancel and editable transcript insertion are conversational transport, equivalent to composing text. Dictation uses the discovered voice contract, requires browser microphone permission and does not submit an agent turn. The dev-mode shortcut is session-only."},
     {"surface":"Coding workspace local configuration","reason":"Model, reasoning, access, layout and session controls in the separate coding page are local or coding-API state, not App Action receipts."},
     {"surface":"GitHub PR creation visual control","reason":"The backend action exists but this UI has no create-PR control; only PR open is wired in the coding workspace."},
     {"surface":"Third-party connector operations","reason":"Discord and X Agent Reach/optional OAuth setup still use plugin-specific API contracts. Generic App Action parity is deferred for those operations; Calendar connection/event writes and Spotify connection/player-session writes are covered above."},

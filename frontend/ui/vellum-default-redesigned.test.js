@@ -20,6 +20,13 @@ const mcpSetup = readFileSync(
 );
 
 describe("Vellum default redesigned frontend", () => {
+  test('dictation keeps the text field and placeholder available above the recording toolbar', () => {
+    expect(html).toContain("const dictationActive = !['idle','error'].includes(dictation.state);");
+    expect(html).toContain("{!text && (() => {");
+    expect(html).toContain('{dictationActive && dictationUi}');
+    expect(html).not.toContain('.dictation-draft-empty');
+  });
+
   test('offers manual compaction through the existing composer slash menu', () => {
     expect(html).toContain("k: 'compact', label: 'Compact context'");
     expect(html).toContain("item.run === 'compact'");

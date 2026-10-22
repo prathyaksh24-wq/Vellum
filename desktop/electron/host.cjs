@@ -1,4 +1,5 @@
 const path = require('node:path');
+const fs = require('node:fs');
 const {pathToFileURL} = require('node:url');
 const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 const {conversationTarget, trustedWorkspace, validateCommand} = require('./policy.cjs');
@@ -118,24 +119,83 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
 
   function configurePermissions(session) {
     const granted = new Set();
-    session.setPermissionCheckHandler((contents, permission, origin) =>
-      known(contents) && trustedWorkspace(origin + new URL(workspace).pathname, workspace) &&
-      (permission === 'fullscreen' || granted.has(contents.id + ':' + permission)));
-    session.setPermissionRequestHandler(async (contents, permission, callback, details) => {
-      if (!known(contents) || !trustedWorkspace(contents.getURL(), workspace) ||
-          (details.requestingUrl && !trustedWorkspace(details.requestingUrl, workspace)) ||
+    const pending = new Map();
+    const workspaceScope = new URL(workspace).origin + new URL(workspace).pathname;
+    const profile = electron.app?.getPath('userData');
+    const permissionFile = profile ? path.join(profile,'workspace-permissions.json') : null;
+    let microphoneAllowed = false;
+    if (permissionFile) {
+      try {
+        if (fs.statSync(permissionFile).size <= 16384) {
+          const saved = JSON.parse(fs.readFileSync(permissionFile,'utf8'));
+          microphoneAllowed = saved.version === 1 && saved.workspace === workspaceScope && saved.microphone === true;
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') console.warn('Could not read the saved Vellum microphone permission.');
+      }
+    }
+    const rememberMicrophone = () => {
+      microphoneAllowed = true;
+      if (!permissionFile) return;
+      try {
+        fs.mkdirSync(profile,{recursive:true});
+        const staging = permissionFile + '.tmp';
+        fs.writeFileSync(staging,JSON.stringify({version:1,workspace:workspaceScope,microphone:true}),{mode:0o600});
+        fs.renameSync(staging,permissionFile);
+      } catch { console.warn('Could not save Vellum microphone permission; it remains allowed for this session.'); }
+    };
+    const trustedPermission = (contents, origin, details = {}) => {
+      if (!known(contents) || !trustedWorkspace(contents.getURL(),workspace) || details.isMainFrame === false) return false;
+      try {
+        for (const value of [origin, details.securityOrigin].filter(Boolean)) {
+          const url = new URL(value);
+          if (url.origin !== new URL(workspace).origin || url.username || url.password) return false;
+        }
+        return !details.requestingUrl || trustedWorkspace(details.requestingUrl,workspace);
+      } catch { return false; }
+    };
+    session.setPermissionCheckHandler((contents, permission, origin, details = {}) => {
+      if (!trustedPermission(contents,origin,details)) return false;
+      if (permission === 'media') {
+        return (details.mediaType === 'audio' && microphoneAllowed) ||
+          (['audio','video'].includes(details.mediaType) && granted.has(contents.id + ':media:' + details.mediaType));
+      }
+      return permission === 'fullscreen' || granted.has(contents.id + ':' + permission);
+    });
+    session.setPermissionRequestHandler(async (contents, permission, callback, details = {}) => {
+      if (!trustedPermission(contents,details.requestingUrl,details) ||
           !['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'].includes(permission)) {
         callback(false); return;
       }
       if (['fullscreen', 'clipboard-sanitized-write'].includes(permission)) { callback(true); return; }
+      const mediaTypes = Array.isArray(details.mediaTypes) ? [...new Set(details.mediaTypes)].sort() : [];
+      const microphoneOnly = permission === 'media' && mediaTypes.length === 1 && mediaTypes[0] === 'audio';
+      if (microphoneOnly && microphoneAllowed) { callback(true); return; }
+      const permissionKey = contents.id + ':' + permission + (permission === 'media' ? ':' + mediaTypes.join(',') : '');
+      if (granted.has(permissionKey)) { callback(true); return; }
       try {
-        const parent = BrowserWindow.fromWebContents(contents);
-        const {response} = await dialog.showMessageBox(parent, {
-          type: 'question', title: 'Vellum permission',
-          message: permission === 'media' ? 'Allow Vellum to use the requested camera or microphone?' : 'Allow Vellum notifications?',
-          buttons: ['Do not allow', 'Allow'], defaultId: 0, cancelId: 0,
-        });
-        if (response === 1) granted.add(contents.id + ':' + permission);
+        // Coalesce simultaneous microphone requests from workspace windows.
+        const promptKey = microphoneOnly ? 'workspace-microphone' : permissionKey;
+        if (!pending.has(promptKey)) {
+          const parent = BrowserWindow.fromWebContents(contents);
+          pending.set(promptKey,dialog.showMessageBox(parent, {
+            type: 'question', title: 'Vellum permission',
+            message: microphoneOnly ? 'Allow Vellum to use your microphone?' : permission === 'media' ? 'Allow Vellum to use the requested camera or microphone?' : 'Allow Vellum notifications?',
+            ...(microphoneOnly ? {detail:'If you allow access, Vellum will remember it on this device.'} : {}),
+            buttons: ['Do not allow', 'Allow'], defaultId: 0, cancelId: 0,
+          }));
+        }
+        let response;
+        try { ({response} = await pending.get(promptKey)); }
+        finally { pending.delete(promptKey); }
+        if (!trustedPermission(contents,details.requestingUrl,details)) { callback(false); return; }
+        if (response === 1) {
+          granted.add(permissionKey);
+          if (microphoneOnly && !microphoneAllowed) rememberMicrophone();
+          if (permission === 'media') {
+            for (const type of mediaTypes.filter(type => ['audio','video'].includes(type))) granted.add(contents.id + ':media:' + type);
+          }
+        }
         callback(response === 1);
       } catch { callback(false); }
     });
