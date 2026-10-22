@@ -35,6 +35,7 @@ data/plugins/youtube/
 data/plugins/google-calendar/
 data/plugins/state.json
 data/logs/
+data/voice/
 data/cache/
 data/embeddings/
 data/exports/

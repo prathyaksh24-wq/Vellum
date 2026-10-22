@@ -43,6 +43,11 @@ def build_capability_contract() -> CapabilityContract:
             canonical_entry="/design-uploads/Vellum%20Default%20Re-designed.html",
         ),
         features={
+            "voice": FeatureContract(
+                enabled=True, contract="v1", source="agent.voice.session",
+                endpoints={"dictation_status":"/api/voice/dictation/status", "dictation_prepare":"/api/voice/dictation/prepare", "dictation_transcribe":"/api/voice/dictation/transcribe", "dictation_preferences":"/api/voice/dictation/preferences", "dictation_history":"/api/voice/dictation/history", "dictation_recording":"/api/voice/dictation/history/{entry_id}/recording"},
+                notes="Offline local dictation into an editable draft. Saved audio and transcripts stay on this device until deletion; dictation never submits a chat turn.",
+            ),
             "accounts": FeatureContract(
                 enabled=True, source="agent.accounts",
                 endpoints={"status": "/api/accounts/status", "start": "/api/accounts/start", "poll": "/api/accounts/poll", "cancel": "/api/accounts/cancel", "select": "/api/accounts/select", "sign_out": "/api/accounts/sign-out", "logout": "/api/accounts/logout", "continue_local": "/api/accounts/continue-local", "google_callback": "/api/accounts/callback/google", "github_callback": "/api/accounts/callback/github", "email_sign_up": "/api/accounts/email/sign-up", "email_sign_in": "/api/accounts/email/sign-in", "email_callback": "/api/accounts/callback/email"},

@@ -21,7 +21,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,6 +29,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 from agent.personalization import request_personalization
 
+import anyio
 import httpx
 
 _LOGGER = logging.getLogger(__name__)
@@ -169,6 +170,11 @@ from agent.terminal.session import TerminalSessionManager
 from agent.tools.skill_bundles import skill_bundles
 from agent.tools.skill_curator import skill_curator
 from agent.tools.skill_hub import skill_hub, uninstall_confirmed
+from agent.voice.session import VoiceSessionError, close_voice_session, get_dictation_session
+from agent.voice.audio import pcm_wav_duration_seconds
+from agent.voice.history import get_dictation_store
+from agent.voice.dictation_models import validate_language
+from agent.contracts.voice import DictationStatus, DictationTranscript, DictationPreferencesView, DictationHistoryPage
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
@@ -1631,6 +1637,7 @@ async def lifespan(app: FastAPI):
         close = getattr(agent, "aclose", None)
         if close is not None:
             await close()
+        await close_voice_session()
         await browser_shutdown_async()
 
 
@@ -1737,6 +1744,7 @@ _settings_runtime_actions = SettingsRuntimeActionService(
     routing_runtime_provider=get_routing_runtime,
     credential_writer=_write_provider_credential,
     provider_selection_resumer=_resume_provider_selection,
+    dictation_store_provider=lambda:get_dictation_store(),
     memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
     conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
     obsidian_memory_importer=lambda: _memory_orchestrator.import_obsidian_memories(
@@ -6176,6 +6184,104 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             explicit_web_search=request.force_web_search,
         )
     )
+
+
+@router.get("/voice/dictation/status", response_model=DictationStatus)
+async def dictation_status() -> DictationStatus:
+    return get_dictation_session().status()
+
+
+@router.post("/voice/dictation/prepare", response_model=DictationStatus)
+async def dictation_prepare() -> DictationStatus:
+    try:
+        return get_dictation_session().prepare()
+    except VoiceSessionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/voice/dictation/transcribe", response_model=DictationTranscript)
+async def dictation_transcribe(request: Request, audio: UploadFile = File(...), language: Annotated[str | None,Form()] = None) -> DictationTranscript:
+    # Completed audio and text stay in local history when saving is enabled.
+    store=get_dictation_store()
+    preference_error=None
+    selected=language
+    dictionary=[]
+    try:
+        preferences=await asyncio.to_thread(store.preferences)
+        dictionary=preferences.dictionary
+        if selected is None:selected=preferences.language
+    except Exception:
+        _LOGGER.warning('Dictation preferences could not be read.')
+        if selected is None:selected='auto'
+        preference_error='Saved dictation preferences could not be read.'
+    try:
+        selected=validate_language(selected)
+    except ValueError as exc:
+        await audio.close()
+        raise HTTPException(status_code=422,detail=str(exc)) from exc
+    audio_bytes = await audio.read(15 * 1024 * 1024 + 1)
+    await audio.close()
+    if len(audio_bytes) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Dictation recording is too large.")
+    try:
+        duration = pcm_wav_duration_seconds(audio_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Dictation requires a non-empty PCM WAV recording.") from exc
+    if duration > 300:
+        raise HTTPException(status_code=413, detail="Dictation recordings can be up to five minutes.")
+    session = get_dictation_session()
+    if not session.status().available:
+        raise HTTPException(status_code=503, detail=session.status().detail)
+    task = asyncio.create_task(session.transcribe(audio_bytes, duration_seconds=duration,language=None if selected=='auto' else selected,dictionary=dictionary))
+    try:
+        while not task.done():
+            if await request.is_disconnected():
+                raise HTTPException(status_code=499, detail="Dictation was cancelled.")
+            await asyncio.wait({task}, timeout=0.25)
+        result=await task
+        result.requested_language=selected
+        result.history_error=preference_error
+        if result.text.strip():
+            try:
+                result.history_id=await asyncio.to_thread(store.save,result,audio_bytes)
+            except Exception:
+                _LOGGER.warning('Completed dictation history could not be saved.')
+                result.history_error='Transcript inserted, but dictation history could not be saved.'
+        return result
+    except VoiceSessionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    finally:
+        if not task.done():
+            task.cancel()
+            with anyio.CancelScope(shield=True):
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+
+@router.get('/voice/dictation/preferences',response_model=DictationPreferencesView)
+async def dictation_preferences() -> DictationPreferencesView:
+    return DictationPreferencesView(settings=await asyncio.to_thread(get_dictation_store().preferences))
+
+
+@router.get('/voice/dictation/history',response_model=DictationHistoryPage)
+async def dictation_history(offset: int=Query(0,ge=0,le=1000000),limit: int=Query(30,ge=1,le=100),
+                            query: str=Query('',max_length=200),language: str=Query('',max_length=7)) -> DictationHistoryPage:
+    if language and language!='unknown':
+        try: validate_language(language)
+        except ValueError as exc: raise HTTPException(status_code=422,detail=str(exc)) from exc
+    return await asyncio.to_thread(get_dictation_store().history,offset=offset,limit=limit,query=query,language=language)
+
+
+@router.get('/voice/dictation/history/{entry_id}/recording')
+async def dictation_recording(entry_id: str) -> Response:
+    if not re.fullmatch(r'[a-f0-9]{32}',entry_id):
+        raise HTTPException(status_code=404,detail='Recording not found.')
+    audio=await asyncio.to_thread(get_dictation_store().recording,entry_id)
+    if audio is None:
+        raise HTTPException(status_code=404,detail='This transcript has no saved recording.')
+    return Response(audio,media_type='audio/wav',headers={'Content-Disposition':f'attachment; filename="vellum-dictation-{entry_id}.wav"','Cache-Control':'no-store'})
 
 
 async def _read_voice_transcript(audio: UploadFile) -> VoiceTranscribeResponse:

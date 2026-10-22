@@ -8,6 +8,30 @@ import wave
 import numpy as np
 
 
+def pcm_wav_duration_seconds(data: bytes) -> float:
+    """Validate a PCM WAV upload and return its duration."""
+
+    if not data:
+        raise ValueError("audio is empty")
+    try:
+        with wave.open(BytesIO(data), "rb") as wav:
+            channels = wav.getnchannels()
+            sample_width = wav.getsampwidth()
+            sample_rate = wav.getframerate()
+            frame_count = wav.getnframes()
+            compression = wav.getcomptype()
+            frames = wav.readframes(frame_count)
+    except (EOFError, wave.Error) as exc:
+        raise ValueError("audio must be a WAV file") from exc
+    if compression != "NONE" or channels < 1 or sample_rate < 1 or frame_count < 1:
+        raise ValueError("audio must be a non-empty PCM WAV file")
+    if sample_width not in (1, 2, 4):
+        raise ValueError("audio sample width is unsupported")
+    if len(frames) != frame_count * channels * sample_width:
+        raise ValueError("audio has incomplete PCM frames")
+    return frame_count / sample_rate
+
+
 def decode_wav_mono_float32(data: bytes) -> tuple[np.ndarray, int]:
     if not data:
         raise ValueError("audio is empty")

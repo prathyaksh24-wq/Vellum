@@ -28,6 +28,13 @@ remains accepted for older clients; no Tauri runtime is shipped.
 Main-process checks reject unknown commands, unexpected arguments, unrelated
 pages, and subframes. Renderers retain sandboxing, context isolation, and web
 security without Node integration. Third-party pages do not get a Vellum bridge.
+Windows workspace/conversation windows use a compact themed, draggable menu bar
+with the existing Vellum, Edit, View, and Window menus. Caption buttons remain
+native through the Windows title-bar overlay. The menu bridge accepts only
+those four menu identifiers, bounded anchors, and opaque theme colors from a
+registered trusted top-level workspace. The ordinary browser preview has no
+native menu bridge. Restart the desktop host after updating main/preload code;
+Ctrl+R alone cannot replace its native window frame or IPC handlers.
 Media and notification requests require a native user decision.
 
 Application data stays in the existing backend, vault, and configured model

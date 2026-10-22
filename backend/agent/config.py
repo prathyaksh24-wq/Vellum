@@ -278,6 +278,16 @@ class Settings(BaseSettings):
     voice_tts_speed: float = Field(default=1.0, alias="VOICE_TTS_SPEED")
     voice_model_dir: Path = Field(default=Path("data/models/voice"), alias="VOICE_MODEL_DIR")
 
+    voice_startup_timeout_seconds: float = Field(default=300.0, alias="VOICE_STARTUP_TIMEOUT_SECONDS")
+    voice_turn_timeout_seconds: float = Field(default=180.0, alias="VOICE_TURN_TIMEOUT_SECONDS")
+    voice_max_input_seconds: float = Field(default=90.0, alias="VOICE_MAX_INPUT_SECONDS")
+    voice_max_upload_bytes: int = Field(default=10 * 1024 * 1024, alias="VOICE_MAX_UPLOAD_BYTES")
+    voice_max_output_tokens: int = Field(default=512, alias="VOICE_MAX_OUTPUT_TOKENS")
+    voice_max_sessions: int = Field(default=4, alias="VOICE_MAX_SESSIONS")
+    dictation_enabled: bool = Field(default=True, alias="DICTATION_ENABLED")
+    dictation_model_dir: Path = Field(default=Path("data/models/whisper-large-v3-turbo"), alias="DICTATION_MODEL_DIR")
+    dictation_device: Literal["auto", "cpu", "cuda"] = Field(default="auto", alias="DICTATION_DEVICE")
+
     # Computer use
     computer_use_allow_desktop: bool = Field(default=False, alias="COMPUTER_USE_ALLOW_DESKTOP")
     computer_use_screenshot_dir: Path = Field(
@@ -294,6 +304,7 @@ class Settings(BaseSettings):
         "knowledge_core_db_path",
         "knowledge_blob_path",
         "voice_model_dir",
+        "dictation_model_dir",
         "computer_use_screenshot_dir",
         "llm_routing_db_path",
         "privacy_receipt_path",
@@ -320,6 +331,7 @@ class Settings(BaseSettings):
         self.knowledge_core_db_path = _resolve_against_repo(self.knowledge_core_db_path)
         self.knowledge_blob_path = _resolve_against_repo(self.knowledge_blob_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
+        self.dictation_model_dir = _resolve_against_repo(self.dictation_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
         self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)
         self.privacy_receipt_path = _resolve_against_repo(self.privacy_receipt_path)
@@ -369,6 +381,18 @@ class Settings(BaseSettings):
             raise ValueError("VOICE_TTS_ENGINE must be kokoro.")
         if self.voice_tts_speed <= 0:
             raise ValueError("VOICE_TTS_SPEED must be greater than 0.")
+        if self.voice_startup_timeout_seconds <= 0:
+            raise ValueError("VOICE_STARTUP_TIMEOUT_SECONDS must be greater than 0.")
+        if self.voice_turn_timeout_seconds <= 0:
+            raise ValueError("VOICE_TURN_TIMEOUT_SECONDS must be greater than 0.")
+        if self.voice_max_input_seconds <= 0:
+            raise ValueError("VOICE_MAX_INPUT_SECONDS must be greater than 0.")
+        if self.voice_max_upload_bytes < 44:
+            raise ValueError("VOICE_MAX_UPLOAD_BYTES must fit a WAV header.")
+        if self.voice_max_output_tokens < 1:
+            raise ValueError("VOICE_MAX_OUTPUT_TOKENS must be at least 1.")
+        if self.voice_max_sessions < 1:
+            raise ValueError("VOICE_MAX_SESSIONS must be at least 1.")
         if not self.apify_mcp_url.startswith(("https://", "http://")):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
         if not self.serpapi_base_url.startswith(("https://", "http://")):

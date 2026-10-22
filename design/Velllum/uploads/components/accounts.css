@@ -44,3 +44,13 @@
 @media(max-width:720px){.account-welcome{padding:28px 24px}.account-layout{grid-template-columns:1fr;gap:32px;max-width:380px}.account-wordmark{margin-bottom:32px}.account-intro h1{font-size:34px}.account-intro p{display:none}.account-form h2{font-size:22px}.account-dialog{padding:24px}}
 @media(max-width:620px){.set-modal:has(.account-list){flex-direction:column;width:calc(100vw - 24px);height:min(680px,calc(100dvh - 48px));max-height:calc(100dvh - 48px)}.set-modal:has(.account-list) .set-nav{width:calc(100% - 52px);flex-basis:auto;flex-shrink:0;display:flex;gap:4px;overflow-x:auto;overflow-y:hidden;padding:12px;border-right:0;border-bottom:1px solid var(--line)}.set-modal:has(.account-list) .sn-title{display:none}.set-modal:has(.account-list) .set-item{white-space:nowrap;flex-shrink:0;margin:0}.set-modal:has(.account-list) .set-body{width:100%;min-height:0;overflow:auto;padding:24px}.account-list-meta{min-width:130px}}
 @media(prefers-reduced-motion:reduce){.account-provider,.account-secondary{transition:none}}
+.account-current,.account-saved,.account-guest{margin-top:28px}
+.account-list :is(.account-current,.account-saved,.account-guest) h3{font-size:13px;line-height:1.5;font-weight:500;color:var(--txt2);margin:0 0 10px}
+.account-current .account-list-row{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:18px;flex-wrap:wrap;gap:12px}
+.account-saved .account-list-row{gap:12px;flex-wrap:wrap;padding:16px 0}
+.account-identity-mark{display:grid;place-items:center;width:34px;height:34px;flex-shrink:0;border-radius:10px;border:1px solid var(--line);color:var(--txt);font-size:18px}
+.account-identity-mark svg{width:18px;height:18px}
+.account-list-row .account-list-meta{flex:1;min-width:min(170px,100%);overflow-wrap:anywhere}
+.account-list-row .btn{min-height:34px}
+.account-list-actions{display:flex;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+.account-settings-actions{margin-top:22px}

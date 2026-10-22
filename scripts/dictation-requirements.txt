@@ -1,0 +1,4 @@
+faster-whisper==1.2.1
+ctranslate2==4.8.3
+huggingface-hub==2.2.0
+av==16.1.0

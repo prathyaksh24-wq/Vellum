@@ -124,3 +124,12 @@ Run these checks before treating a frontend/backend boundary change as ready:
 npm.cmd --prefix frontend test
 npm.cmd --prefix frontend run build
 ```
+
+## Local dictation
+
+The voice capability adds dictation status, prepare, transcribe, preferences,
+history and a per-entry recording download. Dictation is an editable text input
+transport and never submits a chat turn. The voice adapter owns discovery and
+WAV transport; the composer and Settings → Voice → Dictation use it. Persisted
+preferences use dictation.settings.update; audio/text deletion uses confirmed
+dictation.history.delete. See docs/voice.md for local retention and setup.

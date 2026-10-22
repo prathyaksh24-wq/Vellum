@@ -12,6 +12,10 @@ signed-in UI does not show Sign up, including the Add account dialog. Guests can
 reach registration from that dialog. Settings → Accounts lists saved identities,
 switches the active identity, and offers **Remove account** and **Log out**.
 Up to 12 identities can be saved.
+The active identity appears first under **Signed in as**. Other identities are
+listed separately under **Saved on this device**, with an explicit Saved label.
+Guest access never labels a saved account as active. Connected services may use
+a different account from the active Vellum identity.
 Accounts are identified by provider plus the provider's stable subject ID;
 matching email addresses never merge Google and GitHub identities.
 

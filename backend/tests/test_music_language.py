@@ -6,6 +6,51 @@ from agent.contracts.music import MusicPlan
 from test_music_agent import fixture_agent
 
 
+@pytest.mark.parametrize('text',[
+    'Okay play a song from my liked song playlist',
+    "I'm checking if you're able to hear my voice and then you know just you know play a song from my I don't just play a random song from my like to play this song. I'm just checking if this dictation work or not So well, I just pause there by mistake",
+])
+def test_dictated_music_reaches_music_owner_before_unrelated_specialists(tmp_path, text):
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    from agent.master.state import MasterThreadStateStore
+    from agent.profiles import AgentCatalog
+    agent,_,calls=fixture_agent(planner=lambda *_:{'operation':'play_liked','shuffle':True},
+        library={'items':[{'track':{'uri':'spotify:track:liked'}}],'total':1})
+    assert agent.can_handle(text)
+    state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
+    state.set_active_agent('dictated-music','YoutubeAgent')
+    catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent})
+    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=catalog,state_store=state,
+        skill_route_resolver=type('NoSkillRoute',(),{'resolve_all':lambda self,_:[]})())
+    result=dispatcher.maybe_handle(text,'dictated-music')
+    assert result.agent_name=='MusicAgent'
+    assert result.route_source=='music_intent'
+    assert result.status=='answered'
+    assert 'music_agent' in result.tools
+    assert any(name=='spotify_playback' and args.get('action')=='play' for name,args in calls)
+
+
+@pytest.mark.parametrize('title',['Okay','Yeah Yeah Yeah','So What','Well Well Well'])
+def test_spoken_opening_cleanup_preserves_song_titles(title):
+    assert MusicAgent._clean('play '+title)=='play '+title
+
+
+def test_synthetic_dictation_like_song_playlist_means_liked_collection():
+    plan=MusicAgent._fast_plan('Okay, play a song from my like song playlist.')
+    assert plan is not None and plan.operation=='play_liked'
+
+
+def test_spoken_preamble_is_preserved_for_music_interpretation():
+    seen=[]
+    agent,_,calls=fixture_agent(planner=lambda text,*_:seen.append(text) or {'operation':'clarify'})
+    text="I'm testing the microphone and then please play a song from my playlists"
+    assert agent.can_handle(text)
+    result=agent.answer(text)
+    assert seen and text in seen[0]
+    assert result.status=='needs_fetch'
+    assert not calls
+
+
 @pytest.mark.parametrize('text', ['play a song from any playlist', 'play a song from my playslist', 'play a song. choose any playlist u want'])
 def test_any_saved_playlist_wording_is_not_a_song_title(text):
     plan=MusicAgent._fast_plan(text)

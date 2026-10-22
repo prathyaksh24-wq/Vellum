@@ -587,7 +587,7 @@ def test_http_import_rejects_empty_upload_without_creating_a_record(tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    ("approval", "expected_status"), [(None, 422), ("false", 409), ("invalid", 422)],
+    ("approval", "expected_status"), [(None, 422), ("false", 409), ("0", 409), ("off", 409), ("invalid", 422)],
 )
 def test_http_import_requires_explicit_scan_approval(
     tmp_path: Path, approval: str | None, expected_status: int,
