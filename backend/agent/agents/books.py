@@ -32,6 +32,18 @@ class BooksAgent:
         if INSTALLED_BOOK_CONTEXT_START in text and INSTALLED_BOOK_CONTEXT_END in text:
             return True
         lowered = " ".join(text.casefold().split())
+        if re.search(r"\b(?:in|from|about)\s+(?:my|the)\s+(?:imported|uploaded|installed)\s+", lowered):
+            # A source explicitly named as an import may omit the word "book".
+            # Confirm its title through the existing local Library metadata read;
+            # never classify arbitrary imported files as books or invent a title.
+            try:
+                library = self.tool_registry.invoke("books.skill_lookup", {"query": text}, agent_name=self.name)
+                if any(str(book.get("title") or "").strip()
+                       and re.search(r"(?<!\w)" + re.escape(str(book["title"]).casefold()) + r"(?!\w)", lowered)
+                       for book in library.get("books", []) if isinstance(book, dict)):
+                    return True
+            except Exception:
+                logger.debug("Installed Book title lookup unavailable during matching")
         return bool(
             self._inventory_kind(lowered)
             or re.search(r"\b(?:about|from|in)\s+the\s+book\s+", lowered)

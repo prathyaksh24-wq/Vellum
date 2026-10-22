@@ -112,8 +112,15 @@ class Settings(BaseSettings):
         alias="KNOWLEDGE_BLOB_PATH",
     )
 
-    # Vector store (embedded ChromaDB)
-    chroma_path: Path | None = Field(default=Path("data/embeddings/chroma"), alias="CHROMA_PATH")
+    # One local embedding runtime; each model generation gets a fresh index.
+    embedding_backend: Literal["ollama", "sentence_transformers"] = Field(default="ollama", alias="EMBEDDING_BACKEND")
+    embedding_model: str = Field(default="embeddinggemma-2:270m-q8_0-text", alias="EMBEDDING_MODEL")
+    embedding_model_revision: str = Field(default="c21dd30c1e38444d3b4faa091407b6fa97221447b4965d74931d43d7f09bbbfd", alias="EMBEDDING_MODEL_REVISION")
+    embedding_dimensions: int = Field(default=768, ge=1, le=4096, alias="EMBEDDING_DIMENSIONS")
+    embedding_batch_size: int = Field(default=16, ge=1, le=128, alias="EMBEDDING_BATCH_SIZE")
+    embedding_timeout_seconds: float = Field(default=90, ge=1, le=300, alias="EMBEDDING_TIMEOUT_SECONDS")
+    # Preserve data/embeddings/chroma for legacy rollback.
+    chroma_path: Path | None = Field(default=Path("data/embeddings/chroma-embeddinggemma2-v1"), alias="CHROMA_PATH")
 
     # Privacy
     enable_pii_scrubbing: bool = Field(default=True, alias="ENABLE_PII_SCRUBBING")

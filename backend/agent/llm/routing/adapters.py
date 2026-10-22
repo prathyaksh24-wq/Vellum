@@ -199,6 +199,7 @@ class OllamaAdapter:
         max_tokens: int = 2048,
         reasoning_mode: Any = None,
         context_length: int | None = None,
+        thinking_capable: bool = False,
         **kwargs: Any,
     ):
         del secret, policy, thread_id
@@ -251,6 +252,9 @@ class OllamaAdapter:
             num_predict=max(256, max_tokens),
             num_ctx=min(self.context_length, context_length) if context_length is not None else self.context_length,
             num_batch=self.batch_size,
+            # Capability discovery is not a request for extra inference. The
+            # standard interactive mode answers directly; explicit reasoning
+            # modes retain the provider's separate thinking channel.
             reasoning=bool(profile),
             client_kwargs={"timeout": self.request_timeout},
             **kwargs,

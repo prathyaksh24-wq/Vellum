@@ -210,3 +210,14 @@ def test_ollama_translates_json_object_mode_without_mutating_invocation():
     assert "response_format" in options
     with pytest.raises(ValueError):
         OllamaAdapter.invocation_kwargs({"response_format":{"type":"unsupported"}})
+
+
+def test_ollama_enables_the_separate_thinking_channel_for_discovered_thinking_models():
+    from agent.llm.reasoning import ReasoningMode
+    model = OllamaAdapter(base_url="http://127.0.0.1:11434").build_model(
+        target=FallbackTarget(provider="ollama", model="ollama/gemma4:12b"),
+        secret="", temperature=0, thinking_capable=True,
+        reasoning_mode=ReasoningMode.high,
+    )
+    assert model.reasoning is True
+    assert model._chat_params([])["think"] is True

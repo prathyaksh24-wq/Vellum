@@ -91,7 +91,7 @@ def search_my_notes(query: str) -> str:
         try:
             results = get_vector_store().search(
                 collection="obsidian_vault",
-                embedding=get_embedder().embed(query),
+                embedding=_embed_query(get_embedder(), query),
                 top_k=12,
                 score_threshold=0.40,
             )
@@ -157,6 +157,10 @@ def search_my_notes(query: str) -> str:
     return context
 
 
+def _embed_query(embedder, query: str) -> list[float]:
+    return getattr(embedder, 'embed_query', embedder.embed)(query)
+
+
 def _store_query(query: str) -> None:
     """Store private search telemetry without creating user-facing note clutter."""
     settings = _settings()
@@ -164,7 +168,7 @@ def _store_query(query: str) -> None:
         try:
             embedder = get_embedder()
             store = get_vector_store()
-            embedding = embedder.embed(query)
+            embedding = _embed_query(embedder, query)
             existing = store.search("agent_queries", embedding, top_k=1, score_threshold=0.92)
             if existing:
                 return

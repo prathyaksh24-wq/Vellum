@@ -16,7 +16,10 @@ x-honcho-environment: &honcho-environment
   LLM_OPENAI_API_KEY: ollama-local
   EMBEDDING_VECTOR_DIMENSIONS: "768"
   EMBEDDING_MODEL_CONFIG__TRANSPORT: openai
-  EMBEDDING_MODEL_CONFIG__MODEL: nomic-embed-text
+  # Existing volumes require the offline two-table migration before switching
+  # HONCHO_EMBEDDING_MODEL in .env; unchanged volumes keep their original model.
+  EMBEDDING_MODEL_CONFIG__MODEL: ${HONCHO_EMBEDDING_MODEL:-nomic-embed-text}
+  EMBEDDING_MODEL_CONFIG__MAX_BATCH_SIZE: "16"
   EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
   DERIVER_MODEL_CONFIG__TRANSPORT: openai
   DERIVER_MODEL_CONFIG__MODEL: gemma4:12b

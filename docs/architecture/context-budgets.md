@@ -8,6 +8,11 @@ model copies or a guarantee that every prompt fits. AgentCatalog profiles may
 set `context_length` to narrow their specialist budget; it cannot expand the
 global specialist ceiling.
 
+Local thinking capability does not enable additional reasoning automatically.
+Standard turns send `think=false`; explicitly selected reasoning modes retain
+the separate thinking channel and their scaled output reserve. This does not
+change the main or specialist context windows.
+
 `agent/llm/context.py` owns prompt accounting and bounded projections.
 `RoutingEngine` applies it to every inference destination, including smaller
 fallbacks, in both invocation and streaming. `OllamaAdapter` receives the actual

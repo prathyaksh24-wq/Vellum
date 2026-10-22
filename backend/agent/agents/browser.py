@@ -61,6 +61,9 @@ class BrowserAgent:
 
     def can_handle(self, query: str) -> bool:
         clean = user_query_text(query)
+        from agent.conversations.recall import is_conversation_recall
+        if is_conversation_recall(clean):
+            return False
         return self._engine_request(clean) is not None or self.is_page_request(clean) or bool(re.search(r"\b(?:browser|brave|chrome|website|webpage|tabs?|download)\b", clean, re.I))
 
     @staticmethod
@@ -108,6 +111,9 @@ class BrowserAgent:
         return self.tool_registry.invoke(name, payload or {}, agent_name=self.name)
 
     def answer(self, query: str) -> SpecialistResponse:
+        from agent.conversations.recall import is_conversation_recall
+        if is_conversation_recall(user_query_text(query)):
+            return self._response("needs_fetch", "Use conversation_history or approved personal memory to answer this question; browsing cannot establish what the user used before.")
         if not _BROWSER_RUN_LOCK.acquire(blocking=False):
             return self._response("blocked", "BrowserAgent is already working on another task. Wait or pause it in the browser panel.")
         try:
