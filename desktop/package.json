@@ -10,8 +10,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "electron .",
-    "start": "electron .",
+    "dev": "node scripts/start.cjs .",
+    "start": "node scripts/start.cjs .",
     "build": "node scripts/build-ui.cjs",
     "package": "node scripts/build-ui.cjs && electron-forge package",
     "make": "node scripts/build-ui.cjs && electron-forge make",

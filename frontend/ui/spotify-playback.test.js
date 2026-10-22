@@ -30,7 +30,40 @@ async function fixture(overrides = {}) {
 
 describe('Vellum Spotify Connect player lifecycle', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.resetModules(); controllers = []; });
-  afterEach(async () => { controllers.forEach(c => c.dispose()); await flush(); vi.useRealTimers(); });
+  afterEach(async () => { controllers.forEach(c => c.dispose()); await flush(); vi.useRealTimers(); delete window.VellumDesktop; delete navigator.requestMediaKeySystemAccess; });
+
+  test('Electron without Widevine fails promptly without loading or claiming a local SDK', async () => {
+    window.VellumDesktop={runtime:'electron'};
+    navigator.requestMediaKeySystemAccess=vi.fn(async()=>{throw new DOMException('Unsupported keySystem','NotSupportedError');});
+    const f=await fixture();
+    expect(f.player).toBeUndefined();
+    expect(f.controller.getSnapshot()).toMatchObject({status:'unsupported',ready:false});
+    expect(f.controller.getSnapshot().message).toContain('Widevine');
+    await expect(window.VellumSpotifyPlayback.beginRequest('play music').ready).rejects.toMatchObject({vellumPlaybackError:true});
+    expect(f.actions.dispatch).not.toHaveBeenCalled();
+    expect(f.api.spotifyPlaybackToken).not.toHaveBeenCalled();
+  });
+
+  test('Electron can control a verified browser Vellum device without a local DRM player', async () => {
+    window.VellumDesktop={runtime:'electron'};
+    navigator.requestMediaKeySystemAccess=vi.fn(async()=>{throw new DOMException('Unsupported','NotSupportedError');});
+    const f=await fixture({api:{spotifyPlayer:vi.fn(async()=>({web_playback:{status:'ready',device_id:'browser-device'},devices:[{id:'browser-device',is_restricted:false}]}))}});
+    await window.VellumSpotifyPlayback.beginRequest('play music').ready;
+    expect(f.controller.getSnapshot()).toMatchObject({status:'shared',enabled:false});
+    expect(f.player).toBeUndefined();
+    expect(f.actions.dispatch).not.toHaveBeenCalled();
+    f.api.spotifyPlayer.mockResolvedValue({web_playback:{status:'reconnecting'},devices:[]});
+    await expect(window.VellumSpotifyPlayback.beginRequest('play music').ready).rejects.toMatchObject({vellumPlaybackError:true});
+  });
+
+  test('a DRM-capable Electron runtime still prepares its local Spotify player', async () => {
+    window.VellumDesktop={runtime:'electron'};
+    navigator.requestMediaKeySystemAccess=vi.fn(async()=>({}));
+    const f=await fixture();
+    expect(f.player).toBeDefined();
+    await f.controller.enable();
+    expect(f.player.connect).toHaveBeenCalledTimes(1);
+  });
 
   test('a transient backend heartbeat failure does not disconnect healthy audio', async () => {
     const f=await fixture();
@@ -41,6 +74,26 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     await vi.advanceTimersByTimeAsync(2500); await flush();
     expect(f.player.disconnect).not.toHaveBeenCalled();
     expect(f.controller.getSnapshot()).toMatchObject({status:'ready',ready:true});
+  });
+
+  test('a stalled SDK state or volume read cannot stop the device heartbeat', async () => {
+    const f=await fixture();
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    f.player.getCurrentState=vi.fn(()=>new Promise(()=>{}));
+    f.player.getVolume=vi.fn(()=>new Promise(()=>{}));
+    f.api.spotifyPlaybackDevice.mockClear();
+    await vi.advanceTimersByTimeAsync(5500);
+    expect(f.api.spotifyPlaybackDevice.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(f.controller.getSnapshot()).toMatchObject({status:'ready',ready:true});
+  });
+
+  test('audio activation acknowledgement does not block connecting the SDK', async () => {
+    const f=await fixture();
+    f.player.activateElement.mockReturnValue(new Promise(()=>{}));
+    const enabling=f.controller.enable();
+    await flush();
+    expect(f.player.connect).toHaveBeenCalledTimes(1);
+    await enabling;
   });
 
   test('direct HTML file previews explain the required server origin before loading the SDK', async () => {

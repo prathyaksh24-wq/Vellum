@@ -177,12 +177,33 @@ test.each([403,404])('an unexposed playlist keeps exact-context Play without inv
   const browse=api.spotifyBrowse.getMockImplementation();
   api.spotifyBrowse.mockImplementation(args => args.kind === 'playlist_tracks' ? Promise.reject(Object.assign(new Error('Denied'),{status})) : browse(args));
   await render(); await act(async () => host.querySelector('.music-collection-card:last-child').click());
-  expect(host.textContent).toContain(status === 403 ? 'Spotify will not share' : 'Spotify has not exposed');
+  expect(host.textContent).toContain('Spotify playlist view.');
+  expect(host.querySelector('.music-detail-header')).toBe(null);
+  expect(host.querySelector('.music-track-head')).toBe(null);
+  expect(host.querySelectorAll('.music-playlist-embed iframe')).toHaveLength(1);
   expect(host.querySelectorAll('.music-track-row')).toHaveLength(0);
+  const embedded=host.querySelector('iframe[title="Spotify playlist: Tamil"]');
+  expect(embedded?.getAttribute('src')).toBe('https://open.spotify.com/embed/playlist/Tamil?theme=0');
+  expect(embedded?.getAttribute('allow')).not.toContain('autoplay');
   expect(host.querySelector('[aria-label="Play Tamil"]').disabled).toBe(false);
   await click('Play Tamil');
   expect(music.run).toHaveBeenCalledWith({action:'play',context_uri:'spotify:playlist:Tamil'});
-  expect(host.querySelector('.music-error a').href).toBe('https://open.spotify.com/playlist/Tamil');
+  expect(host.querySelector('[aria-label="Play Tamil"]').textContent).toContain('Play in Vellum');
+});
+
+test('readable playlists keep native rows without loading a third-party embed',async()=>{
+  await render(); await act(async()=>host.querySelector('.music-collection-card:last-child').click());
+  expect(host.querySelectorAll('.music-track-row').length).toBeGreaterThan(0);
+  expect(host.querySelector('.music-playlist-embed')).toBe(null);
+});
+
+test('unsupported desktop audio offers the same browser recovery on the Music page',async()=>{
+  window.VellumSpotifyPlayback={playerUrl:'http://127.0.0.1:5173/design-uploads/Vellum%20Default%20Re-designed.html'};
+  await render({playback:{status:'unsupported',ready:false,message:'Widevine unavailable'}});
+  const link=host.querySelector('a.music-button');
+  expect(link?.textContent).toBe('Open Vellum in browser');
+  expect(link?.getAttribute('target')).toBe('_blank');
+  expect(music.enable).not.toHaveBeenCalled();
 });
 
 test('paused Music-page previous and next dispatch navigation without restarting the song',async () => {

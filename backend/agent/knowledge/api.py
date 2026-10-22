@@ -6,6 +6,7 @@ import asyncio
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Path, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, StrictBool
 
@@ -254,20 +255,14 @@ async def core_import_book_epub(
     requested_by: Annotated[str, Form(min_length=1, max_length=120)] = "user",
     local_only: Annotated[bool, Form()] = False,
 ) -> BookImportStatus:
-    # Form checkbox handling can supply False for an omitted required boolean.
-    # Preserve the missing-field contract separately from explicit refusal.
+    # FastAPI treats absent boolean form fields as unchecked HTML checkboxes.
+    # Consent must still be explicitly supplied, as required by this API.
     if "scan_approved" not in await http_request.form():
-        await file.close()
-        raise HTTPException(
-            status_code=422,
-            detail=[{
-                "type": "missing",
-                "loc": ["body", "scan_approved"],
-                "msg": "Field required",
-            }],
-        )
+        raise RequestValidationError([
+            {"type": "missing", "loc": ("body", "scan_approved"),
+             "msg": "Field required", "input": None},
+        ])
     if scan_approved is not True:
-        await file.close()
         raise HTTPException(status_code=409, detail="Local malware scan approval is required.")
     core = get_knowledge_core()
     max_bytes = core.book_ingestion.policy.max_asset_bytes

@@ -5,7 +5,10 @@ const {serveUI} = require('./ui-server.cjs');
 const path = require('node:path');
 const {createNativeBrowser,readDebuggerEndpoint} = require('./native-browser.cjs');
 
+const {initializeProtectedAudio} = require('./protected-audio.cjs');
+
 app.setName('Vellum');
+require('./workspace-profile.cjs').configureWorkspaceProfile(app,{directory:process.env.VELLUM_DESKTOP_PROFILE});
 app.setAppUserModelId('local.vellum.desktop');
 app.enableSandbox();
 app.commandLine.appendSwitch('remote-debugging-address','127.0.0.1');
@@ -20,6 +23,9 @@ if (!app.requestSingleInstanceLock()) {
   require('node:fs').rmSync(path.join(app.getPath('userData'),'DevToolsActivePort'),{force:true});
   app.on('second-instance', () => host?.openWorkspace());
   app.whenReady().then(async () => {
+    // Wait for CDM registration before a workspace can probe EME.
+    try { await initializeProtectedAudio(require('electron')); }
+    catch (error) { console.warn('Spotify protected audio:', error.message); }
     if (app.isPackaged) uiServer = await serveUI(path.join(app.getAppPath(), 'resources/ui'));
     let workspaceRoot=process.env.VELLUM_WORKSPACE_ROOT;
     if(!workspaceRoot && app.isPackaged) {

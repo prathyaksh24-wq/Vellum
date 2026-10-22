@@ -1,6 +1,7 @@
 # Title bar and account identity presentation — 2026-10-21
 
-The draft PR was isolated from the shared checkout onto main at 179def8.
+The draft PR was isolated from the shared checkout onto main at 179def8 and
+later updated with main at 1e3724b to resolve conflicts blocking hosted CI.
 The initial title-bar/account commit was expanded at the user's request to include
 local Whisper dictation, recording history and settings. Live-voice migration,
 streaming, embeddings, profile migration, protected music playback, plugin setup

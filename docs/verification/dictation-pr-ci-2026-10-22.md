@@ -14,7 +14,11 @@ the manifest and lockfile now use patched 7.3.7. The backend run reported
 returned 409 instead of the missing-field contract's 422. The endpoint now
 checks form-field presence separately from explicit false approval, which
 continues to return 409 before any book record is created. Regression source
-also covers false, zero and off form values.
+also covers false, zero and off form values. Before the updated CI could start,
+GitHub reported conflicts with main at 1e3724b. Main already contained the Vite
+and consent fixes from PR #225. The merge retains that consent implementation
+and its invalid-input regression, adds zero/off cases, and combines upstream
+Spotify media-key permission handling with remembered microphone approval.
 
 No local tests, builds, native smoke runs or UI automation were executed while
 preparing or publishing this update, as requested. Static diff and scope review

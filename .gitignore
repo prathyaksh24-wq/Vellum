@@ -78,3 +78,6 @@ desktop/src-tauri/target/
 # Personal data — never commit
 Vault/
 .obsidian/
+
+# Local diagnostic artifacts and isolated worktrees
+.scratch/

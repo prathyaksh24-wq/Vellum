@@ -113,3 +113,108 @@ Chrome extension installation, Widevine/protected media, native browser profile
 import, and host system-cursor control are separate capabilities and are not
 established by native embedding. Agent model planning and backend request time
 are still independent of page rendering performance.
+
+## Spotify protected audio
+
+Stock Electron 44.9.0 does not provide usable Widevine audio in the local probe.
+Self-contained Spotify playback was verified on Windows using the official
+Castlabs ECS 44.5.1+wvcus runtime with a production streaming VMP signature.
+The unsigned development runtime connected but Spotify's audio-license endpoint
+returned HTTP 500 and audio stopped. After EVS signing, the same endpoint returned
+200; the user confirmed continuous audio for the requested one-minute test and
+working Pause, Resume, Next and Previous. A subsequent automated production-
+controller check reached 65 seconds and verified those transport actions again.
+Days/months of playback remain unverified.
+
+`npm run dev`, `npm start` and `scripts/start-desktop.ps1` prefer a locally
+provisioned distribution at `.desktop-runtime/protected-audio` (repository root).
+An explicit `ELECTRON_OVERRIDE_DIST_PATH` takes precedence. Without either, they
+use the installed stock Electron package and the UI explains unavailable DRM.
+This uses Electron's existing CLI and runtime override, not a second player or
+backend. The local distribution is ignored by Git and survives `npm ci`.
+
+To provision another Windows development machine:
+
+1. Obtain an official supported [Castlabs ECS release](https://github.com/castlabs/electron-releases/releases)
+   and verify its published SHA-256 before extracting its distribution into
+   `.desktop-runtime/protected-audio`. Do not copy Widevine from another browser;
+   ECS downloads the component on first launch. The tested Windows x64 archive
+   was `electron-v44.5.1+wvcus-win32-x64.zip`, SHA-256
+   `c7d51e4bf80de9ef18b3306b0d140059bb203510d3dfc88f3404049a12c90f89`.
+2. Follow [Castlabs EVS setup](https://github.com/castlabs/electron-releases/wiki/EVS).
+   Sign the extracted directory with `python -m castlabs_evs.vmp sign-pkg .desktop-runtime/protected-audio`,
+   then verify it with `python -m castlabs_evs.vmp --no-ask verify-pkg .desktop-runtime/protected-audio`.
+   A development-only certificate is insufficient for this Spotify test.
+   Credentials remain in the official client's local configuration, outside Git.
+3. Close older Vellum desktop instances and launch normally. The host waits for
+   Widevine installation before opening its workspace. Re-sign after replacing
+   the ECS distribution, and retest Spotify playback after runtime/CDM updates.
+
+The tested ECS version is older than stock 44.9.0, which includes later upstream
+fixes. Keep that maintenance gap explicit and update the provisioned distribution
+when a supported ECS build containing those fixes becomes available. Stock
+development dependencies remain unchanged. Forge's `readPackageJson` hook selects
+ECS for packaging, because Forge derives the version from package metadata and
+overrides `packagerConfig.electronVersion`. Its download mirror targets official
+Castlabs releases. `VELLUM_ELECTRON_ZIP_DIR` optionally selects an already verified
+archive directory. The `postPackage` hook requires the publisher's EVS client to
+sign and verify the final output; signing/verification failure fails packaging.
+Set `VELLUM_EVS_PYTHON` to that client's Python executable. Credentials stay in the
+official client's local configuration, never in the app or source tree. A local
+Windows x64 package was built, signed and verified successfully. End users receive
+the signed app and do not need an EVS account.
+
+The normal development launcher selects `.desktop-runtime/workspace-profile`.
+Packaged Windows startup selects `%USERPROFILE%/.vellum/desktop-profile`, before
+initializing sessions. `VELLUM_DESKTOP_PROFILE` explicitly overrides either.
+First migration copies existing UI storage/preferences through a staging directory
+and preserves the original profile. It does not transplant cookies, encryption
+keys, CDM state or caches; website sessions may need a new login. An existing
+destination is never overwritten. Backend Spotify authorization is independent.
+
+This profile choice has a specific local basis: the signed runtime returned
+Spotify license HTTP 403 with both fresh and existing AppData profiles. Castlabs'
+documented Widevine verification reported `PLATFORM_TAMPERED` there, versus
+`PLATFORM_SOFTWARE_VERIFIED` with fresh workspace, Documents and user-home
+profiles. Identical DLL/signature hashes, permissions, path separator changes and
+a Local State comparison did not explain the difference. A byte-identical runtime
+copied into Local AppData also failed runtime verification, even with the known
+good workspace profile. The underlying location-dependent verification cause is
+unresolved; the profile selection is a tested local mitigation, not evidence that
+every installation path works. A Windows installer/updater and clean-install
+audio acceptance on representative machines remain release gates. Do not ship
+an AppData installation on the assumption that offline signature verification
+alone establishes runtime VMP verification.
+
+macOS signing order needs a separate release integration: VMP must precede macOS
+code signing; the current hook rejects a configured `osxSign` pipeline rather than
+silently signing in the wrong order. Windows VMP follows executable code signing.
+Linux audio and macOS packages have not been validated by these Windows tests.
+Spotify developer-mode access is also separate from app signing; wider account
+access requires Spotify's approval. See [Spotify quota guidance](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
+
+A successful Spotify OAuth connection is separate from protected audio support.
+The workspace probes the Widevine EME key system before creating a local SDK
+player; unsupported hosts show an explicit browser recovery link instead of
+claiming a connecting playback device.
+
+Open the same Vellum workspace in a protected-content-capable browser such as
+Brave, enable its Vellum player, and keep that tab open. Desktop Play can then
+reuse that verified Vellum device through the existing backend and App Actions.
+It checks both the live device list and canonical ready state on each request;
+it neither takes over the other window's lease nor claims a local audio device.
+This is browser-backed playback controlled from Electron, not embedded Electron
+audio. This remains a fallback for machines without a provisioned signed runtime.
+
+The host permits `mediaKeySystem` only for the workspace origin and the exact
+HTTPS Spotify SDK/embed origins inside a registered workspace window. Spotify
+frames receive no microphone/camera or native bridge authority. This permission
+policy alone does not install Widevine or provide a DRM license.
+
+For playlists whose songs Spotify's Web API denies, Music shows Spotify's official
+playlist iframe. Its own artwork/title appears once, replacing the native header
+and empty native table. Play in Vellum still sends the exact playlist context to
+the canonical player. Spotify owns the embedded list and its internal controls;
+Vellum cannot sort/edit it or treat it as a complete native API result. No scraped
+copy, user token transfer, or parallel playlist store is created. Embed playback
+is independent of the Vellum SDK and is not a workaround for missing DRM.

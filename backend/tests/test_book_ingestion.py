@@ -587,31 +587,33 @@ def test_http_import_rejects_empty_upload_without_creating_a_record(tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    "approval,expected", [(None, 422), ("false", 409), ("0", 409), ("off", 409)]
+    ("approval", "expected_status"), [(None, 422), ("false", 409), ("0", 409), ("off", 409), ("invalid", 422)],
 )
 def test_http_import_requires_explicit_scan_approval(
-    tmp_path: Path, approval: str | None, expected: int
+    tmp_path: Path, approval: str | None, expected_status: int,
 ) -> None:
     core = build_core(tmp_path)
     app = FastAPI()
     app.include_router(knowledge_router, prefix="/api/knowledge")
     set_knowledge_core(core)
-    form = {"user_id": "user-1", "rights_attestation_version": "local-epub-v1"}
+    data = {"user_id": "user-1", "rights_attestation_version": "local-epub-v1"}
     if approval is not None:
-        form["scan_approved"] = approval
+        data["scan_approved"] = approval
     try:
         with TestClient(app) as client:
             response = client.post(
                 "/api/knowledge/core/books/epub",
-                data=form,
+                data=data,
                 files={"file": ("book.epub", valid_epub_bytes(), "application/epub+zip")},
             )
     finally:
         set_knowledge_core(None)
 
-    assert response.status_code == expected
+    assert response.status_code == expected_status
     if approval is None:
         assert response.json()["detail"][0]["loc"] == ["body", "scan_approved"]
+    elif approval == "false":
+        assert response.json()["detail"] == "Local malware scan approval is required."
     assert core.store.status()["counts"]["book_assets"] == 0
 
 
