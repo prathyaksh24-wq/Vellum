@@ -25,6 +25,15 @@ remain active and the Knowledge Core operates in shadow mode.
 
 ## Retrieval flow
 
+The shared local `rag/embedder.py` owner uses pinned Google EmbeddingGemma 2
+text embeddings through loopback Ollama, with 768 dimensions and explicit
+query/document prefixes. Chroma and book materializations record the embedding
+generation. Honcho uses the same installed model through its existing Docker
+host bridge and a separately identified, symmetric unprefixed contract; its
+vectors never share a collection with RAG. FTS5 and canonical memory records
+remain independent of this model. Existing installations require the offline
+migrations in [local embeddings](architecture/local-embeddings.md).
+
 Working conversation compaction is a bounded projection in the existing
 LangGraph checkpoint, not a new durable-memory owner. Canonical chat history
 remains intact. Excerpts retain attribution and cannot authorize actions or

@@ -10,13 +10,13 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator, Sequence
 import unicodedata
+from uuid import uuid4
 
 from agent.skills.parser import SkillPackageError, SkillPackageParser
 
 
 CATALOG_SCHEMA_VERSION = 2
 DEFAULT_SEMANTIC_THRESHOLD = 0.92
-EMBEDDING_MODEL = "BAAI/bge-m3"
 
 
 class SkillCatalogError(ValueError):
@@ -102,7 +102,10 @@ def calibrate_semantic_threshold(
                 best = candidate
     if best is None:
         raise SkillCatalogError("no semantic threshold satisfies the production precision and recall gates")
-    return {**best, "cases": len(labeled_scores), "model": EMBEDDING_MODEL, "projection_version": 1}
+    from agent.rag.embedder import get_embedder
+    provider = get_embedder()
+    return {**best, "cases": len(labeled_scores), "model": provider.model_name,
+            "embedding_profile": provider.fingerprint, "projection_version": 1}
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,7 @@ class SkillCatalog:
         self.root = Path(root).resolve()
         self.path = Path(db_path) if db_path else self.root.parent / "data" / "skills" / "catalog.db"
         self.embedder = embedder
+        self._injected_embedding_profile = f"injected:{uuid4().hex}"
         self.semantic_threshold = semantic_threshold
         self.parser = SkillPackageParser()
         self._migrate()
@@ -169,6 +173,15 @@ class SkillCatalog:
         if errors:
             raise SkillCatalogError("; ".join(errors))
 
+        # Cache validity includes the vector space, even when text is unchanged.
+        # Injected providers stay isolated from the production model's identity.
+        if self.embedder is None:
+            from agent.rag.embedder import get_embedder
+            provider = get_embedder()
+            embedding_profile = f"{provider.model_name}@{provider.fingerprint}"
+        else:
+            embedding_profile = self._injected_embedding_profile
+
         with self.connect() as connection:
             existing = {row["normalized_name"]: dict(row) for row in connection.execute("SELECT * FROM skills")}
             live_names: set[str] = set()
@@ -185,8 +198,10 @@ class SkillCatalog:
                     projection = semantic_projection(package.metadata.description, package.body)
                     semantic_fingerprint = hashlib.sha256(projection.encode("utf-8")).hexdigest()
                     previous = existing.get(name)
-                    vector_json = previous.get("vector_json") if previous else None
-                    if previous and previous.get("semantic_fingerprint") == semantic_fingerprint:
+                    reusable = bool(previous and previous.get("semantic_fingerprint") == semantic_fingerprint
+                                    and previous.get("embedding_model") == embedding_profile and previous.get("vector_json"))
+                    vector_json = previous["vector_json"] if reusable else None
+                    if reusable:
                         unchanged += 1
                     elif embed_semantics:
                         vector = self._embed(projection)
@@ -205,7 +220,7 @@ class SkillCatalog:
                                updated_at=CURRENT_TIMESTAMP""",
                         (name, package.metadata.name, package.metadata.description, state, package.metadata.metadata.hermes.category,
                          package.root.relative_to(self.root).as_posix(), content_hash, semantic_fingerprint, vector_json,
-                         EMBEDDING_MODEL if vector_json else None, metadata_json),
+                         embedding_profile if vector_json else None, metadata_json),
                     )
                     row_id = connection.execute("SELECT id FROM skills WHERE normalized_name=?", (name,)).fetchone()[0]
                     connection.execute("INSERT INTO skills_fts(rowid, name, description, body) VALUES(?,?,?,?)", (row_id, name, package.metadata.description, package.body))

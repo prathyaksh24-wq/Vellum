@@ -50,6 +50,10 @@ bounded connection is justified. Do not return evidence anchors.
 Image OCR transcriptions are identified in supplied evidence. They are inferred text,
 not verified quotations; preserve that uncertainty and do not silently correct names or dates.
 Keep the answer concise and match the requested number of points.
+For a narrow factual question, use one or two short sentences and one claim.
+Include only what directly answers that question; omit peripheral advice.
+Preserve the source's negations, limits, qualifications, and comparisons. Never
+turn a relative comparison into an absolute rule or add an unsupported generalization.
 Keep passage-N labels inside structured evidence_ids only, never in the user-facing answer.
 Never invent chapters, printed page numbers, quotations, or evidence IDs. Give the source section alongside each
 point when useful. Return at most three claims, using this exact claim shape:

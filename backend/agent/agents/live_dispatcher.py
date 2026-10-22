@@ -74,6 +74,11 @@ class LiveAgentDispatcher:
 
     def maybe_handle(self, message: str, thread_id: str, *, on_result=None) -> LiveAgentResult | None:
         message = self._clean_surface_prefix(message)
+        from agent.conversations.recall import is_conversation_recall
+        if is_conversation_recall(message):
+            # Main conversation recall owns this evidence, including when the
+            # noun in the question names a previously selected specialist.
+            return None
         from agent.agents.music import MusicAgent
         state = self.state_store.get(thread_id)
         active_agent = state.active_agent

@@ -1,8 +1,8 @@
 """
 Bulk ingest Obsidian vault content into the configured vector store.
 
-Phase 7 keeps the store/embedder abstraction lightweight. Phase 8 will replace
-those internals with BGE-M3 and embedded ChromaDB while preserving this policy-aware flow.
+The shared embedding owner and embedded Chroma preserve this policy-aware flow
+across model generations.
 """
 
 from pathlib import Path
@@ -90,12 +90,16 @@ class VaultIngester:
             clean, _ = self.scrubber.scrub(clean)
 
         chunks = chunk_text(clean)
+        batch = getattr(self.embedder, 'embed_batch', None)
+        vectors = batch(chunks) if callable(batch) else [self.embedder.embed(chunk) for chunk in chunks]
+        if len(vectors) != len(chunks):
+            raise ValueError('Embedding response count does not match vault chunk count.')
         can_send_to_llm = FolderPermission.SENT_TO_LLM in policy.permissions
         for index, chunk in enumerate(chunks):
             self.store.upsert(
                 collection="obsidian_vault",
                 text=chunk,
-                embedding=self.embedder.embed(chunk),
+                embedding=vectors[index],
                 metadata={
                     "folder": folder,
                     "path": rel_path,

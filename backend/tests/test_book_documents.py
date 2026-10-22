@@ -583,7 +583,7 @@ def test_passed_document_compiles_one_compatible_active_materialization(
             "tags": ["book", "installed", "book-to-skill"],
             "materialization_id": bundle.materialization_id,
             "edition_id": bundle.edition_id,
-            "compiler": "book-to-skill-v1.3.0-vellum.2",
+            "compiler": "book-to-skill-v1.3.0-vellum.3",
         }
     ]
     assert "Truth needs evidence" not in skill_text
@@ -644,7 +644,7 @@ def test_book_retrieval_returns_verified_evidence_from_active_materializations(
     assert index.searches == [
         {
             "embedding": [1.0, 38.0],
-            "top_k": 4,
+            "top_k": 8,
             "filters": {
                 "user_id": "user-1",
                 "materialization_id": {"$in": [status.materialization_id]},
@@ -679,6 +679,28 @@ def test_book_retrieval_returns_verified_evidence_from_active_materializations(
     assert receipt["query_hash"] != "What does the book say about evidence?"
     assert receipt["evidence_count"] == 1
     assert "Truth needs evidence" not in json.dumps(dict(receipt), sort_keys=True)
+
+
+def test_book_retrieval_keeps_named_title_scoped_before_normalizing_query(tmp_path: Path) -> None:
+    index = RecordingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    installed = []
+    original = structured_epub_bytes()
+    with zipfile.ZipFile(BytesIO(original)) as archive:
+        package = archive.read("OPS/package.opf").decode("utf-8")
+    revised = rewrite_zip_entries(original, replacements={
+        "OPS/package.opf": package.replace("Structured Fixture", "Different Fixture")})
+    for content in (original, revised):
+        imported, structured = import_and_construct(core, content)
+        request = BookQualityRequest(user_id="user-1", import_id=imported.import_id,
+            run_id=imported.run_id, document_id=structured.document_id)
+        core.evaluate_book_document_quality(request)
+        installed.append(core.materialize_book_document(BookMaterializationRequest(**request.model_dump())))
+    result = core.search_active_book_materializations(BookRetrievalRequest(
+        user_id="user-1", query="In my imported Structured Fixture, what does it say about evidence?"))
+    assert index.searches[-1]["filters"]["materialization_id"] == {"$in": [installed[0].materialization_id]}
+    assert result["evidence"]
+    assert {row["materialization_id"] for row in result["evidence"]} == {installed[0].materialization_id}
 
 
 def test_book_retrieval_excludes_superseded_materializations(tmp_path: Path) -> None:
@@ -822,11 +844,11 @@ def test_book_retrieval_skips_whole_chunks_that_exceed_the_token_budget(
         )
     )
 
-    assert len(result["evidence"]) == 1
-    assert long_text.strip() not in result["evidence"][0]["text"]
-    assert result["evidence"][0]["text_hash"] == sha256(
-        result["evidence"][0]["text"].encode("utf-8")
-    ).hexdigest()
+    assert 1 <= len(result["evidence"]) <= 2
+    assert sum(max(1, (len(item["text"]) + 3) // 4) for item in result["evidence"]) <= 256
+    for item in result["evidence"]:
+        assert long_text.strip() not in item["text"]
+        assert item["text_hash"] == sha256(item["text"].encode("utf-8")).hexdigest()
 
 
 def test_materialization_rejects_non_passed_and_cross_tenant_documents(

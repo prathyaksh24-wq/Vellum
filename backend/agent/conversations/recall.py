@@ -42,7 +42,7 @@ def read_history() -> list[dict]:
     from agent.conversations.lifecycle import ConversationLifecycle
     return ConversationLifecycle(path=HISTORY_PATH).list()
 
-_STOP = frozenset('what when where which that this have about from with did does said say remember recall earlier previous last first second third message chat conversation spoke talk discussed discuss talked before time times today yesterday our please can could tell know we you me the and for was'.split())
+_STOP = frozenset('what when where which that this have about from with did does said say remember recall earlier previous last first second third message messages chat chats conversation conversations thread threads spoke talk discussed discuss talked before time times today yesterday our please can could tell know we you me the and for was use used using saved memory memories evidence answer briefly guess not'.split())
 
 
 def _text(message: dict) -> str:
@@ -55,8 +55,32 @@ def _terms(text: str) -> set[str]:
     return {t for t in re.findall(r'\w+', text.casefold()) if len(t) > 2 and t not in _STOP}
 
 
+def is_conversation_recall(query: str) -> bool:
+    """Recognize requests whose named source is our conversations, not an app.
+
+    Provider history (YouTube watches, calendar events, etc.) stays with its
+    specialist. A new action referencing an old chat is still a new action.
+    """
+    clean = str(query).strip()
+    source = re.search(
+        r'\b(?:(?:saved|previous|past|older|our|my)\s+(?:chats?|conversations?|threads?)'
+        r'|(?:we|i)\s+(?:discussed|spoke|talked)|(?:saved\s+)?memor(?:y|ies))\b', clean, re.I)
+    prior_request = re.search(
+        r'\b(?:(?:did|have)\s+(?:i|we)\s+(?:ask(?:ed)?|say|said|tell|told|discuss(?:ed)?|request(?:ed)?)'
+        r'|(?:i|we)\s+(?:asked|said|told|requested))\b', clean, re.I)
+    personal_browser = re.search(r'\b(?:which|what)\b.*\bbrowser\b.*\b(?:i|we)\b.*\b(?:use|used|using)\b', clean, re.I)
+    question = re.search(r'\b(?:what|which|when|where|who|whose|remember|recall|summari[sz]e|tell me)\b', clean, re.I)
+    action = re.search(
+        r'(?:^|[.;?!]\s*|\b(?:and|then)\s+)(?:(?:please|can you|could you)\s+)?'
+        r'(?:open|play|create|delete|remove|send|post|book|schedule|add|navigate|visit)\b', clean, re.I)
+    return bool((source or prior_request or personal_browser) and question and not action)
+
+
 def wants_previous_chats(query: str) -> bool:
-    return bool(re.search(r'\b(?:(?:previous|other|older|past|last)\s+(?:chats?|conversations?|threads?|time)|yesterday|last time we|we last spoke|we last talked)\b', query, re.I))
+    # Explicit current-chat questions never broaden to another conversation.
+    if re.search(r'\b(?:this|current)\s+(?:chat|conversation|thread)\b|\bjust\s+(?:ask|asked|say|said|tell|told|gave)\b', query, re.I):
+        return False
+    return is_conversation_recall(query) or bool(re.search(r'\b(?:(?:previous|other|older|past|last)\s+(?:chats?|conversations?|threads?|time)|yesterday|last time we|we last spoke|we last talked)\b', query, re.I))
 
 
 def recall_history(conversations: list[dict], *, thread_id: str, query: str = '',

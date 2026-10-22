@@ -6,6 +6,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Fix Book evidence selection with smaller whole-source chunks, semantic/BM25 rank fusion, named-book scoping, and separation of source questions from presentation instructions. Rebuild derived Book knowledge with compiler `vellum.3` while preserving exact source spans and validation. Keep historical conversation questions with chat recall, prevent accidental browser actions, and stop enabling local thinking solely because a model supports it; explicit reasoning modes retain thinking.
+
+- Replace local BGE embeddings with pinned Google EmbeddingGemma 2 text embeddings through Ollama. Use separate query/document prefixes, identify index generations by model revision, and invalidate stale skill-vector caches. Add offline book/vault and atomic two-table Honcho migrations with retained backups; existing Honcho volumes switch models only after migration. See `docs/architecture/local-embeddings.md`.
+
 - Add pinned multilingual Whisper Large v3 Turbo dictation with an isolated offline worker, GPU startup verification and CPU fallback. Keep Small as an explicit setup option for other installations. Route conversational music requests such as “Okay play a song from my liked song playlist” through MusicAgent; preserve full spoken preambles for typed interpretation.
 - Remember trusted-workspace microphone approval in the local Electron profile, avoiding repeated prompts across dictations, new chat windows and app restarts. Keep camera and embedded-site permissions separate and retain the microphone choice through desktop profile migration.
 - Integrate dictation into the existing composer toolbar with a full-width waveform and small icon controls, without a separate divider or recorder row. Keep the text field, placeholder, image attachments and paste/drop available during recording. The square Stop control shows a centered transcription state before adding recognized text to the draft.

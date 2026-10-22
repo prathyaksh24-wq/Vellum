@@ -40,9 +40,23 @@ try {
   throw "Ollama is unavailable at http://127.0.0.1:11434. Start Ollama before starting Honcho."
 }
 
-foreach ($requiredModel in @("gemma4:12b", "nomic-embed-text:latest")) {
+$embeddingModel = "nomic-embed-text:latest"
+$envFile = Join-Path $Root '.env'
+if (Test-Path -LiteralPath $envFile) {
+  $modelLine = Get-Content -LiteralPath $envFile | Where-Object { $_ -match '^HONCHO_EMBEDDING_MODEL=' } | Select-Object -Last 1
+  if ($modelLine) { $embeddingModel = ($modelLine -split '=', 2)[1].Trim().Trim('"', "'") }
+}
+if ($env:HONCHO_EMBEDDING_MODEL) { $embeddingModel = $env:HONCHO_EMBEDDING_MODEL }
+if (-not $embeddingModel.Contains(':')) { $embeddingModel += ':latest' }
+foreach ($requiredModel in @("gemma4:12b", $embeddingModel)) {
   if (-not ($models -contains $requiredModel)) {
     throw "Required local Ollama model '$requiredModel' is missing. Pull it before starting Honcho."
+  }
+}
+if ($embeddingModel -eq 'embeddinggemma-2:270m-q8_0-text') {
+  $installedEmbedding = $ollama.models | Where-Object { $_.name -eq $embeddingModel } | Select-Object -First 1
+  if ($installedEmbedding.digest -ne 'c21dd30c1e38444d3b4faa091407b6fa97221447b4965d74931d43d7f09bbbfd') {
+    throw 'The Google embedding model digest changed. Rebuild the Honcho vectors before starting with another revision.'
   }
 }
 

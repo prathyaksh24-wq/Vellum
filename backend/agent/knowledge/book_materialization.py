@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+from collections import Counter
 import logging
 import math
 import re
@@ -26,13 +27,15 @@ from agent.skills.models import SkillMetadata
 
 BOOK_MATERIALIZATION_SCHEMA_VERSION = "book-materialization-v1"
 BOOK_TO_SKILL_VERSION = "1.3.0"
-BOOK_MATERIALIZATION_COMPILER_VERSION = f"book-to-skill-v{BOOK_TO_SKILL_VERSION}-vellum.2"
+BOOK_MATERIALIZATION_COMPILER_VERSION = f"book-to-skill-v{BOOK_TO_SKILL_VERSION}-vellum.3"
 BOOK_SKILL_TEMPLATE_VERSION = "book-to-skill-hermes-v1"
 BOOK_SKILL_MODEL_VERSION = "none"
 BOOK_EMBEDDING_MODEL_REVISION = "default"
 BOOK_RETRIEVAL_INDEX_VERSION = "book-retrieval-index-v1"
 BOOK_RETRIEVAL_COLLECTION = "books"
-MAX_CHUNK_CHARACTERS = 6000
+# Keep several complete, citation-backed passages inside the normal 2400-token
+# evidence packet. Individual source blocks remain intact, even when oversized.
+MAX_CHUNK_CHARACTERS = 1600
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +302,8 @@ class BookMaterializationPipeline:
         self.compiler_version = compiler_version
         self.model_version = model_version
         self.prompt_version = prompt_version
-        self.embedding_model_revision = embedding_model_revision
+        self.embedding_model_revision = (getattr(embedding_provider, 'revision', embedding_model_revision)
+            if embedding_model_revision == BOOK_EMBEDDING_MODEL_REVISION else embedding_model_revision)
         self.retrieval_index = retrieval_index
 
     def materialize(self, request: BookMaterializationRequest) -> BookMaterializationStatus:
@@ -652,23 +656,35 @@ class BookMaterializationPipeline:
         }
         documents = {key: self.quality.documents.load(user_id=request.user_id, document_id=bundle.document_id)
                      for key, bundle in bundles.items()}
-        query_vectors = _normalize_vectors(
-            self.embedding_provider.embed_batch([request.query])
-        )
+        named = {key for key, doc in documents.items() if doc.metadata.title
+                 and re.search(r"(?<!\w)" + re.escape(doc.metadata.title) + r"(?!\w)", request.query, re.I)}
+        if named:
+            bundles = {key: bundle for key, bundle in bundles.items() if key in named}
+            documents = {key: doc for key, doc in documents.items() if key in named}
+        search_query = _book_search_query(request.query, [doc.metadata.title for doc in documents.values()])
+        embed_query = getattr(self.embedding_provider, 'embed_query', None)
+        query_vectors = _normalize_vectors([embed_query(search_query)] if callable(embed_query)
+            else self.embedding_provider.embed_batch([search_query]))
         _validate_vectors(query_vectors, expected_count=1)
         hits = self._get_retrieval_index().search(
             embedding=query_vectors[0],
-            top_k=min(request.max_chunks * 4, 24),
+            top_k=min(request.max_chunks * 8, 48),
             filters={
                 "user_id": request.user_id,
                 "materialization_id": {"$in": list(bundles)},
             },
         )
-        hits = sorted(
-            hits,
-            key=lambda hit: _hybrid_book_hit_score(request.query, hit),
-            reverse=True,
-        )
+        # Named people and short maxims can fall outside dense top-k. Rank exact
+        # terms over the same validated, active source chunks, then fuse ranks.
+        # This adds no store and never searches another tenant or excluded book.
+        lexical_hits = []
+        for key, bundle in bundles.items():
+            blocks = {block.id: block for section in documents[key].sections for block in section.blocks}
+            for chunk in bundle.exact_text.chunks:
+                lexical_hits.append({"text": "\n\n".join(blocks[bid].text for bid in chunk.block_ids),
+                    "score": 0.0, "metadata": {"user_id": request.user_id, "materialization_id": key,
+                        "edition_id": bundle.edition_id, "document_id": bundle.document_id, "chunk_id": chunk.chunk_id}})
+        hits = _rank_book_hits(search_query, hits, lexical_hits)
 
         # A whole-book overview needs representative body sections; semantic
         # similarity to a title alone often retrieves the table of contents.
@@ -746,7 +762,7 @@ class BookMaterializationPipeline:
                         section for section in documents[materialization_id].sections if section.id == chunk.section_id)),
                     "text": text,
                     "text_hash": chunk.digest,
-                    "score": _hybrid_book_hit_score(request.query, hit),
+                    "score": _hybrid_book_hit_score(search_query, hit),
                     "citations": citations,
                 }
             )
@@ -1294,6 +1310,50 @@ def _hybrid_book_hit_score(query: str, hit: dict[str, Any]) -> float:
     phrase_score = min(sum(text.count(phrase) for phrase in phrases) / 2, 1.0) if phrases else 0.0
     lexical = (coverage * 0.5) + (frequency * 0.2) + (phrase_score * 0.3)
     return max(0.0, min((dense * 0.6) + (lexical * 0.4), 1.0))
+
+
+def _book_search_query(query: str, titles: list[str]) -> str:
+    """Keep source selection/presentation boilerplate out of semantic ranking.
+
+    Only strip a leading reference to a known installed title and directions
+    following a question mark. The original question still reaches synthesis
+    and the receipt; book source content never supplies instructions here.
+    """
+    clean = query.strip()
+    for title in sorted((title for title in titles if title), key=len, reverse=True):
+        clean = re.sub(r"^(?:in|from|about)\s+(?:(?:my|the|imported|installed|uploaded|book)\s+)*"
+                       + re.escape(title) + r"(?=\s|[,;:]|$)\s*[,;:]?\s*", "", clean, flags=re.I)
+    clean = re.split(r"(?<=\?)\s+(?=(?:please\s+)?(?:use|answer|cite|keep|give)\b)", clean, maxsplit=1, flags=re.I)[0]
+    return clean.strip() or query
+
+
+def _rank_book_hits(query: str, dense_hits: list[dict[str, Any]], source_hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fuse semantic and BM25 ranks without comparing incompatible raw scores."""
+    stop = _BOOK_SEARCH_STOP_WORDS | frozenset(
+        "should myself how can taking become way forward best response being did marcus learn his why when those who us will also term do we know edition background characteristics allow give doing saying someone me respond without my tell".split())
+    terms = set(re.findall(r"\w+", query.casefold())) - stop
+    tokenized = [re.findall(r"\w+", str(hit.get("text") or "").casefold()) for hit in source_hits]
+    frequencies = [Counter(tokens) for tokens in tokenized]
+    document_frequency = Counter(term for tokens in tokenized for term in set(tokens))
+    average = sum(map(len, tokenized)) / max(1, len(tokenized)) or 1
+    lexical = []
+    for hit, tokens, counts in zip(source_hits, tokenized, frequencies, strict=True):
+        score = sum(math.log(1 + (len(source_hits) - document_frequency[t] + .5) / (document_frequency[t] + .5))
+                    * counts[t] * 2.2 / (counts[t] + 1.2 * (.25 + .75 * len(tokens) / average))
+                    for t in terms if counts[t])
+        if score > 0:
+            lexical.append((score, hit))
+    lexical.sort(key=lambda pair: pair[0], reverse=True)
+    def identity(hit):
+        metadata = hit.get("metadata") or {}
+        return (metadata.get("materialization_id"), metadata.get("chunk_id"))
+    candidates = {identity(hit): hit for hit in dense_hits}
+    ranks = {identity(hit): 1 / (10 + rank) for rank, hit in enumerate(dense_hits, 1)}
+    for rank, (_, hit) in enumerate(lexical[:24], 1):
+        key = identity(hit)
+        candidates.setdefault(key, hit)
+        ranks[key] = ranks.get(key, 0) + 1 / (10 + rank)
+    return [candidates[key] for key in sorted(ranks, key=ranks.get, reverse=True)]
 
 
 def _validate_bundle(

@@ -259,6 +259,8 @@ def vellum_prompt(state, config=None, *, runtime_model: str | None = None):
         'Before guessing omitted dates, exact wording, prior decisions or what we discussed, use conversation_history '
         'to retrieve the original messages. Search the current chat first; search previous chats when relevant to the request. '
         'Use memory_orchestrator for durable personal knowledge and search_my_notes for notes. '
+        'Questions about what the user previously said or asked belong to conversation recall even when they mention a specialist domain. '
+        'Questions about an imported book, including follow-ups, require fresh BooksAgent evidence; do not answer from an earlier unrelated passage. '
         'Never replay an old command, infer consent from a summary, or promote compacted content into durable memory. '
         'Pass specialists only the relevant task and permitted memory packet. Skills and tool schemas load on demand.'
     )

@@ -130,6 +130,9 @@ class AgentCatalog:
         return None if profile is None else AgentBinding(profile=profile, executor=self._executors.get(profile_id))
 
     def match(self, query: str) -> AgentBinding | None:
+        from agent.conversations.recall import is_conversation_recall
+        if is_conversation_recall(query):
+            return None
         for profile_id, executor in self._executors.items():
             try:
                 if executor.can_handle(query):
