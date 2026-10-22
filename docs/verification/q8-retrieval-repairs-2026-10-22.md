@@ -31,6 +31,22 @@ documents and regression-guards that behavior while accepting thinking-capabilit
 metadata without turning it into a request for extra reasoning. The latency
 comparison below describes the development checkout, not a new measurement of main.
 
+### Hosted CI follow-up
+
+The initial [CI run 39725214118](https://github.com/prathyaksh24-wq/Vellum/actions/runs/39725214118)
+reported **3,321 backend passes, 28 skips and one failure**. The failing
+`test_settings_loads_paths_and_privacy_defaults` still expected the legacy
+`chroma` directory, while the migration deliberately defaults to the separate
+`chroma-embeddinggemma2-v1` generation. Updated that assertion and added explicit
+checks for the pinned Q8 model, revision, dimensions, backend and batch size.
+Production configuration and the isolated index boundary remain unchanged.
+
+The other five hosted jobs passed: frontend build/tests, Python and frontend
+dependency audits, dependency review and secret scanning. No tests or builds
+were run locally for this CI correction, respecting the user's instruction.
+Those initial hosted results do not establish that the correction has passed;
+the subsequent commit's hosted run is the verification owner.
+
 ## Changes
 
 - `knowledge/book_materialization.py`: advance the Book compiler to `vellum.3`.

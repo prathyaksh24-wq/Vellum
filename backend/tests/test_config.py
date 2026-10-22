@@ -48,7 +48,13 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.cloud_escalation_model == "google/gemini-2.5-pro"
     assert settings.cloud_escalation_enabled is True
     assert settings.chroma_path is not None
-    assert settings.chroma_path.name == "chroma"
+    # A new embedding space must not reuse the legacy BGE index directory.
+    assert settings.chroma_path.name == "chroma-embeddinggemma2-v1"
+    assert settings.embedding_backend == "ollama"
+    assert settings.embedding_model == "embeddinggemma-2:270m-q8_0-text"
+    assert settings.embedding_model_revision == "c21dd30c1e38444d3b4faa091407b6fa97221447b4965d74931d43d7f09bbbfd"
+    assert settings.embedding_dimensions == 768
+    assert settings.embedding_batch_size == 16
     assert settings.llm_routing_db_path.is_absolute()
     assert settings.llm_routing_db_path.name == "routing.db"
     assert settings.llm_routing_keyring_service == "vellum.llm"
