@@ -34,9 +34,18 @@ def tool_name(service, method_id):
 
 @lru_cache(maxsize=4)
 def document(service):
-    if service not in ROOTS:
+    directory = Path(__file__).with_name("google_discovery")
+    if service == "gmail":
+        path = directory / "gmail.json"
+    elif service == "drive":
+        path = directory / "drive.json"
+    elif service == "calendar":
+        path = directory / "calendar.json"
+    elif service == "contacts":
+        path = directory / "contacts.json"
+    else:
         raise ValueError("Choose Gmail, Drive, Calendar or Contacts.")
-    result = json.loads((Path(__file__).with_name("google_discovery") / (service + ".json")).read_text(encoding="utf-8"))
+    result = json.loads(path.read_text(encoding="utf-8"))
     if result["baseUrl"] != ROOTS[service]:
         raise ValueError("The bundled Google API destination is invalid.")
     return result

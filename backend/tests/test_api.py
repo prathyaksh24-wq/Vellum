@@ -1736,11 +1736,11 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
         schedule={"kind": "cron", "expression": "0 2 * * *"},
         destination={"kind": "new_chat"},
     )
-    monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": [{"name": "serpapi", "configured": True, "status": "probe_disabled"}]})
+    monkeypatch.setattr(api, "_mcp_server_configuration", lambda probe=False: [{"name": "serpapi", "configured": True, "status": "probe_disabled"}])
     monkeypatch.setattr(
         api,
         "agent_reach_plugin_status",
-        lambda: SimpleNamespace(
+        lambda probe=False: SimpleNamespace(
             model_dump=lambda: {
                 "id": "agent-reach",
                 "name": "Agent-Reach",

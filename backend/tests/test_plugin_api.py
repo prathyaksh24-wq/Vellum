@@ -110,9 +110,9 @@ def test_plugin_api_lists_owned_skills_and_persists_state(monkeypatch, tmp_path:
     monkeypatch.setattr(api, "_skill_surface_singleton", None)
     agent = _Agent()
     monkeypatch.setattr(api, "agent", agent)
-    monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": []})
+    monkeypatch.setattr(api, "_mcp_server_configuration", lambda probe=False: [])
     monkeypatch.setattr(api, "memory_orchestrator_plugin_status", lambda _value: _status("memory"))
-    monkeypatch.setattr(api, "agent_reach_plugin_status", lambda: _status("agent-reach"))
+    monkeypatch.setattr(api, "agent_reach_plugin_status", lambda probe=False: _status("agent-reach"))
     monkeypatch.setattr(
         api,
         "portable_spotify_status",

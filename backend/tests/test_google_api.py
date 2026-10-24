@@ -1,6 +1,7 @@
 import base64
 import json
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -38,6 +39,12 @@ def test_every_bundled_published_operation_has_a_valid_discoverable_schema(name,
             Draft202012Validator.check_schema(description["body"])
     first = catalog.catalog(name,limit=1)
     assert first["total"]==count and first["next_offset"]==1
+
+
+@pytest.mark.parametrize("name", ["../drive", "drive/../../settings", "https://example.test/schema"])
+def test_service_names_cannot_select_files_outside_the_bundled_catalog(name):
+    with pytest.raises(ValueError, match="Choose Gmail, Drive, Calendar or Contacts"):
+        catalog.document(name)
 
 
 CASES = [
@@ -85,7 +92,10 @@ def test_new_scopes_require_consent_and_existing_reads_remain_available(service)
     grant(service,SERVICES["gmail"]["scopes"])
     service.registry.set_enabled("gmail",True)
     flow=service.configure(GoogleSelection(services=["gmail"],access="manage"))["flow"]
-    assert "mail.google.com" in flow["authorization_url"]
+    authorization = urlsplit(flow["authorization_url"])
+    assert (authorization.scheme, authorization.netloc, authorization.path) == ("https", "accounts.google.com", "/o/oauth2/v2/auth")
+    scopes = parse_qs(authorization.query)["scope"][0].split()
+    assert "https://mail.google.com/" in scopes
     assert service.status().services[1].authorized and not service.status().services[1].can_write
     with pytest.raises(ValueError,match="additional Google permission"):
         GoogleApiAdapter(service).prepare(GoogleApiOperation(service="gmail",method_id="gmail.users.messages.trash",parameters={"id":"m1"}))

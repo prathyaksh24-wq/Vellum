@@ -13,6 +13,7 @@ import httpx
 from agent.contracts.google_workspace import GoogleApiOperation
 from agent.plugins import google_api_catalog as catalog
 from agent.plugins.google_workspace import GoogleError, SERVICES, google_service
+from agent.plugins.credential_binding import credential_digest
 
 
 def _label(value):
@@ -49,7 +50,7 @@ class GoogleApiAdapter:
     def _binding(self, operation, request, tokens, metadata):
         client_id, _ = self.service.credentials()
         return {"account_id": metadata.get("google_account_id", ""), "client_id": client_id,
-            "credential_digest": catalog.digest(tokens.get("refresh_token") or tokens.get("access_token")),
+            "credential_digest": credential_digest(tokens.get("refresh_token") or tokens.get("access_token"),provider="google"),
             "scope_digest": catalog.digest(sorted(str(tokens.get("scope") or "").split())),
             "request_digest": catalog.digest(operation.model_dump()), "schema_digest": request["schema_digest"],
             "service": operation.service, "method_id": operation.method_id}

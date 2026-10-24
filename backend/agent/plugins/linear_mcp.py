@@ -17,6 +17,7 @@ from agent.mcp.plugin_approvals import PluginMcpOperation
 from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError, _privacy_safe_arguments
 from agent.plugins.linear import LinearError, linear_service, scrub
 from agent.plugins.registry import get_plugin_registry
+from agent.plugins.credential_binding import credential_digest
 from agent.tools.plugin_mcp import _run_async
 
 MCP_URL = "https://mcp.linear.app/mcp"
@@ -126,7 +127,7 @@ class LinearMcpAdapter:
         approval = self.runtime.approval_store.request(PluginMcpOperation.from_arguments(
             plugin_id="linear",connector="linear",tool_name=operation.tool_name,arguments=clean))
         return {**actor,"operation":operation.tool_name,"request_digest":_digest(operation.model_dump()),
-            "token_digest":_digest(data["token"]),"schema_digest":_digest(tool),
+            "token_digest":credential_digest(data["token"],provider="linear"),"schema_digest":_digest(tool),
             "approval_id":approval["id"],"clean_arguments":clean,
             "preview":preview.model_dump(),
             "message":preview.heading+": "+(preview.title or actor['workspace_name'])+". Review the details before continuing."}
@@ -195,7 +196,7 @@ class LinearMcpAdapter:
         data = self.service._require()
         if (not confirmed or not binding or binding.get("operation") != operation.tool_name
                 or binding.get("request_digest") != _digest(operation.model_dump())
-                or not secrets.compare_digest(binding.get("token_digest", ""), _digest(data["token"]))):
+                or not secrets.compare_digest(binding.get("token_digest", ""), credential_digest(data["token"],provider="linear"))):
             raise LinearError("Review and confirm this exact Linear MCP operation first.")
         actor = self.service._identity(data["token"])
         if any(actor[key]!=binding.get(key) for key in ("actor_id","workspace_id")):

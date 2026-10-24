@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Bind provider operation reviews to credentials with a process-secret HMAC,
+  and restrict Google schema loading to explicit bundled service files.
 - Redesign full-page Settings, Plugins and Skills management with consistent
   provider logos, source details, Add/marketplace/MCP flows and readable reviews.
 - Connect Product Hunt through OS-stored credentials, Linear through its official

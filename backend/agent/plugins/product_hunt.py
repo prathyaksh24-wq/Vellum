@@ -6,12 +6,12 @@ credential reference; token values never enter action requests or receipts.
 from datetime import datetime, timezone
 from functools import lru_cache, wraps
 import json
-import hashlib
 import secrets
 from threading import RLock
 import time
 
 import httpx
+from agent.plugins.credential_binding import credential_digest
 
 from agent.contracts.product_hunt import (
     PLUGIN_ID, ProductHuntPost, ProductHuntRead, ProductHuntResult,
@@ -268,7 +268,7 @@ class ProductHuntService:
             raise ProductHuntError("Choose another Product Hunt user; you cannot follow yourself.")
         token = self._load().get("token", "")
         return {"user_id":target.id, "username":target.username, "url":target.url, "actor_id":actor.id,
-            "following":following, "token_digest":hashlib.sha256(token.encode()).hexdigest(),
+            "following":following, "token_digest":credential_digest(token,provider="producthunt"),
             "message":f"Confirm {'following' if following else 'unfollowing'} @{target.username} on Product Hunt. This changes your account's following list."}
 
     @serialized
@@ -280,7 +280,7 @@ class ProductHuntService:
         token = data.get("token", "")
         if (not token or binding.get("username", "").casefold() != request.username.casefold()
                 or binding.get("following") is not following
-                or not secrets.compare_digest(binding.get("token_digest", ""), hashlib.sha256(token.encode()).hexdigest())):
+                or not secrets.compare_digest(binding.get("token_digest", ""), credential_digest(token,provider="producthunt"))):
             raise ProductHuntError("The Product Hunt connection or target changed. Review this action again.")
         actor = self.read(ProductHuntRead(operation="viewer")).user
         target = self.read(ProductHuntRead(operation="user",username=request.username)).user

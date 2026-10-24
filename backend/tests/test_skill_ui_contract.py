@@ -33,8 +33,11 @@ def test_reasoning_composer_exposes_codex_style_categorized_slash_menu() -> None
     assert 'role="listbox"' in ui_source
     assert "onOpenPlugins" in ui_source
     assert "plugin-manage" in ui_source
-    assert "[['plugins','Plugins'],['apps','Apps'],['mcps','MCPs'],['skills','Skills']]" in ui_source
-    assert "Select an item to inspect its apps, MCPs, skills, and status." in ui_source
+    assert "[['plugins','Plugins'],['apps','Apps'],['mcps','MCP servers'],['skills','Skills']]" in ui_source
+    assert 'aria-label="Plugin contents"' in ui_source
+    assert 'aria-label="Plugin information"' in ui_source
+    assert "detailPlugin.source" in ui_source
+    assert "detailPlugin.mcp_connectors.length" in ui_source
     assert "onOpenSkills={() => nav('skills')}" in ui_source
 
 

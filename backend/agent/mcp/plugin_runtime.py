@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 import asyncio
 import json
-import hashlib
 import os
 from pathlib import Path
 import re
@@ -29,6 +28,7 @@ from agent.mcp.plugin_approvals import (
 )
 from agent.mcp.results import summarize_mcp_text, structured_mcp_text
 from agent.plugins.registry import PluginRegistry
+from agent.plugins.credential_binding import credential_digest as bind_credential
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 
@@ -342,7 +342,7 @@ def _connector(
                 service=linear_service()
                 data=service._require()
                 token=data["token"]
-                credential_digest=hashlib.sha256(json.dumps(token,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest()
+                credential_digest=bind_credential(token,provider="linear")
                 from agent.plugins.linear_oauth import stored_auth
                 headers,auth={},stored_auth(service,connection=data)
             except LinearError:

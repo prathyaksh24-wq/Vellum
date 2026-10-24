@@ -275,11 +275,13 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
   });
 
-  test("includes routing, OpenRouter, memory, and Hermes-compatible plugin surfaces", () => {
+  test("includes routing, OpenRouter, memory, and source-aware plugin management", () => {
     expect(html).toContain("OpenRouter");
     expect(html).toContain("Provider routing, fallback models, and credential pools");
     expect(html).toContain("memoryDreamingRun");
-    expect(html).toContain("Portable plugins are loaded through Vellum's Hermes-compatible");
+    expect(html).toContain('aria-label="Plugin information"');
+    expect(html).toContain("detailPlugin.source");
+    expect(html).toContain("detailPlugin.mcp_connectors.length");
     expect(html).toContain("API.runtimes.subagents()");
   });
 

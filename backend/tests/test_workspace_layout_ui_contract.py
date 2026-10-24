@@ -16,7 +16,13 @@ def test_registered_surfaces_expose_stable_ui_references_and_accessible_settings
     assert 'data-ui-reference="right-panel"' in ui_source
     assert 'data-ui-reference="composer"' in ui_source
     assert 'data-ui-reference="composer.send"' in ui_source
-    assert 'role="dialog" aria-modal="true" aria-label="Settings"' in ui_source
+    settings = ui_source.split('const SettingsModal =', 1)[1].split('const AUTOMATION_DESTINATIONS', 1)[0]
+    assert "className={'settings-page'" in settings
+    assert 'aria-label="Settings" data-ui-reference="settings"' in settings
+    assert 'aria-label="Settings sections"' in settings
+    assert 'settings-back' in settings
+    assert 'role="dialog"' not in settings
+    assert 'aria-modal="true"' not in settings
     assert "aria-label={sendLabel}" in ui_source
 
 
