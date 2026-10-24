@@ -1957,6 +1957,42 @@ class AppActionRuntime:
                     message=str(exc), authorized=True)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
             if definition.confirmation_rule == "operation_bound":
+                if request.action_id == 'google.api.execute':
+                    from agent.plugins.google_workspace_controls import prepare_google_api
+                    try:
+                        binding = prepare_google_api(request.arguments)
+                    except (ValueError, RuntimeError) as exc:
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='GOOGLE_REVIEW_FAILED', message=str(exc), authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='google_operation', target_reference=binding['account_id'] + ':' + binding['method_id'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['google_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'linear.mcp.execute':
+                    from agent.plugins.linear_controls import prepare_linear_mcp
+                    try:
+                        binding = prepare_linear_mcp(request.arguments)
+                    except (ValueError, RuntimeError) as exc:
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='LINEAR_REVIEW_FAILED',
+                            message=str(exc), authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='linear_operation', target_reference=binding['workspace_id'] + ':' + binding['operation'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['linear_review'] = binding['preview']
+                    return receipt
+                if request.action_id in {'producthunt.user.follow', 'producthunt.user.unfollow'}:
+                    from agent.plugins.product_hunt_controls import prepare_product_hunt_follow
+                    try:
+                        binding = prepare_product_hunt_follow(request.action_id, request.arguments)
+                    except (ValueError, RuntimeError) as exc:
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='PRODUCT_HUNT_REVIEW_FAILED',
+                            message=str(exc), authorized=True)
+                    return self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='producthunt_user', target_reference=binding['user_id'],
+                        message=binding['message'], binding=binding)
                 if request.action_id == 'spotify.playlist.edit':
                     from agent.plugins.spotify_controls import prepare_spotify_playlist_edit
                     try:
@@ -2902,7 +2938,7 @@ class AppActionRuntime:
             target=ActionTarget(kind=target_kind, id=target_id),
             result={"operation": request.action_id, "target": target_id},
             confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
-            message=f"Confirm removing {target_id}.",
+            message=f"Confirm removing {target_id}." if request.action_id==SKILL_UNINSTALL_ACTION_ID else f"Confirm {definition.title.casefold()} for {target_id}.",
             audit_label=f"{definition.audit_label}.confirmation_requested",
             created_at=self._now(),
         )

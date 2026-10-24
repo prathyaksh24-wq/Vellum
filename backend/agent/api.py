@@ -148,6 +148,15 @@ from agent.plugins.google_calendar_runtime import portable_google_calendar_statu
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
 from agent.plugins.youtube_controls import youtube_plugin_contribution
 from agent.plugins.google_calendar_controls import google_calendar_plugin_contribution
+from agent.plugins.product_hunt import product_hunt_plugin_status
+from agent.plugins.product_hunt_controls import product_hunt_contribution
+from agent.plugins.product_hunt_api import router as product_hunt_router
+from agent.plugins.linear import linear_plugin_status
+from agent.plugins.linear_controls import linear_contribution
+from agent.plugins.google_workspace_controls import google_contribution
+from agent.plugins.google_workspace_api import router as google_workspace_router, receive_callback as google_workspace_callback
+from agent.plugins.google_workspace import STATE_PREFIX as GOOGLE_STATE_PREFIX, google_plugin_statuses
+from agent.plugins.linear_api import router as linear_router, oauth_router as linear_oauth_router
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
@@ -201,6 +210,9 @@ _knowledge_source_actions = KnowledgeSourceActionService()
 _app_action_runtime.set_knowledge_source_handler(_knowledge_source_actions.execute)
 _app_action_runtime.register_plugin_contribution(youtube_plugin_contribution())
 _app_action_runtime.register_plugin_contribution(google_calendar_plugin_contribution())
+_app_action_runtime.register_plugin_contribution(product_hunt_contribution())
+_app_action_runtime.register_plugin_contribution(linear_contribution())
+_app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
 
@@ -2758,7 +2770,7 @@ async def _run_agent_scoped(
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _clean_answer_body(_message_content(messages[-1] if messages else None)) or "No response."
     from agent.tools.app_actions import app_action_result_guard
-    answer = app_action_result_guard() or answer
+    answer = app_action_result_guard(answer) or answer
     tools = list(dict.fromkeys([*delegated_tools, *_tool_call_names(messages)]))
     skill_usage_scope.finish("completed", tool_count=len(tools))
     skill_usage_scope.__exit__(None, None, None)
@@ -3622,8 +3634,10 @@ async def skills_v2_catalog(
         items = SkillCatalog(surface.root).duplicate_reviews()
         if after:
             items = [item for item in items if str(item["id"]) > after]
+    elif view == 'installed':
+        items=surface.installed(query,after=after,limit=limit+1)
     else:
-        state = {"installed": "active", "proposed": "proposed", "retired": "retired", "archived": "archived"}[view]
+        state = {"proposed": "proposed", "retired": "retired", "archived": "archived"}[view]
         items = SkillCatalog(surface.root).search(query, state=state, limit=limit + 1, after=after)
     page = items[:limit]
     next_cursor = None
@@ -4735,7 +4749,7 @@ async def _stream_agent_turn_scoped(
     turn_audit: TurnAudit | None = None,
     reasoning_mode: str | None = None,
 ):
-    from agent.tools.app_actions import app_action_result_guard
+    from agent.tools.app_actions import app_action_result_guard, app_action_read_only_google_turn
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
     yield _response_created(response_id=response_id, thread_id=active_thread_id)
@@ -5145,6 +5159,11 @@ async def _stream_agent_turn_scoped(
                     # Internal handoffs are never streamed as the assistant answer.
                     continue
                 kind = event.get("event")
+                if kind == 'on_chain_end' and event.get('name') == 'tool_failure':
+                    output = event.get('data', {}).get('output') or {}
+                    terminal_messages = output.get('messages', []) if isinstance(output, dict) else []
+                    if terminal_messages:
+                        last_chat_model_output = terminal_messages[-1]
                 if kind == "on_custom_event" and event.get("name") == "vellum_context_compacted":
                     yield _agent_activity_event(
                         response_id=response_id, thread_id=active_thread_id,
@@ -5216,7 +5235,7 @@ async def _stream_agent_turn_scoped(
                                 name=str(item.get("name") or "function"),
                             )
                     text = _chunk_text(chunk)
-                    if app_action_result_guard():
+                    if app_action_result_guard() or app_action_read_only_google_turn():
                         text = ''
                     if text and not (specialist_gap and not sources):
                         answer_parts.append(text)
@@ -5488,7 +5507,8 @@ async def _stream_agent_turn_scoped(
                 and last_chat_model_output is not None
                 and not (specialist_gap and not sources)
             ):
-                final_text = app_action_result_guard() or _clean_answer_body(_message_content(last_chat_model_output))
+                final_text = _clean_answer_body(_message_content(last_chat_model_output))
+                final_text = app_action_result_guard(final_text) or final_text
                 if final_text:
                     answer_parts.append(final_text)
                     if specialist_summaries:
@@ -5599,7 +5619,7 @@ async def _stream_agent_turn_scoped(
                     preserve_youtube_links="YoutubeAgent" in completed_specialists)
                 answer = (
                     specialist_answer
-                    if streamed_specialist_results or "XAgent" in completed_specialists or _is_specialist_deferral(model_answer)
+                    if streamed_specialist_results or completed_specialists.intersection({"XAgent", "CalendarAgent"}) or _is_specialist_deferral(model_answer)
                     else model_answer or specialist_answer
                 )
                 if not message_item_started:
@@ -5636,7 +5656,7 @@ async def _stream_agent_turn_scoped(
                     yield _sse("token", {"text": delta})
             else:
                 answer = _clean_answer_body("".join(answer_parts)) or "No response."
-            answer = app_action_result_guard() or answer
+            answer = app_action_result_guard(answer) or answer
             stream_skill_usage.finish("completed", tool_count=len(set(tool_names)))
             stream_skill_usage.__exit__(None, None, None)
             source_models = [Source(**record) for record in sources]
@@ -5697,6 +5717,8 @@ async def _stream_agent_turn_scoped(
             await _repair_incomplete_tool_history(active_thread_id)
             _LOGGER.exception("Agent stream failed")
             public_error = str(exc) if isinstance(exc, ContextBudgetExceeded) else (
+                "The request reached its tool-step limit before completion. Check the action receipts before retrying a write."
+                if isinstance(exc, GraphRecursionError) else
                 "Model stream timed out." if isinstance(exc, TimeoutError) else "Unreachable.")
             yield _response_error(response_id=response_id, thread_id=active_thread_id, message=public_error)
             yield _sse("error", {"error": public_error})
@@ -6637,13 +6659,8 @@ def _probe_mcp_server(entry: dict[str, Any]) -> dict[str, Any]:
     return {"reachable": False, "status": "unsupported_endpoint"}
 
 
-@router.get("/mcp/health")
-async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
-    """Per-MCP-server configuration + reachability hint.
-
-    Reports whether each server has its required env vars set. With
-    probe=true, performs side-effect-free command and HTTP reachability
-    checks. It does not invoke MCP tools."""
+def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
+    """Read configured MCP descriptors without opening adjacent services."""
     settings = get_settings()
     servers: list[dict[str, Any]] = []
 
@@ -6740,7 +6757,19 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
         notes="Sandboxed code execution + indexed retrieval; requires Node >=22.5.",
     ))
 
-    # Adjacent services Vellum depends on
+    return servers
+
+
+@router.get("/mcp/health")
+async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
+    """Inspect adjacent services without blocking chat or heartbeat delivery."""
+    return await asyncio.to_thread(_mcp_health_sync, probe)
+
+
+def _mcp_health_sync(probe: bool) -> dict[str, Any]:
+    settings = get_settings()
+    servers = _mcp_server_configuration(probe=probe)
+    # Adjacent services belong to health inspection, not plugin browsing.
     vector = _vector_health()
 
     honcho_reachable = False
@@ -6767,12 +6796,20 @@ class PluginStateRequest(BaseModel):
 
 
 def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    with _plugin_registry().read_snapshot():
+        return _plugin_catalog_snapshot(servers)
+
+
+def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     runtime_statuses = [
         memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
-        agent_reach_plugin_status().model_dump(),
+        agent_reach_plugin_status(probe=False).model_dump(),
         portable_spotify_status(),
         portable_discord_status(),
         portable_google_calendar_status(),
+        product_hunt_plugin_status(),
+        linear_plugin_status(),
+        *google_plugin_statuses(),
     ]
     plugins = _plugin_registry().catalog(
         runtime_statuses=runtime_statuses,
@@ -6813,10 +6850,7 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 @router.get("/plugins")
 async def list_plugins() -> dict[str, Any]:
-    health_result = mcp_health(probe=False)
-    if inspect.isawaitable(health_result):
-        health_result = await health_result
-    servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
+    servers = await asyncio.to_thread(_mcp_server_configuration)
     plugins = await asyncio.to_thread(_plugin_catalog, servers)
     return {"plugins": plugins}
 
@@ -7070,6 +7104,10 @@ router.include_router(automations_router)
 router.include_router(youtube_router)
 router.include_router(discord_router)
 router.include_router(google_calendar_router)
+router.include_router(google_workspace_router)
+router.include_router(product_hunt_router)
+router.include_router(linear_router)
+router.include_router(linear_oauth_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
 
@@ -7180,6 +7218,8 @@ async def desktop_oauth_callback(
     error: str = "",
 ) -> Any:
     if code or state or error:
+        if state.startswith(GOOGLE_STATE_PREFIX):
+            return await asyncio.to_thread(google_workspace_callback, code=code, state=state, error=error)
         if state.startswith(CALENDAR_STATE_PREFIX):
             return await google_calendar_oauth_callback(code=code, state=state, error=error)
         return await youtube_oauth_callback(code=code, state=state, error=error)

@@ -13,6 +13,47 @@ async function loadPluginsApi(fetchImpl) {
 }
 
 describe("Vellum plugins API adapter", () => {
+  test('Google install navigates directly and validates the OAuth destination',async()=>{
+    const api=await loadPluginsApi(vi.fn());
+    const assign=vi.fn();
+    vi.stubGlobal('window',{location:{assign}});
+    try {
+      const authorization_url='https://accounts.google.com/o/oauth2/v2/auth?state=fixture';
+      api.navigateToGoogle({authorization_url});
+      expect(assign).toHaveBeenCalledExactlyOnceWith(authorization_url);
+      assign.mockClear();
+      api.navigateToGoogle({authorization_url,browser_opened:true});
+      expect(assign).not.toHaveBeenCalled();
+      window.VellumDesktop={invoke:vi.fn()};
+      expect(()=>api.navigateToGoogle({authorization_url})).toThrow('Continue to Google');
+      expect(assign).not.toHaveBeenCalled();
+      for(const url of ['javascript:alert(1)','https://accounts.google.com.example.test/o/oauth2/v2/auth','https://accounts.google.com/wrong']) {
+        expect(()=>api.navigateToGoogle({authorization_url:url})).toThrow('invalid');
+      }
+    } finally {vi.unstubAllGlobals();}
+  });
+  test('Google connection management uses guarded uncached adapter calls',async()=>{
+    const fetchImpl=vi.fn(async(path,options)=>({path,options}));const api=await loadPluginsApi(fetchImpl);
+    expect(await api.googleStatus()).toMatchObject({path:'/api/plugins/google/status',options:{cache:'no-store',headers:{'X-Vellum-Google':'1'}}});
+    expect((await api.googleOAuthStatus('flow/a')).path).toBe('/api/plugins/google/oauth/status?flow_id=flow%2Fa');
+  });
+  test('keeps Product Hunt secret staging local and uncached',async()=>{
+    const fetchImpl=vi.fn(async(path,options)=>({path,options}));
+    const api=await loadPluginsApi(fetchImpl);
+    const result=await api.productHuntStage('fixture-only-token');
+    expect(result.path).toBe('/api/plugins/producthunt/credentials/stage');
+    expect(result.options).toMatchObject({method:'POST',body:{token:'fixture-only-token'},cache:'no-store',headers:{'X-Vellum-ProductHunt':'1'}});
+    const read=await api.productHuntRead({operation:'posts',limit:3});
+    expect(read.path).toBe('/api/plugins/producthunt/read');
+    expect(read.options.body).not.toHaveProperty('token');
+  });
+  test('bounds catalog reads so an unavailable backend can offer retry',async()=>{
+    const fetchImpl=vi.fn(async()=>({plugins:[]}));
+    const api=await loadPluginsApi(fetchImpl);
+    await api.list();
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/plugins');
+    expect(fetchImpl.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
   test("reads local browser-history status without caching", async () => {
     const fetchImpl = vi.fn(async (path, options) => ({path, options}));
     const api = await loadPluginsApi(fetchImpl);

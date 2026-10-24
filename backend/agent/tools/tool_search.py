@@ -262,7 +262,7 @@ def search_catalog(
             score += idf * (tf * (_BM25_K1 + 1)) / denom
         if score > 0:
             scored.append((score, entry))
-    scored.sort(key=lambda pair: pair[0], reverse=True)
+    scored.sort(key=lambda pair: (pair[1].name.casefold() == query.strip().casefold(), pair[0]), reverse=True)
     return [entry for _, entry in scored[:limit]]
 
 
@@ -328,7 +328,7 @@ def _bridge_defs(
 ) -> list[dict[str, Any]]:
     search_description = (
         "Search deferred general capabilities that are hidden from the visible tools list. "
-        "Returns ranked matches with name, source, and required parameters. Use this before tool_call."
+        "Returns ranked matches with name, source, and required parameters. Discovered tools become directly available on the next turn; prefer their declared schemas. Use tool_describe for details and tool_call as a compatibility bridge."
     )
     if listing_form == "full":
         search_description += (
@@ -527,10 +527,11 @@ def build_tool_describe_bridge(catalog: list[CatalogEntry]) -> StructuredTool:
         return _bridge_result(
             {
                 "name": entry.name,
-                "description": entry.description,
+                "description": _def_description(entry.tool_def),
                 "source": entry.source,
                 "required": entry.required,
                 "schema": entry.schema,
+                "parameters": _def_parameters(entry.tool_def),
             }
         )
 
@@ -540,6 +541,60 @@ def build_tool_describe_bridge(catalog: list[CatalogEntry]) -> StructuredTool:
         description="Describe one deferred capability's schema.",
         args_schema=ToolDescribeArgs,
     )
+
+
+def activate_discovered_tool_defs(
+    visible: list[dict[str, Any]], catalog: list[CatalogEntry], messages,
+    *, max_active: int = 8, source_limits: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Declare recently discovered tools, using only the runtime's own schemas.
+
+    Search results and inspected names select existing registry entries; their
+    payloads cannot supply definitions or grant execution permission. This is
+    turn-local and bounded, with the same result used for context budgeting.
+    """
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    if max_active <= 0:
+        return list(visible)
+    by_name = {entry.name: entry.tool_def for entry in catalog}
+    sources = {entry.name:entry.source for entry in catalog}
+    source_counts: dict[str,int] = {}
+    visible_names = {_def_name(item) for item in visible}
+    selected = []
+    for message in reversed(messages):
+        candidates = []
+        if isinstance(message, ToolMessage) and message.name in {TOOL_SEARCH_NAME, TOOL_DESCRIBE_NAME}:
+            try:
+                result = json.loads(message.content)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(result, dict):
+                continue
+            if message.name == TOOL_SEARCH_NAME:
+                matches = result.get("matches", [])
+                if isinstance(matches, list):
+                    candidates = [item.get("name") for item in matches if isinstance(item, dict)]
+            else:
+                candidates = [result.get("name")]
+        elif isinstance(message, AIMessage):
+            for call in message.tool_calls:
+                name = call.get("name")
+                if name == TOOL_CALL_NAME and isinstance(call.get("args"), dict):
+                    name = call["args"].get("name")
+                candidates.append(name)
+        for name in candidates:
+            if isinstance(name, str) and name in by_name and name not in visible_names and name not in selected:
+                source=sources[name]
+                if source_limits and source in source_limits and source_counts.get(source,0)>=source_limits[source]:
+                    continue
+                selected.append(name)
+                source_counts[source]=source_counts.get(source,0)+1
+                if len(selected) >= max_active:
+                    break
+        if len(selected) >= max_active:
+            break
+    return [*visible, *(by_name[name] for name in selected)]
 
 
 def build_tool_call_bridge(tools_by_name: dict[str, StructuredTool]) -> StructuredTool:

@@ -1,0 +1,15 @@
+id: app-69b7bed23a9481919d2378ab225cddeb
+name: Product Hunt
+type: connector
+category: Connectors
+version: 1.1.0
+description: Explore launches and topics, read your Product Hunt account, and follow or unfollow users with confirmation and provider permission.
+capabilities:
+  - producthunt.connection.connect
+  - producthunt.connection.verify
+  - producthunt.connection.disconnect
+  - producthunt.read
+  - producthunt.user.follow
+  - producthunt.user.unfollow
+provides_tools:
+  - product_hunt

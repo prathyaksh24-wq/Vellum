@@ -1,4 +1,4 @@
-"""Read-only GitHub MCP wrapper."""
+"""Canonical GitHub adapter: prefer gh, fall back to the configured MCP."""
 
 from __future__ import annotations
 
@@ -12,6 +12,9 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from agent.config import get_settings
+from agent.mcp.github_cli import run as cli_run
+from agent.mcp.github_cli import credential as cli_credential
+from agent.plugins.registry import get_plugin_registry
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +87,8 @@ def _github_token() -> str:
     return settings.github_mcp_token or settings.github_pat or os.environ.get("GITHUB_PAT", "") or os.environ.get("GITHUB_TOKEN", "")
 
 
-def _github_headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {_github_token()}"}
+def _github_headers(token: str = "") -> dict[str, str]:
+    return {"Authorization": f"Bearer {token or _github_token()}"}
 
 
 def _writes_allowed() -> bool:
@@ -137,40 +140,60 @@ def _tool_params(params: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _run_tool_inner(params: dict[str, Any]) -> str:
-    token = _github_token()
-    if not token:
-        return "GitHub MCP skipped: set GITHUB_MCP_TOKEN or GITHUB_PAT."
-
+    registry = get_plugin_registry()
+    with registry.read_snapshot():
+        if registry.contains("github") and not registry.is_enabled("github"):
+            return "GitHub is disabled. Enable its plugin before using either transport."
     action = _action_name(params)
-    if action == "delete_repository":
-        return await _delete_repository(params)
-
     tool_name = ACTION_TO_TOOL.get(action) or WRITE_ACTION_TO_TOOL.get(action)
-    if tool_name is None:
+    if tool_name is None and action != "delete_repository":
         return f"GitHub MCP action '{action or 'missing'}' is not allowed."
-    if action in WRITE_ACTION_TO_TOOL and not _writes_allowed():
+    if (action in WRITE_ACTION_TO_TOOL or action == "delete_repository") and not _writes_allowed():
         return f"GitHub MCP action '{action}' requires GITHUB_MCP_ALLOW_WRITES=true."
     if action in DESTRUCTIVE_ACTIONS and not _destructive_allowed():
         return f"GitHub MCP action '{action}' requires GITHUB_MCP_ALLOW_DESTRUCTIVE=true."
 
     settings = get_settings()
     timeout = settings.mcp_timeout_seconds
+    token = await cli_credential(_github_token(), timeout=timeout)
+    try:
+        cli_result = await cli_run(action, params, token=token, timeout=min(timeout / 3, 8))
+    except ValueError as exc:
+        return f"GitHub failed: {exc}"
+    if cli_result is not None:
+        return cli_result
+    if not token:
+        return "GitHub MCP skipped: CLI unavailable and no MCP credential. Set GITHUB_MCP_TOKEN or GITHUB_PAT."
+    if action == "delete_repository":
+        return await _delete_repository(params, token=token)
     async with streamablehttp_client(
         settings.github_mcp_url,
-        headers=_github_headers(),
+        headers=_github_headers(token),
         timeout=timeout,
         sse_read_timeout=timeout,
     ) as (read, write, _get_session_id):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tool_names = _tool_names(await session.list_tools())
+            if action in {"get_issue", "get_pull_request"} and tool_name not in tool_names:
+                modern = "issue_read" if action == "get_issue" else "pull_request_read"
+                if modern in tool_names:
+                    arguments = {**_tool_params(params), "method": "get"}
+                    if modern == "issue_read" and "issueNumber" in arguments:
+                        arguments["issue_number"] = arguments.pop("issueNumber")
+                    result = await session.call_tool(modern, arguments)
+                    if getattr(result, "isError", False):
+                        return "GitHub MCP failed: the server rejected this operation."
+                    return _content_text(result)
             if tool_name not in tool_names:
                 return f"GitHub MCP server does not expose {tool_name}."
             result = await session.call_tool(tool_name, _tool_params(params))
+            if getattr(result, "isError", False):
+                return "GitHub MCP failed: the server rejected this operation."
             return _content_text(result) or f"GitHub MCP {action} completed."
 
 
-async def _delete_repository(params: dict[str, Any]) -> str:
+async def _delete_repository(params: dict[str, Any], *, token: str = "") -> str:
     if not _writes_allowed():
         return "GitHub MCP action 'delete_repository' requires GITHUB_MCP_ALLOW_WRITES=true."
     if not _destructive_allowed():
@@ -183,7 +206,7 @@ async def _delete_repository(params: dict[str, Any]) -> str:
         response = await client.delete(
             f"https://api.github.com/repos/{owner}/{repo}",
             headers={
-                **_github_headers(),
+                **_github_headers(token),
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
             },

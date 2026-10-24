@@ -9,7 +9,7 @@ from agent.plugins.contributions import (
     PluginActionContribution, PluginContribution, PluginContributionActionError,
 )
 from agent.plugins.google_calendar_api import (
-    CalendarEventBody, CalendarEventPatch, CalendarConfirmBody, start_connection,
+    CalendarEventBody, CalendarEventPatch, CalendarConfirmBody, start_connection, disconnect_calendar_connection,
 )
 from agent.plugins.google_calendar_runtime import (
     GoogleCalendarAuthError, GoogleCalendarAPIError, google_calendar_service,
@@ -26,7 +26,7 @@ def execute_calendar_control(action_id: str, arguments: dict[str, Any], *, confi
         if not confirmed:
             raise PluginContributionActionError("CONFIRMATION_REQUIRED", "Confirm this Calendar change.")
         if action_id == "calendar.connection.disconnect":
-            google_calendar_store().clear()
+            disconnect_calendar_connection()
             return {"changed": True, "disconnected": True, "_message": "Google Calendar disconnected."}
         operation = action_id.rsplit(".", 1)[-1]
         models = {"create": CalendarEventBody, "update": CalendarEventPatch, "delete": CalendarConfirmBody}

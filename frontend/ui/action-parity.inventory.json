@@ -1,132 +1,1081 @@
 {
   "version": 1,
   "handlerFingerprints": {
-    "design/Velllum/uploads/components/accounts.jsx": {"count":22,"sha256":"97844561b1105da1a36980f119654ac69b0f251d4b53a78712b2a0d2bf365a64"},
-    "design/Velllum/uploads/components/PatternWaves.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
-    "design/Velllum/uploads/components/Particles.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
-    "design/Velllum/uploads/components/browser-settings.jsx": {"count":68,"sha256":"53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"},
-    "design/Velllum/uploads/components/automation-notifications.jsx": {"count":11,"sha256":"50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"},
-    "design/Velllum/uploads/components/music-page.jsx": {"count":55,"sha256":"bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"},
-    "design/Velllum/uploads/components/browser-panel.jsx": {"count":60,"sha256":"f506db087782b1cf82acc5abb6823f8949ee47aec1022ac8eaeb492e5e30e337"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":899,"sha256":"6bcd4c6091cd87158fb93849d30010ab982e770e4fea931d079dfe0b4eef33db"},
-    "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
-    "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
-    "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
-    "design/Velllum/uploads/components/calendar-workspace.jsx": {"count":18,"sha256":"1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"},
-    "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"},
-    "design/Velllum/uploads/components/dictation-settings.jsx": {"count":26,"sha256":"36f32bfa9715720bb21375443385064ed871b2dae5d525430241613301dd0b21"}
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {
+      "count": 952,
+      "sha256": "a01cb9490149da5aeee1591452e48c3316490a7530733db4400d8236563842ca"
+    },
+    "design/Velllum/uploads/vellum-workspace.html": {
+      "count": 178,
+      "sha256": "403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"
+    },
+    "design/Velllum/uploads/components/v-select.jsx": {
+      "count": 5,
+      "sha256": "4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"
+    },
+    "design/Velllum/uploads/components/accounts.jsx": {
+      "count": 22,
+      "sha256": "97844561b1105da1a36980f119654ac69b0f251d4b53a78712b2a0d2bf365a64"
+    },
+    "design/Velllum/uploads/components/books-view.jsx": {
+      "count": 36,
+      "sha256": "7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"
+    },
+    "design/Velllum/uploads/components/calendar-workspace.jsx": {
+      "count": 18,
+      "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
+    },
+    "design/Velllum/uploads/components/browser-panel.jsx": {
+      "count": 60,
+      "sha256": "f506db087782b1cf82acc5abb6823f8949ee47aec1022ac8eaeb492e5e30e337"
+    },
+    "design/Velllum/uploads/components/browser-settings.jsx": {
+      "count": 68,
+      "sha256": "53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"
+    },
+    "design/Velllum/uploads/components/dictation-settings.jsx": {
+      "count": 26,
+      "sha256": "36f32bfa9715720bb21375443385064ed871b2dae5d525430241613301dd0b21"
+    },
+    "design/Velllum/uploads/components/plugin-add.jsx": {
+      "count": 17,
+      "sha256": "119b9e9123b5096e477cefacf2a23d19824391b45943ddd17d40d60edc23381e"
+    },
+    "design/Velllum/uploads/components/product-hunt.jsx": {
+      "count": 14,
+      "sha256": "40dc9e4dd6863edb9c1aa90a21f82554f99407397c6a4c4e12b3b2ff3e772680"
+    },
+    "design/Velllum/uploads/components/linear.jsx": {
+      "count": 9,
+      "sha256": "37b284da7143d0092dfbcce6ee9aa94524b9dbaeea541aa56fa82c1731de2d9e"
+    },
+    "design/Velllum/uploads/components/google-connections.jsx": {
+      "count": 18,
+      "sha256": "90583a76da1888ec73110cf936bf377337d4443f8768162c50a8433d662608e4"
+    },
+    "design/Velllum/uploads/components/youtube-history.jsx": {
+      "count": 1,
+      "sha256": "43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"
+    },
+    "design/Velllum/uploads/components/music-page.jsx": {
+      "count": 55,
+      "sha256": "bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"
+    },
+    "design/Velllum/uploads/components/automation-notifications.jsx": {
+      "count": 11,
+      "sha256": "50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"
+    },
+    "design/Velllum/uploads/components/PatternWaves.jsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/Particles.jsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
   },
   "covered": [
-    {"surface":"Profile and custom instructions","name":"saved display name username and response instructions","actionId":"settings.device.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchDeviceSettings({profile:p})"}},
-    {"surface":"Browser","name":"drag keyboard and reset split ratio through workspace layout","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"properties:{chat_ratio}"}},
-    {"surface":"Browser settings","name":"local cursor presets PNG upload size and click point","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"patch({cursor_style:style})"}},
-    {"surface":"Browser settings","name":"routine interactions under the explicit browser request","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"patch({agent_interactions:value})"}},
-    {"surface":"Browser settings","name":"named profiles preferences site permissions and link destinations","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"'browser.settings.manage'"}},
-    {"surface":"Browser settings","name":"confirmed profile deletion browsing data clear and download save","actionId":"browser.settings.data","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"'browser.settings.data'"}},
-    {"surface":"Notifications","name":"mark individual or all notifications read","actionId":"automation.notifications.read","probe":{"path":"design/Velllum/uploads/components/automation-notifications.jsx","text":"onAction('automation.notifications.read'"}},
-    {"surface":"Browser","name":"page hover and pointer leave","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/components/browser-panel.jsx","text":"command('hover'"}},
-    {"surface":"Music","name":"confirmed playlist rename description song edits and library removal","actionId":"spotify.playlist.edit","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playlist.edit'"}},
-    {"surface":"Music","name":"selected collection and song position playback","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/components/music-page.jsx","text":"offset_position:item.position"}},
-    {"surface":"Music","name":"measured seek volume mute shuffle repeat and track controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/components/music-page.jsx","text":"run({action:'set_volume',volume_percent})"}},
-    {"surface":"YouTube","name":"refresh browser watch history","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/components/youtube-history.jsx","text":"action_id:'youtube.history.refresh'"}},
-    {"surface":"YouTube","name":"history configuration and refresh","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.refresh')"}},
-    {"surface":"YouTube","name":"history URL and timezone","actionId":"youtube.history.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.configure')"}},
-    {"surface":"YouTube","name":"open history in owned browser","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"API.browser.control({operation:'new_tab', url})"}},
-    {"surface":"Browser","name":"dedicated session controls, tabs, navigation, input, downloads and homepage preferences","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/api/browser.js","text":"action_id:'browser.session.control'"}},
-    {"surface":"Workspace Layout","name":"sidebar pin and rail expand","actionId":"ui.sidebar.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}"}},
-    {"surface":"Workspace Layout","name":"settings visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('settings', {visible:true})"}},
-    {"surface":"Workspace Layout","name":"right panel visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('right-panel', {visible:true})"}},
-    {"surface":"Workspace Layout","name":"theme","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}"}},
-    {"surface":"Adaptive UI","name":"suppress learning toast","actionId":"ui.adaptive.rule.suppress","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress'"}},
-    {"surface":"Conversations","name":"new chat","actionId":"conversation.new","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.new', {}, {applyNavigation:false})"}},
-    {"surface":"Conversations","name":"open chat","actionId":"conversation.open","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.open'"}},
-    {"surface":"Conversations","name":"pin chat","actionId":"conversation.pin","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"'conversation.unpin' : 'conversation.pin'"}},
-    {"surface":"Conversations","name":"unpin chat","actionId":"conversation.unpin","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"'conversation.unpin' : 'conversation.pin'"}},
-    {"surface":"Conversations","name":"rename chat","actionId":"conversation.rename","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.rename'"}},
-    {"surface":"Conversations","name":"change Space","actionId":"conversation.space.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.space.set'"}},
-    {"surface":"Conversations","name":"archive chat","actionId":"conversation.archive","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.archive'"}},
-    {"surface":"Conversations","name":"restore chat","actionId":"conversation.restore","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.restore'"}},
-    {"surface":"Conversations","name":"delete chat","actionId":"conversation.delete","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.delete'"}},
-    {"surface":"Conversations","name":"fork chat or message","actionId":"conversation.fork","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.fork'"}},
-    {"surface":"Conversations","name":"open native chat window","actionId":"conversation.window.open","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.window.open'"}},
-    {"surface":"Conversations","name":"share chat","actionId":"conversation.share","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.share'"}},
-    {"surface":"Composer","name":"picker attachment request","actionId":"composer.attachment.import","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchKnowledgeAction('composer.attachment.import', {source:'picker'})"}},
-    {"surface":"Sessions","name":"select agent","actionId":"agent.select","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('agent.select', {agent:id})"}},
-    {"surface":"Sessions","name":"select model","actionId":"model.select","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('model.select', {model_id:id})"}},
-    {"surface":"Sessions","name":"per-chat memory","actionId":"memory.conversation.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('memory.conversation.set', {enabled})"}},
-    {"surface":"Settings","name":"default model","actionId":"settings.default_model.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('settings.default_model.set', {model_id:id})"}},
-    {"surface":"Settings","name":"device preferences including dock and accent","actionId":"settings.device.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onDeviceSettings={dispatchDeviceSettings}"}},
-    {"surface":"Settings","name":"memory preferences","actionId":"memory.settings.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('memory.settings.update', {patch})"}},
-    {"surface":"Memory","name":"create memory","actionId":"memory.entry.create","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.entry.create'"}},
-    {"surface":"Memory","name":"edit memory","actionId":"memory.entry.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.entry.update'"}},
-    {"surface":"Memory","name":"pin memory","actionId":"memory.entry.pin","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.entry.pin'"}},
-    {"surface":"Memory","name":"archive memory","actionId":"memory.entry.archive","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.entry.archive'"}},
-    {"surface":"Memory","name":"delete memory","actionId":"memory.entry.delete","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.entry.delete'"}},
-    {"surface":"Memory","name":"run dreaming","actionId":"memory.dreaming.run","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.dreaming.run'"}},
-    {"surface":"Memory","name":"import old conversations","actionId":"memory.conversations.import","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onMemoryAction('memory.conversations.import'"}},
-    {"surface":"Knowledge","name":"check health","actionId":"knowledge.health.check","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('knowledge.health.check', {})"}},
-    {"surface":"Knowledge","name":"rebuild index","actionId":"knowledge.index.rebuild","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('knowledge.index.rebuild', {})"}},
-    {"surface":"Books","name":"import EPUB with scan and rights consent","actionId":"book.import","probe":{"path":"design/Velllum/uploads/api/books.js","text":"client.request('/api/app-actions/books/import'"}},
-    {"surface":"Books","name":"process EPUB","actionId":"book.process","probe":{"path":"design/Velllum/uploads/components/books-state.js","text":"options.onAction('book.process'"}},
-    {"surface":"Books","name":"build Book skill","actionId":"book.compile","probe":{"path":"design/Velllum/uploads/components/books-state.js","text":"options.onAction('book.compile'"}},
-    {"surface":"Plugins","name":"toggle backend plugin","actionId":"plugin.state.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchKnowledgeAction('plugin.state.set'"}},
-    {"surface":"Skills","name":"submit install/update/removal","actionId":"skill.mutation.submit","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onSkillAction('skill.mutation.submit'"}},
-    {"surface":"Skills","name":"approve mutation","actionId":"skill.mutation.approve","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onSkillAction('skill.mutation.approve'"}},
-    {"surface":"Skills","name":"reject mutation","actionId":"skill.mutation.reject","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onSkillAction('skill.mutation.reject'"}},
-    {"surface":"Skills","name":"uninstall skill","actionId":"skill.uninstall","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onSkillAction('skill.uninstall'"}},
-    {"surface":"Observability","name":"open ledger","actionId":"observability.open","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchObservabilityAction('observability.open', {})"}},
-    {"surface":"Observability","name":"live, pause, reconnect","actionId":"observability.stream.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchControl('observability.stream.set'"}},
-    {"surface":"Observability","name":"refresh period","actionId":"observability.refresh","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchControl('observability.refresh'"}},
-    {"surface":"Coding","name":"open coding workspace","actionId":"coding.workspace.open","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('coding.workspace.open', {}"}},
-    {"surface":"Coding","name":"open GitHub PR from coding workspace","actionId":"github.pull_request.open","probe":{"path":"design/Velllum/uploads/vellum-workspace.html","text":"action_id:\"github.pull_request.open\""}},
-    {"surface":"Automations","name":"create automation","actionId":"automation.create","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('automation.create', payload)"}},
-    {"surface":"Automations","name":"update automation","actionId":"automation.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('automation.update'"}},
-    {"surface":"Automations","name":"pause automation","actionId":"automation.pause","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"'automation.pause' : 'automation.resume'"}},
-    {"surface":"Automations","name":"resume automation","actionId":"automation.resume","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"'automation.pause' : 'automation.resume'"}},
-    {"surface":"Automations","name":"run automation now","actionId":"automation.run","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('automation.run'"}},
-    {"surface":"Automations","name":"remove automation","actionId":"automation.remove","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('automation.remove'"}},
-    {"surface":"Automations","name":"view automation history","actionId":"automation.history","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAction('automation.history'"}},
-    {"surface":"Pets","name":"install pet","actionId":"petdex.install","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"'petdex.remove' : 'petdex.install'"}},
-    {"surface":"Pets","name":"remove pet","actionId":"petdex.remove","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"'petdex.remove' : 'petdex.install'"}},
-    {"surface":"Pets","name":"set active pet","actionId":"petdex.active.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchPetdexAction('petdex.active.set'"}},
-    {"surface":"Pets","name":"show or hide pet","actionId":"petdex.visibility.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchPetdexAction('petdex.visibility.set'"}},
-    {"surface":"Pets","name":"pet size","actionId":"petdex.size.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchPetdexAction('petdex.size.set'"}},
-    {"surface":"Pets","name":"pet position","actionId":"petdex.position.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchPetdexAction('petdex.position.set'"}},
-    {"surface":"Calendar","name":"connect","actionId":"calendar.connection.start","probe":{"path":"design/Velllum/uploads/components/calendar-workspace.jsx","text":"dispatch('calendar.connection.start')"}},
-    {"surface":"Calendar","name":"disconnect","actionId":"calendar.connection.disconnect","probe":{"path":"design/Velllum/uploads/components/calendar-workspace.jsx","text":"dispatch('calendar.connection.disconnect',{},true)"}},
-    {"surface":"Calendar","name":"create confirmed event","actionId":"calendar.event.create","probe":{"path":"design/Velllum/uploads/components/calendar-workspace.jsx","text":"kind:editing?'update':'create'"}},
-    {"surface":"Calendar","name":"update confirmed event","actionId":"calendar.event.update","probe":{"path":"design/Velllum/uploads/components/calendar-workspace.jsx","text":"dispatch(`calendar.event.${pending.kind}`"}},
-    {"surface":"Calendar","name":"delete confirmed event","actionId":"calendar.event.delete","probe":{"path":"design/Velllum/uploads/components/calendar-workspace.jsx","text":"kind:'delete',eventId:event.id,calendarId:event.calendar_id || calendarId"}},
-    {"surface":"Spotify","name":"enable or disable embedded player","actionId":"spotify.playback.session","probe":{"path":"design/Velllum/uploads/components/spotify-playback.js","text":"action_id: 'spotify.playback.session'"}},
-    {"surface":"Spotify","name":"playback controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playback.control'"}},
-    {"surface":"Spotify","name":"connect or upgrade consent","actionId":"spotify.connection.start","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})"}},
-    {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}},
-    {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}},
-    {"surface":"Dictation","name":"saved dictation language dictionary shortcuts and recording retention","actionId":"dictation.settings.update","probe":{"path":"design/Velllum/uploads/components/dictation-settings.jsx","text":"dictation.settings.update"}},
-    {"surface":"Dictation history","name":"confirmed recording and transcript deletion or clear history","actionId":"dictation.history.delete","probe":{"path":"design/Velllum/uploads/components/dictation-settings.jsx","text":"dictation.history.delete"}}
+    {
+      "surface": "Profile and custom instructions",
+      "name": "saved display name username and response instructions",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchDeviceSettings({profile:p})"
+      }
+    },
+    {
+      "surface": "Browser",
+      "name": "drag keyboard and reset split ratio through workspace layout",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "properties:{chat_ratio}"
+      }
+    },
+    {
+      "surface": "Browser settings",
+      "name": "local cursor presets PNG upload size and click point",
+      "actionId": "browser.settings.manage",
+      "probe": {
+        "path": "design/Velllum/uploads/components/browser-settings.jsx",
+        "text": "patch({cursor_style:style})"
+      }
+    },
+    {
+      "surface": "Browser settings",
+      "name": "routine interactions under the explicit browser request",
+      "actionId": "browser.settings.manage",
+      "probe": {
+        "path": "design/Velllum/uploads/components/browser-settings.jsx",
+        "text": "patch({agent_interactions:value})"
+      }
+    },
+    {
+      "surface": "Browser settings",
+      "name": "named profiles preferences site permissions and link destinations",
+      "actionId": "browser.settings.manage",
+      "probe": {
+        "path": "design/Velllum/uploads/components/browser-settings.jsx",
+        "text": "'browser.settings.manage'"
+      }
+    },
+    {
+      "surface": "Browser settings",
+      "name": "confirmed profile deletion browsing data clear and download save",
+      "actionId": "browser.settings.data",
+      "probe": {
+        "path": "design/Velllum/uploads/components/browser-settings.jsx",
+        "text": "'browser.settings.data'"
+      }
+    },
+    {
+      "surface": "Notifications",
+      "name": "mark individual or all notifications read",
+      "actionId": "automation.notifications.read",
+      "probe": {
+        "path": "design/Velllum/uploads/components/automation-notifications.jsx",
+        "text": "onAction('automation.notifications.read'"
+      }
+    },
+    {
+      "surface": "Browser",
+      "name": "page hover and pointer leave",
+      "actionId": "browser.session.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/browser-panel.jsx",
+        "text": "command('hover'"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "confirmed playlist rename description song edits and library removal",
+      "actionId": "spotify.playlist.edit",
+      "probe": {
+        "path": "design/Velllum/uploads/api/plugins.js",
+        "text": "action_id:'spotify.playlist.edit'"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "selected collection and song position playback",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "offset_position:item.position"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "measured seek volume mute shuffle repeat and track controls",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "run({action:'set_volume',volume_percent})"
+      }
+    },
+    {
+      "surface": "YouTube",
+      "name": "refresh browser watch history",
+      "actionId": "youtube.history.refresh",
+      "probe": {
+        "path": "design/Velllum/uploads/components/youtube-history.jsx",
+        "text": "action_id:'youtube.history.refresh'"
+      }
+    },
+    {
+      "surface": "YouTube",
+      "name": "history configuration and refresh",
+      "actionId": "youtube.history.refresh",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "historyAction('youtube.history.refresh')"
+      }
+    },
+    {
+      "surface": "YouTube",
+      "name": "history URL and timezone",
+      "actionId": "youtube.history.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "historyAction('youtube.history.configure')"
+      }
+    },
+    {
+      "surface": "YouTube",
+      "name": "open history in owned browser",
+      "actionId": "browser.session.control",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "API.browser.control({operation:'new_tab', url})"
+      }
+    },
+    {
+      "surface": "Browser",
+      "name": "dedicated session controls, tabs, navigation, input, downloads and homepage preferences",
+      "actionId": "browser.session.control",
+      "probe": {
+        "path": "design/Velllum/uploads/api/browser.js",
+        "text": "action_id:'browser.session.control'"
+      }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "sidebar pin and rail expand",
+      "actionId": "ui.sidebar.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}"
+      }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "settings visibility",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchSurfacePresentation('settings', {visible:true})"
+      }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "right panel visibility",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchSurfacePresentation('right-panel', {visible:true})"
+      }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "theme",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}"
+      }
+    },
+    {
+      "surface": "Adaptive UI",
+      "name": "suppress learning toast",
+      "actionId": "ui.adaptive.rule.suppress",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "new chat",
+      "actionId": "conversation.new",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.new', {}, {applyNavigation:false})"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "open chat",
+      "actionId": "conversation.open",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.open'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "pin chat",
+      "actionId": "conversation.pin",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "'conversation.unpin' : 'conversation.pin'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "unpin chat",
+      "actionId": "conversation.unpin",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "'conversation.unpin' : 'conversation.pin'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "rename chat",
+      "actionId": "conversation.rename",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.rename'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "change Space",
+      "actionId": "conversation.space.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.space.set'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "archive chat",
+      "actionId": "conversation.archive",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.archive'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "restore chat",
+      "actionId": "conversation.restore",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.restore'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "delete chat",
+      "actionId": "conversation.delete",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.delete'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "fork chat or message",
+      "actionId": "conversation.fork",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.fork'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "open native chat window",
+      "actionId": "conversation.window.open",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.window.open'"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "share chat",
+      "actionId": "conversation.share",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.share'"
+      }
+    },
+    {
+      "surface": "Composer",
+      "name": "picker attachment request",
+      "actionId": "composer.attachment.import",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchKnowledgeAction('composer.attachment.import', {source:'picker'})"
+      }
+    },
+    {
+      "surface": "Sessions",
+      "name": "select agent",
+      "actionId": "agent.select",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('agent.select', {agent:id})"
+      }
+    },
+    {
+      "surface": "Sessions",
+      "name": "select model",
+      "actionId": "model.select",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('model.select', {model_id:id})"
+      }
+    },
+    {
+      "surface": "Sessions",
+      "name": "per-chat memory",
+      "actionId": "memory.conversation.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('memory.conversation.set', {enabled})"
+      }
+    },
+    {
+      "surface": "Settings",
+      "name": "default model",
+      "actionId": "settings.default_model.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('settings.default_model.set', {model_id:id})"
+      }
+    },
+    {
+      "surface": "Settings",
+      "name": "device preferences including dock and accent",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onDeviceSettings={dispatchDeviceSettings}"
+      }
+    },
+    {
+      "surface": "Settings",
+      "name": "memory preferences",
+      "actionId": "memory.settings.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('memory.settings.update', {patch})"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "create memory",
+      "actionId": "memory.entry.create",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.entry.create'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "edit memory",
+      "actionId": "memory.entry.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.entry.update'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "pin memory",
+      "actionId": "memory.entry.pin",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.entry.pin'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "archive memory",
+      "actionId": "memory.entry.archive",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.entry.archive'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "delete memory",
+      "actionId": "memory.entry.delete",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.entry.delete'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "run dreaming",
+      "actionId": "memory.dreaming.run",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.dreaming.run'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "import old conversations",
+      "actionId": "memory.conversations.import",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onMemoryAction('memory.conversations.import'"
+      }
+    },
+    {
+      "surface": "Knowledge",
+      "name": "check health",
+      "actionId": "knowledge.health.check",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('knowledge.health.check', {})"
+      }
+    },
+    {
+      "surface": "Knowledge",
+      "name": "rebuild index",
+      "actionId": "knowledge.index.rebuild",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('knowledge.index.rebuild', {})"
+      }
+    },
+    {
+      "surface": "Books",
+      "name": "import EPUB with scan and rights consent",
+      "actionId": "book.import",
+      "probe": {
+        "path": "design/Velllum/uploads/api/books.js",
+        "text": "client.request('/api/app-actions/books/import'"
+      }
+    },
+    {
+      "surface": "Books",
+      "name": "process EPUB",
+      "actionId": "book.process",
+      "probe": {
+        "path": "design/Velllum/uploads/components/books-state.js",
+        "text": "options.onAction('book.process'"
+      }
+    },
+    {
+      "surface": "Books",
+      "name": "build Book skill",
+      "actionId": "book.compile",
+      "probe": {
+        "path": "design/Velllum/uploads/components/books-state.js",
+        "text": "options.onAction('book.compile'"
+      }
+    },
+    {
+      "surface": "Plugins",
+      "name": "toggle backend plugin",
+      "actionId": "plugin.state.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchKnowledgeAction('plugin.state.set'"
+      }
+    },
+    {
+      "surface": "Skills",
+      "name": "submit install/update/removal",
+      "actionId": "skill.mutation.submit",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onSkillAction('skill.mutation.submit'"
+      }
+    },
+    {
+      "surface": "Skills",
+      "name": "approve mutation",
+      "actionId": "skill.mutation.approve",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onSkillAction('skill.mutation.approve'"
+      }
+    },
+    {
+      "surface": "Skills",
+      "name": "reject mutation",
+      "actionId": "skill.mutation.reject",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onSkillAction('skill.mutation.reject'"
+      }
+    },
+    {
+      "surface": "Skills",
+      "name": "uninstall skill",
+      "actionId": "skill.uninstall",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onSkillAction('skill.uninstall'"
+      }
+    },
+    {
+      "surface": "Observability",
+      "name": "open ledger",
+      "actionId": "observability.open",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchObservabilityAction('observability.open', {})"
+      }
+    },
+    {
+      "surface": "Observability",
+      "name": "live, pause, reconnect",
+      "actionId": "observability.stream.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchControl('observability.stream.set'"
+      }
+    },
+    {
+      "surface": "Observability",
+      "name": "refresh period",
+      "actionId": "observability.refresh",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchControl('observability.refresh'"
+      }
+    },
+    {
+      "surface": "Coding",
+      "name": "open coding workspace",
+      "actionId": "coding.workspace.open",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('coding.workspace.open', {}"
+      }
+    },
+    {
+      "surface": "Coding",
+      "name": "open GitHub PR from coding workspace",
+      "actionId": "github.pull_request.open",
+      "probe": {
+        "path": "design/Velllum/uploads/vellum-workspace.html",
+        "text": "action_id:\"github.pull_request.open\""
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "create automation",
+      "actionId": "automation.create",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('automation.create', payload)"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "update automation",
+      "actionId": "automation.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('automation.update'"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "pause automation",
+      "actionId": "automation.pause",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "'automation.pause' : 'automation.resume'"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "resume automation",
+      "actionId": "automation.resume",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "'automation.pause' : 'automation.resume'"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "run automation now",
+      "actionId": "automation.run",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('automation.run'"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "remove automation",
+      "actionId": "automation.remove",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('automation.remove'"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "view automation history",
+      "actionId": "automation.history",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('automation.history'"
+      }
+    },
+    {
+      "surface": "Pets",
+      "name": "install pet",
+      "actionId": "petdex.install",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "'petdex.remove' : 'petdex.install'"
+      }
+    },
+    {
+      "surface": "Pets",
+      "name": "remove pet",
+      "actionId": "petdex.remove",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "'petdex.remove' : 'petdex.install'"
+      }
+    },
+    {
+      "surface": "Pets",
+      "name": "set active pet",
+      "actionId": "petdex.active.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchPetdexAction('petdex.active.set'"
+      }
+    },
+    {
+      "surface": "Pets",
+      "name": "show or hide pet",
+      "actionId": "petdex.visibility.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchPetdexAction('petdex.visibility.set'"
+      }
+    },
+    {
+      "surface": "Pets",
+      "name": "pet size",
+      "actionId": "petdex.size.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchPetdexAction('petdex.size.set'"
+      }
+    },
+    {
+      "surface": "Pets",
+      "name": "pet position",
+      "actionId": "petdex.position.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchPetdexAction('petdex.position.set'"
+      }
+    },
+    {
+      "surface": "Calendar",
+      "name": "connect",
+      "actionId": "calendar.connection.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/calendar-workspace.jsx",
+        "text": "dispatch('calendar.connection.start')"
+      }
+    },
+    {
+      "surface": "Calendar",
+      "name": "disconnect",
+      "actionId": "calendar.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/calendar-workspace.jsx",
+        "text": "dispatch('calendar.connection.disconnect',{},true)"
+      }
+    },
+    {
+      "surface": "Calendar",
+      "name": "create confirmed event",
+      "actionId": "calendar.event.create",
+      "probe": {
+        "path": "design/Velllum/uploads/components/calendar-workspace.jsx",
+        "text": "kind:editing?'update':'create'"
+      }
+    },
+    {
+      "surface": "Calendar",
+      "name": "update confirmed event",
+      "actionId": "calendar.event.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/calendar-workspace.jsx",
+        "text": "dispatch(`calendar.event.${pending.kind}`"
+      }
+    },
+    {
+      "surface": "Calendar",
+      "name": "delete confirmed event",
+      "actionId": "calendar.event.delete",
+      "probe": {
+        "path": "design/Velllum/uploads/components/calendar-workspace.jsx",
+        "text": "kind:'delete',eventId:event.id,calendarId:event.calendar_id || calendarId"
+      }
+    },
+    {
+      "surface": "Spotify",
+      "name": "enable or disable embedded player",
+      "actionId": "spotify.playback.session",
+      "probe": {
+        "path": "design/Velllum/uploads/components/spotify-playback.js",
+        "text": "action_id: 'spotify.playback.session'"
+      }
+    },
+    {
+      "surface": "Spotify",
+      "name": "playback controls",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/api/plugins.js",
+        "text": "action_id:'spotify.playback.control'"
+      }
+    },
+    {
+      "surface": "Spotify",
+      "name": "connect or upgrade consent",
+      "actionId": "spotify.connection.start",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})"
+      }
+    },
+    {
+      "surface": "Spotify",
+      "name": "disconnect",
+      "actionId": "spotify.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('spotify.connection.disconnect')"
+      }
+    },
+    {
+      "surface": "Spotify",
+      "name": "keyboard volume adjustment",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"
+      }
+    },
+    {
+      "surface": "Dictation",
+      "name": "saved dictation language dictionary shortcuts and recording retention",
+      "actionId": "dictation.settings.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/dictation-settings.jsx",
+        "text": "dictation.settings.update"
+      }
+    },
+    {
+      "surface": "Dictation history",
+      "name": "confirmed recording and transcript deletion or clear history",
+      "actionId": "dictation.history.delete",
+      "probe": {
+        "path": "design/Velllum/uploads/components/dictation-settings.jsx",
+        "text": "dictation.history.delete"
+      }
+    },
+    {
+      "surface": "Google services",
+      "name": "choose enabled services and initiate Google consent",
+      "actionId": "google.connection.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/components/google-connections.jsx",
+        "text": "google.connection.configure"
+      }
+    },
+    {
+      "surface": "Google services",
+      "name": "disconnect the shared account after review",
+      "actionId": "google.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/google-connections.jsx",
+        "text": "google.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Linear",
+      "name": "connection verify",
+      "actionId": "linear.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/linear.jsx",
+        "text": "linear.connection.verify"
+      }
+    },
+    {
+      "surface": "Linear",
+      "name": "connection disconnect",
+      "actionId": "linear.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/linear.jsx",
+        "text": "linear.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Linear",
+      "name": "official MCP write confirmation",
+      "actionId": "linear.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "linear.mcp.execute"
+      }
+    },
+    {
+      "surface": "Linear",
+      "name": "OAuth sign in",
+      "actionId": "linear.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/linear.jsx",
+        "text": "linear.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Linear",
+      "name": "cancel OAuth sign in",
+      "actionId": "linear.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/linear.jsx",
+        "text": "linear.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Plugin setup",
+      "name": "confirmed GitHub marketplace addition",
+      "actionId": "plugin.marketplace.add",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-add.jsx",
+        "text": "action='plugin.marketplace.add'"
+      }
+    },
+    {
+      "surface": "Plugin setup",
+      "name": "confirmed custom MCP, personal bundle and scanned archive addition",
+      "actionId": "plugin.add",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-add.jsx",
+        "text": "let action='plugin.add'"
+      }
+    },
+    {
+      "surface": "Product Hunt",
+      "name": "connection connect",
+      "actionId": "producthunt.connection.connect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/product-hunt.jsx",
+        "text": "producthunt.connection.connect"
+      }
+    },
+    {
+      "surface": "Product Hunt",
+      "name": "connection verify",
+      "actionId": "producthunt.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/product-hunt.jsx",
+        "text": "producthunt.connection.verify"
+      }
+    },
+    {
+      "surface": "Product Hunt",
+      "name": "connection disconnect",
+      "actionId": "producthunt.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/product-hunt.jsx",
+        "text": "producthunt.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Product Hunt",
+      "name": "review follow",
+      "actionId": "producthunt.user.follow",
+      "probe": {
+        "path": "design/Velllum/uploads/components/product-hunt.jsx",
+        "text": "producthunt.user.follow"
+      }
+    },
+    {
+      "surface": "Product Hunt",
+      "name": "review unfollow",
+      "actionId": "producthunt.user.unfollow",
+      "probe": {
+        "path": "design/Velllum/uploads/components/product-hunt.jsx",
+        "text": "producthunt.user.unfollow"
+      }
+    },
+    {
+      "surface": "Google services",
+      "name": "review and confirm exact Google API changes",
+      "actionId": "google.api.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "google.api.execute"
+      }
+    }
   ],
   "exemptions": [
-    {"scope":"Windows title-bar menus, native caption controls, theme projection and current-account ordering","reason":"Native window-frame presentation forwards existing Electron menu handlers through a bounded trusted-frame bridge. Account ordering and Active/Saved labels are presentation only; switching, logout and removal retain the existing local Accounts API deferral."},
-    {"scope":"Appearance thumbnail hover and keyboard focus previews","reason":"Ephemeral decorative rendering only; choosing a background still dispatches settings.device.update. Pausing a covered backdrop does not change the saved background."},
-    {"scope":"Notification bell and popover visibility, video link navigation and run ID disclosure","reason":"Presentation and navigation only; persisted read state uses automation.notifications.read. History is supplied by automation.history."},
-    {"scope":"Music page navigation, dock player disclosure/dismissal and focus retention, provider preview tabs, search categories, collection filters, display sorting, editor drafts, read-only catalog requests and queue disclosure","reason":"Ephemeral presentation and provider reads only. Dock auto-hide and player disclosure do not stop or recreate playback. Sorting preserves Spotify source positions without rewriting playlists. Playlist writes use spotify.playlist.edit with an operation-bound review. Unconnected services have explicit unavailable states. Playback selections and controls use spotify.playback.control; audio activation retains spotify.playback.session."},
-    {"scope":"More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation, local address suggestions, offline panel dismissal and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},
-    {"scope":"scroll, pointer hover, focus and text selection","reason":"Input/navigation gesture only; does not commit product state."},
-    {"scope":"draft typing and in-view search filters","reason":"No committed product state; a separate save or submit control commits the change."},
-    {"scope":"tooltips, transient pickers and discard prompts","reason":"Non-persistent presentation only; the underlying committed action is reviewed separately."},
-    {"scope":"book shelf rotation and page navigation","reason":"Presentation/reading gestures only; processing and compiling remain App Actions."},
-    {"scope":"Calendar refresh, calendar selection, event search and proposed-slot drafts","reason":"Read-only provider requests or staged form choices; confirmed event mutations use the Calendar App Actions listed above."},
-    {"scope":"Dictation history filters pagination transcript expansion retry clipboard audio export and preference drafts","reason":"Read-only local history presentation, explicit clipboard/audio exports, and unsaved dictionary or shortcut edits. Saved preferences dispatch dictation.settings.update; deletion dispatches dictation.history.delete with confirmation. Capture and draft insertion retain the conversational transport exemption."}
+    {
+      "scope": "Windows title-bar menus, native caption controls, theme projection and current-account ordering",
+      "reason": "Native window-frame presentation forwards existing Electron menu handlers through a bounded trusted-frame bridge. Account ordering and Active/Saved labels are presentation only; switching, logout and removal retain the existing local Accounts API deferral."
+    },
+    {
+      "scope": "Appearance thumbnail hover and keyboard focus previews",
+      "reason": "Ephemeral decorative rendering only; choosing a background still dispatches settings.device.update. Pausing a covered backdrop does not change the saved background."
+    },
+    {
+      "scope": "Notification bell and popover visibility, video link navigation and run ID disclosure",
+      "reason": "Presentation and navigation only; persisted read state uses automation.notifications.read. History is supplied by automation.history."
+    },
+    {
+      "scope": "Music page navigation, dock player disclosure/dismissal and focus retention, provider preview tabs, search categories, collection filters, display sorting, editor drafts, read-only catalog requests and queue disclosure",
+      "reason": "Ephemeral presentation and provider reads only. Dock auto-hide and player disclosure do not stop or recreate playback. Sorting preserves Spotify source positions without rewriting playlists. Playlist writes use spotify.playlist.edit with an operation-bound review. Unconnected services have explicit unavailable states. Playback selections and controls use spotify.playback.control; audio activation retains spotify.playback.session."
+    },
+    {
+      "scope": "More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion",
+      "reason": "Temporary, reversible presentation, local address suggestions, offline panel dismissal and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."
+    },
+    {
+      "scope": "scroll, pointer hover, focus and text selection",
+      "reason": "Input/navigation gesture only; does not commit product state."
+    },
+    {
+      "scope": "draft typing and in-view search filters",
+      "reason": "No committed product state; a separate save or submit control commits the change."
+    },
+    {
+      "scope": "tooltips, transient pickers and discard prompts",
+      "reason": "Non-persistent presentation only; the underlying committed action is reviewed separately."
+    },
+    {
+      "scope": "book shelf rotation and page navigation",
+      "reason": "Presentation/reading gestures only; processing and compiling remain App Actions."
+    },
+    {
+      "scope": "Calendar refresh, calendar selection, event search and proposed-slot drafts",
+      "reason": "Read-only provider requests or staged form choices; confirmed event mutations use the Calendar App Actions listed above."
+    },
+    {
+      "scope": "Dictation history filters pagination transcript expansion retry clipboard audio export and preference drafts",
+      "reason": "Read-only local history presentation, explicit clipboard/audio exports, and unsaved dictionary or shortcut edits. Saved preferences dispatch dictation.settings.update; deletion dispatches dictation.history.delete with confirmation. Capture and draft insertion retain the conversational transport exemption."
+    }
   ],
   "deferred": [
-    {"surface":"Google, GitHub and hosted email account identity transport","reason":"Interactive identity authorization, saved-account selection, logout, explicit local continuation and account removal use the dedicated local-UI-only Accounts API. OAuth state, PKCE and device verification are not model tools or generic App Action arguments. The API checks loopback client, Host, exact UI Origin and a non-simple header. Generic App Action parity is deferred; account lifecycle behavior and failure outcomes have focused service, HTTP and mounted UI tests."},
-    {"surface":"Main Library local notes and project cards","reason":"Legacy local collection mutations still use setLibrary/setProjects; no corresponding App Action definitions."},
-    {"surface":"Agent profile enablement and settings","reason":"The specialist On/Off control and settings modal still edit local agentCfg instead of a canonical agent-setting App Action."},
-    {"surface":"Chat connector selection and custom instructions","reason":"Per-chat app selection, connector-ready badges and custom instructions still update client state without a persisted App Action receipt."},
-    {"surface":"Dictation capture and experimental dev mode","reason":"Local microphone capture, pause/resume, Done, Cancel and editable transcript insertion are conversational transport, equivalent to composing text. Dictation uses the discovered voice contract, requires browser microphone permission and does not submit an agent turn. The dev-mode shortcut is session-only."},
-    {"surface":"Coding workspace local configuration","reason":"Model, reasoning, access, layout and session controls in the separate coding page are local or coding-API state, not App Action receipts."},
-    {"surface":"GitHub PR creation visual control","reason":"The backend action exists but this UI has no create-PR control; only PR open is wired in the coding workspace."},
-    {"surface":"Third-party connector operations","reason":"Discord and X Agent Reach/optional OAuth setup still use plugin-specific API contracts. Generic App Action parity is deferred for those operations; Calendar connection/event writes and Spotify connection/player-session writes are covered above."},
-    {"surface":"Legacy design previews and setup flow","reason":"Not the production entry point; excluded from the served-control lock pending migration or removal."}
+    {
+      "surface": "Google, GitHub and hosted email account identity transport",
+      "reason": "Interactive identity authorization, saved-account selection, logout, explicit local continuation and account removal use the dedicated local-UI-only Accounts API. OAuth state, PKCE and device verification are not model tools or generic App Action arguments. The API checks loopback client, Host, exact UI Origin and a non-simple header. Generic App Action parity is deferred; account lifecycle behavior and failure outcomes have focused service, HTTP and mounted UI tests."
+    },
+    {
+      "surface": "Main Library local notes and project cards",
+      "reason": "Legacy local collection mutations still use setLibrary/setProjects; no corresponding App Action definitions."
+    },
+    {
+      "surface": "Agent profile enablement and settings",
+      "reason": "The specialist On/Off control and settings modal still edit local agentCfg instead of a canonical agent-setting App Action."
+    },
+    {
+      "surface": "Chat connector selection and custom instructions",
+      "reason": "Per-chat app selection, connector-ready badges and custom instructions still update client state without a persisted App Action receipt."
+    },
+    {
+      "surface": "Dictation capture and experimental dev mode",
+      "reason": "Local microphone capture, pause/resume, Done, Cancel and editable transcript insertion are conversational transport, equivalent to composing text. Dictation uses the discovered voice contract, requires browser microphone permission and does not submit an agent turn. The dev-mode shortcut is session-only."
+    },
+    {
+      "surface": "Coding workspace local configuration",
+      "reason": "Model, reasoning, access, layout and session controls in the separate coding page are local or coding-API state, not App Action receipts."
+    },
+    {
+      "surface": "GitHub PR creation visual control",
+      "reason": "The backend action exists but this UI has no create-PR control; only PR open is wired in the coding workspace."
+    },
+    {
+      "surface": "Third-party connector operations",
+      "reason": "Discord and X Agent Reach/optional OAuth setup still use plugin-specific API contracts. Generic App Action parity is deferred for those operations; Calendar connection/event writes and Spotify connection/player-session writes are covered above."
+    },
+    {
+      "surface": "Legacy design previews and setup flow",
+      "reason": "Not the production entry point; excluded from the served-control lock pending migration or removal."
+    }
   ]
 }

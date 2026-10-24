@@ -16,6 +16,27 @@
     return promise;
   }
   window.VellumApi.plugins = {
+    navigateToGoogle: flow => {
+      var target = new URL(flow.authorization_url);
+      if (target.origin + target.pathname !== 'https://accounts.google.com/o/oauth2/v2/auth') throw new Error('The Google sign-in address is invalid. Try again.');
+      if (flow.browser_opened) return;
+      if (window.VellumDesktop && window.VellumDesktop.invoke) throw new Error('The default browser could not be opened. Use Continue to Google to retry.');
+      // Same-tab navigation survives asynchronous setup without popup blockers.
+      // The loopback callback returns to this Vellum page after sign-in.
+      window.location.assign(target.href);
+    },
+    googleStatus: () => client.request('/api/plugins/google/status', {headers:{'X-Vellum-Google':'1'},cache:'no-store'}),
+    googleCatalog: params => client.request('/api/plugins/google/catalog?'+new URLSearchParams(params), {headers:{'X-Vellum-Google':'1'},cache:'no-store'}),
+    googleOAuthStatus: flowId => client.request('/api/plugins/google/oauth/status?flow_id='+encodeURIComponent(flowId), {headers:{'X-Vellum-Google':'1'},cache:'no-store'}),
+    googleRead: body => client.request('/api/plugins/google/read', {...client.jsonOptions('POST',body),headers:{'Content-Type':'application/json','X-Vellum-Google':'1'},cache:'no-store'}),
+    linearStatus: () => client.request('/api/plugins/linear/status', {headers:{'X-Vellum-Linear':'1'}, cache:'no-store'}),
+    linearOAuthStatus: flow_id => client.request('/api/plugins/linear/oauth/status?flow_id='+encodeURIComponent(flow_id), {headers:{'X-Vellum-Linear':'1'}, cache:'no-store'}),
+    linearMcpTools: () => client.request('/api/plugins/linear/mcp/tools', {headers:{'X-Vellum-Linear':'1'}, cache:'no-store'}),
+    linearMcpRead: body => client.request('/api/plugins/linear/mcp/read', {...client.jsonOptions('POST',body), headers:{'Content-Type':'application/json','X-Vellum-Linear':'1'}, cache:'no-store'}),
+    productHuntStatus: () => client.request('/api/plugins/producthunt/status', {headers:{'X-Vellum-ProductHunt':'1'}, cache:'no-store'}),
+    productHuntStage: token => client.request('/api/plugins/producthunt/credentials/stage', {...client.jsonOptions('POST',{token}), headers:{'Content-Type':'application/json','X-Vellum-ProductHunt':'1'}, cache:'no-store'}),
+    productHuntDiscard: credential_id => client.request('/api/plugins/producthunt/credentials/discard', {...client.jsonOptions('POST',{credential_id}), headers:{'Content-Type':'application/json','X-Vellum-ProductHunt':'1'}, cache:'no-store'}),
+    productHuntRead: body => client.request('/api/plugins/producthunt/read', {...client.jsonOptions('POST',body), headers:{'Content-Type':'application/json','X-Vellum-ProductHunt':'1'}, cache:'no-store'}),
     spotifyStatus: () => client.request('/api/plugins/spotify/status'),
     spotifyStart: clientId => client.request('/api/plugins/spotify/oauth/start', client.jsonOptions('POST', {client_id: clientId || ''})),
     spotifyLogout: () => client.request('/api/plugins/spotify/logout', client.jsonOptions('POST')),
@@ -32,7 +53,7 @@
     spotifyPlaybackDevice: body => client.request('/api/plugins/spotify/playback/device', {
       ...client.jsonOptions('POST', body), headers: {'Content-Type': 'application/json', 'X-Vellum-Spotify-Playback': '1'}, signal: AbortSignal.timeout(10000),
     }),
-    list: function () { return client.request("/api/plugins"); },
+    list: function () { return client.request("/api/plugins", {signal:AbortSignal.timeout(30000)}); },
     setEnabled: function (id, enabled) { return client.request("/api/plugins/" + encodeURIComponent(id) + "/state", client.jsonOptions("POST", {enabled:!!enabled})); },
     skills: function () { return client.request("/api/skills"); },
     skillsOverview: function (signal) { return client.request("/api/skills/v2/overview", { signal: signal }); },
