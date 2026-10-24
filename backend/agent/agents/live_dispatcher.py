@@ -361,6 +361,10 @@ class LiveAgentDispatcher:
         lowered = " ".join(str(message or "").casefold().split())
         if not lowered:
             return False
+        if agent_name == 'CalendarAgent':
+            from agent.agents.calendar import CalendarAgent
+            if CalendarAgent.is_booking_followup(lowered):
+                return False
         common = (
             r"^(?:please\s+)?(?:try|check|search|look)\s+again\??$",
             r"^(?:and\s+)?what\s+about\b",

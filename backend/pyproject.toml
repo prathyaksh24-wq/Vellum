@@ -24,6 +24,7 @@ dependencies = [
   "langgraph>=0.2.0",
   "langgraph-checkpoint-sqlite>=2.0.0",
   "mcp>=1.27.2,<2",
+  "jsonschema>=4.20,<5",
   "playwright>=1.56,<2",
   "numpy>=2.0.0",
   "moonshine-voice>=0.0.39",
@@ -66,6 +67,7 @@ include = ["agent*", "evals*"]
 
 [tool.setuptools.package-data]
 "agent.knowledge" = ["*.ps1"]
+"agent.plugins" = ["linear_mcp_tools.json", "google_discovery/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

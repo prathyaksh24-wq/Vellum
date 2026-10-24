@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 import os
 from pathlib import Path
@@ -53,9 +55,31 @@ class PluginRegistry:
         self.sources = tuple(sources)
         self._source_records_cache: tuple[PluginSourceRecord, ...] | None = None
         self._lock = RLock()
+        self._read_view = ContextVar(f"plugin_registry_read_{id(self)}", default=None)
 
     def manifests(self) -> list[PortablePluginManifest]:
+        view = self._read_view.get()
+        if view is not None:
+            return list(view[0])
         return discover_portable_plugins(self.root)
+
+    @contextmanager
+    def read_snapshot(self):
+        """Reuse disk metadata within one catalog build, never across requests.
+
+        Context-local snapshots avoid repeated manifest discovery for every owned
+        skill and contribution. Concurrent readers and subsequent enablement or
+        manifest changes do not share a stale process-wide cache.
+        """
+        if self._read_view.get() is not None:
+            yield
+            return
+        view = (tuple(self.manifests()), self._read_state())
+        token = self._read_view.set(view)
+        try:
+            yield
+        finally:
+            self._read_view.reset(token)
 
     def source_records(self) -> list[PluginSourceRecord]:
         if self._source_records_cache is not None:
@@ -71,7 +95,23 @@ class PluginRegistry:
         required = self._required(plugin_id)
         if required:
             return True
-        return bool(self._read_state().get(plugin_id, True))
+        try:
+            default = self._manifest(plugin_id).default_enabled
+        except KeyError:
+            default = True
+        return bool(self._read_state().get(plugin_id, default))
+
+    def set_enabled_many(self, choices: dict[str, bool]) -> None:
+        """Commit a provider bundle's selection through the canonical state file."""
+        with self._lock:
+            for plugin_id, enabled in choices.items():
+                if not self._exists(plugin_id):
+                    raise KeyError(plugin_id)
+                if self._required(plugin_id) and not enabled:
+                    raise PluginRegistryError(f"{plugin_id} is required and cannot be disabled")
+            state = self._read_state()
+            state.update({key: bool(value) for key, value in choices.items()})
+            self._write_state(state)
 
     def contains(self, plugin_id: str) -> bool:
         return self._exists(plugin_id)
@@ -107,13 +147,26 @@ class PluginRegistry:
             self._write_state(state)
         return self.describe(plugin_id)
 
+    def add(self, request) -> dict[str, Any]:
+        from agent.plugins.setup import add_plugin
+        import zipfile
+        with self._lock:
+            try:
+                return add_plugin(self,request)
+            except (zipfile.BadZipFile,zipfile.LargeZipFile,UnicodeError) as exc:
+                raise PluginRegistryError('Choose a valid UTF-8 declarative plugin ZIP archive.') from exc
+
     def skill_roots(self) -> dict[Path, str]:
         roots: dict[Path, str] = {}
-        for manifest in self.manifests():
+        manifests = self.manifests()
+        portable_ids = {manifest.id for manifest in manifests}
+        for manifest in manifests:
             skill_root = manifest.path / "skills"
             if self.is_enabled(manifest.id) and skill_root.exists():
                 roots[skill_root] = manifest.id
         for record in self.source_records():
+            if record.id in portable_ids:
+                continue
             if self.is_enabled(record.id) and record.skills_root is not None:
                 roots[record.skills_root] = record.id
         for source in self.sources:
@@ -121,7 +174,7 @@ class PluginRegistry:
             if not callable(owned):
                 continue
             for skill_root, plugin_id in owned().items():
-                if self.is_enabled(plugin_id):
+                if plugin_id not in portable_ids and self.is_enabled(plugin_id):
                     roots[Path(skill_root)] = plugin_id
         return roots
 
@@ -161,7 +214,7 @@ class PluginRegistry:
             "status": runtime_state if enabled else "disabled",
             "notes": str(status.get("notes") or manifest.description),
             "capabilities": list(manifest.capabilities),
-            "tools": list(manifest.provides_tools),
+            "tools": list(status.get("tools",manifest.provides_tools)),
             "apps": list(manifest.apps),
             "mcp_connectors": list(manifest.mcp_connectors),
             "skills": self._skills(manifest.path / "skills", manifest.id),
@@ -180,6 +233,15 @@ class PluginRegistry:
         }
 
     def catalog(
+        self,
+        *,
+        runtime_statuses: Iterable[dict[str, Any]] = (),
+        mcp_servers: Iterable[dict[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
+        with self.read_snapshot():
+            return self._catalog_snapshot(runtime_statuses=runtime_statuses, mcp_servers=mcp_servers)
+
+    def _catalog_snapshot(
         self,
         *,
         runtime_statuses: Iterable[dict[str, Any]] = (),
@@ -336,6 +398,9 @@ class PluginRegistry:
         raise KeyError(normalized)
 
     def _read_state(self) -> dict[str, bool]:
+        view = self._read_view.get()
+        if view is not None:
+            return dict(view[1])
         if not self.state_path.exists():
             return {}
         try:

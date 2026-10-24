@@ -113,3 +113,33 @@ def test_catalog_snapshots_external_skill_roots_once(tmp_path: Path):
 
     assert len(registry.catalog()) == 2
     assert source.skill_root_calls == 1
+
+
+def test_native_plugin_override_does_not_activate_imported_duplicate_skills(tmp_path):
+    root = tmp_path / "plugins" / "gmail"
+    root.mkdir(parents=True)
+    (root / "plugin.yaml").write_text("id: gmail\nname: Gmail\ntype: connector\ncategory: Connectors\n")
+    imported = tmp_path / "imported-gmail"
+    imported.mkdir()
+    class Source:
+        def discover(self):
+            return [PluginSourceRecord(id="gmail", name="Gmail", version="1", description="Imported", category="Connectors", developer="Test", source="test", root=imported, skills_root=imported)]
+        def skill_roots(self):
+            return {imported: "gmail"}
+    registry = PluginRegistry(tmp_path / "plugins", state_path=tmp_path / "state.json", sources=[Source()])
+    assert imported not in registry.skill_roots()
+    assert len(registry.catalog()) == 1
+
+
+def test_bundle_selection_is_atomic_and_new_connectors_can_default_off(tmp_path):
+    for identifier in ("first", "second"):
+        root = tmp_path / "plugins" / identifier
+        root.mkdir(parents=True)
+        (root / "plugin.yaml").write_text(f"id: {identifier}\nname: {identifier}\ntype: connector\ncategory: Connectors\ndefault_enabled: false\n")
+    registry = PluginRegistry(tmp_path / "plugins", state_path=tmp_path / "state.json")
+    assert not registry.is_enabled("first")
+    with pytest.raises(KeyError):
+        registry.set_enabled_many({"first": True, "missing": True})
+    assert not registry.is_enabled("first")
+    registry.set_enabled_many({"first": True, "second": False})
+    assert registry.is_enabled("first") and not registry.is_enabled("second")

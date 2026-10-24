@@ -1,0 +1,97 @@
+{
+  "codex-security": {
+    "file": "codex-security.png",
+    "source": "https://developers.openai.com/codex/security",
+    "license": "Proprietary"
+  },
+  "data-analytics": {
+    "file": "data-analytics.png",
+    "source": "https://openai.com/",
+    "license": "Proprietary"
+  },
+  "design-partner": {
+    "file": "design-partner.png",
+    "source": "https://github.com/moinulmoin/design-partner",
+    "license": "MIT"
+  },
+  "designly": {
+    "file": "designly.svg",
+    "source": "Installed publisher plugin bundle",
+    "license": "Publisher logo; rights retained by its owner"
+  },
+  "github": {
+    "file": "github.png",
+    "source": "https://github.com/",
+    "license": "MIT"
+  },
+  "linear": {
+    "file": "linear.png",
+    "source": "https://linear.app/",
+    "license": "MIT"
+  },
+  "netlify": {
+    "file": "netlify.svg",
+    "source": "https://docs.netlify.com",
+    "license": "MIT"
+  },
+  "no-ai-slop": {
+    "file": "no-ai-slop.png",
+    "source": "https://creatoreconomy.so/p/use-my-no-ai-slop-skill-to-remove-20-ai-slop-patterns",
+    "license": "MIT"
+  },
+  "notion": {
+    "file": "notion.png",
+    "source": "Installed publisher plugin bundle",
+    "license": "Publisher logo; rights retained by its owner"
+  },
+  "openai-developers": {
+    "file": "openai-developers.png",
+    "source": "https://platform.openai.com/",
+    "license": "Proprietary"
+  },
+  "openai-templates": {
+    "file": "openai-templates.svg",
+    "source": "https://github.com/openai/oai-maintained-plugins/tree/main/plugins/openai-templates",
+    "license": "Proprietary"
+  },
+  "plugin-management": {
+    "file": "plugin-management.svg",
+    "source": "https://openai.com/",
+    "license": "Proprietary"
+  },
+  "product-design": {
+    "file": "product-design.png",
+    "source": "https://openai.com/",
+    "license": "Proprietary"
+  },
+  "sites": {
+    "file": "sites.svg",
+    "source": "https://openai.com/",
+    "license": "Proprietary"
+  },
+  "superdesign": {
+    "file": "superdesign.png",
+    "source": "https://superdesign.dev",
+    "license": "MIT"
+  },
+  "work-pets": {
+    "file": "work-pets.svg",
+    "source": "https://openai.com/",
+    "license": "Proprietary"
+  },
+  "browser": {
+    "file": "browser.png",
+    "source": "https://github.com/openai/openai/tree/master/lib/oai_browser_use/plugin",
+    "license": "Proprietary"
+  },
+  "code-review": {
+    "file": "code-review.svg",
+    "source": "https://github.com/openai/openai/tree/master/plugins/pull-requests",
+    "license": "Proprietary"
+  },
+  "visualize": {
+    "file": "visualize.svg",
+    "source": "https://openai.com/",
+    "license": "Proprietary"
+  }
+}

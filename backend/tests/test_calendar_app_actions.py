@@ -70,14 +70,16 @@ def test_connection_start_reuses_oauth_flow(runtime, monkeypatch):
 
 def test_disconnect_requires_confirmation(runtime, monkeypatch):
     app, _registry = runtime
-    store = Mock()
-    monkeypatch.setattr(controls, "google_calendar_store", lambda: store)
+    disconnect = Mock()
+    # Patch the boundary actually called by the adapter. Patching its unused
+    # store alias can touch the developer's real shared Google connection.
+    monkeypatch.setattr(controls, "disconnect_calendar_connection", disconnect)
     context = AppActionContext(source="ui")
     request = AppActionRequest(action_id="calendar.connection.disconnect")
     receipt = app.dispatch(request, context)
-    assert not store.mock_calls
+    assert not disconnect.mock_calls
     assert app.confirm(receipt.confirmation.token, request, context).result["disconnected"] is True
-    store.clear.assert_called_once()
+    disconnect.assert_called_once()
 
 
 def test_adapter_cannot_bypass_confirmation():

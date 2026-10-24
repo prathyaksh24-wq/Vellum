@@ -126,3 +126,10 @@ def test_deleting_chat_clears_local_calendar_context_and_pending_authority(tmp_p
     reader.delete('chat')
     assert state.get_specialist_context('chat','CalendarAgent')=={}
     assert state.get_pending_action('chat') is None
+
+
+def test_missing_booking_followup_stays_with_main_conversation_not_generic_agenda(tmp_path):
+    _,dispatcher,_,_=harness(tmp_path)
+    dispatcher.maybe_handle('What is on my calendar tomorrow?','chat')
+    for text in ["i don't see it on my calendar",'where is the event u booked for at 8pm?']:
+        assert dispatcher.maybe_handle(text,'chat') is None

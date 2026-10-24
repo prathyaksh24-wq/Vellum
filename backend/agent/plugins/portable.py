@@ -22,6 +22,7 @@ class PortablePluginManifest:
     mcp_connectors: list[dict[str, Any]] = field(default_factory=list)
     required: bool = False
     protected: bool = False
+    default_enabled: bool = True
     path: Path = Path()
 
 
@@ -183,6 +184,7 @@ def _read_manifest(path: Path) -> PortablePluginManifest:
         mcp_connectors=[dict(item) for item in data.get("mcp_connectors", []) if isinstance(item, dict)],
         required=_as_bool(data.get("required")),
         protected=_as_bool(data.get("protected")),
+        default_enabled=_as_bool(data.get("default_enabled", True)),
         path=path.parent,
     )
 

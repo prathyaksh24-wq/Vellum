@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import os
 from collections.abc import Mapping
 
 from agent.plugins.models import PluginStatus
@@ -36,6 +37,7 @@ def agent_reach_plugin_status(
     timeout_seconds: float = 10.0,
     twitter_env: Mapping[str, str] | None = None,
     trust_configured_credentials: bool = False,
+    probe: bool = True,
 ) -> PluginStatus:
     if shutil.which(agent_reach_bin) is None:
         return _status(
@@ -48,6 +50,16 @@ def agent_reach_plugin_status(
             configured=False,
             status="missing_twitter_cli",
             notes="Install and configure twitter-cli so Agent-Reach can access X account actions.",
+        )
+
+    if not probe:
+        env = twitter_env if twitter_env is not None else os.environ
+        configured = bool(str(env.get("TWITTER_AUTH_TOKEN") or "").strip()
+                          and str(env.get("TWITTER_CT0") or "").strip())
+        return _status(
+            configured=configured,
+            status="not_checked",
+            notes="Agent-Reach and twitter-cli are installed. Browsing plugins does not run CLI health checks; X commands verify the session when used.",
         )
 
     agent_reach_check = _run_health([agent_reach_bin, "--version"], timeout_seconds)

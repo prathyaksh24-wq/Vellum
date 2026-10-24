@@ -32,6 +32,12 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     runtime.register_plugin_contribution(youtube_controls.youtube_plugin_contribution(
         status_provider=lambda: {"connected": True, "configured": True},
     ))
+    from agent.plugins.google_workspace_controls import google_contribution
+    from agent.plugins.linear_controls import linear_contribution
+    from agent.plugins.product_hunt_controls import product_hunt_contribution
+    runtime.register_plugin_contribution(google_contribution())
+    runtime.register_plugin_contribution(linear_contribution())
+    runtime.register_plugin_contribution(product_hunt_contribution())
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

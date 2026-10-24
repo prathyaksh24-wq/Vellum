@@ -23,6 +23,8 @@ class CalendarAgent:
 
     def can_handle(self, query: str) -> bool:
         lowered = self._normalize_query(query).casefold()
+        if self.is_booking_followup(lowered):
+            return False
         if "calendar" in lowered or "agenda" in lowered:
             return True
         return bool(
@@ -34,6 +36,15 @@ class CalendarAgent:
                 r"\b(?:book|create|add|schedule|reschedule|cancel|delete|move|update|find|rename)\s+(?:a|an|my|the)?\s*(?:meeting|appointment|event)\b",
                 lowered,
             )
+        )
+
+    @staticmethod
+    def is_booking_followup(query: str) -> bool:
+        """An unresolved conversation reference is not an agenda-list request."""
+        lowered = query.casefold()
+        return bool(
+            re.search(r"\b(?:don['’]?t|do not|can['’]?t|cannot)\s+(?:see|find)\s+(?:it|that|the\s+event)\b", lowered)
+            or re.search(r"\bwhere\b.*\b(?:event|slot|meeting|appointment)\b.*\b(?:you|u)\s+(?:booked|scheduled|created|added)\b", lowered)
         )
 
     def answer(self, query: str) -> SpecialistResponse:

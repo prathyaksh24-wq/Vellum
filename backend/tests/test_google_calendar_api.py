@@ -19,6 +19,9 @@ class FakeStore:
         self.flow = None
         self.profile = None
 
+    def load_metadata(self):
+        return dict(self.profile or {})
+
     def save_flow(self, flow):
         self.flow = dict(flow)
 

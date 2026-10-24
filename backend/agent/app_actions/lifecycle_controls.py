@@ -12,6 +12,8 @@ from agent.tools.registry import CapabilityAccess
 
 
 PLUGIN_STATE_SET_ACTION_ID = "plugin.state.set"
+PLUGIN_ADD_ACTION_ID = 'plugin.add'
+MARKETPLACE_ADD_ACTION_ID = 'plugin.marketplace.add'
 SKILL_MUTATION_SUBMIT_ACTION_ID = "skill.mutation.submit"
 SKILL_MUTATION_APPROVE_ACTION_ID = "skill.mutation.approve"
 SKILL_MUTATION_REJECT_ACTION_ID = "skill.mutation.reject"
@@ -19,6 +21,8 @@ SKILL_UNINSTALL_ACTION_ID = "skill.uninstall"
 
 LIFECYCLE_CONTROL_ACTION_IDS = frozenset({
     PLUGIN_STATE_SET_ACTION_ID,
+    PLUGIN_ADD_ACTION_ID,
+    MARKETPLACE_ADD_ACTION_ID,
     SKILL_MUTATION_SUBMIT_ACTION_ID,
     SKILL_MUTATION_APPROVE_ACTION_ID,
     SKILL_MUTATION_REJECT_ACTION_ID,
@@ -60,6 +64,18 @@ class PluginSkillActionService:
         confirmed: bool = False,
     ) -> dict[str, Any]:
         try:
+            if action_id in {PLUGIN_ADD_ACTION_ID,MARKETPLACE_ADD_ACTION_ID}:
+                if not confirmed:
+                    raise LifecycleControlError('CONFIRMATION_REQUIRED','Review this plugin source before adding it.')
+                from agent.contracts.plugin_setup import PluginSetup, MarketplaceSetup
+                if action_id==PLUGIN_ADD_ACTION_ID:
+                    plugin=self.plugin_registry.add(PluginSetup.model_validate(arguments))
+                    self.plugin_state_changed()
+                    return {'changed':True,'plugin':plugin,'_target_kind':'plugin','_target_id':plugin['id'],'_message':'Plugin added. Its MCP tools start only when requested.'}
+                from agent.skills.hub import TapsManager
+                request=MarketplaceSetup.model_validate(arguments)
+                result=TapsManager(self.skill_surface_provider().root).add(request.repo,path=request.path,confirm=True)
+                return {'changed':True,'marketplace':result,'_target_kind':'marketplace','_target_id':request.repo,'_message':'Marketplace added to skill discovery. Packages still require review before installation.'}
             if action_id == PLUGIN_STATE_SET_ACTION_ID:
                 return self._set_plugin_state(arguments)
             if action_id == SKILL_MUTATION_SUBMIT_ACTION_ID:
@@ -164,6 +180,7 @@ class PluginSkillActionService:
 
 
 def lifecycle_action_definitions() -> list[AppActionDefinition]:
+    from agent.contracts.plugin_setup import PluginSetup, MarketplaceSetup
     common = {
         "version": "1",
         "scope": "user",
@@ -174,6 +191,12 @@ def lifecycle_action_definitions() -> list[AppActionDefinition]:
         "result_schema": {"type": "object", "required": ["changed"]},
     }
     return [
+        AppActionDefinition(id=PLUGIN_ADD_ACTION_ID,owner='plugin-registry',title='Add plugin',
+            description='Add a declarative plugin, custom MCP server, or scanned skill/MCP archive. Saving does not execute MCP tools.',
+            confirmation_rule='operation_bound',argument_schema=PluginSetup.model_json_schema(),ui_reference='plugins',audit_label=PLUGIN_ADD_ACTION_ID,**common),
+        AppActionDefinition(id=MARKETPLACE_ADD_ACTION_ID,owner='skill-hub',title='Add marketplace',
+            description='Add a public GitHub skill marketplace repository to the existing taps owner. Installation still requires package review.',
+            confirmation_rule='operation_bound',argument_schema=MarketplaceSetup.model_json_schema(),ui_reference='plugins',audit_label=MARKETPLACE_ADD_ACTION_ID,**common),
         AppActionDefinition(
             id=PLUGIN_STATE_SET_ACTION_ID,
             owner="plugin-registry",

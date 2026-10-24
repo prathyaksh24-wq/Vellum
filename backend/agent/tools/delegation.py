@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from agent.agents.base import SpecialistResponse
 from agent.config import get_settings
-from agent.master.live_runtime import get_delegation_runtime
+from agent.master.live_runtime import get_delegation_runtime, get_agent_catalog
 from agent.master.runtime import DelegationRequest
 
 
@@ -56,7 +57,11 @@ def _response_payload(profile, response: SpecialistResponse) -> dict:
             "summary": (
                 f"{profile.id} prepared a change that requires local confirmation."
                 if action
-                else f"{profile.id} completed the request; private content is withheld from the main model."
+                else (
+                    f"{profile.id} completed the request; private content is withheld from the main model."
+                    if response.status == "answered"
+                    else f"{profile.id} returned {response.status}; the requested action is not confirmed as completed. Private details are withheld from the main model."
+                )
             ),
             "confidence": response.confidence,
             "action_request": payload.get("action_request", {}),
@@ -80,7 +85,7 @@ def delegate_to_agent(
     memory_from: list[str] | None = None,
     config: RunnableConfig = None,
 ) -> str:
-    """Delegate one bounded task to a listed specialist; Vellum validates and synthesizes its result."""
+    """Delegate only to an existing specialist profile in the directory. Plugins and MCP servers are not agents; use their tools directly or find them with tool_search."""
     clean_agent_id = str(agent_id or "").strip()
     clean_task = str(task or "").strip()
     clean_context = str(context or "").strip()
@@ -88,7 +93,7 @@ def delegate_to_agent(
     binding = runtime.agent_catalog.try_resolve(clean_agent_id)
     if binding is None or not binding.profile.delegation.can_receive:
         return json.dumps(
-            {"agent": clean_agent_id, "status": "blocked", "summary": "That specialist is not available."},
+            {"agent": clean_agent_id, "status": "blocked", "summary": "That specialist is not available. Use tool_search to find tools for this task; do not invent a profile from a plugin or service name."},
             ensure_ascii=False,
         )
 
@@ -119,3 +124,13 @@ def delegate_to_agent(
             )
 
     return json.dumps(_response_payload(binding.profile, response), ensure_ascii=False, indent=2)
+
+
+def available_delegation_tool(catalog=None):
+    """Constrain the advertised schema to the same catalog used for delegation."""
+    ids=tuple(sorted({entry['id'] for entry in (catalog or get_agent_catalog()).delegation_manifest()}))
+    if not ids:return None
+    schema=create_model('AvailableSpecialistInput',__base__=DelegateToAgentInput,
+        agent_id=(Literal[ids],Field(description="An existing specialist profile ID. For plugin/MCP tasks without a listed owner, use tool_search instead.")))
+    return delegate_to_agent.model_copy(update={"args_schema":schema,
+        "handle_validation_error":"That specialist is not listed. Use tool_search for plugin and MCP capabilities instead of inventing an agent."})

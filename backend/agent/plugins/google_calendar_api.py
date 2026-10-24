@@ -93,6 +93,8 @@ async def start_oauth() -> CalendarOAuthStartResponse:
 
 
 def start_connection() -> CalendarOAuthStartResponse:
+    if google_calendar_store().load_metadata().get("google_account_id"):
+        raise HTTPException(status_code=409, detail="Manage Calendar through the shared Google connection in Plugins.")
     if not get_plugin_registry().is_enabled("google-calendar"):
         raise HTTPException(status_code=403, detail="Enable Google Calendar in Plugins before connecting.")
     settings = get_settings()
@@ -152,10 +154,18 @@ async def oauth_callback(code: str = "", state: str = "", error: str = "") -> HT
 @router.delete("/connection")
 async def disconnect() -> dict[str, bool]:
     try:
-        await asyncio.to_thread(google_calendar_store().clear)
+        await asyncio.to_thread(disconnect_calendar_connection)
     except GoogleCalendarAuthError as exc:
         raise HTTPException(status_code=502, detail="Google Calendar disconnection failed.") from exc
     return {"disconnected": True}
+
+
+def disconnect_calendar_connection() -> None:
+    store = google_calendar_store()
+    if store.load_metadata().get("google_account_id"):
+        get_plugin_registry().set_enabled("google-calendar", False)
+    else:
+        store.clear()
 
 
 @router.get("/calendars")

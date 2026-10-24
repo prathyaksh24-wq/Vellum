@@ -213,6 +213,8 @@ class Settings(BaseSettings):
         alias="YOUTUBE_OAUTH_KEYRING_SERVICE",
     )
     youtube_oauth_account_label: str = Field(default="primary", alias="YOUTUBE_OAUTH_ACCOUNT_LABEL")
+    google_workspace_oauth_client_id: str = Field(default="", alias="GOOGLE_WORKSPACE_OAUTH_CLIENT_ID")
+    google_workspace_oauth_client_secret: str = Field(default="", alias="GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET", repr=False)
     google_calendar_oauth_client_id: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_ID")
     google_calendar_oauth_client_secret: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET")
     google_calendar_oauth_keyring_service: str = Field(

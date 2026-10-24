@@ -26,8 +26,9 @@ from agent.mcp.plugin_approvals import (
     PluginMcpApprovalStore,
     get_plugin_mcp_approval_store,
 )
-from agent.mcp.results import summarize_mcp_text
+from agent.mcp.results import summarize_mcp_text, structured_mcp_text
 from agent.plugins.registry import PluginRegistry
+from agent.plugins.credential_binding import credential_digest as bind_credential
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 
@@ -52,6 +53,8 @@ class PluginMcpConnector:
     env: dict[str, str] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
     missing_env: tuple[str, ...] = ()
+    auth: Any = field(default=None, repr=False, compare=False)
+    credential_digest: str = field(default="",repr=False,compare=False)
 
     @property
     def configured(self) -> bool:
@@ -90,6 +93,7 @@ class SdkPluginMcpTransport:
                 headers=connector.headers,
                 timeout=timeout,
                 sse_read_timeout=timeout,
+                auth=connector.auth,
             ) as (read, write, _get_session_id):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
@@ -109,8 +113,16 @@ class SdkPluginMcpTransport:
 
     async def list_tools(self, connector: PluginMcpConnector) -> list[dict[str, Any]]:
         async with self._session(connector) as session:
-            result = await session.list_tools()
-        return [_public_tool(tool) for tool in getattr(result, "tools", [])]
+            tools, cursor, seen = [], None, set()
+            while True:
+                result = await session.list_tools(cursor=cursor) if cursor else await session.list_tools()
+                tools.extend(_public_tool(tool) for tool in getattr(result, "tools", []))
+                cursor = getattr(result, "nextCursor", None)
+                if not cursor:
+                    return tools
+                if cursor in seen or len(tools) > 500:
+                    raise PluginMcpRuntimeError("MCP tool pagination exceeded its bound.")
+                seen.add(cursor)
 
     async def call_tool(
         self,
@@ -120,6 +132,8 @@ class SdkPluginMcpTransport:
     ) -> str:
         async with self._session(connector) as session:
             result = await session.call_tool(tool_name, arguments)
+        if getattr(result, "isError", False):
+            raise PluginMcpRuntimeError("The MCP server rejected this operation. Check the tool arguments and account permissions before retrying.")
         return content_text(result) or f"{tool_name} completed."
 
 
@@ -150,12 +164,16 @@ class PluginMcpRuntime:
                 if not skip_invalid:
                     raise
                 self.connector_diagnostics.append({"plugin_id": plugin_id, "status": "unavailable"})
-        for manifest in self.registry.manifests():
+        manifests = self.registry.manifests()
+        portable_ids = {manifest.id for manifest in manifests}
+        for manifest in manifests:
             if not self.registry.is_enabled(manifest.id):
                 continue
             for item in manifest.mcp_connectors:
                 append_connector(manifest.id, manifest.path.resolve(), item)
         for record in self.registry.source_records():
+            if record.id in portable_ids:
+                continue
             if not self.registry.is_enabled(record.id):
                 continue
             for item in record.mcp_connectors:
@@ -165,13 +183,26 @@ class PluginMcpRuntime:
     def connector(self, plugin_id: str, connector_name: str) -> PluginMcpConnector:
         normalized_plugin = plugin_id.strip()
         normalized_name = connector_name.strip()
-        for item in self.connectors(skip_invalid=True):
-            if item.plugin_id == normalized_plugin and item.name == normalized_name:
-                return item
+        # A call to one service must not resolve credentials/configuration for
+        # every installed MCP server. Reuse the registry's request-local view;
+        # enablement and manifest changes are still observed on the next call.
+        with self.registry.read_snapshot():
+            manifest=next((item for item in self.registry.manifests() if item.id==normalized_plugin),None)
+            record=manifest or next((item for item in self.registry.source_records() if item.id==normalized_plugin),None)
+            if record is not None and self.registry.is_enabled(normalized_plugin):
+                root=manifest.path.resolve() if manifest else record.root.resolve()
+                for item in record.mcp_connectors:
+                    if str(item.get("name") or "").strip()!=normalized_name:continue
+                    try:return _connector(normalized_plugin,root,item)
+                    except PluginMcpRuntimeError:break
         raise PluginMcpRuntimeError("Plugin MCP connector is unavailable or disabled.")
 
     async def list_tools(self, plugin_id: str, connector_name: str) -> list[dict[str, Any]]:
         connector = self.connector(plugin_id, connector_name)
+        return await self._list_tools(connector)
+
+    async def _list_tools(self, connector):
+        plugin_id,connector_name=connector.plugin_id,connector.name
         if not connector.configured:
             missing = ", ".join(connector.missing_env)
             raise PluginMcpRuntimeError(f"Plugin MCP connector needs environment configuration: {missing}")
@@ -209,9 +240,13 @@ class PluginMcpRuntime:
         arguments: dict[str, Any],
         *,
         approval_id: str = "",
+        credential_digest: str = "",
+        structured: bool = False,
     ) -> str:
         connector = self.connector(plugin_id, connector_name)
-        tools = await self.list_tools(plugin_id, connector_name)
+        if credential_digest and connector.credential_digest != credential_digest:
+            raise PluginMcpRuntimeError("The connector credential changed. Review this operation again.")
+        tools = await self._list_tools(connector)
         tool = next((item for item in tools if item.get("name") == tool_name), None)
         if tool is None:
             raise PluginMcpRuntimeError("Plugin MCP tool is not exposed by this connector.")
@@ -257,7 +292,7 @@ class PluginMcpRuntime:
             started=started,
             outcome="success",
         )
-        return summarize_mcp_text(result)
+        return structured_mcp_text(result) if structured else summarize_mcp_text(result)
 
     def _audit(
         self,
@@ -292,11 +327,26 @@ def _connector(
     headers, header_missing = _resolved_mapping(payload.get("headers"))
     missing = tuple(dict.fromkeys([*env_missing, *header_missing]))
     if url:
+        auth = None
+        credential_digest = ""
         parsed_url = urlsplit(url)
         if parsed_url.scheme.lower() not in {"http", "https"} or not parsed_url.hostname:
             raise PluginMcpRuntimeError("Plugin MCP URL must use HTTP or HTTPS.")
         if parsed_url.username or parsed_url.password:
             raise PluginMcpRuntimeError("Plugin MCP URL must not contain credentials.")
+        if payload.get("credential_provider") == "linear":
+            if plugin_id != "linear" or url != "https://mcp.linear.app/mcp":
+                raise PluginMcpRuntimeError("Linear credentials are restricted to its official MCP endpoint.")
+            from agent.plugins.linear import linear_service, LinearError
+            try:
+                service=linear_service()
+                data=service._require()
+                token=data["token"]
+                credential_digest=bind_credential(token,provider="linear")
+                from agent.plugins.linear_oauth import stored_auth
+                headers,auth={},stored_auth(service,connection=data)
+            except LinearError:
+                headers, missing = {}, ("Linear connection",)
         return PluginMcpConnector(
             plugin_id=plugin_id,
             name=name,
@@ -306,6 +356,8 @@ def _connector(
             env=env,
             headers=headers,
             missing_env=missing,
+            auth=auth,
+            credential_digest=credential_digest,
         )
 
     command = str(payload.get("command") or "").strip()

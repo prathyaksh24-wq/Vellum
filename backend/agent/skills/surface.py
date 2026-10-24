@@ -66,9 +66,22 @@ class SkillSurfaceService:
             "external_diagnostics": self.registry.public_diagnostics(),
         }
 
+    def installed(self, query: str = '', *, after: str = '', limit: int = 50) -> list[dict[str, Any]]:
+        """Project all canonical roots, including plugin-owned and external skills."""
+        from agent.skills.catalog import SkillTextNormalizer
+        terms=query.casefold().split()
+        rows=[]
+        for package in self.registry.list_packages(include_unavailable=True):
+            identity=SkillTextNormalizer.identity(package.metadata.name)
+            if after and identity<=after.casefold():continue
+            haystack=(package.metadata.name+' '+package.metadata.description).casefold()
+            if terms and not all(term in haystack for term in terms):continue
+            rows.append((identity,package))
+        return [{**self._card(package,'active'),'normalized_name':identity} for identity,package in sorted(rows,key=lambda pair:pair[0])[:limit]]
+
     def detail(self, name: str, *, path: str = "") -> dict[str, Any]:
         try:
-            package = self.registry.view(name)
+            package = self.registry.view(name,include_unavailable=True)
         except KeyError:
             lifecycle = None
             for base in (self.root / "proposed", self.root / "retired", self.root / ".archive"):
@@ -81,7 +94,7 @@ class SkillSurfaceService:
         if path:
             return {"name": name, "path": path, "content": self.parser.read_support_file(package.root, path)}
         provenance = HubLockFile(self.root).get(name) or {}
-        metadata = package.metadata.model_dump(mode="json", exclude_none=True)
+        metadata = package.metadata.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
         install_surfaces = skill_install_surfaces(
             name,
             identifier=str(provenance.get("identifier") or ""),
@@ -99,6 +112,9 @@ class SkillSurfaceService:
             "metadata": metadata,
             "content": package.body,
             "skill_md": package.skill_file.read_text(encoding="utf-8"),
+            "local_file": str(package.skill_file.resolve()),
+            "owner_plugin": package.owner_plugin,
+            "read_only": package.is_external,
             "usage": self.usage.get(name),
             "origin": self._origin(package, self.usage.get(name)),
             "usage_intelligence": self.usage_intelligence.aggregate(name),

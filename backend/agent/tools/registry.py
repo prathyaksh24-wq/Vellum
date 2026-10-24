@@ -45,7 +45,8 @@ class CapabilityRecord:
 
     def schema(self) -> dict[str, Any]:
         if self.runtime_tool is not None:
-            return self.runtime_tool.args_schema.model_json_schema()
+            schema = self.runtime_tool.args_schema
+            return schema if isinstance(schema, dict) else schema.model_json_schema()
         return self.input_schema or {"type":"object", "additionalProperties":True}
 
 
