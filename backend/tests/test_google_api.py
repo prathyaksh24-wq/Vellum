@@ -95,7 +95,7 @@ def test_new_scopes_require_consent_and_existing_reads_remain_available(service)
     authorization = urlsplit(flow["authorization_url"])
     assert (authorization.scheme, authorization.netloc, authorization.path) == ("https", "accounts.google.com", "/o/oauth2/v2/auth")
     scopes = parse_qs(authorization.query)["scope"][0].split()
-    assert "https://mail.google.com/" in scopes
+    assert set(WRITE_SCOPES["gmail"]).issubset(scopes)
     assert service.status().services[1].authorized and not service.status().services[1].can_write
     with pytest.raises(ValueError,match="additional Google permission"):
         GoogleApiAdapter(service).prepare(GoogleApiOperation(service="gmail",method_id="gmail.users.messages.trash",parameters={"id":"m1"}))
