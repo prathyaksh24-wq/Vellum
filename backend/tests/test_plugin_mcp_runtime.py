@@ -73,6 +73,30 @@ def test_runtime_does_not_expose_disabled_plugin_connectors(tmp_path: Path) -> N
     registry.set_enabled("demo", False)
 
     assert PluginMcpRuntime(registry).connectors() == []
+    with pytest.raises(PluginMcpRuntimeError,match="unavailable"):
+        PluginMcpRuntime(registry).connector('demo','demo-server')
+
+
+def test_targeted_lookup_does_not_resolve_unrelated_servers_and_observes_enablement(tmp_path,monkeypatch):
+    from agent.mcp import plugin_runtime as module
+    registry,root=_plugin(tmp_path,{'url':'https://mcp.example.test/mcp'})
+    (root/'.mcp.json').write_text(json.dumps({'mcpServers':{
+        'demo-server':{'url':'https://mcp.example.test/mcp'},
+        'unrelated-server':{'url':'https://unrelated.example/mcp','credential_provider':'linear'},
+    }}),encoding='utf-8')
+    original=module._connector;resolved=[]
+    def resolve(plugin_id,root,item):
+        resolved.append(item['name'])
+        return original(plugin_id,root,item)
+    monkeypatch.setattr(module,'_connector',resolve)
+    runtime=PluginMcpRuntime(registry)
+    assert runtime.connector('demo','demo-server').name=='demo-server'
+    assert resolved==['demo-server']
+    registry.set_enabled('demo',False)
+    with pytest.raises(PluginMcpRuntimeError):runtime.connector('demo','demo-server')
+    assert resolved==['demo-server']
+    registry.set_enabled('demo',True)
+    assert runtime.connector('demo','demo-server').name=='demo-server'
 
 
 def test_catalog_can_isolate_invalid_connector_without_weakening_path_validation(tmp_path: Path) -> None:

@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 import json
+import re
 from threading import RLock
 from typing import Literal
 
@@ -20,6 +21,7 @@ class ActionSession:
     context: AppActionContext
     emitted: list[dict] = field(default_factory=list)
     write_results: dict[str, dict] = field(default_factory=dict)
+    google_reads: set[str] = field(default_factory=set)
     lock: object = field(default_factory=RLock)
 
 
@@ -46,10 +48,32 @@ def drain_app_action_events() -> list[dict]:
     return events
 
 
-def app_action_result_guard() -> str | None:
+def note_google_read(service: str) -> None:
+    session = _SESSION.get()
+    if session is not None:
+        with session.lock:
+            session.google_reads.add(service)
+
+
+def app_action_read_only_google_turn() -> bool:
+    """Buffer provider text until its claims can be checked against write receipts."""
+    session = _SESSION.get()
+    return session is not None and bool(session.google_reads) and not session.write_results
+
+
+def app_action_result_guard(answer: str = '') -> str | None:
     """Replace model completion claims while any requested write is unapplied."""
     session = _SESSION.get()
-    if session is None or not session.write_results:
+    if session is None:
+        return None
+    if not session.write_results:
+        # A first-person completion claim is not evidence that a read performed a
+        # write. Do not reject descriptions of events that already exist.
+        claim = re.search(r"(?:^|[.!?]\s+|\n)\s*(?:i|we)(?:['’](?:ve|d)| have| had)?\s+(?:successfully\s+)?(?:scheduled|booked|created|added|saved|sent|deleted|removed|updated|renamed|changed|rescheduled|cancelled|canceled|trashed)\b", answer, re.I)
+        if claim and session.google_reads:
+            if session.google_reads == {'calendar'}:
+                return "I checked Google Calendar, but I haven't created or changed an event. There is no confirmed booking from this request."
+            return "I read the connected Google data, but there is no successful write receipt for this request. I haven't confirmed the requested change."
         return None
     results = list(session.write_results.values())
     pending = [item for item in results if item.get('status') != 'applied' or item.get('result', {}).get('requires_user_selection')]
@@ -58,6 +82,15 @@ def app_action_result_guard() -> str | None:
     applied = [item['message'] for item in results if item not in pending and item.get('message')]
     failures = [item.get('message') or 'The requested change was not applied.' for item in pending]
     return '\n\n'.join([*applied, *failures])
+
+
+def app_action_confirmation_pending() -> bool:
+    """A prepared review is authoritative; no model pass is needed to rewrite it."""
+    session = _SESSION.get()
+    return session is not None and any(
+        result.get('status') == 'confirmation_required'
+        for result in session.write_results.values()
+    )
 
 
 def _contains_secret_argument(arguments: dict) -> bool:
@@ -69,12 +102,29 @@ def _contains_secret_argument(arguments: dict) -> bool:
     return False
 
 
+def _google_tool_hint(action_id: str) -> dict:
+    """Recover a known published method name without guessing or executing a write."""
+    from agent.plugins import google_api_catalog as catalog
+    method_id = action_id.removeprefix('google.')
+    for service in catalog.ROOTS:
+        if method_id in catalog.methods(service):
+            details = catalog.describe(service, method_id)
+            schema = details['parameters']
+            if details['body'] is not None:
+                schema['properties']['body'] = details['body']
+            return {'suggested_tool': {'name': catalog.tool_name(service, method_id),
+                'argument_schema': schema},
+                'next_step': 'Use tool_search with the suggested tool name, then call that discovered tool with actual values matching argument_schema. It prepares the required review; do not invent an App Action ID.'}
+    return {}
+
+
 @tool
 def app_action(operation: Literal['list','inspect','execute'] = 'list', action_id: str = '', arguments: dict | None = None, query: str = '') -> str:
-    """Inspect and change Vellum settings, appearance, personalization, models, pets and other registered controls.
+    """Inspect and change Vellum settings and registered connected-service data.
+    Includes appearance, personalization, models, pets and connector App Actions.
 
     List actions by a short query, inspect an action's argument schema, then execute
-    it with that schema. Use this for requests to change Vellum itself, including
+    it with that schema. Use this for Vellum controls and confirmed external writes, including
     spelling mistakes or shorthand. All changes use the canonical App Action
     permissions, confirmations and receipts. Never request API keys in chat:
     provider.credential.configure without a secret opens the secure field.
@@ -90,6 +140,20 @@ def app_action(operation: Literal['list','inspect','execute'] = 'list', action_i
         return json.dumps({'status':'unavailable','message':'App Actions need the current conversation and device context.'})
     catalog = session.runtime.catalog(session.context)
     actions = {action.id:action for action in catalog.actions}
+    if action_id and action_id not in actions:
+        # A tool name is not an action ID. Do not silently ignore an invalid ID
+        # on list and return the first 30 unrelated actions on every retry.
+        if operation == 'execute' and not session.write_results:
+            session.write_results['unresolved_action'] = {'status':'unavailable','message':'That action is unavailable; the requested change was not applied.'}
+        terms = [term for term in re.split(r"[\W_]+", action_id.casefold()) if len(term) > 2]
+        matches = [action for action in actions.values()
+                   if any(term in f'{action.id} {action.title}'.casefold() for term in terms[:1])]
+        return json.dumps({'status':'unavailable',
+            'message':'This is not a registered App Action ID. Reads use their discovered tool through tool_call. For writes inspect an exact action ID below before execute.',
+            'actions':[{'id':action.id,'title':action.title,'confirmation':action.confirmation_rule} for action in matches[:5]],
+            'discovery_example':{'operation':'list','query':terms[0] if terms else action_id},
+            'available_operations':['list','inspect','execute'],
+            **(_google_tool_hint(action_id) if action_id.startswith('google.') else {})})
     # Models sometimes put a returned catalog ID in the discovery field.
     # Resolve only exact registered IDs; this never guesses a write target.
     if not action_id and query.strip() in actions:
@@ -125,4 +189,6 @@ def app_action(operation: Literal['list','inspect','execute'] = 'list', action_i
     if receipt.status == 'failed':
         result['argument_schema'] = definition.argument_schema
         result['next_step'] = 'Retry with actual values matching argument_schema; do not pass schema metadata as values.'
+        if action_id == 'google.api.execute':
+            result['next_step'] = 'Google arguments must contain service, method_id and parameters (IDs go inside parameters), plus body when required. Prefer tool_search and the exact discovered Google tool; it wraps these fields and prepares the review. Do not repeat the same failed arguments or redo a successful target lookup.'
     return json.dumps(result)

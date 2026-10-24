@@ -10,7 +10,7 @@ from pathlib import Path
 import secrets
 import tempfile
 import time
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlencode
 
 from .errors import GoogleCalendarAuthError
@@ -41,6 +41,7 @@ class GoogleCalendarAuthStore:
         keyring_backend: KeyringBackend | None = None,
         keyring_service: str = "vellum.google-calendar",
         account_label: str = "primary",
+        clock: Callable[[], float] = time.time,
     ) -> None:
         if keyring_backend is None:
             import keyring
@@ -52,6 +53,7 @@ class GoogleCalendarAuthStore:
         self.keyring = keyring_backend
         self.keyring_service = keyring_service.strip() or "vellum.google-calendar"
         self.account_label = account_label.strip() or "primary"
+        self.clock = clock
 
     def save_tokens(self, payload: dict[str, Any]) -> dict[str, Any]:
         access_token = str(payload.get("access_token") or "").strip()
@@ -61,7 +63,7 @@ class GoogleCalendarAuthStore:
         refresh_token = str(payload.get("refresh_token") or existing.get("refresh_token") or "").strip()
         expires_at = float(payload.get("expires_at") or 0)
         if not expires_at:
-            expires_at = time.time() + max(0, int(payload.get("expires_in") or 0))
+            expires_at = self.clock() + max(0, int(payload.get("expires_in") or 0))
         tokens = {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -83,7 +85,7 @@ class GoogleCalendarAuthStore:
                 "account_label": self.account_label,
                 "scope": tokens["scope"],
                 "expires_at": expires_at,
-                "updated_at": time.time(),
+                "updated_at": self.clock(),
             }
         )
         self._atomic_write(self.metadata_path, metadata)
@@ -113,7 +115,7 @@ class GoogleCalendarAuthStore:
                 "calendar_id": str(profile.get("id") or ""),
                 "calendar_label": str(profile.get("summary") or "Primary calendar"),
                 "time_zone": str(profile.get("timeZone") or ""),
-                "updated_at": time.time(),
+                "updated_at": self.clock(),
             }
         )
         self._atomic_write(self.metadata_path, metadata)
@@ -131,7 +133,7 @@ class GoogleCalendarAuthStore:
             raise GoogleCalendarAuthError("Google Calendar authorization state is missing")
         flow = self._read_json(self.flow_path, "Google Calendar authorization state is unreadable")
         created_at = float(flow.get("created_at") or 0)
-        if not created_at or time.time() - created_at > max_age_seconds:
+        if not created_at or self.clock() - created_at > max_age_seconds:
             self.flow_path.unlink(missing_ok=True)
             raise GoogleCalendarAuthError("Google Calendar authorization state expired")
         if not state or not secrets.compare_digest(str(flow.get("state") or ""), state):

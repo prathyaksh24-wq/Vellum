@@ -6,6 +6,14 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Redesign full-page Settings, Plugins and Skills management with consistent
+  provider logos, source details, Add/marketplace/MCP flows and readable reviews.
+- Connect Product Hunt through OS-stored credentials, Linear through its official
+  OAuth MCP server, and Gmail/Drive/Calendar/Contacts through a shared Google grant.
+- Discover service schemas on demand in the main agent and specialists; prefer
+  GitHub CLI with a guarded MCP fallback. Paginate mail across the requested
+  interval, stop repeated tool loops and verify Calendar booking claims/targets.
+
 - Fix Book evidence selection with smaller whole-source chunks, semantic/BM25 rank fusion, named-book scoping, and separation of source questions from presentation instructions. Rebuild derived Book knowledge with compiler `vellum.3` while preserving exact source spans and validation. Keep historical conversation questions with chat recall, prevent accidental browser actions, and stop enabling local thinking solely because a model supports it; explicit reasoning modes retain thinking.
 
 - Replace local BGE embeddings with pinned Google EmbeddingGemma 2 text embeddings through Ollama. Use separate query/document prefixes, identify index generations by model revision, and invalidate stale skill-vector caches. Add offline book/vault and atomic two-table Honcho migrations with retained backups; existing Honcho volumes switch models only after migration. See `docs/architecture/local-embeddings.md`.

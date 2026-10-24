@@ -28,8 +28,8 @@ GoogleCalendarAPIError = _calendar_module.errors.GoogleCalendarAPIError
 def _credentials() -> tuple[str, str]:
     settings = get_settings()
     return (
-        settings.google_calendar_oauth_client_id or settings.youtube_oauth_client_id,
-        settings.google_calendar_oauth_client_secret or settings.youtube_oauth_client_secret,
+        settings.google_workspace_oauth_client_id or settings.google_calendar_oauth_client_id or settings.youtube_oauth_client_id,
+        settings.google_workspace_oauth_client_secret if settings.google_workspace_oauth_client_id else settings.google_calendar_oauth_client_secret or settings.youtube_oauth_client_secret,
     )
 
 
@@ -47,10 +47,14 @@ def google_calendar_client(*, store: Any | None = None, request_backend: Any | N
     if not get_plugin_registry().is_enabled("google-calendar"):
         raise ToolPermissionError("Google Calendar is disabled. Enable it in Plugins to use it.")
     client_id, client_secret = _credentials()
+    current_store = store or google_calendar_store()
+    metadata = current_store.load_metadata()
+    if metadata.get("google_account_id") and not set(google_calendar_scopes()).issubset(set(str(metadata.get("scope") or "").split())):
+        raise GoogleCalendarAuthError("Enable Calendar and grant its permissions in the Google connection.")
     return _calendar_module.client.GoogleCalendarClient(
         client_id=client_id,
         client_secret=client_secret,
-        store=store or google_calendar_store(),
+        store=current_store,
         request_backend=request_backend,
     )
 
@@ -75,6 +79,8 @@ def google_calendar_status(*, probe: bool = False) -> dict[str, Any]:
     try:
         connected = bool(store.load_tokens(required=False))
         metadata = store.load_metadata()
+        if metadata.get("google_account_id"):
+            connected = connected and set(google_calendar_scopes()).issubset(set(str(metadata.get("scope") or "").split()))
         status = "ready" if connected else "not_connected"
         if connected and probe and enabled:
             profile = google_calendar_client(store=store).primary_calendar()
