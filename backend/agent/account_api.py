@@ -124,6 +124,15 @@ def google_callback(state: str = "", code: str = "", error: str = ""):
 
 @router.get("/callback/github", dependencies=[Depends(local_client)])
 def github_callback(state: str = "", code: str = "", error: str = ""):
+    if state.startswith("github-plugin."):
+        from agent.plugins.github_connection import GitHubConnectionError, github_service
+        try:
+            flow_id = github_service().callback(state, code, error)
+        except GitHubConnectionError:
+            return HTMLResponse("<h1>GitHub sign-in expired</h1><p>Return to Vellum and connect again.</p>", status_code=400,
+                headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+        return RedirectResponse("/api/plugins/github/oauth/return?flow_id=" + flow_id, status_code=303,
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
     return callback_response("github", state, code, error)
 
 

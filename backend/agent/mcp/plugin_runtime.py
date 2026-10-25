@@ -203,6 +203,12 @@ class PluginMcpRuntime:
 
     async def _list_tools(self, connector):
         plugin_id,connector_name=connector.plugin_id,connector.name
+        if plugin_id == "github" and connector_name == "github" and connector.url == "https://api.githubcopilot.com/mcp/x/all":
+            from agent.plugins.github_connection import github_service
+            service = github_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The GitHub catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
         if not connector.configured:
             missing = ", ".join(connector.missing_env)
             raise PluginMcpRuntimeError(f"Plugin MCP connector needs environment configuration: {missing}")
@@ -347,6 +353,17 @@ def _connector(
                 headers,auth={},stored_auth(service,connection=data)
             except LinearError:
                 headers, missing = {}, ("Linear connection",)
+        if payload.get("credential_provider") == "github":
+            if plugin_id != "github" or name != "github" or url != "https://api.githubcopilot.com/mcp/x/all":
+                raise PluginMcpRuntimeError("GitHub authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.github_connection import GitHubConnectionError, github_service
+            try:
+                service = github_service()
+                data = service.require()
+                headers = service.connector(data).headers
+                credential_digest = data["revision"]
+            except GitHubConnectionError:
+                headers, missing = {}, ("GitHub OAuth connection",)
         return PluginMcpConnector(
             plugin_id=plugin_id,
             name=name,

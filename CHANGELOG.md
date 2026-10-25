@@ -6,6 +6,16 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Keep GitHub OAuth completion values in escaped HTML data instead of executable
+  script source, register its reviewed UI controls, and make clock regression
+  fixtures deterministic across winter, summer and the daylight-saving transition.
+- Keep the desktop composer and sidebar footer inside the window by sizing the
+  workspace to its root's available height after the native title bar.
+- Connect GitHub through Vellum OAuth with OS-owned authorization, CLI-first
+  operations, the complete connected official MCP catalog discovered on demand,
+  readable operation-bound reviews and disconnect controls. Close the OAuth window
+  after verification and focus the original app; keep the full workspace out of
+  authentication popups, including the isolated desktop sign-in window.
 - Bind provider operation reviews to credentials with secret-salted PBKDF2,
   and restrict Google schema loading to explicit bundled service files.
 - Redesign full-page Settings, Plugins and Skills management with consistent

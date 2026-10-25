@@ -1969,6 +1969,20 @@ class AppActionRuntime:
                         message=binding['message'], binding=binding)
                     receipt.result['google_review'] = binding['preview']
                     return receipt
+                if request.action_id == 'github.mcp.execute':
+                    from agent.contracts.github_connection import GitHubMcpOperation
+                    from agent.plugins.github_mcp import GitHubMcpAdapter
+                    try:
+                        binding = GitHubMcpAdapter().prepare(GitHubMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='GITHUB_REVIEW_FAILED',
+                            message='GitHub could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='github_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['github_review'] = binding['preview']
+                    return receipt
                 if request.action_id == 'linear.mcp.execute':
                     from agent.plugins.linear_controls import prepare_linear_mcp
                     try:

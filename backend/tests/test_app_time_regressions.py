@@ -46,16 +46,34 @@ def test_long_unknown_clock_location_returns_clarification():
     assert 'timezone' in api._current_datetime_answer('time in ' + 'a' * 100_000)
 
 
+@pytest.fixture(params=[
+    (datetime(2026, 1, 15, 12, tzinfo=timezone.utc), 'CET'),
+    (datetime(2026, 10, 15, 12, tzinfo=timezone.utc), 'CEST'),
+    (datetime(2026, 10, 25, 0, 59, tzinfo=timezone.utc), 'CEST'),
+    (datetime(2026, 10, 25, 1, 0, tzinfo=timezone.utc), 'CET'),
+], ids=['winter', 'summer', 'before-dst-end', 'after-dst-end'])
+def brussels_clock(monkeypatch, request):
+    instant, abbreviation = request.param
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.astimezone(tz) if tz is not None else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(api, 'datetime', FrozenDateTime)
+    return abbreviation + ' in Brussels '
+
+
 @pytest.mark.parametrize('prefix', ['and ', 'what about ', 'how about '])
-def test_repeated_followup_prefixes_and_punctuation_keep_the_requested_zone(monkeypatch, prefix):
+def test_repeated_followup_prefixes_and_punctuation_keep_the_requested_zone(monkeypatch, prefix, brussels_clock):
     monkeypatch.setattr(api, '_thread_user_messages', lambda *a, **kw: ['what time is it in South Korea?'])
     answer = api._clock_followup_answer(prefix * 5_000 + 'Belgium' + '!' * 10_000, 'clock-thread')
-    assert 'CEST in Brussels ' in answer
+    assert brussels_clock in answer
 
 
-def test_location_followup_keeps_the_first_explicit_preposition(monkeypatch):
+def test_location_followup_keeps_the_first_explicit_preposition(monkeypatch, brussels_clock):
     monkeypatch.setattr(api, '_thread_user_messages', lambda *a, **kw: ['what time is it in South Korea?'])
-    assert 'CEST in Brussels ' in api._clock_followup_answer('in Belgium?!', 'clock-thread')
+    assert brussels_clock in api._clock_followup_answer('in Belgium?!', 'clock-thread')
     assert 'timezone' in api._clock_followup_answer('in in Belgium?!', 'clock-thread')
 
 

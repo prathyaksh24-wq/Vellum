@@ -1,0 +1,24 @@
+id: github
+name: GitHub
+type: connector
+category: Developer Tools
+version: 1.0.0
+description: Search code and manage repositories, issues, pull requests, Actions and more. Uses GitHub CLI first with the official GitHub MCP fallback.
+mcp_connectors:
+  - name: github
+    type: http
+    url: https://api.githubcopilot.com/mcp/x/all
+    credential_provider: github
+capabilities:
+  - github.connection.oauth.start
+  - github.connection.oauth.cancel
+  - github.connection.verify
+  - github.connection.disconnect
+  - github.mcp.execute
+provides_tools:
+  - github_read
+  - github_write
+  - github_mcp_catalog
+  - github_mcp_describe
+  - github_mcp_read
+  - github_mcp_execute

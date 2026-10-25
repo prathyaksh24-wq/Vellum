@@ -519,6 +519,11 @@ def core_tool_registry() -> ToolRegistry:
             requires_confirmation=tool.name == "delete_file",
         )
     from agent.plugins.linear_mcp import agent_tools as linear_mcp_tools
+    from agent.plugins.github_mcp import agent_tools as github_mcp_tools
+    for tool in github_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
     for tool in published_google_tools():
         registry.register_langchain(tool, access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
             allowed_agents=frozenset({"VellumAgent"}))
