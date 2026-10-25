@@ -161,6 +161,57 @@ def test_explicit_non_popup_flow_returns_to_the_validated_app(service, monkeypat
     assert target.scheme == "http" and target.hostname == "127.0.0.1" and target.port == 5173
 
 
+@pytest.mark.parametrize('flow_id', [
+    '</script><script>alert("oauth")</script>',
+    '\"><img src=x onerror=alert(1)>',
+    '&quot; onload=alert(1) data-flow-id="',
+    '\u2028\u2029',
+])
+def test_popup_values_are_inert_html_data_not_javascript(service, monkeypatch, flow_id):
+    from html.parser import HTMLParser
+    from agent.plugins import github_api
+
+    class Page(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.tags, self.body, self.scripts = [], {}, []
+            self.in_script = False
+
+        def handle_starttag(self, tag, attrs):
+            self.tags.append(tag)
+            if tag == 'body':
+                self.body = dict(attrs)
+            if tag == 'script':
+                self.in_script = True
+                self.scripts.append('')
+
+        def handle_endtag(self, tag):
+            if tag == 'script':
+                self.in_script = False
+
+        def handle_data(self, value):
+            if self.in_script:
+                self.scripts[-1] += value
+
+    monkeypatch.setattr(github_api, 'github_service', lambda: service)
+    started = service.start(GitHubConnectionRequest(popup=True))
+    # Generated IDs are URL-safe. Seed hostile stored data to exercise the HTML
+    # boundary independently of today's token generator and flow lookup guard.
+    service.flows[flow_id] = service.flows.pop(started.flow_id)
+    service.flows[flow_id].update(status='connected', message='<img src=x onerror=alert(2)>')
+    response = github_api.oauth_return(flow_id)
+    page = Page()
+    page.feed(response.body.decode())
+    assert response.status_code == 200
+    assert page.body['data-flow-id'] == flow_id
+    assert page.body['data-target-origin'] == 'http://127.0.0.1:5173'
+    assert len(page.scripts) == 1 and 'img' not in page.tags
+    assert set(page.body) == {'data-flow-id', 'data-target-origin'}
+    assert flow_id not in page.scripts[0]
+    assert 'window.opener.postMessage' in page.scripts[0]
+    assert 'window.opener.focus()' in page.scripts[0] and 'window.close()' in page.scripts[0]
+
+
 def test_desktop_launch_route_uses_the_existing_flow_and_rejects_unknown_ids(service, monkeypatch):
     from agent.plugins import github_api
     monkeypatch.setattr(github_api, "github_service", lambda: service)
@@ -169,3 +220,15 @@ def test_desktop_launch_route_uses_the_existing_flow_and_rejects_unknown_ids(ser
     assert response.status_code == 303
     assert response.headers["location"] == started.authorization_url
     assert github_api.oauth_open("unknown-flow").status_code == 400
+
+
+def test_pending_popup_keeps_polling_and_unknown_return_is_static(service, monkeypatch):
+    from agent.plugins import github_api
+    monkeypatch.setattr(github_api, 'github_service', lambda: service)
+    started = service.start(GitHubConnectionRequest(popup=True))
+    response = github_api.oauth_return(started.flow_id)
+    assert response.status_code == 200 and response.headers['refresh'] == '1'
+    assert '<script' not in response.body.decode()
+    assert 'target="_blank" rel="noopener noreferrer"' in response.body.decode()
+    unknown = github_api.oauth_return('</script><script>alert(1)</script>')
+    assert unknown.status_code == 400 and '<script' not in unknown.body.decode()

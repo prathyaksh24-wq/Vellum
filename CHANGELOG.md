@@ -6,6 +6,9 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Keep GitHub OAuth completion values in escaped HTML data instead of executable
+  script source, register its reviewed UI controls, and make clock regression
+  fixtures deterministic across winter, summer and the daylight-saving transition.
 - Keep the desktop composer and sidebar footer inside the window by sizing the
   workspace to its root's available height after the native title bar.
 - Connect GitHub through Vellum OAuth with OS-owned authorization, CLI-first

@@ -43,7 +43,6 @@ def read(operation: GitHubMcpOperation):
 @oauth_router.get("/oauth/return")
 def oauth_return(flow_id: str):
     from html import escape
-    import json
     import secrets
     from urllib.parse import urlsplit
     headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'"}
@@ -61,15 +60,20 @@ def oauth_return(flow_id: str):
         nonce = secrets.token_urlsafe(24)
         origin = urlsplit(destination)
         target_origin = origin.scheme + "://" + origin.netloc
-        message = {"type": "vellum:github:oauth", "flow_id": flow_id}
-        script = "(()=>{try{if(window.opener&&!window.opener.closed){window.opener.postMessage(" + json.dumps(message) + "," + json.dumps(target_origin) + ");window.opener.focus();}}catch{}window.close();})();"
+        # Keep request-derived values out of JavaScript source. HTML-escaped
+        # attributes are inert data, read by this fixed script without evaluation.
+        script = """(()=>{try{if(window.opener&&!window.opener.closed){
+const data=document.body.dataset;
+window.opener.postMessage({type:"vellum:github:oauth",flow_id:data.flowId},data.targetOrigin);
+window.opener.focus();}}catch{}window.close();})();"""
         headers["Content-Security-Policy"] = f"default-src 'none'; script-src 'nonce-{nonce}'; frame-ancestors 'none'; base-uri 'none'"
         title = "GitHub connected" if flow.status == "connected" else "GitHub sign-in finished"
         return HTMLResponse('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-            f'<title>{title}</title><h1>{title}</h1><p>{escape(flow.message)}</p>'
+            f'<title>{title}</title><body data-flow-id="{escape(flow_id, quote=True)}" data-target-origin="{escape(target_origin, quote=True)}">'
+            f'<h1>{title}</h1><p>{escape(flow.message)}</p>'
             '<p>This sign-in window can close. Continue in your original Vellum window.</p>'
             f'<p><a href="{escape(destination, quote=True)}" target="_blank" rel="noopener noreferrer">Open Vellum</a></p>'
-            f'<script nonce="{nonce}">{script}</script></html>', headers=headers)
+            f'<script nonce="{nonce}">{script}</script></body></html>', headers=headers)
     headers["Refresh"] = "1"
     link_target = ' target="_blank" rel="noopener noreferrer"' if popup else ''
     return HTMLResponse('<!doctype html><meta name="viewport" content="width=device-width"><title>Connecting GitHub</title>'

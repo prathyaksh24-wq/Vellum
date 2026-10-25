@@ -2,8 +2,8 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 952,
-      "sha256": "a01cb9490149da5aeee1591452e48c3316490a7530733db4400d8236563842ca"
+      "count": 953,
+      "sha256": "96e986a1b2dfb330cc77f5f4355759ff38831fc20c35f696d9c4ca5dc2df59b1"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -72,6 +72,10 @@
     "design/Velllum/uploads/components/Particles.jsx": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/github.jsx": {
+      "count": 8,
+      "sha256": "810668e4abeaaf35c7194d35faf3dd5f0ea55ea90045f670482a086bd5cba014"
     }
   },
   "covered": [
@@ -992,6 +996,51 @@
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "google.api.execute"
       }
+    },
+    {
+      "surface": "GitHub",
+      "name": "sign in or reconnect",
+      "actionId": "github.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/github.jsx",
+        "text": "github.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "GitHub",
+      "name": "cancel sign-in",
+      "actionId": "github.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/github.jsx",
+        "text": "github.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "GitHub",
+      "name": "verify connection",
+      "actionId": "github.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/github.jsx",
+        "text": "github.connection.verify"
+      }
+    },
+    {
+      "surface": "GitHub",
+      "name": "review and confirm disconnection",
+      "actionId": "github.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/github.jsx",
+        "text": "github.connection.disconnect"
+      }
+    },
+    {
+      "surface": "GitHub",
+      "name": "review and confirm exact provider changes",
+      "actionId": "github.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "github.mcp.execute"
+      }
     }
   ],
   "exemptions": [
@@ -1038,6 +1087,10 @@
     {
       "scope": "Dictation history filters pagination transcript expansion retry clipboard audio export and preference drafts",
       "reason": "Read-only local history presentation, explicit clipboard/audio exports, and unsaved dictionary or shortcut edits. Saved preferences dispatch dictation.settings.update; deletion dispatches dictation.history.delete with confirmation. Capture and draft insertion retain the conversational transport exemption."
+    },
+    {
+      "scope": "GitHub tool catalog browsing/refresh and filters, OAuth continuation links and post-receipt catalog presentation",
+      "reason": "Provider metadata reads, in-view filtering and navigation only. Sign-in lifecycle and verification dispatch typed GitHub connection actions. Review decisions use existing App Action confirmation/cancellation tokens; confirmed provider writes retain github.mcp.execute."
     }
   ],
   "deferred": [

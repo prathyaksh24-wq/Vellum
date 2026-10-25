@@ -140,3 +140,20 @@ explicit local WAV export, and unsaved preference edits are narrow non-state
 exemptions. The composer remains ordinary conversational transport. Its language
 selector was removed and shortcut help receives the saved chord. Only these
 reviewed handlers were refreshed; unrelated inventory drift is reported separately.
+
+## GitHub connection and operation reviews
+
+The served `github.jsx` is registered with the scanner. Sign-in/reconnect,
+sign-in cancellation, verification and disconnection dispatch
+`github.connection.oauth.start`, `github.connection.oauth.cancel`,
+`github.connection.verify` and `github.connection.disconnect`. Disconnection
+confirmation and cancellation use the existing App Action confirmation tokens;
+confirmed provider changes use `github.mcp.execute` through the shared readable
+review. The added main-page callback refreshes catalog presentation after a receipt.
+
+Tool catalog browsing/refresh and filtering are read-only metadata requests and
+in-view presentation. OAuth continuation and documentation links are navigation;
+the server retains authorization state and validates each flow. These gestures
+do not gain permission to perform provider writes. Only the reviewed main-page
+and GitHub component fingerprints are updated; the backend catalog fixture now
+composes GitHub's contribution as production does.
