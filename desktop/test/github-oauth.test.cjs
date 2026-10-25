@@ -29,9 +29,9 @@ function fixture(){
   return {host,owner,instances,prompts,workspace};
 }
 
-test('GitHub OAuth gets an isolated child and returning to Vellum closes it',()=>{
+for(const provider of ['github','slack'])test(provider+' OAuth gets an isolated child and returning to Vellum closes it',()=>{
   const f=fixture();
-  const url='http://127.0.0.1:8000/api/plugins/github/oauth/open?flow_id='+'a'.repeat(43);
+  const url='http://127.0.0.1:8000/api/plugins/'+provider+'/oauth/open?flow_id='+'a'.repeat(43);
   assert.deepEqual(f.owner.openHandler({url}),{action:'deny'});
   assert.equal(f.instances.length,2);assert.equal(f.prompts.length,0);
   const auth=f.instances[1],preferences=auth.options.webPreferences;
@@ -57,4 +57,21 @@ test('arbitrary origins, extra parameters and ambiguous flow IDs cannot create a
     'http://127.0.0.1:8000/api/plugins/github/oauth/open?flow_id='+id+'&flow_id='+id,
   ])assert.deepEqual(f.owner.openHandler({url}),{action:'deny'});
   assert.equal(f.instances.length,1);
+});
+
+
+test('Slack localhost callback is allowed only on the backend port',()=>{
+  const f=fixture(),id='a'.repeat(43);
+  f.owner.openHandler({url:'http://127.0.0.1:8000/api/plugins/slack/oauth/open?flow_id='+id});
+  const auth=f.instances[1];
+  for(const [url,blocked] of [
+    ['http://localhost:8000/api/plugins/slack/oauth/callback?code=fixture&state=fixture',false],
+    ['http://localhost:8001/api/plugins/slack/oauth/callback',true],
+    ['http://localhost:8000/api/plugins/github/oauth/return',true],
+    ['http://localhost:8000/unrelated',true],
+  ]){
+    let prevented=false;
+    auth.webContents.emit('will-redirect',{preventDefault(){prevented=true;}},url);
+    assert.equal(prevented,blocked,url);
+  }
 });

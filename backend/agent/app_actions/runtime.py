@@ -1969,6 +1969,20 @@ class AppActionRuntime:
                         message=binding['message'], binding=binding)
                     receipt.result['google_review'] = binding['preview']
                     return receipt
+                if request.action_id == 'slack.mcp.execute':
+                    from agent.contracts.slack import SlackMcpOperation
+                    from agent.plugins.slack_mcp import SlackMcpAdapter
+                    try:
+                        binding = SlackMcpAdapter().prepare(SlackMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='SLACK_REVIEW_FAILED',
+                            message='Slack could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='slack_operation', target_reference=binding['workspace_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['slack_review'] = binding['preview']
+                    return receipt
                 if request.action_id == 'github.mcp.execute':
                     from agent.contracts.github_connection import GitHubMcpOperation
                     from agent.plugins.github_mcp import GitHubMcpAdapter

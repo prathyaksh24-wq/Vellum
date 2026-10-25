@@ -6,6 +6,13 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Save Slack authorization across bounded OS credential entries to avoid Windows'
+  per-entry size limit; preserve the previous record until the new one is stored,
+  and distinguish credential persistence failures from MCP access failures.
+- Add Slack's official MCP connection with a desktop PKCE app manifest, OS-owned
+  authorization and refresh tokens, verified account/workspace identity, on-demand
+  tool discovery, Slack logos and exact-input operation reviews. Reuse the isolated
+  desktop authorization window and return focus to the original workspace.
 - Keep GitHub OAuth completion values in escaped HTML data instead of executable
   script source, register its reviewed UI controls, and make clock regression
   fixtures deterministic across winter, summer and the daylight-saving transition.

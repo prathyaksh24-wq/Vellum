@@ -155,6 +155,9 @@ from agent.plugins.linear import linear_plugin_status
 from agent.plugins.github_connection import github_plugin_status
 from agent.plugins.github_controls import github_contribution
 from agent.plugins.github_api import router as github_router, oauth_router as github_oauth_router
+from agent.plugins.slack import slack_plugin_status
+from agent.plugins.slack_controls import slack_contribution
+from agent.plugins.slack_api import router as slack_router, oauth_router as slack_oauth_router
 from agent.plugins.linear_controls import linear_contribution
 from agent.plugins.google_workspace_controls import google_contribution
 from agent.plugins.google_workspace_api import router as google_workspace_router, receive_callback as google_workspace_callback
@@ -216,6 +219,7 @@ _app_action_runtime.register_plugin_contribution(google_calendar_plugin_contribu
 _app_action_runtime.register_plugin_contribution(product_hunt_contribution())
 _app_action_runtime.register_plugin_contribution(linear_contribution())
 _app_action_runtime.register_plugin_contribution(github_contribution())
+_app_action_runtime.register_plugin_contribution(slack_contribution())
 _app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
@@ -6743,6 +6747,12 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         notes=f"Writes: {settings.obsidian_mcp_allow_writes}, deletes: {settings.obsidian_mcp_allow_destructive}, commands: {settings.obsidian_mcp_allow_commands}.",
     ))
     servers.append(_entry(
+        "slack",
+        configured=slack_plugin_status()["configured"],
+        url_or_cmd="https://mcp.slack.com/mcp",
+        notes="Official Slack MCP. Uses the user and workspace connected in Plugins; changes require review.",
+    ))
+    servers.append(_entry(
         "context7",
         configured=settings.context7_mcp_url.startswith("http"),
         url_or_cmd=settings.context7_mcp_url,
@@ -6814,6 +6824,7 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         product_hunt_plugin_status(),
         linear_plugin_status(),
         github_plugin_status(),
+        slack_plugin_status(),
         *google_plugin_statuses(),
     ]
     plugins = _plugin_registry().catalog(
@@ -7115,6 +7126,8 @@ router.include_router(linear_router)
 router.include_router(linear_oauth_router)
 router.include_router(github_router)
 router.include_router(github_oauth_router)
+router.include_router(slack_router)
+router.include_router(slack_oauth_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
 

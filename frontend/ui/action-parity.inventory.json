@@ -2,8 +2,8 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 953,
-      "sha256": "96e986a1b2dfb330cc77f5f4355759ff38831fc20c35f696d9c4ca5dc2df59b1"
+      "count": 954,
+      "sha256": "96a1076677845dcc60bdffb470e0e5c11d3f54e1e80a93e44777f1e0ef91cca0"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -76,6 +76,10 @@
     "design/Velllum/uploads/components/github.jsx": {
       "count": 8,
       "sha256": "810668e4abeaaf35c7194d35faf3dd5f0ea55ea90045f670482a086bd5cba014"
+    },
+    "design/Velllum/uploads/components/slack.jsx": {
+      "count": 12,
+      "sha256": "5b0f551c9e878325ee1fa8a7075255b861ff13cab0a4c2dc777c0f370d7e85de"
     }
   },
   "covered": [
@@ -1041,6 +1045,60 @@
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "github.mcp.execute"
       }
+    },
+    {
+      "surface": "Slack",
+      "name": "save public app registration",
+      "actionId": "slack.connection.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/components/slack.jsx",
+        "text": "slack.connection.configure"
+      }
+    },
+    {
+      "surface": "Slack",
+      "name": "sign in or reconnect",
+      "actionId": "slack.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/slack.jsx",
+        "text": "slack.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Slack",
+      "name": "cancel sign-in",
+      "actionId": "slack.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/slack.jsx",
+        "text": "slack.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Slack",
+      "name": "verify connection",
+      "actionId": "slack.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/slack.jsx",
+        "text": "slack.connection.verify"
+      }
+    },
+    {
+      "surface": "Slack",
+      "name": "review and confirm disconnection",
+      "actionId": "slack.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/slack.jsx",
+        "text": "slack.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Slack",
+      "name": "review and confirm exact provider changes",
+      "actionId": "slack.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "slack.mcp.execute"
+      }
     }
   ],
   "exemptions": [
@@ -1091,6 +1149,10 @@
     {
       "scope": "GitHub tool catalog browsing/refresh and filters, OAuth continuation links and post-receipt catalog presentation",
       "reason": "Provider metadata reads, in-view filtering and navigation only. Sign-in lifecycle and verification dispatch typed GitHub connection actions. Review decisions use existing App Action confirmation/cancellation tokens; confirmed provider writes retain github.mcp.execute."
+    },
+    {
+      "scope": "Slack app-identity drafts, manifest disclosure/copying, tool metadata browsing/refresh and filtering, OAuth continuation and post-receipt catalog refresh",
+      "reason": "Unsaved public identifier drafts, explicit clipboard copy of a public manifest, provider reads, navigation and in-view presentation only. Saving registration and OAuth lifecycle dispatch typed Slack connection actions. Review decisions use existing confirmation tokens; confirmed provider writes retain slack.mcp.execute."
     }
   ],
   "deferred": [

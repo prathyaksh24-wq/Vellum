@@ -203,6 +203,12 @@ class PluginMcpRuntime:
 
     async def _list_tools(self, connector):
         plugin_id,connector_name=connector.plugin_id,connector.name
+        if plugin_id == "slack" and connector_name == "slack" and connector.url == "https://mcp.slack.com/mcp":
+            from agent.plugins.slack import slack_service
+            service = slack_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Slack catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
         if plugin_id == "github" and connector_name == "github" and connector.url == "https://api.githubcopilot.com/mcp/x/all":
             from agent.plugins.github_connection import github_service
             service = github_service()
@@ -353,6 +359,16 @@ def _connector(
                 headers,auth={},stored_auth(service,connection=data)
             except LinearError:
                 headers, missing = {}, ("Linear connection",)
+        if payload.get("credential_provider") == "slack":
+            if plugin_id != "slack" or name != "slack" or url != "https://mcp.slack.com/mcp":
+                raise PluginMcpRuntimeError("Slack authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.slack import SlackError, slack_service
+            try:
+                service = slack_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except SlackError:
+                headers, missing = {}, ("Slack OAuth connection",)
         if payload.get("credential_provider") == "github":
             if plugin_id != "github" or name != "github" or url != "https://api.githubcopilot.com/mcp/x/all":
                 raise PluginMcpRuntimeError("GitHub authorization is restricted to its official MCP endpoint.")

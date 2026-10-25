@@ -7,7 +7,7 @@ const {conversationTarget, trustedWorkspace, validateCommand} = require('./polic
 function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null}) {
   const {BrowserWindow, ipcMain, screen, dialog, shell} = electron;
   const windows = new Map();
-  const githubAuthWindows = new Map();
+  const providerAuthWindows = new Map();
   const controlsURL = pathToFileURL(path.join(root, 'index.html')).href;
   const overlayURL = pathToFileURL(path.join(root, 'overlay.html')).href;
   const known = contents => [...windows.values()].some(win => !win.isDestroyed() && win.webContents === contents);
@@ -15,23 +15,31 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
 
   installChromeHandler(electron,{known,trusted:url=>trustedWorkspace(url,workspace),windows});
 
-  function githubAuthStart(value) {
+  function providerAuthStart(value) {
     try {
       const target = new URL(value), api = new URL(backend);
       const flowId = target.searchParams.get('flow_id');
+      const provider = /^\/api\/plugins\/(github|slack)\/oauth\/open$/.exec(target.pathname)?.[1];
       return target.origin === api.origin && ['127.0.0.1','localhost'].includes(target.hostname) &&
-        !target.username && !target.password && !target.hash && target.pathname === '/api/plugins/github/oauth/open' && target.searchParams.getAll('flow_id').length===1 &&
-        [...target.searchParams.keys()].every(key=>key==='flow_id') && /^[A-Za-z0-9_-]{20,100}$/.test(flowId || '') ? flowId : null;
+        !target.username && !target.password && !target.hash && provider && target.searchParams.getAll('flow_id').length===1 &&
+        [...target.searchParams.keys()].every(key=>key==='flow_id') && /^[A-Za-z0-9_-]{20,100}$/.test(flowId || '') ? {provider,flowId} : null;
     } catch { return null; }
   }
 
-  function openGitHubAuth(owner, url, flowId) {
-    const previous = githubAuthWindows.get(flowId);
+  function providerLoopback(target) {
+    const api=new URL(backend);
+    return ['127.0.0.1','localhost'].includes(api.hostname)&&['127.0.0.1','localhost'].includes(target.hostname)&&
+      target.protocol===api.protocol&&target.port===api.port&&!target.username&&!target.password;
+  }
+
+  function openProviderAuth(owner, url, {provider,flowId}) {
+    const key=provider+':'+flowId;
+    const previous = providerAuthWindows.get(key);
     if (previous && !previous.isDestroyed()) {previous.show(); previous.focus(); return;}
     const auth = new BrowserWindow({parent:owner, width:680, height:780, minWidth:480, minHeight:500,
-      title:'Sign in to GitHub', autoHideMenuBar:true, show:false,
-      webPreferences:{contextIsolation:true, sandbox:true, nodeIntegration:false, webSecurity:true, partition:'vellum-github-oauth'}});
-    githubAuthWindows.set(flowId,auth);
+      title:'Sign in to '+({github:'GitHub',slack:'Slack'})[provider], autoHideMenuBar:true, show:false,
+      webPreferences:{contextIsolation:true, sandbox:true, nodeIntegration:false, webSecurity:true, partition:'vellum-'+provider+'-oauth'}});
+    providerAuthWindows.set(key,auth);
     // This window is deliberately outside `windows`/`known`: provider pages get
     // no preload, native bridge, workspace privileges or device permissions.
     auth.webContents.session.setPermissionCheckHandler(()=>false);
@@ -40,12 +48,14 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     const restoreOwner=()=>{if(!owner.isDestroyed()){owner.show();owner.focus();}};
     const closeWithOwner=()=>{if(!auth.isDestroyed())auth.destroy();};
     owner.once('closed',closeWithOwner);
-    auth.on('closed',()=>{githubAuthWindows.delete(flowId);owner.removeListener('closed',closeWithOwner);restoreOwner();});
+    auth.on('closed',()=>{providerAuthWindows.delete(key);owner.removeListener('closed',closeWithOwner);restoreOwner();});
     const navigation=(event,value)=>{
       if (trustedWorkspace(value,workspace)) {event.preventDefault();auth.close();return;}
       try {
-        const target=new URL(value), api=new URL(backend);
-        const localCallback=target.origin===api.origin && ['/api/accounts/callback/github','/api/plugins/github/oauth/open','/api/plugins/github/oauth/return'].includes(target.pathname);
+        const target=new URL(value);
+        const callbacks=[`/api/plugins/${provider}/oauth/callback`,`/api/plugins/${provider}/oauth/open`,`/api/plugins/${provider}/oauth/return`];
+        if(provider==='github')callbacks.push('/api/accounts/callback/github');
+        const localCallback=providerLoopback(target)&&callbacks.includes(target.pathname);
         if (target.protocol!=='https:'&&!localCallback) event.preventDefault();
       } catch {event.preventDefault();}
     };
@@ -54,9 +64,9 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     auth.webContents.on('did-finish-load',async()=>{
       try {
         if(auth.isDestroyed())return;
-        const page=new URL(auth.webContents.getURL()), api=new URL(backend);
-        if(page.origin!==api.origin||page.pathname!=='/api/plugins/github/oauth/return'||page.searchParams.get('flow_id')!==flowId)return;
-        const statusUrl=new URL('/api/plugins/github/oauth/status',backend);statusUrl.searchParams.set('flow_id',flowId);
+        const page=new URL(auth.webContents.getURL());
+        if(!providerLoopback(page)||page.pathname!==`/api/plugins/${provider}/oauth/return`||page.searchParams.get('flow_id')!==flowId)return;
+        const statusUrl=new URL(`/api/plugins/${provider}/oauth/status`,backend);statusUrl.searchParams.set('flow_id',flowId);
         const response=await fetch(statusUrl,{headers:{Origin:new URL(workspace).origin,'X-Vellum-Accounts':'1'},signal:AbortSignal.timeout(5000)});
         if(!response.ok)return;
         const result=await response.json();
@@ -102,8 +112,8 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
       if (!(key === 'overlay' ? target === overlayURL : trusted(target))) event.preventDefault();
     });
     win.webContents.setWindowOpenHandler(({url}) => {
-      const githubFlow=githubAuthStart(url);
-      if(githubFlow){openGitHubAuth(win,url,githubFlow);return {action:'deny'};}
+      const providerFlow=providerAuthStart(url);
+      if(providerFlow){openProviderAuth(win,url,providerFlow);return {action:'deny'};}
       // Only an explicit user-facing link can request an external web window;
       // no native bridge is ever loaded into third-party content.
       if (/^https?:\/\//i.test(url)) {

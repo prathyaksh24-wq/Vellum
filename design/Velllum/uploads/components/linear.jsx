@@ -3,8 +3,9 @@
   function LinearActionReview({review}) {
     const Markdown=window.VellumUI?.AnswerMarkdown;
     const github=review.provider==='GitHub';
-    return <section className="linear-action-preview" aria-label={github?'Review GitHub change':'Review Linear issue'}>
-      <header><img src={github?'/design-uploads/assets/plugins/github.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
+    const slack=review.provider==='Slack';
+    return <section className="linear-action-preview" aria-label={github?'Review GitHub change':slack?'Review Slack change':'Review Linear issue'}>
+      <header><img src={github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
       <div className="linear-review-content">
         {review.title&&<h4 className="linear-review-title">{review.title}</h4>}
         <dl><div><dt>{github?'Repository':'Workspace'}</dt><dd>{review.workspace}</dd></div>{(review.fields||[]).map((field,index)=><div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
