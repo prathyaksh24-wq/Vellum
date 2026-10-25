@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="components/google-connections.css"/>
 <script type="text/babel" data-presets="react" src="components/google-connections.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/linear.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/github.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/product-hunt.jsx"></script>
 <script src="components/spotify-playback.js"></script>
 <link rel="stylesheet" href="components/music-page.css"/>
@@ -100,7 +101,8 @@
 html,body{height:100%}
 body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",Helvetica,system-ui,sans-serif;font-size:13.5px;-webkit-font-smoothing:antialiased;overflow:hidden}
 #root{height:100vh}
-.stage{height:100vh;padding:0;background:var(--stage);position:relative;overflow:hidden;user-select:none;-webkit-user-select:none}
+/* The desktop root already excludes the native title bar; fill that space. */
+.stage{height:100%;min-height:0;padding:0;background:var(--stage);position:relative;overflow:hidden;user-select:none;-webkit-user-select:none}
 .stage input,.stage textarea,.stage [contenteditable="true"],.stage .msg-body,.stage .code-block{user-select:text;-webkit-user-select:text}
 .stage::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:26px 26px;-webkit-mask-image:radial-gradient(circle at 50% 28%,#000 22%,transparent 78%);mask-image:radial-gradient(circle at 50% 28%,#000 22%,transparent 78%);opacity:.6}
 [data-theme="light"] .stage::after{background-image:radial-gradient(rgba(20,45,70,.07) 1px,transparent 1px)}
@@ -6421,7 +6423,7 @@ const ConnLogo = ({c, size=20}) => {
 };
 function mcp(o){ return Object.assign({ source:'official', category:'Other', authType:'None', install:'npm', trust:'community', tools:[], state:'available' }, o); }
 const REQUIRED_CONNECTORS = [
-  mcp({ id:'github', name:'GitHub', source:'official', category:'Developer', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-github', trust:'verified', description:'Read and write GitHub repositories, issues, and pull requests on your behalf.', tools:['list_repos','get_repo','search_code','create_issue','comment_issue','list_pull_requests','get_pull_request'] }),
+  mcp({ id:'github', name:'GitHub', source:'official', category:'Developer', authType:'OAuth', install:'http', url:'https://api.githubcopilot.com/mcp/x/all', trust:'verified', description:'GitHub CLI first with the official hosted MCP fallback. Discover the connected account’s tools on demand.', tools:[] }),
   mcp({ id:'gmail', name:'Gmail', source:'official', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-gmail', trust:'verified', description:'Search, read, draft, and send email from your Gmail account.', tools:['search_messages','read_message','list_threads','create_draft','send_email'] }),
 ];
 
@@ -6713,6 +6715,11 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
     if(linear)setSelected({kind:'plugin',item:linear});
   },[apps]);
   useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('github_oauth'))return;
+    const github=plugins.find(item=>item.id==='github');
+    if(github)setSelected({kind:'plugin',item:github});
+  },[apps]);
+  useEffect(()=>{
     if(!new URLSearchParams(window.location.search).get('google_oauth'))return;
     const google=plugins.find(item=>item.id==='google-workspace');
     if(google)setSelected({kind:'plugin',item:google});
@@ -6732,7 +6739,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
   };
   const statusLabel = app => {
     const status = connectorStatus(app);
-    if (status === 'ready') return ['linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
+    if (status === 'ready') return ['github','linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
     if (app?.id === 'app-69b7bed23a9481919d2378ab225cddeb') return ({not_connected:'Needs setup',not_checked:'Verify connection',unauthorized:'Reconnect',rate_limited:'Rate limited',unreachable:'Connection unavailable',keyring_unavailable:'Unlock credential store'})[status] || (status === 'disabled' ? 'Disabled' : 'Connection error');
     if (status === 'disabled') return 'Disabled';
     if (status === 'available') return 'Available';
@@ -6816,6 +6823,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
             {detailPlugin.id==='spotify' && spotifyControls}
             {detailPlugin.id==='app-69b7bed23a9481919d2378ab225cddeb' && window.VellumUI.ProductHuntWorkspace && <window.VellumUI.ProductHuntWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
             {detailPlugin.id==='linear' && window.VellumUI.LinearWorkspace && <window.VellumUI.LinearWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
+            {detailPlugin.id==='github' && window.VellumUI.GitHubConnection && <window.VellumUI.GitHubConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
             {detailPlugin.id==='discord' && <DiscordWorkspace/>}
             {['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(detailPlugin.id) && window.VellumUI?.GoogleConnections && <window.VellumUI.GoogleConnections onChanged={onRetry} revision={plugins.filter(item=>['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(item.id)).map(item=>item.id+':'+item.enabled).join('|')}/>}
             {detailPlugin.id==='google-calendar' && <CalendarWorkspace sharedConnection onAction={onCalendarAction} enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id==='google-calendar');if(app){const status=next.enabled===false?'disabled':next.connected?'ready':next.status;if(app.status!==status){Object.assign(app,{status,enabled:next.enabled!==false});setRevision(value=>value+1);}}}}/>}
@@ -10444,7 +10452,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!notify) return;
     const share = receipt.result && receipt.result.share;
     const shareReview = receipt.result && receipt.result.share_review;
-    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : null;
+    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : null;
     const googleReview = receipt.action_id === 'google.api.execute' ? receipt.result?.google_review : null;
     const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getDesktopInvoke() !== 'function';
     const confirmationMessage = shareReview
@@ -10469,6 +10477,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         : receipt.action_id === 'spotify.playlist.edit' ? 'Confirm change'
         : receipt.action_id === 'google.api.execute' ? (googleReview?.confirm_label || 'Confirm change')
         : receipt.action_id === 'linear.mcp.execute' ? (linearReview?.confirm_label || 'Confirm change')
+        : receipt.action_id === 'github.mcp.execute' ? (linearReview?.confirm_label || 'Apply GitHub change')
         : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
         : receipt.action_id === 'youtube.connection.disconnect' ? 'Disconnect'
         : receipt.action_id === 'book.process' ? 'Process'

@@ -152,6 +152,9 @@ from agent.plugins.product_hunt import product_hunt_plugin_status
 from agent.plugins.product_hunt_controls import product_hunt_contribution
 from agent.plugins.product_hunt_api import router as product_hunt_router
 from agent.plugins.linear import linear_plugin_status
+from agent.plugins.github_connection import github_plugin_status
+from agent.plugins.github_controls import github_contribution
+from agent.plugins.github_api import router as github_router, oauth_router as github_oauth_router
 from agent.plugins.linear_controls import linear_contribution
 from agent.plugins.google_workspace_controls import google_contribution
 from agent.plugins.google_workspace_api import router as google_workspace_router, receive_callback as google_workspace_callback
@@ -212,6 +215,7 @@ _app_action_runtime.register_plugin_contribution(youtube_plugin_contribution())
 _app_action_runtime.register_plugin_contribution(google_calendar_plugin_contribution())
 _app_action_runtime.register_plugin_contribution(product_hunt_contribution())
 _app_action_runtime.register_plugin_contribution(linear_contribution())
+_app_action_runtime.register_plugin_contribution(github_contribution())
 _app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
@@ -6728,9 +6732,9 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
     ))
     servers.append(_entry(
         "github",
-        configured=bool(settings.github_mcp_token or settings.github_pat),
-        url_or_cmd=settings.github_mcp_url,
-        notes=f"Writes: {settings.github_mcp_allow_writes}, destructive: {settings.github_mcp_allow_destructive}.",
+        configured=github_plugin_status()["configured"],
+        url_or_cmd="https://api.githubcopilot.com/mcp/x/all",
+        notes="GitHub CLI first; official MCP fallback uses the account connected in Plugins. Changes require review.",
     ))
     servers.append(_entry(
         "obsidian",
@@ -6809,6 +6813,7 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         portable_google_calendar_status(),
         product_hunt_plugin_status(),
         linear_plugin_status(),
+        github_plugin_status(),
         *google_plugin_statuses(),
     ]
     plugins = _plugin_registry().catalog(
@@ -7108,6 +7113,8 @@ router.include_router(google_workspace_router)
 router.include_router(product_hunt_router)
 router.include_router(linear_router)
 router.include_router(linear_oauth_router)
+router.include_router(github_router)
+router.include_router(github_oauth_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
 
