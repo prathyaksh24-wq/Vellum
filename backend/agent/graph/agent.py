@@ -520,6 +520,11 @@ def core_tool_registry() -> ToolRegistry:
         )
     from agent.plugins.linear_mcp import agent_tools as linear_mcp_tools
     from agent.plugins.github_mcp import agent_tools as github_mcp_tools
+    from agent.plugins.slack_mcp import agent_tools as slack_mcp_tools
+    for tool in slack_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
     for tool in github_mcp_tools():
         registry.register_langchain(tool,
             access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,

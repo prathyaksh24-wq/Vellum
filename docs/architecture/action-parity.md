@@ -157,3 +157,20 @@ the server retains authorization state and validates each flow. These gestures
 do not gain permission to perform provider writes. Only the reviewed main-page
 and GitHub component fingerprints are updated; the backend catalog fixture now
 composes GitHub's contribution as production does.
+
+## Slack connection and operation reviews
+
+The served `slack.jsx` participates in the same scanner. Public app registration,
+sign-in/reconnect, sign-in cancellation, verification and disconnection dispatch
+`slack.connection.configure`, `slack.connection.oauth.start`,
+`slack.connection.oauth.cancel`, `slack.connection.verify` and
+`slack.connection.disconnect`. Changing an existing registration requires explicit
+disconnection first. Disconnection decisions retain the existing confirmation
+tokens. Provider changes use `slack.mcp.execute` with account, workspace, grant,
+schema and exact-argument binding; the shared preview uses Slack's logo.
+
+App ID/Client ID drafts, tool filtering, manifest disclosure/copying, provider
+metadata reads, OAuth continuation and documentation links are non-committing
+gestures. A parent refresh callback updates catalog presentation after receipts.
+The backend catalog fixture composes Slack's contribution. Only the main-page
+and new Slack component handler fingerprints change in this integration.

@@ -35,6 +35,7 @@
 <script type="text/babel" data-presets="react" src="components/google-connections.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/linear.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/github.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/slack.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/product-hunt.jsx"></script>
 <script src="components/spotify-playback.js"></script>
 <link rel="stylesheet" href="components/music-page.css"/>
@@ -6442,7 +6443,7 @@ function makeRegistryAdapter({ id, label, color, catalog }){
 const MCP_SOURCES = [
   makeRegistryAdapter({ id:'official', label:'Official MCP Registry', color:'#5b8def', catalog:[
     ...REQUIRED_CONNECTORS,
-    { id:'slack', name:'Slack', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-slack', trust:'verified', description:'Post messages and read channels in your Slack workspace.', tools:['list_channels','post_message','read_channel','search_messages'] },
+    { id:'slack', name:'Slack', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.slack.com/mcp', trust:'verified', description:'Search and work in Slack through its official MCP server. Sign in to discover your workspace’s published tools.', tools:[] },
     { id:'filesystem', name:'Filesystem', category:'Developer', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-filesystem', trust:'verified', description:'Read and write files within an allow-listed directory.', tools:['read_file','write_file','list_dir','search_files'] },
     { id:'postgres', name:'Postgres', category:'Data', authType:'API key', install:'docker', image:'mcp/postgres:latest', trust:'verified', description:'Run read-only SQL queries against a Postgres database.', tools:['query','list_tables','describe_table'] },
     { id:'puppeteer', name:'Puppeteer', category:'Web', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-puppeteer', trust:'community', description:'Drive a headless browser to navigate and scrape pages.', tools:['navigate','screenshot','extract_text','click'] },
@@ -6720,6 +6721,11 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
     if(github)setSelected({kind:'plugin',item:github});
   },[apps]);
   useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('slack_oauth'))return;
+    const slack=plugins.find(item=>item.id==='slack');
+    if(slack)setSelected({kind:'plugin',item:slack});
+  },[apps]);
+  useEffect(()=>{
     if(!new URLSearchParams(window.location.search).get('google_oauth'))return;
     const google=plugins.find(item=>item.id==='google-workspace');
     if(google)setSelected({kind:'plugin',item:google});
@@ -6739,7 +6745,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
   };
   const statusLabel = app => {
     const status = connectorStatus(app);
-    if (status === 'ready') return ['github','linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
+    if (status === 'ready') return ['slack','github','linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
     if (app?.id === 'app-69b7bed23a9481919d2378ab225cddeb') return ({not_connected:'Needs setup',not_checked:'Verify connection',unauthorized:'Reconnect',rate_limited:'Rate limited',unreachable:'Connection unavailable',keyring_unavailable:'Unlock credential store'})[status] || (status === 'disabled' ? 'Disabled' : 'Connection error');
     if (status === 'disabled') return 'Disabled';
     if (status === 'available') return 'Available';
@@ -6824,6 +6830,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
             {detailPlugin.id==='app-69b7bed23a9481919d2378ab225cddeb' && window.VellumUI.ProductHuntWorkspace && <window.VellumUI.ProductHuntWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
             {detailPlugin.id==='linear' && window.VellumUI.LinearWorkspace && <window.VellumUI.LinearWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
             {detailPlugin.id==='github' && window.VellumUI.GitHubConnection && <window.VellumUI.GitHubConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='slack' && window.VellumUI.SlackConnection && <window.VellumUI.SlackConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
             {detailPlugin.id==='discord' && <DiscordWorkspace/>}
             {['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(detailPlugin.id) && window.VellumUI?.GoogleConnections && <window.VellumUI.GoogleConnections onChanged={onRetry} revision={plugins.filter(item=>['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(item.id)).map(item=>item.id+':'+item.enabled).join('|')}/>}
             {detailPlugin.id==='google-calendar' && <CalendarWorkspace sharedConnection onAction={onCalendarAction} enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id==='google-calendar');if(app){const status=next.enabled===false?'disabled':next.connected?'ready':next.status;if(app.status!==status){Object.assign(app,{status,enabled:next.enabled!==false});setRevision(value=>value+1);}}}}/>}
@@ -10452,7 +10459,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!notify) return;
     const share = receipt.result && receipt.result.share;
     const shareReview = receipt.result && receipt.result.share_review;
-    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : null;
+    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : receipt.action_id === 'slack.mcp.execute' ? receipt.result?.slack_review : null;
     const googleReview = receipt.action_id === 'google.api.execute' ? receipt.result?.google_review : null;
     const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getDesktopInvoke() !== 'function';
     const confirmationMessage = shareReview
@@ -10478,6 +10485,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         : receipt.action_id === 'google.api.execute' ? (googleReview?.confirm_label || 'Confirm change')
         : receipt.action_id === 'linear.mcp.execute' ? (linearReview?.confirm_label || 'Confirm change')
         : receipt.action_id === 'github.mcp.execute' ? (linearReview?.confirm_label || 'Apply GitHub change')
+        : receipt.action_id === 'slack.mcp.execute' ? (linearReview?.confirm_label || 'Apply Slack change')
         : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
         : receipt.action_id === 'youtube.connection.disconnect' ? 'Disconnect'
         : receipt.action_id === 'book.process' ? 'Process'

@@ -36,10 +36,12 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     from agent.plugins.linear_controls import linear_contribution
     from agent.plugins.product_hunt_controls import product_hunt_contribution
     from agent.plugins.github_controls import github_contribution
+    from agent.plugins.slack_controls import slack_contribution
     runtime.register_plugin_contribution(google_contribution())
     runtime.register_plugin_contribution(linear_contribution())
     runtime.register_plugin_contribution(product_hunt_contribution())
     runtime.register_plugin_contribution(github_contribution())
+    runtime.register_plugin_contribution(slack_contribution())
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

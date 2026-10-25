@@ -1,0 +1,23 @@
+id: slack
+name: Slack
+type: connector
+category: MCP
+version: 1.0.0
+description: Search and read your Slack workspace, send messages, manage canvases and lists, and use every tool published by Slack's official MCP server.
+mcp_connectors:
+  - name: slack
+    type: http
+    url: https://mcp.slack.com/mcp
+    credential_provider: slack
+capabilities:
+  - slack.connection.configure
+  - slack.connection.oauth.start
+  - slack.connection.oauth.cancel
+  - slack.connection.verify
+  - slack.connection.disconnect
+  - slack.mcp.execute
+provides_tools:
+  - slack_mcp_catalog
+  - slack_mcp_describe
+  - slack_mcp_read
+  - slack_mcp_execute
