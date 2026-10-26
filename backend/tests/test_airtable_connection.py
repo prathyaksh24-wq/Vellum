@@ -165,9 +165,13 @@ def test_provider_failures_never_become_success_receipts():
 
 
 def test_disconnect_clears_local_authorization_and_tool_cache(service):
-    client_id = connect(service)['client_id']
+    original = connect(service)
     assert not service.disconnect().configured
-    assert service.load() == {'client_id': client_id} and service.cached_tools() == []
+    saved = service.load()
+    assert saved['client_id'] == original['client_id']
+    assert saved['revision'] and saved['revision'] != original['revision']
+    assert set(saved) == {'client_id', 'revision'}
+    assert service.cached_tools() == []
 
 
 def test_record_review_shows_nested_field_values_without_raw_json():

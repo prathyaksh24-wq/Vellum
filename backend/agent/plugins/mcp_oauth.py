@@ -1,7 +1,8 @@
-"""Shared public-client OAuth lifecycle for official hosted MCP connections.
+"""Shared OAuth lifecycle for official hosted MCP connections.
 
 The existing PluginMcpRuntime owns transport, policy, approvals and auditing.
 This helper owns only the local connection lifecycle and bounded credential record.
+Provider-specific client registration/authentication uses narrow overridable hooks.
 """
 import asyncio
 import base64
@@ -154,8 +155,8 @@ class OfficialMcpOAuthService(KeyringRecordStore):
                 if not data.get('refresh_token'):
                     raise self.error_type(f'{self.provider.name} authorization expired. Reconnect in Plugins.')
                 try:
-                    refreshed = self._json(self.provider.token, data={
-                        'grant_type': 'refresh_token', 'client_id': data['client_id'],
+                    refreshed = self.token_request(data, {
+                        'grant_type': 'refresh_token',
                         'refresh_token': data['refresh_token'], 'resource': self.provider.resource,
                     })
                 except OAuthRefreshRejected:
@@ -216,6 +217,21 @@ class OfficialMcpOAuthService(KeyringRecordStore):
         data = self.load()
         return list(self.tools) if self.enabled() and data.get('revision') == self.tools_revision else []
 
+    def client_fields(self, data):
+        return {'client_id': data['client_id']} if data.get('client_id') else {}
+
+    def register_client(self, data):
+        if data.get('client_id'):
+            return self.client_fields(data)
+        client = self._json(self.provider.register, json={'client_name': 'Vellum', 'redirect_uris': [self.provider.callback], 'grant_types': ['authorization_code', 'refresh_token'], 'response_types': ['code'], 'token_endpoint_auth_method': 'none', 'scope': self.provider.scopes})
+        client_id = client.get('client_id')
+        if not isinstance(client_id, str) or not re.fullmatch('[A-Za-z0-9_-]{5,200}', client_id) or client.get('token_endpoint_auth_method', 'none') != 'none' or client.get('client_secret') or client.get('redirect_uris', [self.provider.callback]) != [self.provider.callback]:
+            raise self.error_type(f'{self.provider.name} did not register the expected public desktop client.')
+        return {'client_id': client_id}
+
+    def token_request(self, client, parameters):
+        return self._json(self.provider.token, data={'client_id': client['client_id'], **parameters})
+
     def start(self, request):
         if not self.enabled():
             raise self.error_type(f'Enable {self.provider.name} before connecting.')
@@ -223,17 +239,14 @@ class OfficialMcpOAuthService(KeyringRecordStore):
             data = self.load()
             self._cancel_flows()
             self.flows = {}
-            client_id = data.get('client_id')
-            if not client_id:
-                client = self._json(self.provider.register, json={'client_name': 'Vellum', 'redirect_uris': [self.provider.callback], 'grant_types': ['authorization_code', 'refresh_token'], 'response_types': ['code'], 'token_endpoint_auth_method': 'none', 'scope': self.provider.scopes})
-                client_id = client.get('client_id')
-                if not isinstance(client_id, str) or not re.fullmatch('[A-Za-z0-9_-]{5,200}', client_id) or client.get('token_endpoint_auth_method', 'none') != 'none' or client.get('client_secret') or (client.get('redirect_uris', [self.provider.callback]) != [self.provider.callback]):
-                    raise self.error_type(f'{self.provider.name} did not register the expected public desktop client.')
-                self.save({**data, 'client_id': client_id})
+            client = self.register_client(data)
+            client_id = client['client_id']
+            if any(data.get(key) != value for key, value in client.items()):
+                self.save({**data, **client})
             identifier, state, verifier = (secrets.token_urlsafe(32), secrets.token_urlsafe(32), secrets.token_urlsafe(64))
             challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
             url = self.provider.authorize + '?' + urlencode({'client_id': client_id, 'redirect_uri': self.provider.callback, 'scope': self.provider.scopes, 'resource': self.provider.resource, 'response_type': 'code', 'state': state, 'code_challenge': challenge, 'code_challenge_method': 'S256'})
-            self.flows[identifier] = {'status': 'pending', 'message': f'Choose your {self.provider.name} account and the resources Vellum can access.', 'created': self.clock(), 'state': state, 'verifier': verifier, 'consumed': False, 'client_id': client_id, 'original_revision': data.get('revision'), 'return_url': request.return_url, 'popup': request.popup, 'authorization_url': url}
+            self.flows[identifier] = {'status': 'pending', 'message': f'Choose your {self.provider.name} account and the resources Vellum can access.', 'created': self.clock(), 'state': state, 'verifier': verifier, 'consumed': False, **client, 'original_revision': data.get('revision'), 'return_url': request.return_url, 'popup': request.popup, 'authorization_url': url}
         return self.flow_start_model(flow_id=identifier, authorization_url=url, status='pending',
             message=f"Review {self.provider.name}'s requested permissions and choose the resources to connect.")
 
@@ -279,8 +292,8 @@ class OfficialMcpOAuthService(KeyringRecordStore):
         try:
             with self.lock:
                 flow = dict(self.flows[identifier])
-            value = self._json(self.provider.token, data={'grant_type': 'authorization_code', 'client_id': flow['client_id'], 'code': code, 'code_verifier': flow['verifier'], 'redirect_uri': self.provider.callback, 'resource': self.provider.resource})
-            data = {**self._tokens(value), 'client_id': flow['client_id'], 'revision': secrets.token_urlsafe(32)}
+            value = self.token_request(flow, {'grant_type': 'authorization_code', 'code': code, 'code_verifier': flow['verifier'], 'redirect_uri': self.provider.callback, 'resource': self.provider.resource})
+            data = {**self._tokens(value), **self.client_fields(flow), 'revision': secrets.token_urlsafe(32)}
             phase = 'verifying your account'
             data.update(self.identity(data))
             phase = 'verifying official MCP access'
@@ -342,9 +355,9 @@ class OfficialMcpOAuthService(KeyringRecordStore):
 
     def disconnect(self):
         with self.lock:
-            client_id = self.load().get('client_id')
+            client = self.client_fields(self.load())
             self._cancel_flows()
-            self.save({'client_id': client_id} if client_id else {})
+            self.save({**client, 'revision': secrets.token_urlsafe(32)})
             self.tools, self.tools_revision = ([], '')
         self.invalidator()
         return self.status()

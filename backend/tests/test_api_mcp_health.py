@@ -26,7 +26,7 @@ def test_mcp_health_returns_all_servers(client: TestClient) -> None:
     assert servers == {
         "apify", "serpapi", "exa", "brave", "playwright", "github",
         "obsidian", "context7", "gitmcp", "context_mode",
-        "tavily", "firecrawl", "slack", "airtable", "notion",
+        "tavily", "firecrawl", "slack", "airtable", "notion", "supabase", "vercel", "clickup", "hubspot",
     }
     slack = next(entry for entry in body["mcp_servers"] if entry["name"] == "slack")
     assert slack["endpoint"] == "https://mcp.slack.com/mcp"

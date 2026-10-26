@@ -29,7 +29,7 @@ function fixture(){
   return {host,owner,instances,prompts,workspace};
 }
 
-for(const provider of ['github','slack','airtable','notion','firecrawl','apify','exa','tavily'])test(provider+' OAuth gets an isolated child and returning to Vellum closes it',()=>{
+for(const provider of ['github','slack','airtable','notion','firecrawl','apify','exa','tavily','supabase','vercel','clickup','hubspot'])test(provider+' OAuth gets an isolated child and returning to Vellum closes it',()=>{
   const f=fixture();
   const url='http://127.0.0.1:8000/api/plugins/'+provider+'/oauth/open?flow_id='+'a'.repeat(43);
   assert.deepEqual(f.owner.openHandler({url}),{action:'deny'});

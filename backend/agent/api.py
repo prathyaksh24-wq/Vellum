@@ -159,6 +159,18 @@ from agent.plugins.search_connections import search_settings
 from agent.plugins.serpapi_connection import serpapi_plugin_status, SERVER as SERPAPI_OFFICIAL_MCP_URL
 from agent.plugins.serpapi_controls import serpapi_contribution
 from agent.plugins.serpapi_api import router as serpapi_router
+from agent.plugins.hubspot_connection import hubspot_plugin_status
+from agent.plugins.hubspot_controls import hubspot_contribution
+from agent.plugins.hubspot_api import router as hubspot_router, oauth_router as hubspot_oauth_router
+from agent.plugins.clickup_connection import clickup_plugin_status
+from agent.plugins.clickup_controls import clickup_contribution
+from agent.plugins.clickup_api import router as clickup_router, oauth_router as clickup_oauth_router
+from agent.plugins.vercel_connection import vercel_plugin_status
+from agent.plugins.vercel_controls import vercel_contribution
+from agent.plugins.vercel_api import router as vercel_router, oauth_router as vercel_oauth_router
+from agent.plugins.supabase_connection import supabase_plugin_status
+from agent.plugins.supabase_controls import supabase_contribution
+from agent.plugins.supabase_api import router as supabase_router, oauth_router as supabase_oauth_router
 from agent.plugins.exa_connection import exa_plugin_status, SERVER as EXA_OFFICIAL_MCP_URL
 from agent.plugins.exa_controls import exa_contribution
 from agent.plugins.exa_api import router as exa_router, oauth_router as exa_oauth_router
@@ -246,6 +258,10 @@ _app_action_runtime.register_plugin_contribution(notion_contribution())
 _app_action_runtime.register_plugin_contribution(firecrawl_contribution())
 _app_action_runtime.register_plugin_contribution(apify_contribution())
 _app_action_runtime.register_plugin_contribution(serpapi_contribution())
+_app_action_runtime.register_plugin_contribution(supabase_contribution())
+_app_action_runtime.register_plugin_contribution(vercel_contribution())
+_app_action_runtime.register_plugin_contribution(clickup_contribution())
+_app_action_runtime.register_plugin_contribution(hubspot_contribution())
 _app_action_runtime.register_plugin_contribution(exa_contribution())
 _app_action_runtime.register_plugin_contribution(tavily_contribution())
 _app_action_runtime.register_plugin_contribution(slack_contribution())
@@ -6727,6 +6743,15 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         "serpapi", configured=serpapi_plugin_status()["configured"], url_or_cmd=SERPAPI_OFFICIAL_MCP_URL,
         notes="Official SerpAPI MCP with deferred tool schemas and a user-owned connection.",
     ))
+    servers.append(_entry("hubspot", configured=hubspot_plugin_status()["configured"], url_or_cmd="https://mcp.hubspot.com",
+        notes="Official HubSpot MCP; per-user OAuth, deferred published tools and reviewed changes."))
+    servers.append(_entry("clickup", configured=clickup_plugin_status()["configured"], url_or_cmd="https://mcp.clickup.com/mcp",
+        notes="Official ClickUp MCP; per-user OAuth, deferred published tools and reviewed changes."))
+    servers.append(_entry("vercel", configured=vercel_plugin_status()["configured"], url_or_cmd="https://mcp.vercel.com",
+        notes="Official Vercel MCP; per-user OAuth, deferred published tools and reviewed changes."))
+    servers.append(_entry("supabase", configured=supabase_plugin_status()["configured"],
+        url_or_cmd="https://mcp.supabase.com/mcp?features=docs,account,database,debugging,development,functions,branching,storage",
+        notes="Official Supabase platform MCP; per-user OAuth, all feature groups and reviewed operations."))
     servers.append(_entry(
         "exa", configured=exa_plugin_status()["configured"], url_or_cmd=EXA_OFFICIAL_MCP_URL,
         notes="Official Exa MCP with deferred tool schemas and a user-owned connection.",
@@ -6865,6 +6890,10 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         firecrawl_plugin_status(),
         apify_plugin_status(),
         serpapi_plugin_status(),
+        supabase_plugin_status(),
+        vercel_plugin_status(),
+        clickup_plugin_status(),
+        hubspot_plugin_status(),
         exa_plugin_status(),
         tavily_plugin_status(),
         slack_plugin_status(),
@@ -7179,6 +7208,14 @@ router.include_router(firecrawl_oauth_router)
 router.include_router(apify_router)
 router.include_router(apify_oauth_router)
 router.include_router(serpapi_router)
+router.include_router(supabase_router)
+router.include_router(supabase_oauth_router)
+router.include_router(vercel_router)
+router.include_router(vercel_oauth_router)
+router.include_router(clickup_router)
+router.include_router(clickup_oauth_router)
+router.include_router(hubspot_router)
+router.include_router(hubspot_oauth_router)
 router.include_router(exa_router)
 router.include_router(exa_oauth_router)
 router.include_router(tavily_router)
