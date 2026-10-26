@@ -108,11 +108,21 @@ class WebMcpAdapter:
             if isinstance(value, dict) and isinstance(value.get('data'), dict):
                 value = value['data']
             state = value.get('status', '') if isinstance(value, dict) else ''
+            if self.provider.plugin_id == 'vercel' and isinstance(value, dict):
+                state = value.get('readyState') or value.get('state') or state
+                if str(state).upper() in {'ERROR', 'CANCELED', 'CANCELLED'}:
+                    raise self.service.error_type('Vercel reported a failed or cancelled deployment. No completion was recorded.')
+            if self.provider.plugin_id == 'supabase' and str(state).upper().endswith('_FAILED'):
+                raise self.service.error_type('Supabase reported a failed project or branch operation. No completion was recorded.')
             if str(state).upper() in {'FAILED', 'ABORTED', 'TIMED-OUT', 'TIMED_OUT'}:
                 raise self.service.error_type('The provider run failed or was stopped. No success was recorded.')
             pending = str(state).upper() in {'READY', 'RUNNING', 'PENDING', 'QUEUED', 'SCRAPING', 'PROCESSING'}
             if operation.tool_name in {'call-actor', 'firecrawl_crawl', 'firecrawl_agent', 'agent_run'}:
                 pending = str(state).upper() not in {'SUCCEEDED', 'COMPLETED', 'DONE'}
+            if self.provider.plugin_id == 'supabase' and operation.tool_name in {'create_project', 'restore_project', 'create_branch'}:
+                pending = str(state).upper() not in {'ACTIVE_HEALTHY', 'ACTIVE', 'COMPLETED', 'DONE'}
+            if self.provider.plugin_id == 'vercel' and operation.tool_name in {'create_deployment', 'deploy_to_vercel'}:
+                pending = str(state).upper() not in {'READY', 'SUCCEEDED', 'COMPLETED', 'DONE'}
             return {'changed': True, 'pending': pending, 'result': result,
                 '_message': f'{self.provider.name} accepted this operation. Read its run/job status and output before reporting completion; do not repeat the run.' if pending else f'{self.provider.name} confirmed this operation. Retrieve its output separately when the result provides storage IDs.'}
 

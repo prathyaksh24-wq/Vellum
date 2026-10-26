@@ -6,11 +6,15 @@
     const slack=review.provider==='Slack';
     const airtable=review.provider==='Airtable';
     const notion=review.provider==='Notion';
+    const hubspot=review.provider==='HubSpot';
+    const clickup=review.provider==='ClickUp';
+    const vercel=review.provider==='Vercel';
+    const supabase=review.provider==='Supabase';
     const searchProvider={SerpAPI:'serpapi',Exa:'exa',Tavily:'tavily'}[review.provider];
     const firecrawl=review.provider==='Firecrawl';
     const apify=review.provider==='Apify';
-    return <section className="linear-action-preview" aria-label={searchProvider?'Review '+review.provider+' operation':github?'Review GitHub change':slack?'Review Slack change':airtable?'Review Airtable change':notion?'Review Notion change':firecrawl?'Review Firecrawl operation':apify?'Review Apify operation':'Review Linear issue'}>
-      <header><img src={searchProvider?'/design-uploads/assets/plugins/'+searchProvider+'.png':firecrawl?'/design-uploads/assets/plugins/firecrawl.ico':apify?'/design-uploads/assets/plugins/apify.ico':notion?'/design-uploads/assets/plugins/notion.png':airtable?'/design-uploads/assets/plugins/airtable.svg':github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
+    return <section className="linear-action-preview" aria-label={hubspot?'Review HubSpot operation':clickup?'Review ClickUp operation':vercel?'Review Vercel operation':supabase?'Review Supabase operation':searchProvider?'Review '+review.provider+' operation':github?'Review GitHub change':slack?'Review Slack change':airtable?'Review Airtable change':notion?'Review Notion change':firecrawl?'Review Firecrawl operation':apify?'Review Apify operation':'Review Linear issue'}>
+      <header><img className={vercel?"conn-logo-img brand-monochrome":undefined} src={hubspot?'/design-uploads/assets/plugins/hubspot.svg':clickup?'/design-uploads/assets/plugins/clickup.png':vercel?'/design-uploads/assets/plugins/vercel.svg':supabase?'/design-uploads/assets/plugins/supabase.svg':searchProvider?'/design-uploads/assets/plugins/'+searchProvider+'.png':firecrawl?'/design-uploads/assets/plugins/firecrawl.ico':apify?'/design-uploads/assets/plugins/apify.ico':notion?'/design-uploads/assets/plugins/notion.png':airtable?'/design-uploads/assets/plugins/airtable.svg':github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
       <div className="linear-review-content">
         {review.title&&<h4 className="linear-review-title">{review.title}</h4>}
         <dl><div><dt>{github?'Repository':airtable?'Resources':'Workspace'}</dt><dd>{review.workspace}</dd></div>{(review.fields||[]).map((field,index)=><div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>

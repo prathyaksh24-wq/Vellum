@@ -2,8 +2,8 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 961,
-      "sha256": "0dc400f97ac3dfdbc54ee25cd6da905217b8c0dde718191bfc56f3b62358dc7e"
+      "count": 965,
+      "sha256": "d2bc618811a331e97924d078c465145efdba529c5687211b358e0ab9a09fdcdb"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -112,6 +112,22 @@
     "design/Velllum/uploads/components/web-search-settings.jsx": {
       "count": 1,
       "sha256": "a1fb0869ae3f919b7d9c97464ac725816681234e3c6175829489f65a6ed3e81d"
+    },
+    "design/Velllum/uploads/components/clickup.jsx": {
+      "count": 8,
+      "sha256": "2a66630e00d0ecd43efd0422b163bbce47a229426b78f7b217eaaebb5d384f23"
+    },
+    "design/Velllum/uploads/components/hubspot.jsx": {
+      "count": 11,
+      "sha256": "491efb5ffde398e2a77ad27d4e3b50186c4e7f8fc77cfdbcc03bd91e5894e9e6"
+    },
+    "design/Velllum/uploads/components/supabase.jsx": {
+      "count": 8,
+      "sha256": "5410458b34f1bfc8e718716e4b7415324779af49adbb2ebd0426b3a3965adb7e"
+    },
+    "design/Velllum/uploads/components/vercel.jsx": {
+      "count": 8,
+      "sha256": "3c88b245390f1cf4aa15ab4c725853697089f2542e2935fc69851f711821180f"
     }
   },
   "covered": [
@@ -1482,6 +1498,195 @@
         "path": "design/Velllum/uploads/components/web-search-settings.jsx",
         "text": "settings.web_search.set"
       }
+    },
+    {
+      "surface": "Supabase",
+      "name": "sign in or reconnect",
+      "actionId": "supabase.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/supabase.jsx",
+        "text": "supabase.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Supabase",
+      "name": "cancel sign-in",
+      "actionId": "supabase.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/supabase.jsx",
+        "text": "supabase.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Supabase",
+      "name": "verify connection",
+      "actionId": "supabase.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/supabase.jsx",
+        "text": "supabase.connection.verify"
+      }
+    },
+    {
+      "surface": "Supabase",
+      "name": "review and confirm disconnection",
+      "actionId": "supabase.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/supabase.jsx",
+        "text": "supabase.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Supabase",
+      "name": "review and confirm supabasect provider changes",
+      "actionId": "supabase.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "supabase.mcp.execute"
+      }
+    },
+    {
+      "surface": "Vercel",
+      "name": "sign in or reconnect",
+      "actionId": "vercel.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/vercel.jsx",
+        "text": "vercel.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Vercel",
+      "name": "cancel sign-in",
+      "actionId": "vercel.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/vercel.jsx",
+        "text": "vercel.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Vercel",
+      "name": "verify connection",
+      "actionId": "vercel.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/vercel.jsx",
+        "text": "vercel.connection.verify"
+      }
+    },
+    {
+      "surface": "Vercel",
+      "name": "review and confirm disconnection",
+      "actionId": "vercel.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/vercel.jsx",
+        "text": "vercel.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Vercel",
+      "name": "review and confirm vercelct provider changes",
+      "actionId": "vercel.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "vercel.mcp.execute"
+      }
+    },
+    {
+      "surface": "ClickUp",
+      "name": "sign in or reconnect",
+      "actionId": "clickup.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/clickup.jsx",
+        "text": "clickup.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "ClickUp",
+      "name": "cancel sign-in",
+      "actionId": "clickup.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/clickup.jsx",
+        "text": "clickup.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "ClickUp",
+      "name": "verify connection",
+      "actionId": "clickup.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/clickup.jsx",
+        "text": "clickup.connection.verify"
+      }
+    },
+    {
+      "surface": "ClickUp",
+      "name": "review and confirm disconnection",
+      "actionId": "clickup.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/clickup.jsx",
+        "text": "clickup.connection.disconnect"
+      }
+    },
+    {
+      "surface": "ClickUp",
+      "name": "review and confirm exact provider changes",
+      "actionId": "clickup.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "clickup.mcp.execute"
+      }
+    },
+    {
+      "surface": "HubSpot",
+      "name": "sign in or reconnect",
+      "actionId": "hubspot.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/hubspot.jsx",
+        "text": "hubspot.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "HubSpot",
+      "name": "cancel sign-in",
+      "actionId": "hubspot.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/hubspot.jsx",
+        "text": "hubspot.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "HubSpot",
+      "name": "verify connection",
+      "actionId": "hubspot.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/hubspot.jsx",
+        "text": "hubspot.connection.verify"
+      }
+    },
+    {
+      "surface": "HubSpot",
+      "name": "review and confirm disconnection",
+      "actionId": "hubspot.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/hubspot.jsx",
+        "text": "hubspot.connection.disconnect"
+      }
+    },
+    {
+      "surface": "HubSpot",
+      "name": "review and confirm exact provider changes",
+      "actionId": "hubspot.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "hubspot.mcp.execute"
+      }
+    },
+    {
+      "surface": "HubSpot",
+      "name": "review and save staged app credentials",
+      "actionId": "hubspot.connection.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/components/hubspot.jsx",
+        "text": "hubspot.connection.configure"
+      }
     }
   ],
   "exemptions": [
@@ -1568,6 +1773,22 @@
     {
       "scope": "SerpAPI secret staging and discard",
       "reason": "Guarded UI-only transport returns an opaque expiring reference; the connection App Action verifies and persists the credential. Values never enter action arguments."
+    },
+    {
+      "scope": "Supabase tool discovery, filters and OAuth status polling",
+      "reason": "Read-only metadata and transient presentation; connection lifecycle and provider changes use typed App Actions and exact-input reviews."
+    },
+    {
+      "scope": "Vercel tool discovery, filters and OAuth status polling",
+      "reason": "Read-only metadata and transient presentation; connection lifecycle and provider changes use typed App Actions and exact-input reviews."
+    },
+    {
+      "scope": "ClickUp tool discovery, filters and OAuth status polling",
+      "reason": "Read-only metadata and transient presentation; connection lifecycle and provider changes use typed App Actions and exact-input reviews."
+    },
+    {
+      "scope": "HubSpot tool discovery, filters and OAuth status polling",
+      "reason": "Read-only metadata and transient presentation; connection lifecycle and provider changes use typed App Actions and exact-input reviews."
     }
   ],
   "deferred": [

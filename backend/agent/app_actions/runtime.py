@@ -1983,6 +1983,62 @@ class AppActionRuntime:
                         message=binding['message'], binding=binding)
                     receipt.result['serpapi_review'] = binding['preview']
                     return receipt
+                if request.action_id == 'hubspot.mcp.execute':
+                    from agent.contracts.hubspot_connection import HubSpotMcpOperation
+                    from agent.plugins.hubspot_mcp import HubSpotMcpAdapter
+                    try:
+                        binding = HubSpotMcpAdapter().prepare(HubSpotMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='HUBSPOT_REVIEW_FAILED',
+                            message='HubSpot could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='hubspot_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['hubspot_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'clickup.mcp.execute':
+                    from agent.contracts.clickup_connection import ClickUpMcpOperation
+                    from agent.plugins.clickup_mcp import ClickUpMcpAdapter
+                    try:
+                        binding = ClickUpMcpAdapter().prepare(ClickUpMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='CLICKUP_REVIEW_FAILED',
+                            message='ClickUp could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='clickup_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['clickup_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'vercel.mcp.execute':
+                    from agent.contracts.vercel_connection import VercelMcpOperation
+                    from agent.plugins.vercel_mcp import VercelMcpAdapter
+                    try:
+                        binding = VercelMcpAdapter().prepare(VercelMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='VERCEL_REVIEW_FAILED',
+                            message='Vercel could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='vercel_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['vercel_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'supabase.mcp.execute':
+                    from agent.contracts.supabase_connection import SupabaseMcpOperation
+                    from agent.plugins.supabase_mcp import SupabaseMcpAdapter
+                    try:
+                        binding = SupabaseMcpAdapter().prepare(SupabaseMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='SUPABASE_REVIEW_FAILED',
+                            message='Supabase could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='supabase_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['supabase_review'] = binding['preview']
+                    return receipt
                 if request.action_id == 'exa.mcp.execute':
                     from agent.contracts.exa_connection import ExaMcpOperation
                     from agent.plugins.exa_mcp import ExaMcpAdapter

@@ -50,6 +50,14 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     runtime.register_plugin_contribution(apify_contribution())
     from agent.plugins.serpapi_controls import serpapi_contribution
     runtime.register_plugin_contribution(serpapi_contribution())
+    from agent.plugins.supabase_controls import supabase_contribution
+    runtime.register_plugin_contribution(supabase_contribution())
+    from agent.plugins.vercel_controls import vercel_contribution
+    runtime.register_plugin_contribution(vercel_contribution())
+    from agent.plugins.clickup_controls import clickup_contribution
+    runtime.register_plugin_contribution(clickup_contribution())
+    from agent.plugins.hubspot_controls import hubspot_contribution
+    runtime.register_plugin_contribution(hubspot_contribution())
     from agent.plugins.exa_controls import exa_contribution
     runtime.register_plugin_contribution(exa_contribution())
     from agent.plugins.tavily_controls import tavily_contribution

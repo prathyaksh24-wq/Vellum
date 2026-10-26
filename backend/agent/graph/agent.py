@@ -525,6 +525,26 @@ def core_tool_registry() -> ToolRegistry:
         registry.register_langchain(tool,
             access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
             allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.hubspot_mcp import agent_tools as hubspot_mcp_tools
+    for tool in hubspot_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
+    from agent.plugins.clickup_mcp import agent_tools as clickup_mcp_tools
+    for tool in clickup_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
+    from agent.plugins.vercel_mcp import agent_tools as vercel_mcp_tools
+    for tool in vercel_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
+    from agent.plugins.supabase_mcp import agent_tools as supabase_mcp_tools
+    for tool in supabase_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
     from agent.plugins.exa_mcp import agent_tools as exa_mcp_tools
     for tool in exa_mcp_tools():
         registry.register_langchain(tool,

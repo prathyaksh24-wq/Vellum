@@ -220,6 +220,38 @@ class PluginMcpRuntime:
             if service.tools_revision != connector.credential_digest:
                 raise PluginMcpRuntimeError("The SerpAPI catalog changed. Refresh the connection.")
             return service.cached_tools()
+        if plugin_id == 'hubspot' and connector_name == 'hubspot':
+            from agent.plugins.hubspot_connection import hubspot_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = hubspot_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The HubSpot catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'clickup' and connector_name == 'clickup':
+            from agent.plugins.clickup_connection import clickup_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = clickup_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The ClickUp catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'vercel' and connector_name == 'vercel':
+            from agent.plugins.vercel_connection import vercel_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = vercel_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Vercel catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'supabase' and connector_name == 'supabase':
+            from agent.plugins.supabase_connection import supabase_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = supabase_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Supabase catalog changed. Refresh the connection.")
+            return service.cached_tools()
         if plugin_id == 'exa' and connector_name == 'exa':
             from agent.plugins.exa_connection import exa_service, SERVER
             if connector.url != SERVER:
@@ -427,6 +459,50 @@ def _connector(
                 credential_digest = data["revision"]
             except (ValueError, RuntimeError):
                 headers, missing = {}, ("SerpAPI connection",)
+        if payload.get("credential_provider") == 'hubspot':
+            from agent.plugins.hubspot_connection import hubspot_service, SERVER
+            if plugin_id != 'hubspot' or name != 'hubspot' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = hubspot_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("HubSpot connection",)
+        if payload.get("credential_provider") == 'clickup':
+            from agent.plugins.clickup_connection import clickup_service, SERVER
+            if plugin_id != 'clickup' or name != 'clickup' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = clickup_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("ClickUp connection",)
+        if payload.get("credential_provider") == 'vercel':
+            from agent.plugins.vercel_connection import vercel_service, SERVER
+            if plugin_id != 'vercel' or name != 'vercel' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = vercel_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Vercel connection",)
+        if payload.get("credential_provider") == 'supabase':
+            from agent.plugins.supabase_connection import supabase_service, SERVER
+            if plugin_id != 'supabase' or name != 'supabase' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = supabase_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Supabase connection",)
         if payload.get("credential_provider") == 'exa':
             from agent.plugins.exa_connection import exa_service, SERVER
             if plugin_id != 'exa' or name != 'exa' or url != SERVER:

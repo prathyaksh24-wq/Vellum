@@ -7,6 +7,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Added
+- Connect Supabase, Vercel, ClickUp and HubSpot to their official remote MCP servers, with user-owned OAuth, real logos, deferred tool discovery and readable operation reviews. Support confidential app credentials, provider-specific callback/resource requirements, ClickUp’s long-lived grants and truthful provisioning/deployment status.
 - Connect Airtable, Notion, Firecrawl, Apify, SerpAPI, Exa and Tavily through their official hosted MCP servers, with real logos, user-owned connections, complete selected tool catalogs, deferred schemas and readable operation reviews. Share bounded credential storage and OAuth lifecycle without introducing another tool runtime.
 - Add a styled web-search provider selector. Automatic prefers SerpAPI; an explicit choice is exclusive and persists as `WEB_SEARCH_BACKEND`. Existing search and extraction adapters reuse managed connections.
 
