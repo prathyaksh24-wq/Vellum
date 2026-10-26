@@ -6,6 +6,13 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+### Added
+- Connect Airtable, Notion, Firecrawl, Apify, SerpAPI, Exa and Tavily through their official hosted MCP servers, with real logos, user-owned connections, complete selected tool catalogs, deferred schemas and readable operation reviews. Share bounded credential storage and OAuth lifecycle without introducing another tool runtime.
+- Add a styled web-search provider selector. Automatic prefers SerpAPI; an explicit choice is exclusive and persists as `WEB_SEARCH_BACKEND`. Existing search and extraction adapters reuse managed connections.
+
+### Fixed
+- Request Tavily's exact `/mcp` OAuth resource so sign-in opens correctly; distinguish provider request rejection from declined consent. Keep keys out of Tavily MCP URLs, preserve failed replacement grants, and prevent disconnect from reviving older configured keys.
+
 - Save Slack authorization across bounded OS credential entries to avoid Windows'
   per-entry size limit; preserve the previous record until the new one is stored,
   and distinguish credential persistence failures from MCP access failures.

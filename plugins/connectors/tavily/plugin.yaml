@@ -1,0 +1,23 @@
+id: tavily
+name: Tavily
+type: connector
+category: MCP
+version: 1.0.0
+description: Search, extract pages, map and crawl sites, and research topics through Tavily’s official MCP server. Each user connects their own account with OAuth.
+mcp_connectors:
+  - name: tavily
+    type: http
+    url: https://mcp.tavily.com/mcp/
+    credential_provider: tavily
+capabilities:
+  - tavily.connection.oauth.start
+  - tavily.connection.oauth.cancel
+  - tavily.connection.use_configured
+  - tavily.connection.verify
+  - tavily.connection.disconnect
+  - tavily.mcp.execute
+provides_tools:
+  - tavily_mcp_catalog
+  - tavily_mcp_describe
+  - tavily_mcp_read
+  - tavily_mcp_execute

@@ -101,6 +101,7 @@ def test_apify_sanitizes_urls_asins_and_pii():
 
 
 def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path):
+    monkeypatch.setattr(apify_tools, "_managed_connection", lambda: False)
     fake_session = FakeSession(
         text="ASIN B0ABCDEF12 https://amazon.com/dp/B0ABCDEF12 seller@example.com"
     )
@@ -134,6 +135,7 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
 
 
 def test_apify_youtube_search_calls_configured_actor_and_parses_items(monkeypatch):
+    monkeypatch.setattr(apify_tools, "_managed_connection", lambda: False)
     fake_session = FakeSession(
         text='[{"videoId":"yt1234567","title":"Arsenal analysis","url":"https://www.youtube.com/watch?v=yt1234567"}]'
     )
@@ -835,6 +837,7 @@ def test_github_token_reads_pat_from_settings(monkeypatch):
 
 
 def test_tavily_search_calls_remote_mcp_with_api_key(monkeypatch):
+    monkeypatch.setattr("agent.plugins.search_connections.managed", lambda provider: False)
     fake_session = FakeSession(tools=["tavily_search"], text="search result")
     seen = {}
 
@@ -858,10 +861,12 @@ def test_tavily_search_calls_remote_mcp_with_api_key(monkeypatch):
 
     assert result == "search result"
     assert fake_session.calls[0] == ("tavily_search", {"query": "latest sports", "max_results": 3})
-    assert seen["url"] == "https://mcp.tavily.com/mcp/?tavilyApiKey=tvly_test"
+    assert seen["url"] == "https://mcp.tavily.com/mcp/"
+    assert seen["headers"] == {"Authorization": "Bearer tvly_test"}
 
 
 def test_tavily_answer_maps_to_search_with_answer(monkeypatch):
+    monkeypatch.setattr("agent.plugins.search_connections.managed", lambda provider: False)
     fake_session = FakeSession(tools=["tavily_search"], text="answer result")
     monkeypatch.setattr(
         tavily_tools,
@@ -882,6 +887,7 @@ def test_tavily_answer_maps_to_search_with_answer(monkeypatch):
 
 
 def test_firecrawl_fetch_calls_stdio_mcp_with_api_key(monkeypatch):
+    monkeypatch.setattr(firecrawl_tools, "_managed_connection", lambda: False)
     fake_session = FakeSession(tools=["firecrawl_scrape"], text="page markdown")
     seen = {}
 

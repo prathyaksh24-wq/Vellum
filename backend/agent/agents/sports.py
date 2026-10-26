@@ -214,10 +214,11 @@ class SportsAgent:
 
     def _default_web_searcher(self, query: str) -> WebSearchResult:
         settings = get_settings()
-        if settings.serpapi_api_key:
+        from agent.tools.providers.registry import get_active_search_provider
+        selected = get_active_search_provider()
+        if selected is not None and selected.name == 'serpapi':
             try:
                 client = SerpApiClient(
-                    api_key=settings.serpapi_api_key,
                     log_path=settings.serpapi_log_path,
                 )
                 min_sources = 5 if "official schedule standings news reports" in query else 3

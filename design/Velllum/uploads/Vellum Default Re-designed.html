@@ -36,6 +36,14 @@
 <script type="text/babel" data-presets="react" src="components/linear.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/github.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/slack.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/airtable.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/notion.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/apify.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/web-search-settings.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/serpapi.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/exa.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/tavily.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/firecrawl.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/product-hunt.jsx"></script>
 <script src="components/spotify-playback.js"></script>
 <link rel="stylesheet" href="components/music-page.css"/>
@@ -6401,7 +6409,7 @@ const CONNECTOR_LOCAL_LOGOS = {
   vercel:'vercel.svg',mongodb:'mongodb.svg',asana:'asana.svg',hubspot:'hubspot.svg',
   shopify:'shopify.svg',postgres:'postgresql.svg',postgresql:'postgresql.svg',
   brave:'brave.svg',sentry:'sentry.svg',stripe:'stripe.svg',obsidian:'obsidian.svg',
-  todoist:'todoist.svg',puppeteer:'puppeteer.svg',slack:'slack.png'
+  serpapi:'serpapi.png',exa:'exa.png',tavily:'tavily.png',apify:'apify.ico',firecrawl:'firecrawl.ico',todoist:'todoist.svg',puppeteer:'puppeteer.svg',slack:'slack.png'
 };
 const connectorIconSource = (c) => {
   const id = String(c?.id || '').toLowerCase();
@@ -6443,13 +6451,19 @@ function makeRegistryAdapter({ id, label, color, catalog }){
 const MCP_SOURCES = [
   makeRegistryAdapter({ id:'official', label:'Official MCP Registry', color:'#5b8def', catalog:[
     ...REQUIRED_CONNECTORS,
+    { id:'airtable', name:'Airtable', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.airtable.com/mcp', trust:'verified', description:'Work with bases, tables, records, interfaces and automations through Airtable’s official MCP server.', tools:[] },
     { id:'slack', name:'Slack', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.slack.com/mcp', trust:'verified', description:'Search and work in Slack through its official MCP server. Sign in to discover your workspace’s published tools.', tools:[] },
     { id:'filesystem', name:'Filesystem', category:'Developer', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-filesystem', trust:'verified', description:'Read and write files within an allow-listed directory.', tools:['read_file','write_file','list_dir','search_files'] },
     { id:'postgres', name:'Postgres', category:'Data', authType:'API key', install:'docker', image:'mcp/postgres:latest', trust:'verified', description:'Run read-only SQL queries against a Postgres database.', tools:['query','list_tables','describe_table'] },
     { id:'puppeteer', name:'Puppeteer', category:'Web', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-puppeteer', trust:'community', description:'Drive a headless browser to navigate and scrape pages.', tools:['navigate','screenshot','extract_text','click'] },
   ]}),
   makeRegistryAdapter({ id:'smithery', label:'Smithery', color:'#e0a030', catalog:[
-    { id:'notion', name:'Notion', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@smithery/notion', trust:'verified', description:'Search pages and append content to your Notion workspace.', tools:['search','get_page','append_block','create_page'] },
+    { id:'serpapi', name:'SerpAPI', category:'MCP', authType:'API key', install:'http', url:"https://mcp.serpapi.com/mcp", trust:'verified', description:"Search Google, YouTube, Bing, shopping, news and other supported engines through SerpAPI\u2019s official MCP server. Existing Vellum web search uses the same saved key.", tools:[] },
+    { id:'exa', name:'Exa', category:'MCP', authType:'OAuth', install:'http', url:"https://mcp.exa.ai/mcp?login&tools=web_search_exa,web_fetch_exa,agent_run,web_search_advanced_exa", trust:'verified', description:"Search the web with advanced filters, fetch page content, and run multi-step research through Exa\u2019s official MCP server. Includes all four currently documented tools.", tools:[] },
+    { id:'tavily', name:'Tavily', category:'MCP', authType:'OAuth', install:'http', url:"https://mcp.tavily.com/mcp/", trust:'verified', description:"Search, extract pages, map and crawl sites, and research topics through Tavily\u2019s official MCP server. Each user connects their own account with OAuth.", tools:[] },
+    { id:'firecrawl', name:'Firecrawl', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.firecrawl.dev/v2/mcp-oauth', trust:'verified', description:'Search, scrape, map and crawl websites, parse documents, use research tools, and manage monitors through Firecrawl’s official hosted MCP server.', tools:[] },
+    { id:'apify', name:'Apify', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,report-problem,apify/rag-web-browser,apify/web-fetch&telemetry-enabled=false', trust:'verified', description:'Discover and run Actors, retrieve datasets and run results, and manage saved tasks and schedules through Apify’s official hosted MCP server.', tools:[] },
+    { id:'notion', name:'Notion', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.notion.com/mcp', trust:'verified', description:'Search, read and manage your workspace through Notion’s official MCP server. Sign in to discover its complete published tool catalog.', tools:[] },
     { id:'linear', name:'Linear', category:'Developer', authType:'API key', install:'npm', pkg:'@smithery/linear', trust:'verified', description:'Create and track issues, projects, and cycles in Linear.', tools:['create_issue','list_issues','update_issue','list_projects'] },
     { id:'brave', name:'Brave Search', category:'Web', authType:'API key', install:'npm', pkg:'@smithery/brave-search', trust:'community', description:'Privacy-first web and local search.', tools:['web_search','local_search'] },
     { id:'sentry', name:'Sentry', category:'Developer', authType:'API key', install:'docker', image:'smithery/sentry:latest', trust:'community', description:'Inspect errors, issues, and releases in Sentry.', tools:['list_issues','get_issue','resolve_issue'] },
@@ -6721,6 +6735,36 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
     if(github)setSelected({kind:'plugin',item:github});
   },[apps]);
   useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('exa_oauth'))return;
+    const exa=plugins.find(item=>item.id==='exa');
+    if(exa)setSelected({kind:'plugin',item:exa});
+  },[apps]);
+  useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('tavily_oauth'))return;
+    const tavily=plugins.find(item=>item.id==='tavily');
+    if(tavily)setSelected({kind:'plugin',item:tavily});
+  },[apps]);
+  useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('firecrawl_oauth'))return;
+    const firecrawl=plugins.find(item=>item.id==='firecrawl');
+    if(firecrawl)setSelected({kind:'plugin',item:firecrawl});
+  },[apps]);
+  useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('apify_oauth'))return;
+    const apify=plugins.find(item=>item.id==='apify');
+    if(apify)setSelected({kind:'plugin',item:apify});
+  },[apps]);
+  useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('notion_oauth'))return;
+    const notion=plugins.find(item=>item.id==='notion');
+    if(notion)setSelected({kind:'plugin',item:notion});
+  },[apps]);
+  useEffect(()=>{
+    if(!new URLSearchParams(window.location.search).get('airtable_oauth'))return;
+    const airtable=plugins.find(item=>item.id==='airtable');
+    if(airtable)setSelected({kind:'plugin',item:airtable});
+  },[apps]);
+  useEffect(()=>{
     if(!new URLSearchParams(window.location.search).get('slack_oauth'))return;
     const slack=plugins.find(item=>item.id==='slack');
     if(slack)setSelected({kind:'plugin',item:slack});
@@ -6745,7 +6789,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
   };
   const statusLabel = app => {
     const status = connectorStatus(app);
-    if (status === 'ready') return ['slack','github','linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
+    if (status === 'ready') return ['tavily','exa','serpapi','apify','firecrawl','notion','airtable','slack','github','linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
     if (app?.id === 'app-69b7bed23a9481919d2378ab225cddeb') return ({not_connected:'Needs setup',not_checked:'Verify connection',unauthorized:'Reconnect',rate_limited:'Rate limited',unreachable:'Connection unavailable',keyring_unavailable:'Unlock credential store'})[status] || (status === 'disabled' ? 'Disabled' : 'Connection error');
     if (status === 'disabled') return 'Disabled';
     if (status === 'available') return 'Available';
@@ -6830,6 +6874,13 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalend
             {detailPlugin.id==='app-69b7bed23a9481919d2378ab225cddeb' && window.VellumUI.ProductHuntWorkspace && <window.VellumUI.ProductHuntWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
             {detailPlugin.id==='linear' && window.VellumUI.LinearWorkspace && <window.VellumUI.LinearWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
             {detailPlugin.id==='github' && window.VellumUI.GitHubConnection && <window.VellumUI.GitHubConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='serpapi' && window.VellumUI.SerpApiConnection && <window.VellumUI.SerpApiConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='exa' && window.VellumUI.ExaConnection && <window.VellumUI.ExaConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='tavily' && window.VellumUI.TavilyConnection && <window.VellumUI.TavilyConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='firecrawl' && window.VellumUI.FirecrawlConnection && <window.VellumUI.FirecrawlConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='apify' && window.VellumUI.ApifyConnection && <window.VellumUI.ApifyConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='notion' && window.VellumUI.NotionConnection && <window.VellumUI.NotionConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
+            {detailPlugin.id==='airtable' && window.VellumUI.AirtableConnection && <window.VellumUI.AirtableConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
             {detailPlugin.id==='slack' && window.VellumUI.SlackConnection && <window.VellumUI.SlackConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
             {detailPlugin.id==='discord' && <DiscordWorkspace/>}
             {['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(detailPlugin.id) && window.VellumUI?.GoogleConnections && <window.VellumUI.GoogleConnections onChanged={onRetry} revision={plugins.filter(item=>['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(item.id)).map(item=>item.id+':'+item.enabled).join('|')}/>}
@@ -10459,7 +10510,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!notify) return;
     const share = receipt.result && receipt.result.share;
     const shareReview = receipt.result && receipt.result.share_review;
-    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : receipt.action_id === 'slack.mcp.execute' ? receipt.result?.slack_review : null;
+    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : receipt.action_id === 'slack.mcp.execute' ? receipt.result?.slack_review : receipt.action_id === 'airtable.mcp.execute' ? receipt.result?.airtable_review : receipt.action_id === 'serpapi.mcp.execute' ? receipt.result?.serpapi_review : receipt.action_id === 'exa.mcp.execute' ? receipt.result?.exa_review : receipt.action_id === 'tavily.mcp.execute' ? receipt.result?.tavily_review : receipt.action_id === 'firecrawl.mcp.execute' ? receipt.result?.firecrawl_review : receipt.action_id === 'apify.mcp.execute' ? receipt.result?.apify_review : receipt.action_id === 'notion.mcp.execute' ? receipt.result?.notion_review : null;
     const googleReview = receipt.action_id === 'google.api.execute' ? receipt.result?.google_review : null;
     const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getDesktopInvoke() !== 'function';
     const confirmationMessage = shareReview
@@ -10485,6 +10536,13 @@ const [slashSkills, setSlashSkills] = useState([]);
         : receipt.action_id === 'google.api.execute' ? (googleReview?.confirm_label || 'Confirm change')
         : receipt.action_id === 'linear.mcp.execute' ? (linearReview?.confirm_label || 'Confirm change')
         : receipt.action_id === 'github.mcp.execute' ? (linearReview?.confirm_label || 'Apply GitHub change')
+        : receipt.action_id === 'serpapi.mcp.execute' ? (linearReview?.confirm_label || 'Run SerpAPI operation')
+        : receipt.action_id === 'exa.mcp.execute' ? (linearReview?.confirm_label || 'Run Exa operation')
+        : receipt.action_id === 'tavily.mcp.execute' ? (linearReview?.confirm_label || 'Run Tavily operation')
+        : receipt.action_id === 'firecrawl.mcp.execute' ? (linearReview?.confirm_label || 'Run Firecrawl operation')
+        : receipt.action_id === 'apify.mcp.execute' ? (linearReview?.confirm_label || 'Run Apify operation')
+        : receipt.action_id === 'notion.mcp.execute' ? (linearReview?.confirm_label || 'Apply Notion change')
+        : receipt.action_id === 'airtable.mcp.execute' ? (linearReview?.confirm_label || 'Apply Airtable change')
         : receipt.action_id === 'slack.mcp.execute' ? (linearReview?.confirm_label || 'Apply Slack change')
         : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
         : receipt.action_id === 'youtube.connection.disconnect' ? 'Disconnect'

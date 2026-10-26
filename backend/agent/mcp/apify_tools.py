@@ -64,6 +64,11 @@ def _apify_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _managed_connection():
+    from agent.plugins.apify_connection import apify_service
+    return apify_service().managed()
+
+
 def _content_text(result: Any) -> str:
     content = getattr(result, "content", None) or []
     parts = []
@@ -142,6 +147,10 @@ def _safe_youtube_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 async def search_youtube_videos_async(query: str, max_results: int) -> list[dict[str, Any]]:
+    if _managed_connection():
+        # Actor launches now use the reviewed provider tools. The YouTube read
+        # fallback must not launch an unreviewed Actor behind that boundary.
+        return []
     query = (query or "").strip()
     if not query:
         return []
@@ -177,6 +186,8 @@ def search_youtube_videos(query: str, max_results: int) -> list[dict[str, Any]]:
 
 
 async def _run_tool_inner(params: dict) -> str:
+    if _managed_connection():
+        return json.dumps({'ok': False, 'error': 'Discover Apify tools and prepare call-actor for review; the legacy direct Actor runner is retired for managed connections.'})
     query = (params.get("query") or "").strip()
     if not query:
         return "Apify search skipped: no query provided."

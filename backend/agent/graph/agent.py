@@ -520,6 +520,41 @@ def core_tool_registry() -> ToolRegistry:
         )
     from agent.plugins.linear_mcp import agent_tools as linear_mcp_tools
     from agent.plugins.github_mcp import agent_tools as github_mcp_tools
+    from agent.plugins.serpapi_mcp import agent_tools as serpapi_mcp_tools
+    for tool in serpapi_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.exa_mcp import agent_tools as exa_mcp_tools
+    for tool in exa_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.tavily_mcp import agent_tools as tavily_mcp_tools
+    for tool in tavily_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.firecrawl_mcp import agent_tools as firecrawl_mcp_tools
+    for tool in firecrawl_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.apify_mcp import agent_tools as apify_mcp_tools
+    for tool in apify_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.notion_mcp import agent_tools as notion_mcp_tools
+    for tool in notion_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.airtable_mcp import agent_tools as airtable_mcp_tools
+    for tool in airtable_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({"VellumAgent"}))
     from agent.plugins.slack_mcp import agent_tools as slack_mcp_tools
     for tool in slack_mcp_tools():
         registry.register_langchain(tool,

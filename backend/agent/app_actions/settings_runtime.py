@@ -40,8 +40,10 @@ ROUTING_POOL_RESET_ACTION_ID = "llm.routing.pool.reset"
 
 DICTATION_SETTINGS_ACTION_ID = "dictation.settings.update"
 DICTATION_DELETE_ACTION_ID = "dictation.history.delete"
+WEB_SEARCH_SET_ACTION_ID = 'settings.web_search.set'
 
 SETTINGS_RUNTIME_ACTION_IDS = frozenset({
+    WEB_SEARCH_SET_ACTION_ID,
     DICTATION_SETTINGS_ACTION_ID,
     DICTATION_DELETE_ACTION_ID,
     DEVICE_SETTINGS_INSPECT_ACTION_ID,
@@ -68,6 +70,7 @@ SETTINGS_RUNTIME_ACTION_IDS = frozenset({
 })
 
 CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS = frozenset({
+    WEB_SEARCH_SET_ACTION_ID,
     DICTATION_DELETE_ACTION_ID,
     MEMORY_SETTINGS_UPDATE_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
@@ -135,6 +138,7 @@ class SettingsRuntimeActionService:
         obsidian_memory_importer: Callable[[], dict[str, Any]],
         provider_selection_resumer: Callable[[str, AppActionContext], dict[str, Any]] | None = None,
         dictation_store_provider: Callable[[], Any] | None = None,
+        config_writer: Callable[[str, str], None] | None = None,
     ) -> None:
         self._memory_store_provider = memory_store_provider
         self._memory_creator = memory_creator
@@ -146,6 +150,7 @@ class SettingsRuntimeActionService:
         self._obsidian_memory_importer = obsidian_memory_importer
         self._provider_selection_resumer = provider_selection_resumer
         self._dictation_store_provider = dictation_store_provider
+        self._config_writer = config_writer
 
     def execute(
         self,
@@ -155,6 +160,17 @@ class SettingsRuntimeActionService:
         *,
         confirmed: bool = False,
     ) -> dict[str, Any]:
+        if action_id == WEB_SEARCH_SET_ACTION_ID:
+            from agent.contracts.web_search import WebSearchSelection
+            try:
+                selection = WebSearchSelection.model_validate(arguments)
+                if self._config_writer is None:
+                    raise ValueError()
+                self._config_writer('WEB_SEARCH_BACKEND', selection.provider)
+                return {'changed': True, 'provider': selection.provider, '_target_kind': 'web_search',
+                    '_target_id': 'local', '_message': 'Web search provider saved: ' + selection.provider + '.'}
+            except (ValueError, OSError):
+                raise SettingsRuntimeActionError('WEB_SEARCH_SETTINGS_FAILED', 'Choose a supported provider and check local configuration access.') from None
         if action_id in {DICTATION_SETTINGS_ACTION_ID,DICTATION_DELETE_ACTION_ID}:
             if self._dictation_store_provider is None:
                 raise SettingsRuntimeActionError('DICTATION_UNAVAILABLE','Dictation history is unavailable.',unavailable=True)
@@ -915,6 +931,8 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','minLength':1,'maxLength':120}}},
     }
     specs = [
+        (WEB_SEARCH_SET_ACTION_ID, 'Choose web search provider', 'Use this provider exclusively for public web searches, or choose automatic fallback. No credentials are changed.', 'process', 'none',
+            {'provider': {'type': 'string', 'enum': ['auto', 'serpapi', 'exa', 'tavily', 'brave', 'ddgs']}}, 'settings-web-search'),
         (DICTATION_SETTINGS_ACTION_ID,'Update dictation settings','Set the local dictation language and whether completed transcripts are saved.','device','none',
             {'patch':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'language':{'type':'string'},'save_history':{'type':'boolean'},'dictionary':{'type':'array','items':{'type':'string'},'maxItems':100},'hold_shortcut':{'type':'string'},'toggle_shortcut':{'type':'string'}}}},'settings-dictation'),
         (DICTATION_DELETE_ACTION_ID,'Delete dictation history','Permanently delete one saved dictation, or explicitly clear all saved dictations. This does not delete sent chat messages.','device','operation_bound',

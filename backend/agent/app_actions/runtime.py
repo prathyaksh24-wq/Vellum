@@ -1969,6 +1969,104 @@ class AppActionRuntime:
                         message=binding['message'], binding=binding)
                     receipt.result['google_review'] = binding['preview']
                     return receipt
+                if request.action_id == 'serpapi.mcp.execute':
+                    from agent.contracts.serpapi_connection import SerpApiMcpOperation
+                    from agent.plugins.serpapi_mcp import SerpApiMcpAdapter
+                    try:
+                        binding = SerpApiMcpAdapter().prepare(SerpApiMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='SERPAPI_REVIEW_FAILED',
+                            message='SerpApi could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='serpapi_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['serpapi_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'exa.mcp.execute':
+                    from agent.contracts.exa_connection import ExaMcpOperation
+                    from agent.plugins.exa_mcp import ExaMcpAdapter
+                    try:
+                        binding = ExaMcpAdapter().prepare(ExaMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='EXA_REVIEW_FAILED',
+                            message='Exa could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='exa_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['exa_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'tavily.mcp.execute':
+                    from agent.contracts.tavily_connection import TavilyMcpOperation
+                    from agent.plugins.tavily_mcp import TavilyMcpAdapter
+                    try:
+                        binding = TavilyMcpAdapter().prepare(TavilyMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='TAVILY_REVIEW_FAILED',
+                            message='Tavily could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='tavily_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['tavily_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'firecrawl.mcp.execute':
+                    from agent.contracts.firecrawl_connection import FirecrawlMcpOperation
+                    from agent.plugins.firecrawl_mcp import FirecrawlMcpAdapter
+                    try:
+                        binding = FirecrawlMcpAdapter().prepare(FirecrawlMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='FIRECRAWL_REVIEW_FAILED',
+                            message='Firecrawl could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='firecrawl_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['firecrawl_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'apify.mcp.execute':
+                    from agent.contracts.apify_connection import ApifyMcpOperation
+                    from agent.plugins.apify_mcp import ApifyMcpAdapter
+                    try:
+                        binding = ApifyMcpAdapter().prepare(ApifyMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='APIFY_REVIEW_FAILED',
+                            message='Apify could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='apify_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['apify_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'notion.mcp.execute':
+                    from agent.contracts.notion import NotionMcpOperation
+                    from agent.plugins.notion_mcp import NotionMcpAdapter
+                    try:
+                        binding = NotionMcpAdapter().prepare(NotionMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='NOTION_REVIEW_FAILED',
+                            message='Notion could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='notion_operation', target_reference=binding['workspace_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['notion_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'airtable.mcp.execute':
+                    from agent.contracts.airtable import AirtableMcpOperation
+                    from agent.plugins.airtable_mcp import AirtableMcpAdapter
+                    try:
+                        binding = AirtableMcpAdapter().prepare(AirtableMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='AIRTABLE_REVIEW_FAILED',
+                            message='Airtable could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='airtable_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['airtable_review'] = binding['preview']
+                    return receipt
                 if request.action_id == 'slack.mcp.execute':
                     from agent.contracts.slack import SlackMcpOperation
                     from agent.plugins.slack_mcp import SlackMcpAdapter

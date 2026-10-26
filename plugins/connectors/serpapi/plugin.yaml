@@ -1,0 +1,22 @@
+id: serpapi
+name: SerpAPI
+type: connector
+category: MCP
+version: 1.0.0
+description: Search Google, YouTube, Bing, shopping, news and other supported engines through SerpAPI’s official MCP server. Existing Vellum web search uses the same saved key.
+mcp_connectors:
+  - name: serpapi
+    type: http
+    url: https://mcp.serpapi.com/mcp
+    credential_provider: serpapi
+capabilities:
+  - serpapi.connection.connect
+  - serpapi.connection.use_configured
+  - serpapi.connection.verify
+  - serpapi.connection.disconnect
+  - serpapi.mcp.execute
+provides_tools:
+  - serpapi_mcp_catalog
+  - serpapi_mcp_describe
+  - serpapi_mcp_read
+  - serpapi_mcp_execute

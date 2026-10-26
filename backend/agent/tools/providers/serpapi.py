@@ -23,7 +23,8 @@ class SerpApiProvider(WebSearchProvider):
         return "SerpAPI"
 
     def is_available(self) -> bool:
-        return bool(getattr(get_settings(), "serpapi_api_key", ""))
+        from agent.plugins.search_connections import available
+        return available('serpapi')
 
     def supports_search(self) -> bool:
         return True

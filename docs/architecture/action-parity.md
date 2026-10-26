@@ -174,3 +174,12 @@ metadata reads, OAuth continuation and documentation links are non-committing
 gestures. A parent refresh callback updates catalog presentation after receipts.
 The backend catalog fixture composes Slack's contribution. Only the main-page
 and new Slack component handler fingerprints change in this integration.
+
+## Hosted connector controls
+
+Airtable, Notion, Firecrawl, Apify, SerpAPI, Exa and Tavily connection lifecycle
+controls and operation reviews dispatch typed App Actions. Secret staging is
+guarded UI-only transport; only an expiring reference reaches SerpAPI's connect
+action. Search preference selection uses `settings.web_search.set` through the
+canonical config writer. Read-only metadata, filters and OAuth polling retain
+documented exemptions. All served connection sources are in the parity inventory.

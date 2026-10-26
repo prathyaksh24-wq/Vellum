@@ -24,6 +24,18 @@ logger = logging.getLogger(__name__)
 
 
 def _tavily_request(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    from agent.plugins.search_connections import managed, mcp_read
+    if managed('tavily'):
+        if endpoint not in {'search', 'extract'}:
+            raise ValueError('Use the published Tavily tool catalog for this operation.')
+        # Current MCP search schema does not expose REST-only include_answer/raw-content booleans.
+        body = dict(payload)
+        if endpoint == 'search':
+            body.pop('include_raw_content', None)
+        value = mcp_read('tavily', 'tavily_' + endpoint, body)
+        if not isinstance(value, dict):
+            raise ValueError('Tavily did not return structured results for this operation.')
+        return value
     settings = get_settings()
     api_key = settings.tavily_api_key
     if not api_key:
@@ -120,7 +132,8 @@ class TavilyProvider(WebSearchProvider):
         return "Tavily"
 
     def is_available(self) -> bool:
-        return bool(getattr(get_settings(), "tavily_api_key", ""))
+        from agent.plugins.search_connections import available
+        return available('tavily')
 
     def supports_search(self) -> bool:
         return True

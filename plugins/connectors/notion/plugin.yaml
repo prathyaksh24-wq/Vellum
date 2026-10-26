@@ -1,0 +1,22 @@
+id: notion
+name: Notion
+type: connector
+category: MCP
+version: 1.0.0
+description: Search, read and manage pages, databases, comments and every tool published by Notion's official MCP server. Sign in with your own workspace.
+mcp_connectors:
+  - name: notion
+    type: http
+    url: https://mcp.notion.com/mcp
+    credential_provider: notion
+capabilities:
+  - notion.connection.oauth.start
+  - notion.connection.oauth.cancel
+  - notion.connection.verify
+  - notion.connection.disconnect
+  - notion.mcp.execute
+provides_tools:
+  - notion_mcp_catalog
+  - notion_mcp_describe
+  - notion_mcp_read
+  - notion_mcp_execute
