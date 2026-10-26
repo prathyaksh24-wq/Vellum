@@ -42,6 +42,20 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     runtime.register_plugin_contribution(product_hunt_contribution())
     runtime.register_plugin_contribution(github_contribution())
     runtime.register_plugin_contribution(slack_contribution())
+    from agent.plugins.airtable_controls import airtable_contribution
+    runtime.register_plugin_contribution(airtable_contribution())
+    from agent.plugins.notion_controls import notion_contribution
+    runtime.register_plugin_contribution(notion_contribution())
+    from agent.plugins.apify_controls import apify_contribution
+    runtime.register_plugin_contribution(apify_contribution())
+    from agent.plugins.serpapi_controls import serpapi_contribution
+    runtime.register_plugin_contribution(serpapi_contribution())
+    from agent.plugins.exa_controls import exa_contribution
+    runtime.register_plugin_contribution(exa_contribution())
+    from agent.plugins.tavily_controls import tavily_contribution
+    runtime.register_plugin_contribution(tavily_contribution())
+    from agent.plugins.firecrawl_controls import firecrawl_contribution
+    runtime.register_plugin_contribution(firecrawl_contribution())
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

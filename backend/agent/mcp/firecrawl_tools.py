@@ -25,6 +25,31 @@ ACTION_TO_TOOL = {
 }
 
 
+def _managed_connection():
+    from agent.plugins.firecrawl_connection import firecrawl_service
+    # A locked credential store must not silently reactivate an old environment key.
+    return firecrawl_service().managed()
+
+
+def _managed_read(params):
+    from agent.contracts.firecrawl_connection import FirecrawlMcpOperation
+    from agent.plugins.firecrawl_mcp import FirecrawlMcpAdapter
+    action = _action_name(params)
+    if action in {'extract', 'firecrawl_extract'}:
+        options = {'type': 'json'}
+        for key in ('schema', 'prompt'):
+            if params.get(key):
+                options[key] = params[key]
+        arguments = {'url': _url(params), 'formats': [options]}
+        name = 'firecrawl_scrape'
+    else:
+        name = ACTION_TO_TOOL.get(action)
+        if name is None:
+            raise ValueError('Search Firecrawl’s published tools for this operation.')
+        arguments = _tool_params(name, params)
+    return FirecrawlMcpAdapter().read(FirecrawlMcpOperation(tool_name=name, arguments=arguments))
+
+
 def _server_params() -> StdioServerParameters:
     settings = get_settings()
     if not settings.firecrawl_api_key:
@@ -108,6 +133,8 @@ async def _run_tool_inner(params: dict[str, Any]) -> str:
 async def run_tool_async(params: dict[str, Any]) -> str:
     timeout = get_settings().mcp_timeout_seconds
     try:
+        if _managed_connection():
+            return await asyncio.to_thread(_managed_read, params)
         return await asyncio.wait_for(_run_tool_inner(params), timeout=timeout)
     except TimeoutError:
         return f"Firecrawl MCP timed out after {timeout} seconds."

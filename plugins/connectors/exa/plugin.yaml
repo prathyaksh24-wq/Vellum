@@ -1,0 +1,22 @@
+id: exa
+name: Exa
+type: connector
+category: MCP
+version: 1.0.0
+description: Search the web with advanced filters, fetch page content, and run multi-step research through Exa’s official MCP server. Includes all four currently documented tools.
+mcp_connectors:
+  - name: exa
+    type: http
+    url: https://mcp.exa.ai/mcp?login&tools=web_search_exa,web_fetch_exa,agent_run,web_search_advanced_exa
+    credential_provider: exa
+capabilities:
+  - exa.connection.oauth.start
+  - exa.connection.oauth.cancel
+  - exa.connection.verify
+  - exa.connection.disconnect
+  - exa.mcp.execute
+provides_tools:
+  - exa_mcp_catalog
+  - exa_mcp_describe
+  - exa_mcp_read
+  - exa_mcp_execute

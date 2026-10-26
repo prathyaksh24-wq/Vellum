@@ -1,0 +1,23 @@
+id: apify
+name: Apify
+type: connector
+category: MCP
+version: 1.0.0
+description: Discover and run Actors, retrieve datasets and run results, and manage saved tasks and schedules through Apify’s official hosted MCP server.
+mcp_connectors:
+  - name: apify
+    type: http
+    url: https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,report-problem,apify/rag-web-browser,apify/web-fetch&telemetry-enabled=false
+    credential_provider: apify
+capabilities:
+  - apify.connection.oauth.start
+  - apify.connection.oauth.cancel
+  - apify.connection.use_configured
+  - apify.connection.verify
+  - apify.connection.disconnect
+  - apify.mcp.execute
+provides_tools:
+  - apify_mcp_catalog
+  - apify_mcp_describe
+  - apify_mcp_read
+  - apify_mcp_execute

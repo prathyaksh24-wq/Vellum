@@ -1,0 +1,23 @@
+id: firecrawl
+name: Firecrawl
+type: connector
+category: MCP
+version: 1.0.0
+description: Search, scrape, map and crawl websites, parse documents, use research tools, and manage monitors through Firecrawl’s official hosted MCP server.
+mcp_connectors:
+  - name: firecrawl
+    type: http
+    url: https://mcp.firecrawl.dev/v2/mcp-oauth
+    credential_provider: firecrawl
+capabilities:
+  - firecrawl.connection.oauth.start
+  - firecrawl.connection.oauth.cancel
+  - firecrawl.connection.use_configured
+  - firecrawl.connection.verify
+  - firecrawl.connection.disconnect
+  - firecrawl.mcp.execute
+provides_tools:
+  - firecrawl_mcp_catalog
+  - firecrawl_mcp_describe
+  - firecrawl_mcp_read
+  - firecrawl_mcp_execute

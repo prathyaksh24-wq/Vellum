@@ -26,10 +26,18 @@ def test_mcp_health_returns_all_servers(client: TestClient) -> None:
     assert servers == {
         "apify", "serpapi", "exa", "brave", "playwright", "github",
         "obsidian", "context7", "gitmcp", "context_mode",
-        "tavily", "firecrawl", "slack",
+        "tavily", "firecrawl", "slack", "airtable", "notion",
     }
     slack = next(entry for entry in body["mcp_servers"] if entry["name"] == "slack")
     assert slack["endpoint"] == "https://mcp.slack.com/mcp"
+    airtable = next(entry for entry in body["mcp_servers"] if entry["name"] == "airtable")
+    assert airtable["endpoint"] == "https://mcp.airtable.com/mcp"
+    notion = next(entry for entry in body["mcp_servers"] if entry["name"] == "notion")
+    assert notion["endpoint"] == "https://mcp.notion.com/mcp"
+    firecrawl = next(entry for entry in body["mcp_servers"] if entry["name"] == "firecrawl")
+    assert firecrawl["endpoint"] == "https://mcp.firecrawl.dev/v2/mcp-oauth"
+    apify = next(entry for entry in body["mcp_servers"] if entry["name"] == "apify")
+    assert apify["endpoint"].startswith("https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,")
 
 
 def test_mcp_health_each_server_has_required_keys(client: TestClient) -> None:

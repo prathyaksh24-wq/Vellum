@@ -1,8 +1,7 @@
 """Tavily remote MCP wrapper for shared web research.
 
-Tavily is used as a source-backed research/search provider. The remote MCP
-endpoint accepts the API key as a query parameter, so the configured base URL is
-kept keyless and the key is appended only at call time.
+Managed connections use the plugin's saved grant. Legacy configurations also
+send credentials in a bearer header; keys never belong in the MCP URL.
 """
 
 from __future__ import annotations
@@ -51,7 +50,7 @@ def _server_url() -> str:
         raise ValueError("TAVILY_API_KEY is not configured.")
     parsed = urllib.parse.urlparse(settings.tavily_mcp_url)
     query = urllib.parse.parse_qs(parsed.query)
-    query["tavilyApiKey"] = [api_key]
+    query.pop("tavilyApiKey", None)
     return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query, doseq=True)))
 
 
@@ -82,6 +81,7 @@ async def _run_tool_inner(params: dict[str, Any]) -> str:
     timeout = settings.mcp_timeout_seconds
     async with streamablehttp_client(
         _server_url(),
+        headers={'Authorization': 'Bearer ' + settings.tavily_api_key},
         timeout=timeout,
         sse_read_timeout=timeout,
     ) as (read, write, _get_session_id):
@@ -95,6 +95,23 @@ async def _run_tool_inner(params: dict[str, Any]) -> str:
 
 
 async def run_tool_async(params: dict[str, Any]) -> str:
+    from agent.plugins.search_connections import managed, mcp_read, service_for
+    try:
+        if not service_for('tavily').enabled():
+            return 'Tavily MCP failed: Enable Tavily in Plugins first.'
+        if managed('tavily'):
+            action = _action_name(params)
+            tool_name = ACTION_TO_TOOL.get(action)
+            if tool_name is None:
+                return 'Use the published Tavily catalog for this operation.'
+            arguments = _tool_params(action, params)
+            # The hosted MCP search tool returns sources; it has no include_answer parameter.
+            arguments.pop('include_answer', None)
+            import json
+            value = await asyncio.to_thread(mcp_read, 'tavily', tool_name, arguments)
+            return json.dumps(value, ensure_ascii=False)
+    except (ValueError, RuntimeError):
+        return 'Tavily MCP failed: Verify its saved connection and published arguments.'
     timeout = get_settings().mcp_timeout_seconds
     try:
         return await asyncio.wait_for(_run_tool_inner(params), timeout=timeout)

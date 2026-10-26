@@ -155,6 +155,28 @@ from agent.plugins.linear import linear_plugin_status
 from agent.plugins.github_connection import github_plugin_status
 from agent.plugins.github_controls import github_contribution
 from agent.plugins.github_api import router as github_router, oauth_router as github_oauth_router
+from agent.plugins.search_connections import search_settings
+from agent.plugins.serpapi_connection import serpapi_plugin_status, SERVER as SERPAPI_OFFICIAL_MCP_URL
+from agent.plugins.serpapi_controls import serpapi_contribution
+from agent.plugins.serpapi_api import router as serpapi_router
+from agent.plugins.exa_connection import exa_plugin_status, SERVER as EXA_OFFICIAL_MCP_URL
+from agent.plugins.exa_controls import exa_contribution
+from agent.plugins.exa_api import router as exa_router, oauth_router as exa_oauth_router
+from agent.plugins.tavily_connection import tavily_plugin_status, SERVER as TAVILY_OFFICIAL_MCP_URL
+from agent.plugins.tavily_controls import tavily_contribution
+from agent.plugins.tavily_api import router as tavily_router, oauth_router as tavily_oauth_router
+from agent.plugins.firecrawl_connection import firecrawl_plugin_status
+from agent.plugins.firecrawl_controls import firecrawl_contribution
+from agent.plugins.firecrawl_api import router as firecrawl_router, oauth_router as firecrawl_oauth_router
+from agent.plugins.apify_connection import apify_plugin_status, SERVER as APIFY_OFFICIAL_MCP_URL
+from agent.plugins.apify_controls import apify_contribution
+from agent.plugins.apify_api import router as apify_router, oauth_router as apify_oauth_router
+from agent.plugins.notion import notion_plugin_status
+from agent.plugins.notion_controls import notion_contribution
+from agent.plugins.notion_api import router as notion_router, oauth_router as notion_oauth_router
+from agent.plugins.airtable import airtable_plugin_status
+from agent.plugins.airtable_controls import airtable_contribution
+from agent.plugins.airtable_api import router as airtable_router, oauth_router as airtable_oauth_router
 from agent.plugins.slack import slack_plugin_status
 from agent.plugins.slack_controls import slack_contribution
 from agent.plugins.slack_api import router as slack_router, oauth_router as slack_oauth_router
@@ -219,6 +241,13 @@ _app_action_runtime.register_plugin_contribution(google_calendar_plugin_contribu
 _app_action_runtime.register_plugin_contribution(product_hunt_contribution())
 _app_action_runtime.register_plugin_contribution(linear_contribution())
 _app_action_runtime.register_plugin_contribution(github_contribution())
+_app_action_runtime.register_plugin_contribution(airtable_contribution())
+_app_action_runtime.register_plugin_contribution(notion_contribution())
+_app_action_runtime.register_plugin_contribution(firecrawl_contribution())
+_app_action_runtime.register_plugin_contribution(apify_contribution())
+_app_action_runtime.register_plugin_contribution(serpapi_contribution())
+_app_action_runtime.register_plugin_contribution(exa_contribution())
+_app_action_runtime.register_plugin_contribution(tavily_contribution())
 _app_action_runtime.register_plugin_contribution(slack_contribution())
 _app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
@@ -1758,6 +1787,7 @@ def _resume_provider_selection(provider: str, context: AppActionContext) -> dict
 
 
 _settings_runtime_actions = SettingsRuntimeActionService(
+    config_writer=_set_env_value,
     memory_store_provider=lambda: _memory_orchestrator.store,
     memory_creator=lambda **values: _memory_orchestrator.save_explicit_memory(**values),
     provider_registry_provider=get_provider_registry,
@@ -6689,21 +6719,17 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
 
     servers.append(_entry(
         "apify",
-        configured=bool(settings.apify_api_token) and settings.apify_mcp_url.startswith("http"),
-        url_or_cmd=settings.apify_mcp_url,
-        notes="Amazon scraper; requires APIFY_API_TOKEN. YouTube now uses SerpAPI.",
+        configured=apify_plugin_status()["configured"],
+        url_or_cmd=APIFY_OFFICIAL_MCP_URL,
+        notes="Official Apify MCP: Actor discovery and runs, datasets, tasks and schedules. OAuth is per user; Actor runs require review.",
     ))
     servers.append(_entry(
-        "serpapi",
-        configured=bool(settings.serpapi_api_key) and settings.serpapi_base_url.startswith("http"),
-        url_or_cmd=settings.serpapi_base_url,
-        notes="Sports Google results plus YouTube search/video/transcript APIs; logs redacted search metadata.",
+        "serpapi", configured=serpapi_plugin_status()["configured"], url_or_cmd=SERPAPI_OFFICIAL_MCP_URL,
+        notes="Official SerpAPI MCP with deferred tool schemas and a user-owned connection.",
     ))
     servers.append(_entry(
-        "exa",
-        configured=bool(settings.exa_api_key) and settings.exa_base_url.startswith("http"),
-        url_or_cmd=settings.exa_base_url,
-        notes="Neural web search provider; second in web_search fallback chain; logs redacted search metadata.",
+        "exa", configured=exa_plugin_status()["configured"], url_or_cmd=EXA_OFFICIAL_MCP_URL,
+        notes="Official Exa MCP with deferred tool schemas and a user-owned connection.",
     ))
     servers.append(_entry(
         "brave",
@@ -6712,16 +6738,14 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         notes="Private index web search provider; third in web_search fallback chain; logs redacted search metadata.",
     ))
     servers.append(_entry(
-        "tavily",
-        configured=bool(settings.tavily_api_key) and settings.tavily_mcp_url.startswith("http"),
-        url_or_cmd=settings.tavily_mcp_url,
-        notes="Shared live web research/search MCP; API key is supplied out-of-band by Vellum.",
+        "tavily", configured=tavily_plugin_status()["configured"], url_or_cmd=TAVILY_OFFICIAL_MCP_URL,
+        notes="Official Tavily MCP with deferred tool schemas and a user-owned connection.",
     ))
     servers.append(_entry(
         "firecrawl",
-        configured=bool(settings.firecrawl_api_key) and bool(settings.firecrawl_mcp_command),
-        url_or_cmd=f"{settings.firecrawl_mcp_command} {settings.firecrawl_mcp_args}",
-        notes="Shared page fetch/crawl/extract MCP; reads URLs and returns LLM-ready content.",
+        configured=firecrawl_plugin_status()["configured"],
+        url_or_cmd="https://mcp.firecrawl.dev/v2/mcp-oauth",
+        notes="Official hosted Firecrawl MCP: full live tool catalog, per-user OAuth or an optional configured API credential.",
     ))
     servers.append(_entry(
         "playwright",
@@ -6745,6 +6769,18 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         configured=bool(settings.obsidian_api_key),
         url_or_cmd=settings.obsidian_mcp_url,
         notes=f"Writes: {settings.obsidian_mcp_allow_writes}, deletes: {settings.obsidian_mcp_allow_destructive}, commands: {settings.obsidian_mcp_allow_commands}.",
+    ))
+    servers.append(_entry(
+        "airtable",
+        configured=airtable_plugin_status()["configured"],
+        url_or_cmd="https://mcp.airtable.com/mcp",
+        notes="Official Airtable MCP. Uses the resources selected during OAuth; changes require review.",
+    ))
+    servers.append(_entry(
+        "notion",
+        configured=notion_plugin_status()["configured"],
+        url_or_cmd="https://mcp.notion.com/mcp",
+        notes="Official Notion MCP. Uses the resources selected during OAuth; changes require review.",
     ))
     servers.append(_entry(
         "slack",
@@ -6824,6 +6860,13 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         product_hunt_plugin_status(),
         linear_plugin_status(),
         github_plugin_status(),
+        airtable_plugin_status(),
+        notion_plugin_status(),
+        firecrawl_plugin_status(),
+        apify_plugin_status(),
+        serpapi_plugin_status(),
+        exa_plugin_status(),
+        tavily_plugin_status(),
         slack_plugin_status(),
         *google_plugin_statuses(),
     ]
@@ -6914,6 +6957,7 @@ async def public_settings() -> dict[str, Any]:
     settings = get_settings()
     return {
         "thread_id": settings.thread_id,
+        "web_search": search_settings().model_dump(),
         "honcho_base_url": settings.honcho_base_url,
         "vault_path": str(settings.obsidian_vault_path),
         "agent_notes_folder": settings.agent_notes_folder,
@@ -7126,6 +7170,19 @@ router.include_router(linear_router)
 router.include_router(linear_oauth_router)
 router.include_router(github_router)
 router.include_router(github_oauth_router)
+router.include_router(airtable_router)
+router.include_router(airtable_oauth_router)
+router.include_router(notion_router)
+router.include_router(notion_oauth_router)
+router.include_router(firecrawl_router)
+router.include_router(firecrawl_oauth_router)
+router.include_router(apify_router)
+router.include_router(apify_oauth_router)
+router.include_router(serpapi_router)
+router.include_router(exa_router)
+router.include_router(exa_oauth_router)
+router.include_router(tavily_router)
+router.include_router(tavily_oauth_router)
 router.include_router(slack_router)
 router.include_router(slack_oauth_router)
 router.include_router(privacy_router)

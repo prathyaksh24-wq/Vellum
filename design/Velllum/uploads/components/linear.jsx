@@ -4,11 +4,16 @@
     const Markdown=window.VellumUI?.AnswerMarkdown;
     const github=review.provider==='GitHub';
     const slack=review.provider==='Slack';
-    return <section className="linear-action-preview" aria-label={github?'Review GitHub change':slack?'Review Slack change':'Review Linear issue'}>
-      <header><img src={github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
+    const airtable=review.provider==='Airtable';
+    const notion=review.provider==='Notion';
+    const searchProvider={SerpAPI:'serpapi',Exa:'exa',Tavily:'tavily'}[review.provider];
+    const firecrawl=review.provider==='Firecrawl';
+    const apify=review.provider==='Apify';
+    return <section className="linear-action-preview" aria-label={searchProvider?'Review '+review.provider+' operation':github?'Review GitHub change':slack?'Review Slack change':airtable?'Review Airtable change':notion?'Review Notion change':firecrawl?'Review Firecrawl operation':apify?'Review Apify operation':'Review Linear issue'}>
+      <header><img src={searchProvider?'/design-uploads/assets/plugins/'+searchProvider+'.png':firecrawl?'/design-uploads/assets/plugins/firecrawl.ico':apify?'/design-uploads/assets/plugins/apify.ico':notion?'/design-uploads/assets/plugins/notion.png':airtable?'/design-uploads/assets/plugins/airtable.svg':github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
       <div className="linear-review-content">
         {review.title&&<h4 className="linear-review-title">{review.title}</h4>}
-        <dl><div><dt>{github?'Repository':'Workspace'}</dt><dd>{review.workspace}</dd></div>{(review.fields||[]).map((field,index)=><div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
+        <dl><div><dt>{github?'Repository':airtable?'Resources':'Workspace'}</dt><dd>{review.workspace}</dd></div>{(review.fields||[]).map((field,index)=><div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
         <div className="linear-review-description"><h4>Description</h4>{review.description?(Markdown?<Markdown text={review.description}/>:<p>{review.description}</p>):<p className="linear-review-empty">{review.description_note||'No description supplied.'}</p>}</div>
       </div>
     </section>;

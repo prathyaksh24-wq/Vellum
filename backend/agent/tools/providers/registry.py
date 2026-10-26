@@ -9,8 +9,7 @@ precedence (per capability, mirroring Hermes):
    (search: serpapi -> exa -> brave -> tavily -> ddgs;
    extract: firecrawl -> tavily -> exa).
 
-An explicitly configured backend is only used when it is registered AND
-available AND supports the requested capability; otherwise the walk applies.
+An explicit backend is exclusive. Only automatic selection walks the fallbacks.
 """
 
 from __future__ import annotations
@@ -60,11 +59,15 @@ def available_providers(capability: str) -> List[WebSearchProvider]:
 def _resolve_backend(settings: Settings, capability: str) -> str:
     explicit = getattr(settings, f"web_{capability}_backend", "") or ""
     if explicit:
-        return explicit.strip().lower()
+        return '' if explicit.strip().lower() == 'auto' else explicit.strip().lower()
     shared = getattr(settings, "web_backend", "") or ""
     if shared:
-        return shared.strip().lower()
+        return '' if shared.strip().lower() == 'auto' else shared.strip().lower()
     return ""
+
+
+def configured_backend(capability: str) -> str:
+    return _resolve_backend(get_settings(), capability)
 
 
 def _eligible(provider: Optional[WebSearchProvider], capability: str) -> bool:
@@ -83,13 +86,8 @@ def get_active_provider(capability: str, settings: Optional[Settings] = None) ->
         provider = get_provider(backend)
         if _eligible(provider, capability):
             return provider
-        if provider is not None:
-            logger.info(
-                "[WEB] configured %s backend '%s' not eligible (registered=%s); using availability walk",
-                capability,
-                backend,
-                provider is not None,
-            )
+        if capability == 'search':
+            return None
     walk = available_providers(capability)
     if walk:
         return walk[0]
@@ -105,15 +103,11 @@ def get_active_extract_provider(settings: Optional[Settings] = None) -> Optional
 
 
 def provider_chain(capability: str, settings: Optional[Settings] = None) -> List[WebSearchProvider]:
-    """Ordered candidate chain for per-call fallback.
-
-    Starts at the active provider (respected even when not first in the
-    preference order), then continues with the remaining available
-    providers in preference order. Used by ``web_search`` so a transient
-    failure on the primary backend falls through to the next one.
-    """
+    """Explicit search selection is exclusive; automatic mode permits fallback."""
     settings = settings if settings is not None else get_settings()
     active = get_active_provider(capability, settings)
+    if capability == 'search' and _resolve_backend(settings, capability):
+        return [active] if active is not None else []
     walk = available_providers(capability)
     if active is None:
         return walk

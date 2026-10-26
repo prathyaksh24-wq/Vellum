@@ -390,9 +390,10 @@ class YoutubeCapabilityService:
 
     def _default_serpapi_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         settings = get_settings()
-        if not settings.serpapi_api_key:
+        from agent.plugins.search_connections import available
+        if not available('serpapi'):
             return []
-        return SerpApiClient(api_key=settings.serpapi_api_key, log_path=settings.serpapi_log_path).youtube_search(
+        return SerpApiClient(log_path=settings.serpapi_log_path).youtube_search(
             query,
             max_results=max_results * 3,
         )
@@ -443,9 +444,10 @@ class YoutubeCapabilityService:
 
     def _default_serpapi_fetch_transcript(self, video_id: str) -> dict[str, Any] | None:
         settings = get_settings()
-        if not settings.serpapi_api_key:
+        from agent.plugins.search_connections import available
+        if not available('serpapi'):
             return None
-        return SerpApiClient(api_key=settings.serpapi_api_key, log_path=settings.serpapi_log_path).youtube_transcript(
+        return SerpApiClient(log_path=settings.serpapi_log_path).youtube_transcript(
             video_id
         )
 

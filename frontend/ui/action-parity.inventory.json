@@ -2,8 +2,8 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 954,
-      "sha256": "96a1076677845dcc60bdffb470e0e5c11d3f54e1e80a93e44777f1e0ef91cca0"
+      "count": 961,
+      "sha256": "0dc400f97ac3dfdbc54ee25cd6da905217b8c0dde718191bfc56f3b62358dc7e"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -80,6 +80,38 @@
     "design/Velllum/uploads/components/slack.jsx": {
       "count": 12,
       "sha256": "5b0f551c9e878325ee1fa8a7075255b861ff13cab0a4c2dc777c0f370d7e85de"
+    },
+    "design/Velllum/uploads/components/airtable.jsx": {
+      "count": 8,
+      "sha256": "88e19fa5f9653b5c6953fc9f665d675e962e5b00aff4376cf583fd9e0abbc5ee"
+    },
+    "design/Velllum/uploads/components/notion.jsx": {
+      "count": 8,
+      "sha256": "d6cfe08a068591af928ece76b1d3f0c2ae60f8bbf8fd832b472c7345e4fd4499"
+    },
+    "design/Velllum/uploads/components/firecrawl.jsx": {
+      "count": 9,
+      "sha256": "e69bf9e6586043fcae926d7b8f693761861ea47a60c713e0930a2b3e18368ffe"
+    },
+    "design/Velllum/uploads/components/apify.jsx": {
+      "count": 9,
+      "sha256": "05f31029fa2b1bb1a7c9dd7dbfbb86ca7160c12c73a2db80c245206b28283984"
+    },
+    "design/Velllum/uploads/components/serpapi.jsx": {
+      "count": 9,
+      "sha256": "775c1184a001fdfe11e5b2d72a8a7c051c003c6da0ad45ca7cee85e5c7991087"
+    },
+    "design/Velllum/uploads/components/exa.jsx": {
+      "count": 8,
+      "sha256": "714ca8ae94fc2c0141f860209f177236f35f51824eba814e9ad035b7a6f6e04c"
+    },
+    "design/Velllum/uploads/components/tavily.jsx": {
+      "count": 9,
+      "sha256": "65bfee36375922521a44ddf1208f014fdf5d0084b4ee35f78233ced8304f8e74"
+    },
+    "design/Velllum/uploads/components/web-search-settings.jsx": {
+      "count": 1,
+      "sha256": "a1fb0869ae3f919b7d9c97464ac725816681234e3c6175829489f65a6ed3e81d"
     }
   },
   "covered": [
@@ -1099,6 +1131,357 @@
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "slack.mcp.execute"
       }
+    },
+    {
+      "surface": "Airtable",
+      "name": "sign in or reconnect",
+      "actionId": "airtable.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/airtable.jsx",
+        "text": "airtable.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Airtable",
+      "name": "cancel sign-in",
+      "actionId": "airtable.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/airtable.jsx",
+        "text": "airtable.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Airtable",
+      "name": "verify connection",
+      "actionId": "airtable.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/airtable.jsx",
+        "text": "airtable.connection.verify"
+      }
+    },
+    {
+      "surface": "Airtable",
+      "name": "review and confirm disconnection",
+      "actionId": "airtable.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/airtable.jsx",
+        "text": "airtable.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Airtable",
+      "name": "review and confirm exact provider changes",
+      "actionId": "airtable.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "airtable.mcp.execute"
+      }
+    },
+    {
+      "surface": "Notion",
+      "name": "sign in or reconnect",
+      "actionId": "notion.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/notion.jsx",
+        "text": "notion.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Notion",
+      "name": "cancel sign-in",
+      "actionId": "notion.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/notion.jsx",
+        "text": "notion.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Notion",
+      "name": "verify connection",
+      "actionId": "notion.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/notion.jsx",
+        "text": "notion.connection.verify"
+      }
+    },
+    {
+      "surface": "Notion",
+      "name": "review and confirm disconnection",
+      "actionId": "notion.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/notion.jsx",
+        "text": "notion.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Notion",
+      "name": "review and confirm exact provider changes",
+      "actionId": "notion.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "notion.mcp.execute"
+      }
+    },
+    {
+      "surface": "Firecrawl",
+      "name": "sign in or reconnect",
+      "actionId": "firecrawl.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/firecrawl.jsx",
+        "text": "firecrawl.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Firecrawl",
+      "name": "cancel sign-in",
+      "actionId": "firecrawl.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/firecrawl.jsx",
+        "text": "firecrawl.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Firecrawl",
+      "name": "verify connection",
+      "actionId": "firecrawl.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/firecrawl.jsx",
+        "text": "firecrawl.connection.verify"
+      }
+    },
+    {
+      "surface": "Firecrawl",
+      "name": "review and confirm disconnection",
+      "actionId": "firecrawl.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/firecrawl.jsx",
+        "text": "firecrawl.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Firecrawl",
+      "name": "review and confirm exact provider changes",
+      "actionId": "firecrawl.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "firecrawl.mcp.execute"
+      }
+    },
+    {
+      "surface": "Firecrawl",
+      "name": "adopt the configured device credential",
+      "actionId": "firecrawl.connection.use_configured",
+      "probe": {
+        "path": "design/Velllum/uploads/components/firecrawl.jsx",
+        "text": "firecrawl.connection.use_configured"
+      }
+    },
+    {
+      "surface": "Apify",
+      "name": "sign in or reconnect",
+      "actionId": "apify.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/apify.jsx",
+        "text": "apify.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Apify",
+      "name": "cancel sign-in",
+      "actionId": "apify.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/apify.jsx",
+        "text": "apify.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Apify",
+      "name": "verify connection",
+      "actionId": "apify.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/apify.jsx",
+        "text": "apify.connection.verify"
+      }
+    },
+    {
+      "surface": "Apify",
+      "name": "review and confirm disconnection",
+      "actionId": "apify.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/apify.jsx",
+        "text": "apify.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Apify",
+      "name": "review and confirm exact provider changes",
+      "actionId": "apify.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "apify.mcp.execute"
+      }
+    },
+    {
+      "surface": "Apify",
+      "name": "adopt the configured device credential",
+      "actionId": "apify.connection.use_configured",
+      "probe": {
+        "path": "design/Velllum/uploads/components/apify.jsx",
+        "text": "apify.connection.use_configured"
+      }
+    },
+    {
+      "surface": "SerpAPI",
+      "name": "verify connection",
+      "actionId": "serpapi.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/serpapi.jsx",
+        "text": "serpapi.connection.verify"
+      }
+    },
+    {
+      "surface": "SerpAPI",
+      "name": "review and confirm disconnection",
+      "actionId": "serpapi.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/serpapi.jsx",
+        "text": "serpapi.connection.disconnect"
+      }
+    },
+    {
+      "surface": "SerpAPI",
+      "name": "review and confirm exact provider changes",
+      "actionId": "serpapi.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "serpapi.mcp.execute"
+      }
+    },
+    {
+      "surface": "SerpAPI",
+      "name": "adopt the configured device credential",
+      "actionId": "serpapi.connection.use_configured",
+      "probe": {
+        "path": "design/Velllum/uploads/components/serpapi.jsx",
+        "text": "serpapi.connection.use_configured"
+      }
+    },
+    {
+      "surface": "Exa",
+      "name": "sign in or reconnect",
+      "actionId": "exa.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/exa.jsx",
+        "text": "exa.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Exa",
+      "name": "cancel sign-in",
+      "actionId": "exa.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/exa.jsx",
+        "text": "exa.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Exa",
+      "name": "verify connection",
+      "actionId": "exa.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/exa.jsx",
+        "text": "exa.connection.verify"
+      }
+    },
+    {
+      "surface": "Exa",
+      "name": "review and confirm disconnection",
+      "actionId": "exa.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/exa.jsx",
+        "text": "exa.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Exa",
+      "name": "review and confirm exact provider changes",
+      "actionId": "exa.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "exa.mcp.execute"
+      }
+    },
+    {
+      "surface": "Tavily",
+      "name": "sign in or reconnect",
+      "actionId": "tavily.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/tavily.jsx",
+        "text": "tavily.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Tavily",
+      "name": "cancel sign-in",
+      "actionId": "tavily.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/tavily.jsx",
+        "text": "tavily.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Tavily",
+      "name": "verify connection",
+      "actionId": "tavily.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/tavily.jsx",
+        "text": "tavily.connection.verify"
+      }
+    },
+    {
+      "surface": "Tavily",
+      "name": "review and confirm disconnection",
+      "actionId": "tavily.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/tavily.jsx",
+        "text": "tavily.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Tavily",
+      "name": "review and confirm exact provider changes",
+      "actionId": "tavily.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "tavily.mcp.execute"
+      }
+    },
+    {
+      "surface": "Tavily",
+      "name": "adopt the configured device credential",
+      "actionId": "tavily.connection.use_configured",
+      "probe": {
+        "path": "design/Velllum/uploads/components/tavily.jsx",
+        "text": "tavily.connection.use_configured"
+      }
+    },
+    {
+      "surface": "SerpAPI",
+      "name": "connect a UI-staged key",
+      "actionId": "serpapi.connection.connect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/serpapi.jsx",
+        "text": "serpapi.connection.connect"
+      }
+    },
+    {
+      "surface": "Web search",
+      "name": "choose preferred provider",
+      "actionId": "settings.web_search.set",
+      "probe": {
+        "path": "design/Velllum/uploads/components/web-search-settings.jsx",
+        "text": "settings.web_search.set"
+      }
     }
   ],
   "exemptions": [
@@ -1153,6 +1536,38 @@
     {
       "scope": "Slack app-identity drafts, manifest disclosure/copying, tool metadata browsing/refresh and filtering, OAuth continuation and post-receipt catalog refresh",
       "reason": "Unsaved public identifier drafts, explicit clipboard copy of a public manifest, provider reads, navigation and in-view presentation only. Saving registration and OAuth lifecycle dispatch typed Slack connection actions. Review decisions use existing confirmation tokens; confirmed provider writes retain slack.mcp.execute."
+    },
+    {
+      "scope": "Airtable tool metadata browsing, filters, OAuth continuation and status polling",
+      "reason": "Read-only metadata and transient presentation only. OAuth lifecycle, verification, disconnection and provider changes dispatch the typed Airtable actions; review decisions retain existing confirmation tokens."
+    },
+    {
+      "scope": "Notion catalog browsing, in-view filters, OAuth continuation and flow polling",
+      "reason": "Read-only metadata and transient presentation. Connection lifecycle uses typed Notion actions; changes retain exact-input review and canonical confirmation tokens."
+    },
+    {
+      "scope": "Firecrawl tool metadata, filters and OAuth status polling",
+      "reason": "Read-only discovery and transient presentation; saved connection lifecycle and provider changes use the typed App Actions and canonical reviews."
+    },
+    {
+      "scope": "Apify tool metadata, filters and OAuth status polling",
+      "reason": "Read-only discovery and transient presentation; saved connection lifecycle and provider changes use the typed App Actions and canonical reviews."
+    },
+    {
+      "scope": "SerpAPI metadata, schema browser, tool filters and OAuth polling",
+      "reason": "Read-only discovery and transient presentation; connection changes and provider operations use typed App Actions."
+    },
+    {
+      "scope": "Exa metadata, schema browser, tool filters and OAuth polling",
+      "reason": "Read-only discovery and transient presentation; connection changes and provider operations use typed App Actions."
+    },
+    {
+      "scope": "Tavily metadata, schema browser, tool filters and OAuth polling",
+      "reason": "Read-only discovery and transient presentation; connection changes and provider operations use typed App Actions."
+    },
+    {
+      "scope": "SerpAPI secret staging and discard",
+      "reason": "Guarded UI-only transport returns an opaque expiring reference; the connection App Action verifies and persists the credential. Values never enter action arguments."
     }
   ],
   "deferred": [

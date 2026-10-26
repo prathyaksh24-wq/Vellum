@@ -40,6 +40,15 @@ class PluginMcpRuntimeError(ValueError):
     pass
 
 
+def operation_read_only(plugin_id, tool, arguments):
+    """Exa publishes one tool for starting research and polling its existing run."""
+    if (plugin_id == 'exa' and tool.get('name') == 'agent_run'
+            and set(arguments) == {'runId'} and isinstance(arguments.get('runId'), str)
+            and arguments['runId'].strip()):
+        return True
+    return bool(tool.get('read_only'))
+
+
 @dataclass(frozen=True)
 class PluginMcpConnector:
     plugin_id: str
@@ -203,6 +212,54 @@ class PluginMcpRuntime:
 
     async def _list_tools(self, connector):
         plugin_id,connector_name=connector.plugin_id,connector.name
+        if plugin_id == 'serpapi' and connector_name == 'serpapi':
+            from agent.plugins.serpapi_connection import serpapi_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = serpapi_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The SerpAPI catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'exa' and connector_name == 'exa':
+            from agent.plugins.exa_connection import exa_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = exa_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Exa catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'tavily' and connector_name == 'tavily':
+            from agent.plugins.tavily_connection import tavily_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = tavily_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Tavily catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == "firecrawl" and connector_name == "firecrawl" and connector.url == "https://mcp.firecrawl.dev/v2/mcp-oauth":
+            from agent.plugins.firecrawl_connection import firecrawl_service
+            service = firecrawl_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Firecrawl catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "apify" and connector_name == "apify" and connector.url == "https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,report-problem,apify/rag-web-browser,apify/web-fetch&telemetry-enabled=false":
+            from agent.plugins.apify_connection import apify_service
+            service = apify_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Apify catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "notion" and connector_name == "notion" and connector.url == "https://mcp.notion.com/mcp":
+            from agent.plugins.notion import notion_service
+            service = notion_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Notion catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "airtable" and connector_name == "airtable" and connector.url == "https://mcp.airtable.com/mcp":
+            from agent.plugins.airtable import airtable_service
+            service = airtable_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Airtable catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
         if plugin_id == "slack" and connector_name == "slack" and connector.url == "https://mcp.slack.com/mcp":
             from agent.plugins.slack import slack_service
             service = slack_service()
@@ -263,7 +320,7 @@ class PluginMcpRuntime:
         if tool is None:
             raise PluginMcpRuntimeError("Plugin MCP tool is not exposed by this connector.")
         clean_arguments = _privacy_safe_arguments(arguments)
-        if not tool.get("read_only"):
+        if not operation_read_only(plugin_id, tool, clean_arguments):
             operation = PluginMcpOperation.from_arguments(
                 plugin_id=plugin_id,
                 connector=connector_name,
@@ -359,6 +416,79 @@ def _connector(
                 headers,auth={},stored_auth(service,connection=data)
             except LinearError:
                 headers, missing = {}, ("Linear connection",)
+        if payload.get("credential_provider") == 'serpapi':
+            from agent.plugins.serpapi_connection import serpapi_service, SERVER
+            if plugin_id != 'serpapi' or name != 'serpapi' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = serpapi_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("SerpAPI connection",)
+        if payload.get("credential_provider") == 'exa':
+            from agent.plugins.exa_connection import exa_service, SERVER
+            if plugin_id != 'exa' or name != 'exa' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = exa_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Exa connection",)
+        if payload.get("credential_provider") == 'tavily':
+            from agent.plugins.tavily_connection import tavily_service, SERVER
+            if plugin_id != 'tavily' or name != 'tavily' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = tavily_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Tavily connection",)
+        if payload.get("credential_provider") == "firecrawl":
+            if plugin_id != "firecrawl" or name != "firecrawl" or url != "https://mcp.firecrawl.dev/v2/mcp-oauth":
+                raise PluginMcpRuntimeError("Firecrawl authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.firecrawl_connection import FirecrawlError, firecrawl_service
+            try:
+                service = firecrawl_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except FirecrawlError:
+                headers, missing = {}, ("Firecrawl OAuth connection",)
+        if payload.get("credential_provider") == "apify":
+            if plugin_id != "apify" or name != "apify" or url != "https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,report-problem,apify/rag-web-browser,apify/web-fetch&telemetry-enabled=false":
+                raise PluginMcpRuntimeError("Apify authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.apify_connection import ApifyError, apify_service
+            try:
+                service = apify_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except ApifyError:
+                headers, missing = {}, ("Apify OAuth connection",)
+        if payload.get("credential_provider") == "notion":
+            if plugin_id != "notion" or name != "notion" or url != "https://mcp.notion.com/mcp":
+                raise PluginMcpRuntimeError("Notion authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.notion import NotionError, notion_service
+            try:
+                service = notion_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except NotionError:
+                headers, missing = {}, ("Notion OAuth connection",)
+        if payload.get("credential_provider") == "airtable":
+            if plugin_id != "airtable" or name != "airtable" or url != "https://mcp.airtable.com/mcp":
+                raise PluginMcpRuntimeError("Airtable authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.airtable import AirtableError, airtable_service
+            try:
+                service = airtable_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except AirtableError:
+                headers, missing = {}, ("Airtable OAuth connection",)
         if payload.get("credential_provider") == "slack":
             if plugin_id != "slack" or name != "slack" or url != "https://mcp.slack.com/mcp":
                 raise PluginMcpRuntimeError("Slack authorization is restricted to its official MCP endpoint.")

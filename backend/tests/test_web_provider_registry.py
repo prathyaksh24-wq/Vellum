@@ -76,16 +76,17 @@ def test_per_capability_overrides_shared(monkeypatch):
     install_registry(monkeypatch, serpapi=serpapi)
 
     settings = fake_settings(web_backend="serpapi", web_search_backend="exa")
-    # exa unavailable in registry -> falls back to walk -> serpapi
-    assert registry.get_active_search_provider(settings).name == "serpapi"
+    # Explicit unavailable Exa must never send the query to SerpAPI.
+    assert registry.get_active_search_provider(settings) is None
+    assert registry.provider_chain("search", settings) == []
 
 
-def test_unknown_backend_falls_back_to_walk(monkeypatch):
+def test_unknown_backend_reports_unavailable(monkeypatch):
     serpapi = FakeProvider("serpapi", available=True)
     install_registry(monkeypatch, serpapi=serpapi)
 
     settings = fake_settings(web_search_backend="bogus")
-    assert registry.get_active_search_provider(settings).name == "serpapi"
+    assert registry.get_active_search_provider(settings) is None
 
 
 def test_extract_walk_skips_search_only_providers(monkeypatch):
@@ -123,7 +124,7 @@ def test_provider_chain_starts_at_active_provider(monkeypatch):
     settings = fake_settings(web_search_backend="brave")
     chain = registry.provider_chain("search", settings)
 
-    assert [p.name for p in chain] == ["brave", "serpapi", "exa"]
+    assert [p.name for p in chain] == ["brave"]
 
 
 def test_register_provider_is_last_writer_wins(monkeypatch):
@@ -132,3 +133,9 @@ def test_register_provider_is_last_writer_wins(monkeypatch):
     registry.register_provider(replacement)
 
     assert registry.get_provider("serpapi") is replacement
+
+
+def test_automatic_selection_overrides_shared_and_keeps_fallbacks(monkeypatch):
+    install_registry(monkeypatch, serpapi=FakeProvider('serpapi'), exa=FakeProvider('exa'))
+    settings = fake_settings(web_backend='exa', web_search_backend='auto')
+    assert [p.name for p in registry.provider_chain('search', settings)] == ['serpapi', 'exa']

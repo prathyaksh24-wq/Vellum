@@ -516,12 +516,12 @@ def test_sports_agent_prefers_web_over_stale_latest_sports_note(tmp_path):
     assert list((vault_root / "Library" / "Sports").rglob("*-sports-response.md")) == []
 
 
-def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypatch, tmp_path):
+def test_sports_agent_uses_fresh_serpapi_search_when_selected(monkeypatch, tmp_path):
     calls = {}
 
     class FakeSerpApiClient:
-        def __init__(self, api_key, log_path):
-            calls["init"] = {"api_key": api_key, "log_path": log_path}
+        def __init__(self, *, log_path):
+            calls["init"] = {"log_path": log_path}
 
         def fresh_google_search_text(self, query, num):
             calls["search"] = {"query": query, "num": num}
@@ -532,6 +532,8 @@ def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypat
             )
 
     monkeypatch.setattr("agent.agents.sports.SerpApiClient", FakeSerpApiClient)
+    monkeypatch.setattr("agent.tools.providers.registry.get_active_search_provider",
+                        lambda: type("Provider", (), {"name": "serpapi"})())
     monkeypatch.setattr(
         "agent.agents.sports.get_settings",
         lambda: type(
@@ -545,7 +547,7 @@ def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypat
     response = agent.answer("when is the next NBA game?")
 
     assert response.status == "answered"
-    assert calls["init"]["api_key"] == "serp-token"
+    assert calls["init"]["log_path"] == tmp_path / "serpapi.jsonl"
     assert calls["search"]["num"] == 5
     assert "next NBA game" in calls["search"]["query"]
     assert response.sources[0].path_or_url == "https://www.nba.com/schedule"
