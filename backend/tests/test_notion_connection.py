@@ -140,14 +140,14 @@ def test_reads_cannot_execute_writes_and_review_is_bound_to_exact_inputs(service
     connect(service)
     runtime = SimpleNamespace(approval_store=SimpleNamespace(request=lambda _: {'id': 'fixture-approval'}))
     adapter = NotionMcpAdapter(service, runtime)
-    operation = NotionMcpOperation(tool_name='notion-create-pages', arguments={'parent': {'page_id': 'fixture-parent-0123456789'}, 'pages': []})
+    operation = NotionMcpOperation(tool_name='notion-create-pages', arguments={'parent': {'page_id': 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'}, 'pages': []})
     with pytest.raises(NotionError, match='changes data'):
         adapter.read(operation)
     with pytest.raises(NotionError, match='confirm'):
         adapter.execute(operation)
     binding = adapter.prepare(operation)
     assert binding['preview']['provider'] == 'Notion' and binding['preview']['workspace'] == 'Fixture workspace'
-    changed = operation.model_copy(update={'arguments': {'parent': {'page_id': 'fixture-other-parent-0123456789'}, 'pages': []}})
+    changed = operation.model_copy(update={'arguments': {'parent': {'page_id': 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff'}, 'pages': []}})
     with pytest.raises(NotionError, match='changed'):
         adapter.execute(changed, binding=binding, confirmed=True)
     service.save({**service.load(), 'revision': 'a-new-authorization'})
@@ -188,7 +188,7 @@ def test_workspace_switch_invalidates_prepared_write_even_for_the_same_person(se
     connect(service)
     runtime = SimpleNamespace(approval_store=SimpleNamespace(request=lambda _: {'id': 'fixture-approval'}))
     adapter = NotionMcpAdapter(service, runtime)
-    operation = NotionMcpOperation(tool_name='notion-create-pages', arguments={'parent': {'page_id': 'fixture-parent-0123456789'}, 'pages': []})
+    operation = NotionMcpOperation(tool_name='notion-create-pages', arguments={'parent': {'page_id': 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'}, 'pages': []})
     binding = adapter.prepare(operation)
     service.save({**service.load(), 'workspace_id': 'fixture-different-workspace'})
     with pytest.raises(NotionError, match='changed'):
@@ -205,7 +205,7 @@ def test_async_write_is_pending_until_provider_completion(service):
         call_tool=call,
     )
     adapter = NotionMcpAdapter(service, runtime)
-    operation = NotionMcpOperation(tool_name='notion-create-pages', arguments={'parent': {'page_id': 'fixture-parent-0123456789'}, 'pages': []})
+    operation = NotionMcpOperation(tool_name='notion-create-pages', arguments={'parent': {'page_id': 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'}, 'pages': []})
     result = adapter.execute(operation, binding=adapter.prepare(operation), confirmed=True)
     assert result['pending'] is True and result['task_id'] == 'fixture-task'
     assert 'before reporting completion' in result['_message']

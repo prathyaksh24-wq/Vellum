@@ -49,3 +49,29 @@ Earlier implementation notes remain historical evidence:
 [Airtable](airtable-2026-10-26.md), [Notion](notion-2026-10-26.md),
 [Firecrawl/Apify](firecrawl-apify-2026-10-26.md),
 [search providers](search-connectors-2026-10-26.md).
+
+## PR #231 hosted CI correction
+
+Inspected CI run 40285438754 at head f550dbc. Three of six jobs failed:
+backend tests (4 failed, 3621 passed, 28 skipped), frontend Vitest (2 failed,
+571 passed), and the Python audit's exception-expiry guard. Production build,
+secret scanning, npm audit and dependency review passed. No manual CI rerun
+was dispatched.
+
+The three Notion review tests used a synthetic parent ID with ten consecutive
+digits that the privacy boundary scrubbed. Use realistic UUID fixtures instead;
+privacy classification and exact-operation checks are unchanged. The sports
+fixture now explicitly selects SerpAPI and matches its credential-owning client's
+keyword-only construction. Registry-selection behavior retains separate tests.
+The Apify and Firecrawl copy assertions match "official hosted MCP server".
+
+Rechecked PyPI ChromaDB release metadata and all four listed GitHub advisories
+on 2026-10-26. Latest is still 1.5.9 and first_patched_version remains null for
+all four. Source still constructs only embedded PersistentClient/EphemeralClient
+instances; no Chroma HTTP client, server or trust_remote_code use was found.
+Renewed the same exceptions through 2026-11-09 without adding exemptions or
+weakening the expiry/audit gates. This is not a claim of a fresh full audit.
+
+Python/JavaScript syntax and scoped whitespace checks cover the corrections.
+No local test suites or builds were run. The next push starts normal hosted CI;
+its result is separate from these source checks.

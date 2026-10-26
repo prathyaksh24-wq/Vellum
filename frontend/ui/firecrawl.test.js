@@ -26,7 +26,7 @@ beforeEach(()=>{
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();});
 test('shows Firecrawl’s real logo and OAuth connection without a credential input',async()=>{
   await render();expect(button('Sign in with Firecrawl')).toBeTruthy();expect(host.querySelector('input[type=password]')).toBeNull();
-  expect(host.textContent).toContain('official MCP server');expect(host.textContent).toContain('Each user signs in with their own Firecrawl account.');
+  expect(host.textContent).toContain('official hosted MCP server');expect(host.textContent).toContain('Each user signs in with their own Firecrawl account.');
   expect(host.querySelector('img[alt=Firecrawl]').getAttribute('src')).toContain('assets/plugins/firecrawl.ico');
 });
 test('reserves a popup before the asynchronous OAuth request and navigates it afterward',async()=>{

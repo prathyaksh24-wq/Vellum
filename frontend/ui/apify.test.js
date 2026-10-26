@@ -26,7 +26,7 @@ beforeEach(()=>{
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();});
 test('shows Apify’s real logo and OAuth connection without a credential input',async()=>{
   await render();expect(button('Sign in with Apify')).toBeTruthy();expect(host.querySelector('input[type=password]')).toBeNull();
-  expect(host.textContent).toContain('official MCP server');expect(host.textContent).toContain('Each user signs in with their own Apify account.');
+  expect(host.textContent).toContain('official hosted MCP server');expect(host.textContent).toContain('Each user signs in with their own Apify account.');
   expect(host.querySelector('img[alt=Apify]').getAttribute('src')).toContain('assets/plugins/apify.ico');
 });
 test('reserves a popup before the asynchronous OAuth request and navigates it afterward',async()=>{
