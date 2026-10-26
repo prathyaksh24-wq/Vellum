@@ -115,7 +115,7 @@ def test_credential_validation_response_redacts_input(connection,monkeypatch):
     from agent.plugins import hubspot_api
     monkeypatch.setattr(hubspot_api,'hubspot_service',lambda:connection)
     app = FastAPI();app.include_router(hubspot_api.router,prefix='/api')
-    with TestClient(app,base_url='http://127.0.0.1:8000') as client:
+    with TestClient(app,base_url='http://127.0.0.1:8000',client=('127.0.0.1',50000)) as client:
         response = client.post('/api/plugins/hubspot/credentials/stage',headers={
             'Origin':'http://127.0.0.1:5173','X-Vellum-Accounts':'1'},
             json={'client_id':'invalid id','client_secret':'fixture-secret-must-not-echo'})
