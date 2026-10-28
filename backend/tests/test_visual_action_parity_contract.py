@@ -64,6 +64,14 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     runtime.register_plugin_contribution(tavily_contribution())
     from agent.plugins.firecrawl_controls import firecrawl_contribution
     runtime.register_plugin_contribution(firecrawl_contribution())
+    from agent.plugins.asana_controls import asana_contribution
+    runtime.register_plugin_contribution(asana_contribution())
+    from agent.plugins.swiggy_controls import swiggy_contribution
+    runtime.register_plugin_contribution(swiggy_contribution())
+    from agent.plugins.zomato_controls import zomato_contribution
+    runtime.register_plugin_contribution(zomato_contribution())
+    from agent.plugins.district_controls import district_contribution
+    runtime.register_plugin_contribution(district_contribution())
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

@@ -33,11 +33,14 @@ def test_reasoning_composer_exposes_codex_style_categorized_slash_menu() -> None
     assert 'role="listbox"' in ui_source
     assert "onOpenPlugins" in ui_source
     assert "plugin-manage" in ui_source
-    assert "[['plugins','Plugins'],['apps','Apps'],['mcps','MCP servers'],['skills','Skills']]" in ui_source
-    assert 'aria-label="Plugin contents"' in ui_source
-    assert 'aria-label="Plugin information"' in ui_source
-    assert "detailPlugin.source" in ui_source
-    assert "detailPlugin.mcp_connectors.length" in ui_source
+    workspace = (ROOT / "design" / "Velllum" / "uploads" / "components" / "plugin-workspace.jsx").read_text(encoding="utf-8")
+    assert 'src="components/plugin-workspace.jsx"' in ui_source
+    for key, label in [('plugins', 'Plugins'), ('apps', 'Apps'), ('mcps', 'MCPs'), ('skills', 'Skills')]:
+        assert f"['{key}', '{label}']" in workspace
+    assert 'aria-label="MCP servers"' in workspace
+    assert 'aria-label="Plugin information"' in workspace
+    assert "p.source" in workspace
+    assert "p.mcp_connectors" in workspace
     assert "onOpenSkills={() => nav('skills')}" in ui_source
 
 

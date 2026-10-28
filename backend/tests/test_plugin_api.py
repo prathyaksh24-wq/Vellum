@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import asyncio
 
 from fastapi.testclient import TestClient
 
@@ -12,6 +13,16 @@ from agent.plugins.contributions import (
     PluginSurfaceContribution,
 )
 from agent.plugins.registry import PluginRegistry
+
+
+def test_plugin_catalog_does_not_run_adjacent_service_health(monkeypatch):
+    def unrelated_health(*args, **kwargs):
+        raise AssertionError('Plugin browsing must not open the vector store or probe Honcho')
+
+    monkeypatch.setattr(api, 'mcp_health', unrelated_health)
+    monkeypatch.setattr(api, '_vector_health', unrelated_health)
+    monkeypatch.setattr(api, '_plugin_catalog', lambda servers: [{'id': 'fixture'}])
+    assert asyncio.run(api.list_plugins()) == {'plugins': [{'id': 'fixture'}]}
 
 
 def _write_plugin(root: Path, plugin_id: str, *, required: bool = False) -> None:

@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function SupabaseConnection({enabled=true,onChanged}) {
+  function SupabaseConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('supabase_oauth');return id?{flow_id:id,status:'pending',message:'Checking Supabase sign-in…'}:null;});
@@ -36,6 +36,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.supabaseMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <section className="product-hunt-workspace supabase-workspace" aria-label="Supabase connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Supabase':'Connect Supabase'}</h2><p>{status?.message||'Checking Supabase connection…'}</p></div><img src="/design-uploads/assets/plugins/supabase.svg" alt="Supabase" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Manage Supabase projects, database tables and SQL, migrations, Edge Functions, branches and Storage through the official MCP server. Changes require a readable review. Supabase permissions, plan limits and any required server confirmations still apply.</p>

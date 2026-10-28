@@ -6,6 +6,10 @@
     const slack=review.provider==='Slack';
     const airtable=review.provider==='Airtable';
     const notion=review.provider==='Notion';
+    const district=review.provider==='District';
+    const zomato=review.provider==='Zomato';
+    const swiggy=review.provider?.startsWith('Swiggy')||review.provider==='Instamart';
+    const asana=review.provider==='Asana';
     const hubspot=review.provider==='HubSpot';
     const clickup=review.provider==='ClickUp';
     const vercel=review.provider==='Vercel';
@@ -13,8 +17,8 @@
     const searchProvider={SerpAPI:'serpapi',Exa:'exa',Tavily:'tavily'}[review.provider];
     const firecrawl=review.provider==='Firecrawl';
     const apify=review.provider==='Apify';
-    return <section className="linear-action-preview" aria-label={hubspot?'Review HubSpot operation':clickup?'Review ClickUp operation':vercel?'Review Vercel operation':supabase?'Review Supabase operation':searchProvider?'Review '+review.provider+' operation':github?'Review GitHub change':slack?'Review Slack change':airtable?'Review Airtable change':notion?'Review Notion change':firecrawl?'Review Firecrawl operation':apify?'Review Apify operation':'Review Linear issue'}>
-      <header><img className={vercel?"conn-logo-img brand-monochrome":undefined} src={hubspot?'/design-uploads/assets/plugins/hubspot.svg':clickup?'/design-uploads/assets/plugins/clickup.png':vercel?'/design-uploads/assets/plugins/vercel.svg':supabase?'/design-uploads/assets/plugins/supabase.svg':searchProvider?'/design-uploads/assets/plugins/'+searchProvider+'.png':firecrawl?'/design-uploads/assets/plugins/firecrawl.ico':apify?'/design-uploads/assets/plugins/apify.ico':notion?'/design-uploads/assets/plugins/notion.png':airtable?'/design-uploads/assets/plugins/airtable.svg':github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
+    return <section className="linear-action-preview" aria-label={district?'Review District operation':zomato?'Review Zomato operation':swiggy?'Review Swiggy operation':asana?'Review Asana operation':hubspot?'Review HubSpot operation':clickup?'Review ClickUp operation':vercel?'Review Vercel operation':supabase?'Review Supabase operation':searchProvider?'Review '+review.provider+' operation':github?'Review GitHub change':slack?'Review Slack change':airtable?'Review Airtable change':notion?'Review Notion change':firecrawl?'Review Firecrawl operation':apify?'Review Apify operation':'Review Linear issue'}>
+      <header><img className={vercel?"conn-logo-img brand-monochrome":undefined} src={district?'/design-uploads/assets/plugins/district.png':zomato?'/design-uploads/assets/plugins/zomato.png':swiggy?'/design-uploads/assets/plugins/'+(review.provider==='Instamart'?'swiggy-instamart.png':'swiggy.png'):asana?'/design-uploads/assets/plugins/asana.svg':hubspot?'/design-uploads/assets/plugins/hubspot.svg':clickup?'/design-uploads/assets/plugins/clickup.png':vercel?'/design-uploads/assets/plugins/vercel.svg':supabase?'/design-uploads/assets/plugins/supabase.svg':searchProvider?'/design-uploads/assets/plugins/'+searchProvider+'.png':firecrawl?'/design-uploads/assets/plugins/firecrawl.ico':apify?'/design-uploads/assets/plugins/apify.ico':notion?'/design-uploads/assets/plugins/notion.png':airtable?'/design-uploads/assets/plugins/airtable.svg':github?'/design-uploads/assets/plugins/github.png':slack?'/design-uploads/assets/plugins/slack.png':'/design-uploads/assets/plugins/linear.png'} width="22" height="22" alt=""/><h3>{review.heading}</h3></header>
       <div className="linear-review-content">
         {review.title&&<h4 className="linear-review-title">{review.title}</h4>}
         <dl><div><dt>{github?'Repository':airtable?'Resources':'Workspace'}</dt><dd>{review.workspace}</dd></div>{(review.fields||[]).map((field,index)=><div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
@@ -22,7 +26,7 @@
       </div>
     </section>;
   }
-  function LinearWorkspace({enabled=true,onStatus}) {
+  function LinearWorkspace({enabled=true,onStatus,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null);
     const [busy,setBusy]=useState(false),[error,setError]=useState(''),[pending,setPending]=useState(null),[result,setResult]=useState(null);
@@ -62,6 +66,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const catalog=await api.plugins.linearMcpTools();if(mounted.current)setTools(catalog.tools);}catch(err){if(mounted.current)setError(err.message);}finally{await refresh();if(mounted.current)setBusy(false);}};
     const readIssues=async()=>{setBusy(true);setError('');try{setResult(await api.plugins.linearMcpRead({tool_name:'list_issues',arguments:{limit:5,orderBy:'createdAt',fields:['id','title','url']}}));}catch(err){setError(err.message);}finally{await refresh();setBusy(false);}};
     const connected=!!status?.connected&&enabled;
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect:signIn,decide,flow:oauth});
     return <section className="product-hunt-workspace linear-workspace" aria-label="Linear connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Linear':'Connect Linear'}</h2><p>{status?.message||'Checking connection…'}</p></div><span className="product-hunt-access">Official MCP</span></div>
       <p className="product-hunt-privacy">Your authorization is saved in this device’s system credential store and sent only to Linear. Reads use your workspace access; every write requires review and confirmation.</p>

@@ -1983,6 +1983,20 @@ class AppActionRuntime:
                         message=binding['message'], binding=binding)
                     receipt.result['serpapi_review'] = binding['preview']
                     return receipt
+                if request.action_id == 'asana.mcp.execute':
+                    from agent.contracts.asana_connection import AsanaMcpOperation
+                    from agent.plugins.asana_mcp import AsanaMcpAdapter
+                    try:
+                        binding = AsanaMcpAdapter().prepare(AsanaMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='ASANA_REVIEW_FAILED',
+                            message='Asana could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='asana_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['asana_review'] = binding['preview']
+                    return receipt
                 if request.action_id == 'hubspot.mcp.execute':
                     from agent.contracts.hubspot_connection import HubSpotMcpOperation
                     from agent.plugins.hubspot_mcp import HubSpotMcpAdapter
@@ -2010,6 +2024,48 @@ class AppActionRuntime:
                         target_kind='clickup_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
                     receipt.result['clickup_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'swiggy.mcp.execute':
+                    from agent.contracts.swiggy_connection import SwiggyMcpOperation
+                    from agent.plugins.swiggy_mcp import SwiggyMcpAdapter
+                    try:
+                        binding = SwiggyMcpAdapter().prepare(SwiggyMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='SWIGGY_REVIEW_FAILED',
+                            message='Swiggy could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='swiggy_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['swiggy_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'zomato.mcp.execute':
+                    from agent.contracts.zomato_connection import ZomatoMcpOperation
+                    from agent.plugins.zomato_mcp import ZomatoMcpAdapter
+                    try:
+                        binding = ZomatoMcpAdapter().prepare(ZomatoMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='ZOMATO_REVIEW_FAILED',
+                            message='Zomato could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='zomato_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['zomato_review'] = binding['preview']
+                    return receipt
+                if request.action_id == 'district.mcp.execute':
+                    from agent.contracts.district_connection import DistrictMcpOperation
+                    from agent.plugins.district_mcp import DistrictMcpAdapter
+                    try:
+                        binding = DistrictMcpAdapter().prepare(DistrictMcpOperation.model_validate(request.arguments))
+                    except (ValueError, RuntimeError):
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code='DISTRICT_REVIEW_FAILED',
+                            message='District could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                    receipt = self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='district_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
+                        message=binding['message'], binding=binding)
+                    receipt.result['district_review'] = binding['preview']
                     return receipt
                 if request.action_id == 'vercel.mcp.execute':
                     from agent.contracts.vercel_connection import VercelMcpOperation
@@ -4530,6 +4586,12 @@ class AppActionRuntime:
             UISurfaceDefinition(
                 reference="sidebar", owner="workspace-layout", title="Sidebar",
                 aliases=["sidebar", "left sidebar"],
+                default_presentation=SurfacePresentation(visible=True, location="left"),
+                supported_locations=["left"],
+            ),
+            UISurfaceDefinition(
+                reference="plugin-sidebar", owner="workspace-layout", title="Plugin sidebar",
+                aliases=["plugin sidebar", "plugins sidebar", "customize sidebar"],
                 default_presentation=SurfacePresentation(visible=True, location="left"),
                 supported_locations=["left"],
             ),

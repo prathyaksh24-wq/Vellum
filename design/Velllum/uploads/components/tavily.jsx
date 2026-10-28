@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function TavilyConnection({enabled=true,onChanged}) {
+  function TavilyConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('tavily_oauth');return id?{flow_id:id,status:'pending',message:'Checking Tavily sign-in…'}:null;});
@@ -36,6 +36,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.tavilyMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <><window.VellumUI.WebSearchSettings/><section className="product-hunt-workspace tavily-workspace" aria-label="Tavily connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Tavily':'Connect Tavily'}</h2><p>{status?.message||'Checking Tavily connection…'}</p></div><img src="/design-uploads/assets/plugins/tavily.png" alt="Tavily" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Search, extract pages, map and crawl sites, and research topics through Tavily’s official MCP server. Each user connects their own account with OAuth. Provider plans and usage charges apply.</p>

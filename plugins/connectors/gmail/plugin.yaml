@@ -1,7 +1,7 @@
 id: gmail
 name: Gmail
 type: connector
-category: Connectors
+category: CRM & Communication
 version: 1.0.0
 default_enabled: false
 description: Read, compose, send, edit and delete email, drafts, labels and other published Gmail operations with reviewed changes.

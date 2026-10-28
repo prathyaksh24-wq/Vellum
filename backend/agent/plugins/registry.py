@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 from agent.plugins.portable import PortablePluginManifest, discover_portable_plugins
 from agent.plugins.sources import CodexPluginSource, LooseSkillBundleSource, PluginSourceRecord
+from agent.plugins.categories import plugin_category
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -74,7 +75,7 @@ class PluginRegistry:
         if self._read_view.get() is not None:
             yield
             return
-        view = (tuple(self.manifests()), self._read_state())
+        view = (tuple(self.manifests()), self._read_state(), self._read_installations())
         token = self._read_view.set(view)
         try:
             yield
@@ -95,11 +96,46 @@ class PluginRegistry:
         required = self._required(plugin_id)
         if required:
             return True
+        if not self.is_installed(plugin_id):
+            return False
         try:
             default = self._manifest(plugin_id).default_enabled
         except KeyError:
             default = True
         return bool(self._read_state().get(plugin_id, default))
+
+    def is_installed(self, plugin_id: str) -> bool:
+        """User installation choice; source-owned packages remain untouched."""
+        return self._read_installations().get(plugin_id, True)
+
+    def _read_installations(self) -> dict[str, bool]:
+        view = self._read_view.get()
+        if view is not None:
+            return dict(view[2])
+        if not self.state_path.exists():
+            return {}
+        try:
+            payload = json.loads(self.state_path.read_text(encoding='utf-8'))
+            values = payload.get('installed', {}) if isinstance(payload, dict) else {}
+            if not isinstance(values, dict) or any(type(value) is not bool for value in values.values()):
+                raise ValueError('invalid installation choices')
+            return values
+        except (OSError, ValueError) as exc:
+            raise PluginRegistryError('Plugin installation state is unreadable.') from exc
+
+    def set_installed(self, plugin_id: str, installed: bool) -> dict[str, Any]:
+        """Atomically change local availability without deleting another app's files or grants."""
+        with self._lock:
+            if not self._exists(plugin_id):
+                raise KeyError(plugin_id)
+            if not installed:
+                self.assert_removable(plugin_id)
+            choices = self._read_installations()
+            choices[plugin_id] = installed
+            state = self._read_state()
+            state[plugin_id] = installed
+            self._write_state(state, installations=choices)
+        return self.describe(plugin_id)
 
     def set_enabled_many(self, choices: dict[str, bool]) -> None:
         """Commit a provider bundle's selection through the canonical state file."""
@@ -107,6 +143,8 @@ class PluginRegistry:
             for plugin_id, enabled in choices.items():
                 if not self._exists(plugin_id):
                     raise KeyError(plugin_id)
+                if enabled and not self.is_installed(plugin_id):
+                    raise PluginRegistryError(f"Install {plugin_id} before enabling it")
                 if self._required(plugin_id) and not enabled:
                     raise PluginRegistryError(f"{plugin_id} is required and cannot be disabled")
             state = self._read_state()
@@ -139,6 +177,8 @@ class PluginRegistry:
     def set_enabled(self, plugin_id: str, enabled: bool) -> dict[str, Any]:
         if not self._exists(plugin_id):
             raise KeyError(plugin_id)
+        if enabled and not self.is_installed(plugin_id):
+            raise PluginRegistryError(f"Install {plugin_id} before enabling it")
         if self._required(plugin_id) and not enabled:
             raise PluginRegistryError(f"{plugin_id} is required and cannot be disabled")
         with self._lock:
@@ -201,12 +241,13 @@ class PluginRegistry:
             "id": manifest.id,
             "name": manifest.name,
             "type": manifest.type,
-            "category": manifest.category,
+            "category": plugin_category(manifest.id, manifest.name, manifest.category),
             "version": manifest.version,
             "description": manifest.description,
-            "developer": "Vellum",
+            "developer": str(status.get("developer") or "Vellum"),
             "source": "portable",
             "configured": configured,
+            "installed": self.is_installed(manifest.id),
             "enabled": enabled,
             "required": manifest.required,
             "protected": bool(manifest.protected or manifest.required),
@@ -274,7 +315,7 @@ class PluginRegistry:
                     "id": plugin_id,
                     "name": plugin_id.replace("_", " ").title(),
                     "type": "mcp",
-                    "category": "MCP",
+                    "category": plugin_category(plugin_id, plugin_id, "MCP"),
                     "version": None,
                     "description": str(server.get("notes") or ""),
                     "developer": "",
@@ -330,12 +371,13 @@ class PluginRegistry:
             "id": record.id,
             "name": record.name,
             "type": "bundle",
-            "category": record.category,
+            "category": plugin_category(record.id, record.name, record.category),
             "version": record.version,
             "description": record.description,
             "developer": record.developer,
             "source": record.source,
             "configured": configured,
+            "installed": self.is_installed(record.id),
             "enabled": enabled,
             "required": record.required,
             "protected": bool(record.protected or record.required),
@@ -412,11 +454,12 @@ class PluginRegistry:
             raise PluginRegistryError("plugin state must be a JSON object")
         return {str(key): bool(value) for key, value in values.items()}
 
-    def _write_state(self, state: dict[str, bool]) -> None:
+    def _write_state(self, state: dict[str, bool], *, installations: dict[str, bool] | None = None) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.state_path.with_name(f".{self.state_path.name}.tmp")
         payload = json.dumps(
-            {"version": 1, "enabled": dict(sorted(state.items()))},
+            {"version": 1, "enabled": dict(sorted(state.items())),
+             "installed": dict(sorted((self._read_installations() if installations is None else installations).items()))},
             indent=2,
         ) + "\n"
         temporary.write_text(payload, encoding="utf-8")

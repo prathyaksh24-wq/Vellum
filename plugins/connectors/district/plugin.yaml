@@ -1,0 +1,24 @@
+id: district
+name: District
+type: connector
+category: Food & Experiences
+version: 1.0.0
+description: Find restaurants, movies, theatres, showtimes and events through the official District MCP server.
+mcp_connectors:
+  - name: district
+    display_name: District
+    description: Restaurants, movies, theatres, showtimes and events from District.
+    type: http
+    url: https://mcp-server.district.in/mcp
+    credential_provider: district
+capabilities:
+  - district.connection.oauth.start
+  - district.connection.oauth.cancel
+  - district.connection.verify
+  - district.connection.disconnect
+  - district.mcp.execute
+provides_tools:
+  - district_mcp_catalog
+  - district_mcp_describe
+  - district_mcp_read
+  - district_mcp_execute

@@ -1,7 +1,7 @@
 id: tavily
 name: Tavily
 type: connector
-category: MCP
+category: Web & Research
 version: 1.0.0
 description: Search, extract pages, map and crawl sites, and research topics through Tavily’s official MCP server. Each user connects their own account with OAuth.
 mcp_connectors:

@@ -1,7 +1,7 @@
 id: airtable
 name: Airtable
 type: connector
-category: MCP
+category: CRM & Communication
 version: 1.0.0
 description: Read and manage bases, tables, fields, records, comments, interfaces and automations through Airtable's official MCP server. Choose authorized resources during OAuth.
 mcp_connectors:

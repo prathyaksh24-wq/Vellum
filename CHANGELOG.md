@@ -7,11 +7,18 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Added
+
+- Integrate the supplied plugin directory and plugin settings design inside Vellum, with real catalog/skill data, canonical CRM and functional categories, reviewed persistent plugin installation choices, and independent sidebar visibility. Plugin pages, dialogs, Settings, and Music follow the selected Vellum appearance.
+- Connect the existing GitMCP entry to its public MCP catalog, real upstream identity and source, deferred repository-documentation tool, and installation/enablement controls. No OAuth or API key is required.
+- Add local Swiggy Food and Instamart OAuth, separate service controls, real logos and deferred tools with reviewed order handling.
+
+### Added
 - Connect Supabase, Vercel, ClickUp and HubSpot to their official remote MCP servers, with user-owned OAuth, real logos, deferred tool discovery and readable operation reviews. Support confidential app credentials, provider-specific callback/resource requirements, ClickUp’s long-lived grants and truthful provisioning/deployment status.
 - Connect Airtable, Notion, Firecrawl, Apify, SerpAPI, Exa and Tavily through their official hosted MCP servers, with real logos, user-owned connections, complete selected tool catalogs, deferred schemas and readable operation reviews. Share bounded credential storage and OAuth lifecycle without introducing another tool runtime.
 - Add a styled web-search provider selector. Automatic prefers SerpAPI; an explicit choice is exclusive and persists as `WEB_SEARCH_BACKEND`. Existing search and extraction adapters reuse managed connections.
 
 ### Fixed
+- Keep Swiggy, District and Zomato catalog status available when the OS credential store is locked. Restore Discord's backend-owned bot install and lazy workspace in the plugin design, expose included MCP server details, and align CI fixtures and Action Parity metadata with the served components and canonical categories.
 - Request Tavily's exact `/mcp` OAuth resource so sign-in opens correctly; distinguish provider request rejection from declined consent. Keep keys out of Tavily MCP URLs, preserve failed replacement grants, and prevent disconnect from reviving older configured keys.
 
 - Save Slack authorization across bounded OS credential entries to avoid Windows'

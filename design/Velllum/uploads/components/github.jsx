@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function GitHubConnection({enabled=true,onChanged}) {
+  function GitHubConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('github_oauth');return id?{flow_id:id,status:'pending',message:'Checking GitHub authorization…'}:null;});
@@ -41,6 +41,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.githubMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const cancel=async()=>{setBusy(true);try{await dispatch('github.connection.oauth.cancel',{flow_id:flow.flow_id});setFlow({...flow,status:'cancelled',message:'GitHub sign-in cancelled.'});}catch(err){setError(err.message);}finally{setBusy(false);}};
     const connected=status?.connected&&enabled;
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <section className="product-hunt-workspace github-workspace" aria-label="GitHub connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to GitHub':'Connect GitHub'}</h2><p>{status?.message||'Checking GitHub connection…'}</p></div><img src="/design-uploads/assets/plugins/github.png" alt="GitHub" width="32" height="32"/></div>
       {connected&&<p className="linear-identity">{status.account_name} <span>@{status.login}</span></p>}

@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
+const pluginWorkspace = readFileSync(resolve(here, "../../design/Velllum/uploads/components/plugin-workspace.jsx"), "utf8");
 const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
   "utf8",
@@ -170,9 +171,10 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("installs Discord through the backend-owned bot authorization contract", () => {
-    expect(html).toContain("API.plugins.discordInstall()");
-    expect(html).toContain("vellum-discord-install");
-    expect(html).toContain("Install bot");
+    expect(pluginWorkspace).toContain("window.VellumApi.plugins.discordInstall()");
+    expect(pluginWorkspace).toContain("vellum-discord-install");
+    expect(pluginWorkspace).toContain("Install bot");
+    expect(pluginWorkspace).not.toContain("DISCORD_BOT_TOKEN");
     expect(html).not.toContain("DISCORD_BOT_TOKEN");
   });
 
@@ -279,9 +281,10 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("OpenRouter");
     expect(html).toContain("Provider routing, fallback models, and credential pools");
     expect(html).toContain("memoryDreamingRun");
-    expect(html).toContain('aria-label="Plugin information"');
-    expect(html).toContain("detailPlugin.source");
-    expect(html).toContain("detailPlugin.mcp_connectors.length");
+    expect(pluginWorkspace).toContain('aria-label="Plugin information"');
+    expect(pluginWorkspace).toContain("p.source");
+    expect(pluginWorkspace).toContain("p.mcp_connectors.length");
+    expect(pluginWorkspace).toContain('aria-label="MCP servers"');
     expect(html).toContain("API.runtimes.subagents()");
   });
 

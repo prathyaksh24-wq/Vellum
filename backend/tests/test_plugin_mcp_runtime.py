@@ -58,6 +58,23 @@ def test_runtime_resolves_stdio_args_inside_plugin_root(tmp_path: Path) -> None:
     assert connector.cwd == root.resolve()
 
 
+def test_catalog_preview_never_resolves_provider_grants_and_is_not_an_executable_connection(tmp_path, monkeypatch):
+    from agent.plugins import district_connection
+    registry, _ = _plugin(tmp_path, {'url': 'https://mcp-server.district.in/mcp',
+        'credential_provider': 'district'})
+    def forbidden():
+        raise AssertionError('Catalog browsing must not resolve or refresh provider credentials')
+    monkeypatch.setattr(district_connection, 'district_service', forbidden)
+    runtime = PluginMcpRuntime(registry)
+    preview = runtime.connectors(resolve_credentials=False)[0]
+    assert preview.headers == {} and preview.auth is None
+    assert preview.configured is False
+    assert preview.public()['credentials_deferred'] is True
+    # Metadata mode does not authorize a different plugin to use District's grant.
+    with pytest.raises(PluginMcpRuntimeError, match='unavailable or disabled'):
+        runtime.connector('demo', 'demo-server')
+
+
 def test_runtime_rejects_stdio_path_escape(tmp_path: Path) -> None:
     registry, _ = _plugin(
         tmp_path,

@@ -511,6 +511,9 @@ def core_tool_registry() -> ToolRegistry:
     ]
     # BrowserAgent owns browser tools; the main model reaches it through delegation.
     tools = [tool for tool in tools if not tool.name.startswith("browser_")]
+    from agent.plugins.registry import get_plugin_registry
+    if not get_plugin_registry().is_enabled('gitmcp'):
+        tools = [tool for tool in tools if tool.name != 'repo_docs']
     for tool in tools:
         registry.register_langchain(
             tool,
@@ -525,6 +528,11 @@ def core_tool_registry() -> ToolRegistry:
         registry.register_langchain(tool,
             access=CapabilityAccess.READ if tool.metadata["read_only"] else CapabilityAccess.WRITE,
             allowed_agents=frozenset({"VellumAgent"}))
+    from agent.plugins.asana_mcp import agent_tools as asana_mcp_tools
+    for tool in asana_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
     from agent.plugins.hubspot_mcp import agent_tools as hubspot_mcp_tools
     for tool in hubspot_mcp_tools():
         registry.register_langchain(tool,
@@ -532,6 +540,21 @@ def core_tool_registry() -> ToolRegistry:
             allowed_agents=frozenset({'VellumAgent'}))
     from agent.plugins.clickup_mcp import agent_tools as clickup_mcp_tools
     for tool in clickup_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
+    from agent.plugins.swiggy_mcp import agent_tools as swiggy_mcp_tools
+    for tool in swiggy_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
+    from agent.plugins.zomato_mcp import agent_tools as zomato_mcp_tools
+    for tool in zomato_mcp_tools():
+        registry.register_langchain(tool,
+            access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
+            allowed_agents=frozenset({'VellumAgent'}))
+    from agent.plugins.district_mcp import agent_tools as district_mcp_tools
+    for tool in district_mcp_tools():
         registry.register_langchain(tool,
             access=CapabilityAccess.READ if tool.metadata['read_only'] else CapabilityAccess.WRITE,
             allowed_agents=frozenset({'VellumAgent'}))

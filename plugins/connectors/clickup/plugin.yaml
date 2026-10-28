@@ -1,7 +1,7 @@
 id: clickup
 name: ClickUp
 type: connector
-category: MCP
+category: CRM & Communication
 version: 1.0.0
 description: Search and manage tasks, Docs, comments, Chat, time tracking and workspace structure through the official ClickUp MCP server.
 mcp_connectors:

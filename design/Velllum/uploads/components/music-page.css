@@ -23,3 +23,24 @@
 @container(max-width:780px){.music-detail-tools{margin-left:0;width:100%}.music-detail-toolbar{gap:14px}.music-library-tabs{flex-wrap:wrap}.music-sort>.music-button span{display:none}.music-track-head{padding-right:46px}}
 
 .music-playlist-embed{margin:20px 0}.music-playlist-embed p{font-size:12px;line-height:1.6;color:var(--music-muted);margin:0 0 14px}.music-playlist-embed iframe{display:block;width:100%;height:500px;border:0;border-radius:12px}
+
+/* Use the existing Vellum appearance behind the listening room. */
+[data-background] .music-page{--music-text:var(--txt2);--music-muted:var(--dim);--music-line:var(--line);--music-sage:var(--ember);background:transparent;scrollbar-color:var(--line2) transparent}
+[data-background] .body:has(.music-page) .main{background:transparent}
+[data-background] .body:has(.music-page) .sidebar{background:var(--glass-side)}
+[data-background] .body:has(.music-page) .sb-row.active{background:var(--active);color:var(--txt2)}
+[data-background] .music-search,[data-background] .music-button,[data-background] .music-collection-card{background:var(--panel);border-color:var(--line2)}
+[data-background] .music-search input::placeholder,[data-background] .music-providers button,[data-background] .music-library-tabs button{color:var(--dim)}
+[data-background] .music-eyebrow,[data-background] .music-section-heading h3{color:var(--txt2)}
+[data-background] .music-providers button.selected,[data-background] .music-library-tabs button.on{color:var(--ember);border-color:var(--ember)}
+[data-background] .music-sort-options{background:var(--menu-solid);border-color:var(--line2)}
+[data-background] .music-playlist-editor input,[data-background] .music-playlist-editor textarea{background:var(--input);border-color:var(--line2)}
+[data-background] .music-control.primary{background:var(--txt2)}
+[data-background] .music-detail-play{background:var(--ember);color:var(--bg)!important}
+[data-background-tone="light"] .music-page .music-icon{filter:brightness(0);opacity:.8}
+[data-background-tone="light"] .music-page .music-control.primary .music-icon{filter:brightness(0) invert(1);opacity:1}
+[data-background-tone="light"] .music-providers button>img[alt=Spotify]{filter:brightness(0)}
+[data-background-tone="light"] .music-error{color:#9e3024}
+[data-background-tone="light"] .music-detail-play{color:#fff!important}
+[data-background-tone="light"] .music-detail-play .music-icon{filter:brightness(0) invert(1);opacity:1}
+[data-background-tone="light"] .music-artwork>.music-icon{filter:brightness(0) invert(1)}

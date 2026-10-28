@@ -14,6 +14,8 @@
 <link rel="stylesheet" href="components/accounts.css"/>
 <link rel="stylesheet" href="components/desktop-chrome.css"/>
 <link rel="stylesheet" href="components/settings-workspace.css"/>
+<link rel="stylesheet" href="components/plugin-workspace.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=JetBrains+Mono:wght@400;500;600&display=swap"/>
 <script src="components/desktop-chrome.js"></script>
 <script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
 <script src="api/chat.js"></script>
@@ -49,6 +51,12 @@
 <script type="text/babel" data-presets="react" src="components/tavily.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/firecrawl.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/product-hunt.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/asana.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/swiggy.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/zomato.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/district.jsx"></script>
+<script src="components/plugin-design-assets.js"></script>
+<script type="text/babel" data-presets="react" src="components/plugin-workspace.jsx"></script>
 <script src="components/spotify-playback.js"></script>
 <link rel="stylesheet" href="components/music-page.css"/>
 <script type="text/babel" data-presets="react" src="components/music-page.jsx"></script>
@@ -3792,7 +3800,7 @@ const buildReasoningSlashItems = ({q='', apps=[], skills=[], agents=AGENTS}) => 
     description:item.description || ('App included with '+plugin.name), owner:plugin.name, ic:IcGrid, raw:item, plugin,
   }))).filter(item => item.label && matches(item));
   const mcpRows = (apps || []).flatMap(plugin => (plugin.mcp_connectors || []).map(item => ({
-    kind:'mcp', k:'mcp:'+plugin.id+':'+(item.id || item.name), label:item.name || item.id || plugin.name,
+    kind:'mcp', k:'mcp:'+plugin.id+':'+(item.id || item.name), label:item.display_name || item.name || item.id || plugin.name,
     description:item.description || item.transport || item.command || 'MCP connector', owner:plugin.name, ic:IcMcp, raw:item, plugin,
   }))).filter(item => item.label && matches(item));
   const agentRows = agents.map(agent => ({
@@ -3962,7 +3970,8 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true}) => {
+const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true}) => {
+  useEffect(()=>{if(pluginDraft?.text)setText(pluginDraft.text);},[pluginDraft?.id]);
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
@@ -6410,10 +6419,10 @@ const CONNECTOR_LOCAL_LOGOS = {
   youtube:'youtube.svg',discord:'discord.svg','agent-reach':'x.svg',x:'x.svg',
   'product-hunt':'producthunt.svg','app-69b7bed23a9481919d2378ab225cddeb':'producthunt.svg',
   figma:'figma.svg',jira:'jira.svg',cloudflare:'cloudflare.svg',supabase:'supabase.svg',
-  clickup:'clickup.png',vercel:'vercel.svg',mongodb:'mongodb.svg',asana:'asana.svg',hubspot:'hubspot.svg',
+  clickup:'clickup.png',vercel:'vercel.svg',mongodb:'mongodb.svg',district:'district.png',zomato:'zomato.png',swiggy:'swiggy.png',asana:'asana.svg',hubspot:'hubspot.svg',
   shopify:'shopify.svg',postgres:'postgresql.svg',postgresql:'postgresql.svg',
   brave:'brave.svg',sentry:'sentry.svg',stripe:'stripe.svg',obsidian:'obsidian.svg',
-  serpapi:'serpapi.png',exa:'exa.png',tavily:'tavily.png',apify:'apify.ico',firecrawl:'firecrawl.ico',todoist:'todoist.svg',puppeteer:'puppeteer.svg',slack:'slack.png'
+  gitmcp:'gitmcp.png',serpapi:'serpapi.png',exa:'exa.png',tavily:'tavily.png',apify:'apify.ico',firecrawl:'firecrawl.ico',todoist:'todoist.svg',puppeteer:'puppeteer.svg',slack:'slack.png'
 };
 const connectorIconSource = (c) => {
   const id = String(c?.id || '').toLowerCase();
@@ -6463,8 +6472,12 @@ const MCP_SOURCES = [
   ]}),
   makeRegistryAdapter({ id:'smithery', label:'Smithery', color:'#e0a030', catalog:[
     { id:'serpapi', name:'SerpAPI', category:'MCP', authType:'API key', install:'http', url:"https://mcp.serpapi.com/mcp", trust:'verified', description:"Search Google, YouTube, Bing, shopping, news and other supported engines through SerpAPI\u2019s official MCP server. Existing Vellum web search uses the same saved key.", tools:[] },
+    { id:'asana', name:'Asana', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.asana.com/v2/mcp', trust:'verified', description:'Search and manage tasks, projects and other operations published by Asana’s official V2 MCP server.', tools:[] },
     { id:'hubspot', name:'HubSpot', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.hubspot.com', trust:'verified', description:'Search and manage CRM records, activities, marketing content and other operations published by HubSpot’s official remote MCP server.', tools:[] },
     { id:'clickup', name:'ClickUp', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.clickup.com/mcp', trust:'verified', description:'Search and manage tasks, Docs, comments, Chat, time tracking and workspace structure through ClickUp’s official MCP server.', tools:[] },
+    { id:'swiggy', name:'Swiggy', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.swiggy.com/food', trust:'verified', description:'Order food and groceries through Swiggy’s official Food and Instamart MCP servers, with one account and separate service controls.', tools:[] },
+    { id:'zomato', name:'Zomato', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp-server.zomato.com/mcp', trust:'verified', description:'Discover restaurants, explore menus, manage carts and track food orders using Zomato’s official MCP server.', tools:[] },
+    { id:'district', name:'District', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp-server.district.in/mcp', trust:'verified', description:'Find restaurants, movies, theatres, showtimes and events using District’s official MCP server.', tools:[] },
     { id:'vercel', name:'Vercel', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.vercel.com', trust:'verified', description:'Manage projects, deployments, logs, domains, analytics and other published Vercel operations through its official MCP server.', tools:[] },
     { id:'supabase', name:'Supabase', category:'MCP', authType:'OAuth', install:'http', url:'https://mcp.supabase.com/mcp?features=docs,account,database,debugging,development,functions,branching,storage', trust:'verified', description:'Manage projects, database SQL and migrations, Edge Functions, branches and Storage through Supabase’s official MCP server.', tools:[] },
     { id:'exa', name:'Exa', category:'MCP', authType:'OAuth', install:'http', url:"https://mcp.exa.ai/mcp?login&tools=web_search_exa,web_fetch_exa,agent_run,web_search_advanced_exa", trust:'verified', description:"Search the web with advanced filters, fetch page content, and run multi-step research through Exa\u2019s official MCP server. Includes all four currently documented tools.", tools:[] },
@@ -6672,272 +6685,7 @@ const DiscordWorkspace = () => {
   </section>;
 };
 const CalendarWorkspace = window.VellumUI.CalendarWorkspace;
-const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalendarAction, youtubeIntelligence, catalogState, onRetry, mode='manage', onBrowse, onManage, renderSkills, spotifyControls, onAdd, onConfirmAdd, onCancelAdd}) => {
-  const [query, setQuery] = useState('');
-  const [tab, setTab] = useState('plugins');
-  const [filter, setFilter] = useState('all');
-  const [selected, setSelected] = useState(null);
-  const [revision, setRevision] = useState(0);
-  const [busyPlugin, setBusyPlugin] = useState('');
-  const [pluginError, setPluginError] = useState('');
-  const [category, setCategory] = useState('all');
-  const [initialSkill, setInitialSkill] = useState(null);
-  const [createSkill,setCreateSkill]=useState(false);
-  const directory = mode === 'directory';
-  const headingRef = useRef(null);
-  const triggerRef = useRef(null);
-  const pageRef = useRef(null);
-  useEffect(() => {
-    if (selected) headingRef.current?.focus();
-    else [...(pageRef.current?.querySelectorAll('[data-plugin-key]') || [])].find(node=>node.dataset.pluginKey===triggerRef.current)?.focus();
-  }, [selected]);
-  const togglePlugin = async app => {
-    if (!app.manageable || app.required || busyPlugin) return;
-    setBusyPlugin(app.id);
-    setPluginError('');
-    try {
-      const receipt = await onPluginState(app.id, !app.enabled);
-      if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'Plugin state could not be updated.');
-      // The parent owns the plugin snapshot; use the applied receipt while it refreshes.
-      Object.assign(app, receipt.result && receipt.result.plugin || {});
-      setRevision(value => value + 1);
-    } catch (error) {
-      setPluginError((error && error.message) || 'Plugin state could not be updated.');
-    } finally {
-      setBusyPlugin('');
-    }
-  };
-  const installDiscord = async () => {
-    if (busyPlugin) return;
-    const popup = window.open('', 'vellum-discord-install', 'width=720,height=760');
-    setBusyPlugin('discord-install');
-    setPluginError('');
-    try {
-      const result = await API.plugins.discordInstall();
-      if (popup) popup.location.href = result.authorization_url;
-      else window.open(result.authorization_url, '_blank', 'noopener,noreferrer');
-    } catch (error) {
-      if (popup) popup.close();
-      setPluginError((error && error.message) || 'Discord installation could not be started.');
-    } finally {
-      setBusyPlugin('');
-    }
-  };
-  const plugins = (apps || []).map(a => ({
-    ...a,
-    type: a.type || (a.id === 'agent-reach' ? 'connector' : 'mcp'),
-    category: a.category || (a.id === 'agent-reach' ? 'Connectors' : 'MCP'),
-    capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
-    apps: Array.isArray(a.apps) ? a.apps : [],
-    mcp_connectors: Array.isArray(a.mcp_connectors) ? a.mcp_connectors : [],
-    skills: Array.isArray(a.skills) ? a.skills : [],
-  }));
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('linear_oauth'))return;
-    const linear=plugins.find(item=>item.id==='linear');
-    if(linear)setSelected({kind:'plugin',item:linear});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('github_oauth'))return;
-    const github=plugins.find(item=>item.id==='github');
-    if(github)setSelected({kind:'plugin',item:github});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('supabase_oauth'))return;
-    const supabase=plugins.find(item=>item.id==='supabase');
-    if(supabase)setSelected({kind:'plugin',item:supabase});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('vercel_oauth'))return;
-    const vercel=plugins.find(item=>item.id==='vercel');
-    if(vercel)setSelected({kind:'plugin',item:vercel});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('clickup_oauth'))return;
-    const clickup=plugins.find(item=>item.id==='clickup');
-    if(clickup)setSelected({kind:'plugin',item:clickup});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('hubspot_oauth'))return;
-    const hubspot=plugins.find(item=>item.id==='hubspot');
-    if(hubspot)setSelected({kind:'plugin',item:hubspot});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('exa_oauth'))return;
-    const exa=plugins.find(item=>item.id==='exa');
-    if(exa)setSelected({kind:'plugin',item:exa});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('tavily_oauth'))return;
-    const tavily=plugins.find(item=>item.id==='tavily');
-    if(tavily)setSelected({kind:'plugin',item:tavily});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('firecrawl_oauth'))return;
-    const firecrawl=plugins.find(item=>item.id==='firecrawl');
-    if(firecrawl)setSelected({kind:'plugin',item:firecrawl});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('apify_oauth'))return;
-    const apify=plugins.find(item=>item.id==='apify');
-    if(apify)setSelected({kind:'plugin',item:apify});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('notion_oauth'))return;
-    const notion=plugins.find(item=>item.id==='notion');
-    if(notion)setSelected({kind:'plugin',item:notion});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('airtable_oauth'))return;
-    const airtable=plugins.find(item=>item.id==='airtable');
-    if(airtable)setSelected({kind:'plugin',item:airtable});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('slack_oauth'))return;
-    const slack=plugins.find(item=>item.id==='slack');
-    if(slack)setSelected({kind:'plugin',item:slack});
-  },[apps]);
-  useEffect(()=>{
-    if(!new URLSearchParams(window.location.search).get('google_oauth'))return;
-    const google=plugins.find(item=>item.id==='google-workspace');
-    if(google)setSelected({kind:'plugin',item:google});
-  },[apps]);
-  const allRows = {
-    plugins: plugins.map(item => ({kind:'plugin',item})),
-    apps: plugins.flatMap(plugin => plugin.apps.map(item => ({kind:'app',item,parent:plugin}))),
-    mcps: plugins.flatMap(plugin => plugin.mcp_connectors.map(item => ({kind:'mcp',item,parent:plugin}))),
-    skills: plugins.flatMap(plugin => plugin.skills.map(item => ({kind:'skill',item,parent:plugin}))),
-  };
-  const rowName = row => row.kind === 'plugin' ? row.item.name : (row.item.name || row.item.id);
-  const rowDescription = row => row.item.description || (row.parent ? 'Included with ' + row.parent.name : row.item.notes || '');
-  const ownerOf = row => row.kind === 'plugin' ? row.item : row.parent;
-  const groupOf = row => {
-    const status = connectorStatus(ownerOf(row));
-    return status === 'ready' || status === 'available' ? 'ready' : status === 'disabled' ? 'disabled' : 'setup';
-  };
-  const statusLabel = app => {
-    const status = connectorStatus(app);
-    if (status === 'ready') return ['hubspot','clickup','vercel','supabase','tavily','exa','serpapi','apify','firecrawl','notion','airtable','slack','github','linear','google-workspace','gmail','google-drive','google-calendar','google-contacts','app-69b7bed23a9481919d2378ab225cddeb'].includes(app?.id) ? 'Connected' : 'Ready';
-    if (app?.id === 'app-69b7bed23a9481919d2378ab225cddeb') return ({not_connected:'Needs setup',not_checked:'Verify connection',unauthorized:'Reconnect',rate_limited:'Rate limited',unreachable:'Connection unavailable',keyring_unavailable:'Unlock credential store'})[status] || (status === 'disabled' ? 'Disabled' : 'Connection error');
-    if (status === 'disabled') return 'Disabled';
-    if (status === 'available') return 'Available';
-    if (status === 'error') return 'Connection error';
-    if (status === 'probe_disabled') return 'Not checked';
-    if (status === 'configured') return 'Configured';
-    if (status === 'degraded') return 'Needs attention';
-    return CONNECTOR_STATUS_LABELS[status] || (status === 'off' || status === 'not_configured' || status === 'not_connected' ? 'Needs setup' : status.replaceAll('_', ' '));
-  };
-  const viewLabels = {plugins:'plugins',apps:'apps',mcps:'MCP servers',skills:'skills'};
-  const groups = [['ready','Ready to use'],['setup','Needs setup'],['disabled','Disabled']];
-  const rows = (allRows[tab] || []).filter(row => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (rowName(row) + ' ' + rowDescription(row) + ' ' + (row.parent ? row.parent.name : '') + ' ' + statusLabel(ownerOf(row))).toLowerCase().includes(q);
-  });
-  const detailPlugin = selected && plugins.find(item => item.id === (selected.kind === 'plugin' ? selected.item.id : selected.parent.id));
-  const count = key => (allRows[key] || []).length;
-  const categoryOf = row => ownerOf(row).category || (ownerOf(row).type === 'bundle' ? 'Skill bundles' : ownerOf(row).type === 'mcp' ? 'MCP servers' : 'Connectors');
-  const categories = [...new Set((allRows[tab] || []).map(categoryOf))].sort();
-  const visibleRows = rows.filter(row => (filter === 'all' || groupOf(row) === filter) && (category === 'all' || categoryOf(row) === category));
-  const displayGroups = directory ? categories.map(name=>[name,name]) : groups;
-  const resetFilters = () => {setQuery('');setFilter('all');setCategory('all');};
-  const renderChildren = (title, items, Icon) => items.length > 0 && <section className="plugin-section" aria-label={title}>
-    <h2 className="plugin-section-h">{title}<span>{items.length}</span></h2>
-    {items.map(item => <div className="plugin-child" key={item.id||item.name}><span className="conn-ic" aria-hidden="true"><Icon size={16}/></span><div className="plugin-child-copy"><div className="plugin-child-name">{item.name||item.id}</div><div className="plugin-child-desc">{item.description||item.transport||''}</div></div>{title==='Skills' && renderSkills && <button className="btn" onClick={()=>{setInitialSkill(item);setTab('skills');setSelected(null);}}>View skill</button>}</div>)}
-  </section>;
-  return (
-    <div className={'page plugins-page '+(directory?'plugin-directory':'plugin-management')} ref={pageRef}>
-      {directory && <aside className="plugin-directory-nav" aria-label="Customize">
-        <h2>Customize</h2>
-        <button className="directory-nav-item active" onClick={()=>{setTab('plugins');setSelected(null);resetFilters();}}><IcGrid size={16}/>Plugins</button>
-        <button className="directory-nav-item" onClick={onOpenSkills}><IcSparkle size={16}/>Skills Hub<IcExternal size={13}/></button>
-        <h3>In your workspace <span>{plugins.length}</span></h3>
-        {plugins.map(plugin=><button key={plugin.id} className={'directory-nav-item'+(detailPlugin?.id===plugin.id?' active':'')} onClick={()=>{setPluginError('');setSelected({kind:'plugin',item:plugin});}}><span className="directory-nav-logo"><ConnLogo c={plugin} size={18}/></span><span>{plugin.name}</span></button>)}
-      </aside>}
-      <div className="page-inner plugins-inner">
-        {!selected ? <React.Fragment>
-          <header className="plugins-head">
-            <div><h1 className="plugins-title">Plugins</h1><p className="plugins-intro">{directory?'Discover the tools and capabilities in your workspace.':'Manage plugins, apps, MCP servers, and skills.'}</p></div>
-            <div className="plugins-head-actions">{onAdd && <window.VellumUI.PluginAdd onAction={onAdd} onConfirm={onConfirmAdd} onCancel={onCancelAdd} onChanged={onRetry} onSkills={()=>{setInitialSkill(null);setCreateSkill(true);setTab('skills');}}/>}{directory && onManage && <button className="btn" onClick={onManage}>Manage plugins</button>}{!directory && onBrowse && <button className="btn" onClick={onBrowse}>Browse directory<IcExternal size={13}/></button>}</div>
-            <div className="plugins-search"><IcSearch size={16}/><input type="search" aria-label={'Search '+viewLabels[tab]} placeholder={'Search '+viewLabels[tab]} value={query} onChange={e=>setQuery(e.target.value)}/>{query && <button aria-label="Clear search" onClick={()=>setQuery('')}><IcX size={14}/></button>}</div>
-          </header>
-          <nav className="plugin-tabs" aria-label="Plugin contents">{[['plugins','Plugins'],['apps','Apps'],['mcps','MCP servers'],['skills','Skills']].map(([id,label]) => <button key={id} className={'plugin-tab'+(tab===id?' active':'')} aria-pressed={tab===id} onClick={()=>{setTab(id);resetFilters();}}>{label}<span className="plugin-tab-count">{count(id)}</span></button>)}</nav>
-          {tab==='skills' && renderSkills ? renderSkills(initialSkill,createSkill) : <React.Fragment>
-          <div className="plugins-toolbar">
-            <div className="plugins-filters" role="group" aria-label="Filter by status">{[['all','All'],['ready','Ready'],['setup','Needs setup'],['disabled','Disabled']].map(([id,label])=><button className="plugins-filter" key={id} aria-pressed={filter===id} onClick={()=>setFilter(id)}>{label}</button>)}</div>
-            <button className="plugins-hub-link" onClick={onOpenSkills}>Open Skills Hub<IcExternal size={13}/></button>
-          </div>
-          {directory && <nav className="plugin-categories" aria-label="Browse by category"><button aria-pressed={category==='all'} onClick={()=>setCategory('all')}>All categories</button>{categories.map(name=><button key={name} aria-pressed={category===name} onClick={()=>setCategory(name)}>{name}</button>)}</nav>}
-          {pluginError && <div className="plugins-error" role="alert">{pluginError}</div>}
-          {catalogState?.error && <div className="plugins-error" role="alert">{catalogState.error} <button className="btn" onClick={onRetry} disabled={catalogState.loading}>Try again</button></div>}
-          {catalogState?.loading && <div className="plugins-empty" role="status">Loading your plugins…</div>}
-          {displayGroups.map(([id,label])=>{
-            const items=visibleRows.filter(row=>(directory?categoryOf(row):groupOf(row))===id);
-            return items.length>0 && <section className="plugins-group" key={id} aria-label={label}>
-              <h2 className="plugins-group-head">{label}<span>{items.length}</span></h2>
-              <div className="plugins-grid">{items.map(row=>{
-                const owner=ownerOf(row), name=rowName(row);
-                const key=row.kind+':'+owner.id+':'+(row.item.id||name);
-                return <div key={key} className="plugin-management-row"><button data-plugin-key={key} className="plugin-row" onClick={()=>{triggerRef.current=key;setPluginError('');setSelected(row);}}>
-                  <span className="conn-ic" aria-hidden="true"><ConnLogo c={owner} size={24}/></span>
-                  <span className="plugin-row-copy"><span className="plugin-row-name">{name}</span><span className="plugin-row-desc">{rowDescription(row)}</span></span>
-                  <span className="plugin-row-end"><span className={'plugin-status '+groupOf(row)}>{statusLabel(owner)}</span><IcChevR size={16}/></span>
-                </button>{!directory && row.kind==='plugin' && owner.manageable && <button className={'sw'+(owner.enabled!==false?' on':'')} role="switch" aria-label={'Enable '+name} aria-checked={owner.enabled!==false} disabled={owner.required || !!busyPlugin} title={owner.required?'Required by Vellum':undefined} onClick={()=>togglePlugin(owner)}/>}</div>;
-              })}</div>
-            </section>;
-          })}
-          {!visibleRows.length && !catalogState?.loading && !catalogState?.error && <div className="plugins-empty" role="status"><h2>{rows.length || query || filter!=='all' ? 'No matching '+viewLabels[tab] : 'No '+viewLabels[tab]+' yet'}</h2><p>{query || filter!=='all' ? 'Try a different search or status filter.' : tab==='skills' ? 'Browse the Skills Hub to find and review skills.' : tab==='plugins' ? 'Installed plugins will appear here when the backend makes them available.' : 'Included '+viewLabels[tab]+' will appear here when a plugin provides them.'}</p>{(query || filter!=='all') && <button className="btn" onClick={resetFilters}>Clear filters</button>}</div>}
-          </React.Fragment>}
-        </React.Fragment> : <section className="plugin-detail" aria-label={rowName(selected)+' details'}>
-          <button className="plugins-back" onClick={()=>setSelected(null)}><IcChevR size={15}/>Back to {viewLabels[tab]}</button>
-          <div className="plugin-detail-head">
-            <span className="conn-ic" aria-hidden="true"><ConnLogo c={detailPlugin || selected.item} size={26}/></span>
-            <div style={{minWidth:0,flex:1}}><h1 ref={headingRef} tabIndex={-1} className="plugin-detail-title">{rowName(selected)}</h1><p className="plugin-detail-sub">{rowDescription(selected)}</p>{selected.parent && <p className="plugin-detail-sub">Included with {selected.parent.name}</p>}</div>
-            <div className="plugin-detail-actions">{detailPlugin?.id==='discord' && <button className="btn" disabled={!!busyPlugin} onClick={installDiscord}>{busyPlugin==='discord-install'?'Opening installation…':'Install bot'}</button>}{selected.kind==='plugin' && detailPlugin?.manageable && <button className="btn" disabled={detailPlugin.required || !!busyPlugin} onClick={()=>togglePlugin(detailPlugin)}>{detailPlugin.required?'Required':busyPlugin===detailPlugin.id?'Updating…':detailPlugin.enabled===false?'Enable plugin':'Disable plugin'}</button>}</div>
-          </div>
-          {pluginError && <div className="plugins-error" role="alert">{pluginError}</div>}
-          {detailPlugin && <React.Fragment>
-            <div className="plugin-connection" role="status"><span className={'plugin-status '+groupOf({kind:'plugin',item:detailPlugin})}>{connectorStatus(detailPlugin)==='ready' && <IcCheck size={14}/>}{statusLabel(detailPlugin)}</span><p>{detailPlugin.required?'Included with Vellum. This plugin stays enabled.':connectorStatus(detailPlugin)==='disabled'?'Enable this plugin to make its capabilities available to Vellum.':connectorStatus(detailPlugin)==='available'?'Installed and available to Vellum.':connectorSetupNote(detailPlugin)}</p></div>
-            {detailPlugin.id==='spotify' && spotifyControls}
-            {detailPlugin.id==='app-69b7bed23a9481919d2378ab225cddeb' && window.VellumUI.ProductHuntWorkspace && <window.VellumUI.ProductHuntWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
-            {detailPlugin.id==='linear' && window.VellumUI.LinearWorkspace && <window.VellumUI.LinearWorkspace enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id===detailPlugin.id);if(app&&JSON.stringify(app.metadata?.connection)!==JSON.stringify(next)){Object.assign(app,{status:next.status,configured:next.configured,notes:next.message,metadata:{...app.metadata,connection:next}});setRevision(value=>value+1);}}}/>}
-            {detailPlugin.id==='github' && window.VellumUI.GitHubConnection && <window.VellumUI.GitHubConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='serpapi' && window.VellumUI.SerpApiConnection && <window.VellumUI.SerpApiConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='hubspot' && window.VellumUI.HubSpotConnection && <window.VellumUI.HubSpotConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='clickup' && window.VellumUI.ClickUpConnection && <window.VellumUI.ClickUpConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='vercel' && window.VellumUI.VercelConnection && <window.VellumUI.VercelConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='supabase' && window.VellumUI.SupabaseConnection && <window.VellumUI.SupabaseConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='exa' && window.VellumUI.ExaConnection && <window.VellumUI.ExaConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='tavily' && window.VellumUI.TavilyConnection && <window.VellumUI.TavilyConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='firecrawl' && window.VellumUI.FirecrawlConnection && <window.VellumUI.FirecrawlConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='apify' && window.VellumUI.ApifyConnection && <window.VellumUI.ApifyConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='notion' && window.VellumUI.NotionConnection && <window.VellumUI.NotionConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='airtable' && window.VellumUI.AirtableConnection && <window.VellumUI.AirtableConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='slack' && window.VellumUI.SlackConnection && <window.VellumUI.SlackConnection enabled={detailPlugin.enabled!==false} onChanged={onRetry}/>}
-            {detailPlugin.id==='discord' && <DiscordWorkspace/>}
-            {['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(detailPlugin.id) && window.VellumUI?.GoogleConnections && <window.VellumUI.GoogleConnections onChanged={onRetry} revision={plugins.filter(item=>['google-workspace','gmail','google-drive','google-calendar','google-contacts'].includes(item.id)).map(item=>item.id+':'+item.enabled).join('|')}/>}
-            {detailPlugin.id==='google-calendar' && <CalendarWorkspace sharedConnection onAction={onCalendarAction} enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id==='google-calendar');if(app){const status=next.enabled===false?'disabled':next.connected?'ready':next.status;if(app.status!==status){Object.assign(app,{status,enabled:next.enabled!==false});setRevision(value=>value+1);}}}}/>}
-            {detailPlugin.id==='youtube' && <YouTubeIntelligenceStatus status={youtubeIntelligence}/>}
-            <dl className="plugin-information" aria-label="Plugin information">
-              <div><dt>Provided by</dt><dd>{detailPlugin.name}</dd></div>
-              {detailPlugin.developer && <div><dt>Developer</dt><dd>{detailPlugin.developer}</dd></div>}
-              {detailPlugin.version && <div><dt>Version</dt><dd>{detailPlugin.version}</dd></div>}
-              {detailPlugin.source && <div><dt>Source</dt><dd>{detailPlugin.metadata?.integration || detailPlugin.source.replaceAll('_',' ')}</dd></div>}
-              <div><dt>Category</dt><dd>{detailPlugin.category}</dd></div>
-              <div><dt>Availability</dt><dd>{statusLabel(detailPlugin)}</dd></div>
-              <div><dt>Contents</dt><dd>{detailPlugin.apps.length} apps · {detailPlugin.mcp_connectors.length} MCP servers · {detailPlugin.skills.length} skills</dd></div>
-              {detailPlugin.capabilities.length>0 && <div><dt>Capabilities</dt><dd>{detailPlugin.capabilities.join(' · ')}</dd></div>}
-            </dl>
-            {Array.isArray(selected.item.tools) && selected.item.tools.length>0 && renderChildren('Tools',selected.item.tools.map(item=>typeof item==='string'?{id:item,name:item}:item),(()=> <ConnLogo c={detailPlugin} size={22}/>))}
-            {renderChildren('Apps',detailPlugin.apps,IcGrid)}
-            {renderChildren('Skills',detailPlugin.skills,IcSparkle)}
-            {detailPlugin.mcp_connectors.length>0 && <details className="plugin-technical"><summary>MCP servers · {detailPlugin.mcp_connectors.length}</summary>{renderChildren('MCP servers',detailPlugin.mcp_connectors,IcMcp)}</details>}
-          </React.Fragment>}
-        </section>}
-      </div>
-    </div>
-  );
-};
+const BackendConnectorsView = props => <window.VellumUI.PluginWorkspace {...props} Logo={ConnLogo} SidebarIcon={IcPanel} renderDiscord={()=><DiscordWorkspace/>}/>;
 
 const ArchiveView = ({chats, onRestore, onDelete}) => {
   const archived = chats.filter(c => c.archived);
@@ -7945,7 +7693,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({onTryPlugin, pluginTarget, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const SHORTCUTS=shortcutGroups(dictationShortcuts);
   const [tab, setTab] = useState(initialTab || 'General');
   const [settingsQuery, setSettingsQuery] = useState('');
@@ -8239,7 +7987,7 @@ const SettingsModal = ({onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAct
           )}
           {tab === 'Plugins' && (
             <React.Fragment>
-              <BackendConnectorsView onAdd={onAddPlugin} onConfirmAdd={onConfirmPlugin} onCancelAdd={onCancelPlugin} spotifyControls={<div className="set-row spotify-row">
+              <BackendConnectorsView onTry={onTryPlugin} initialRoute={pluginTarget} onNavigateSettings={setTab} onExit={onClose} onSkillAction={onSkillAction} onAdd={onAddPlugin} onConfirmAdd={onConfirmPlugin} onCancelAdd={onCancelPlugin} spotifyControls={<div className="set-row spotify-row">
                 <div className="spotify-row-main"><span className="spotify-mark">S</span><div className="spotify-row-copy">Spotify<span className="sr-sub">Playback, devices, queue, search, playlists, albums, library, and history.</span><span className={'spotify-status' + (spotify && spotify.connected ? ' connected' : '')}>{spotify && spotify.connected ? ((spotify.account_name || 'Spotify') + (spotify.product ? ' Â· ' + spotify.product : '')) : spotify && spotify.status === 'reauth_required' ? 'Reauthentication required' : 'Not connected'}</span></div></div>
                 <span className="sr-end">{spotify && spotify.connected ? <button className="btn" onClick={onSpotifyDisconnect}>Disconnect</button> : <button className="btn primary" onClick={onSpotifyConnect}>{spotify && spotify.status === 'reauth_required' ? 'Reconnect' : 'Connect'}</button>}</span>
               </div>} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={onSkillAction}/>} apps={apps} catalogState={pluginCatalogState} onRetry={onRetryPlugins} onPluginState={onPluginState} onCalendarAction={onCalendarAction} youtubeIntelligence={youtubeIntelligence} onOpenSkills={onOpenSkills} onBrowse={onBrowsePlugins}/>
@@ -9338,6 +9086,9 @@ const [slashSkills, setSlashSkills] = useState([]);
   const cuEnabled = !!deviceSettings.values.computer_use_preview;
   const setCuEnabled = value => dispatchDeviceSettings({computer_use_preview:!!value});
   const [settingsTab, setSettingsTab] = useState('General');
+  const [settingsPluginTarget,setSettingsPluginTarget]=useState(null);
+  const [pluginDirectoryRevision,setPluginDirectoryRevision]=useState(0);
+  const [pluginDraft,setPluginDraft]=useState(null);
   const [menu, setMenu] = useState(null);          // {type:'chat'|'project'|'profile', id?, x, y}
   const [renamingId, setRenamingId] = useState(null);
   const [projRenamingId, setProjRenamingId] = useState(null);
@@ -10542,7 +10293,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!notify) return;
     const share = receipt.result && receipt.result.share;
     const shareReview = receipt.result && receipt.result.share_review;
-    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : receipt.action_id === 'slack.mcp.execute' ? receipt.result?.slack_review : receipt.action_id === 'airtable.mcp.execute' ? receipt.result?.airtable_review : receipt.action_id === 'serpapi.mcp.execute' ? receipt.result?.serpapi_review : receipt.action_id === 'supabase.mcp.execute' ? receipt.result?.supabase_review : receipt.action_id === 'vercel.mcp.execute' ? receipt.result?.vercel_review : receipt.action_id === 'clickup.mcp.execute' ? receipt.result?.clickup_review : receipt.action_id === 'hubspot.mcp.execute' ? receipt.result?.hubspot_review : receipt.action_id === 'exa.mcp.execute' ? receipt.result?.exa_review : receipt.action_id === 'tavily.mcp.execute' ? receipt.result?.tavily_review : receipt.action_id === 'firecrawl.mcp.execute' ? receipt.result?.firecrawl_review : receipt.action_id === 'apify.mcp.execute' ? receipt.result?.apify_review : receipt.action_id === 'notion.mcp.execute' ? receipt.result?.notion_review : null;
+    const linearReview = receipt.action_id === 'linear.mcp.execute' ? receipt.result?.linear_review : receipt.action_id === 'github.mcp.execute' ? receipt.result?.github_review : receipt.action_id === 'slack.mcp.execute' ? receipt.result?.slack_review : receipt.action_id === 'airtable.mcp.execute' ? receipt.result?.airtable_review : receipt.action_id === 'serpapi.mcp.execute' ? receipt.result?.serpapi_review : receipt.action_id === 'asana.mcp.execute' ? receipt.result?.asana_review : receipt.action_id === 'hubspot.mcp.execute' ? receipt.result?.hubspot_review : receipt.action_id === 'clickup.mcp.execute' ? receipt.result?.clickup_review : receipt.action_id === 'swiggy.mcp.execute' ? receipt.result?.swiggy_review : receipt.action_id === 'zomato.mcp.execute' ? receipt.result?.zomato_review : receipt.action_id === 'district.mcp.execute' ? receipt.result?.district_review : receipt.action_id === 'vercel.mcp.execute' ? receipt.result?.vercel_review : receipt.action_id === 'supabase.mcp.execute' ? receipt.result?.supabase_review : receipt.action_id === 'exa.mcp.execute' ? receipt.result?.exa_review : receipt.action_id === 'tavily.mcp.execute' ? receipt.result?.tavily_review : receipt.action_id === 'firecrawl.mcp.execute' ? receipt.result?.firecrawl_review : receipt.action_id === 'apify.mcp.execute' ? receipt.result?.apify_review : receipt.action_id === 'notion.mcp.execute' ? receipt.result?.notion_review : null;
     const googleReview = receipt.action_id === 'google.api.execute' ? receipt.result?.google_review : null;
     const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getDesktopInvoke() !== 'function';
     const confirmationMessage = shareReview
@@ -10569,8 +10320,12 @@ const [slashSkills, setSlashSkills] = useState([]);
         : receipt.action_id === 'linear.mcp.execute' ? (linearReview?.confirm_label || 'Confirm change')
         : receipt.action_id === 'github.mcp.execute' ? (linearReview?.confirm_label || 'Apply GitHub change')
         : receipt.action_id === 'serpapi.mcp.execute' ? (linearReview?.confirm_label || 'Run SerpAPI operation')
+        : receipt.action_id === 'asana.mcp.execute' ? (linearReview?.confirm_label || 'Run Asana operation')
         : receipt.action_id === 'hubspot.mcp.execute' ? (linearReview?.confirm_label || 'Run HubSpot operation')
         : receipt.action_id === 'clickup.mcp.execute' ? (linearReview?.confirm_label || 'Run ClickUp operation')
+        : receipt.action_id === 'swiggy.mcp.execute' ? (linearReview?.confirm_label || 'Run Swiggy operation')
+        : receipt.action_id === 'zomato.mcp.execute' ? (linearReview?.confirm_label || 'Run Zomato operation')
+        : receipt.action_id === 'district.mcp.execute' ? (linearReview?.confirm_label || 'Run District operation')
         : receipt.action_id === 'vercel.mcp.execute' ? (linearReview?.confirm_label || 'Run Vercel operation')
         : receipt.action_id === 'supabase.mcp.execute' ? (linearReview?.confirm_label || 'Run Supabase operation')
         : receipt.action_id === 'exa.mcp.execute' ? (linearReview?.confirm_label || 'Run Exa operation')
@@ -11019,8 +10774,9 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
   const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
+  const tryPlugin=(plugin,text)=>{dispatchSurfacePresentation('settings',{visible:false},{notify:false});newChat();setPluginDraft({id:crypto.randomUUID(),text:text||`Use ${plugin.name} to help me.`});};
   return (
-    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:settingsOpen}}>
+    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:false}}>
     <div className="stage" data-ui-reference="workspace" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
       <div className="bg-orb orb1"></div>
@@ -11063,7 +10819,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -11072,17 +10828,17 @@ const [slashSkills, setSlashSkills] = useState([]);
               onAddSource={addSource}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
-            {view === 'apps' && <BackendConnectorsView onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={()=>{setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
+            {view === 'apps' && <BackendConnectorsView sidebarVisible={workspaceLayout.surfaces['plugin-sidebar']?.visible!==false} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserSplitter value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38} onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})}/>}
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
@@ -11132,7 +10888,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal onTryPlugin={tryPlugin} pluginTarget={settingsPluginTarget} theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }
@@ -11145,7 +10901,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onOpenScheduled={() => nav('scheduled')}
           onAddPlugin={dispatchKnowledgeAction} onConfirmPlugin={confirmAppAction} onCancelPlugin={cancelAppAction} onSkillAction={dispatchSkillAction} speechPreferences={deviceSettings.values.speech} pluginCatalogState={pluginCatalog} onRetryPlugins={refreshPlugins} youtubeIntelligence={ytIntelligence} onCalendarAction={dispatchKnowledgeAction}
           onPluginState={(pluginId,enabled)=>dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}
-          onBrowsePlugins={()=>{dispatchSurfacePresentation('settings',{visible:false});nav('apps');}}
+          onBrowsePlugins={()=>{setPluginDirectoryRevision(value=>value+1);dispatchSurfacePresentation('settings',{visible:false});nav('apps');}}
           onOpenSkills={()=>{dispatchSurfacePresentation('settings',{visible:false});nav('skills');}}
           petManifest={petManifest} petLoading={petLoading} petError={petError} petInstalled={petInstalled} petActive={petActive} petSize={petSize} petHidden={petHidden} onPetToggleInstall={petToggleInstall} onPetSetActive={petSetActive} onPetSize={petSetSize} onPetHidden={petSetHidden}
           onClose={() => dispatchSurfacePresentation('settings', {visible:false})}/>}

@@ -1,7 +1,7 @@
 id: hubspot
 name: HubSpot
 type: connector
-category: MCP
+category: CRM & Communication
 version: 1.0.0
 description: Search and manage CRM records, activities, marketing content and other published operations through the official HubSpot remote CRM MCP server.
 mcp_connectors:

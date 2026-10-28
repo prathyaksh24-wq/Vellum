@@ -566,3 +566,18 @@ describe("Device Settings App Action adapter", () => {
     expect(runtime.snapshot()).toMatchObject({ revision: 0, values: { accent: "default" } });
   });
 });
+
+
+test('plugin sidebar persists independently of the main sidebar in the existing layout store', async()=> {
+  const AppActions=await loadRuntime(),storage=memoryStorage();
+  const client={dispatch:vi.fn(async(request,context)=>surfaceReceipt({reference:'plugin-sidebar',presentation:{visible:request.arguments.visible,location:'left',properties:{}},baseRevision:context.workspace_layout.revision,revision:context.workspace_layout.revision+1}))};
+  const runtime=AppActions.createWorkspaceLayoutRuntime({storage,client});
+  await runtime.dispatchSurface('plugin-sidebar',{visible:false});
+  expect(runtime.snapshot().surfaces['plugin-sidebar'].visible).toBe(false);
+  expect(runtime.snapshot().surfaces.sidebar.visible).toBe(true);
+  const restored=AppActions.createWorkspaceLayoutRuntime({storage,client});
+  expect(restored.snapshot().surfaces['plugin-sidebar'].visible).toBe(false);
+  expect(restored.snapshot().surfaces.sidebar.visible).toBe(true);
+  await restored.dispatchSurface('plugin-sidebar',{visible:true});
+  expect(restored.snapshot().surfaces['plugin-sidebar'].visible).toBe(true);
+});

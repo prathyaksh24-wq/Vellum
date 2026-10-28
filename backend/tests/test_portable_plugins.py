@@ -11,7 +11,7 @@ pytestmark = pytest.mark.usefixtures("repo_root_cwd")
 def test_discovers_hermes_style_agent_reach_and_memory_plugins():
     plugins = {plugin.id: plugin for plugin in discover_portable_plugins(Path("plugins"))}
 
-    assert plugins["agent-reach"].category == "Connectors"
+    assert plugins["agent-reach"].category == "Web & Research"
     assert plugins["agent-reach"].type == "connector"
     assert "x.search" in plugins["agent-reach"].capabilities
     assert plugins["memory-orchestrator"].category == "Memory"
@@ -91,7 +91,7 @@ def test_spotify_manifest_declares_full_hermes_toolset():
     spotify = manifests["spotify"]
 
     assert spotify.type == "connector"
-    assert spotify.category == "Connectors"
+    assert spotify.category == "Media & Entertainment"
     assert spotify.capabilities == [
         "spotify.playback",
         "spotify.devices",

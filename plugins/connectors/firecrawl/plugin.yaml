@@ -1,7 +1,7 @@
 id: firecrawl
 name: Firecrawl
 type: connector
-category: MCP
+category: Web & Research
 version: 1.0.0
 description: Search, scrape, map and crawl websites, parse documents, use research tools, and manage monitors through Firecrawl’s official hosted MCP server.
 mcp_connectors:

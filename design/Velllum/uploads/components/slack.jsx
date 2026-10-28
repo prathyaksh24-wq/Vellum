@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function SlackConnection({enabled=true,onChanged}) {
+  function SlackConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[setup,setSetup]=useState(null);
     const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -37,6 +37,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.slackMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const copy=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(setup.manifest,null,2));setNotice('Manifest copied. Paste it into Slack’s app creation form.');}catch{setError('Clipboard is unavailable. Select and copy the manifest below.');}};
     const connected=enabled&&status?.connected;
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow,setup,appId,setAppId,clientId,setClientId});
     return <section className="product-hunt-workspace slack-workspace" aria-label="Slack connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Slack':'Connect Slack'}</h2><p>{status?.message||'Checking Slack connection…'}</p></div><img src="/design-uploads/assets/plugins/slack.png" alt="Slack" width="32" height="32"/></div>
       {connected&&<p className="linear-identity">{status.account_name} <span>in {status.workspace_name}</span></p>}

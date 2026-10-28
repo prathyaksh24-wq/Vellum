@@ -1,7 +1,7 @@
 id: notion
 name: Notion
 type: connector
-category: MCP
+category: Productivity
 version: 1.0.0
 description: Search, read and manage pages, databases, comments and every tool published by Notion's official MCP server. Sign in with your own workspace.
 mcp_connectors:

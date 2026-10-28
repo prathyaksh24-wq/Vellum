@@ -20,6 +20,11 @@ function findRoot() {
 
 export const root = findRoot();
 export const SOURCE_FILES = [
+  "design/Velllum/uploads/components/asana.jsx",
+  "design/Velllum/uploads/components/swiggy.jsx",
+  "design/Velllum/uploads/components/zomato.jsx",
+  "design/Velllum/uploads/components/district.jsx",
+  "design/Velllum/uploads/components/plugin-workspace.jsx",
   "design/Velllum/uploads/Vellum Default Re-designed.html",
   "design/Velllum/uploads/vellum-workspace.html",
   "design/Velllum/uploads/components/v-select.jsx",

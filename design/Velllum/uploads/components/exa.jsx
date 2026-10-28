@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function ExaConnection({enabled=true,onChanged}) {
+  function ExaConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('exa_oauth');return id?{flow_id:id,status:'pending',message:'Checking Exa sign-in…'}:null;});
@@ -36,6 +36,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.exaMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <><window.VellumUI.WebSearchSettings/><section className="product-hunt-workspace exa-workspace" aria-label="Exa connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Exa':'Connect Exa'}</h2><p>{status?.message||'Checking Exa connection…'}</p></div><img src="/design-uploads/assets/plugins/exa.png" alt="Exa" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Search the web with advanced filters, fetch page content, and run multi-step research through Exa’s official MCP server. Includes all four currently documented tools. Provider plans and usage charges apply.</p>

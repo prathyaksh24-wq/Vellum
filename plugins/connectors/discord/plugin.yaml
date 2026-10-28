@@ -1,7 +1,7 @@
 id: discord
 name: Discord
 type: connector
-category: Connectors
+category: CRM & Communication
 version: 1.0.0
 description: Scoped Discord bot access for Vellum reads and policy-controlled messages.
 capabilities:
