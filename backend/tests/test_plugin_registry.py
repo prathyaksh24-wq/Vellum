@@ -67,6 +67,49 @@ def test_required_plugin_cannot_be_disabled(tmp_path: Path):
         registry.set_enabled("core", False)
 
 
+def test_uninstall_choice_survives_reload_and_keeps_source_files(tmp_path: Path):
+    root = tmp_path / 'plugins'
+    source = _write_plugin(root, 'demo')
+    _write_plugin(root, 'other')
+    state = tmp_path / 'state.json'
+    registry = PluginRegistry(root, state_path=state)
+    assert registry.set_installed('demo', False)['installed'] is False
+    assert (source / 'plugin.yaml').exists()
+    assert (source / 'skills' / 'demo-skill' / 'SKILL.md').exists()
+    restored = PluginRegistry(root, state_path=state)
+    restored.set_enabled('other', False)
+    assert restored.is_installed('demo') is False
+    with pytest.raises(PluginRegistryError, match='Install demo'):
+        restored.set_enabled('demo', True)
+    with pytest.raises(PluginRegistryError, match='Install demo'):
+        restored.set_enabled_many({'demo': True, 'other': True})
+    assert restored.is_enabled('demo') is False
+    assert not any(owner == 'demo' for owner in restored.skill_roots().values())
+    with restored.read_snapshot():
+        assert restored.describe('demo')['installed'] is False
+    assert restored.set_installed('demo', True)['enabled'] is True
+    assert restored.is_enabled('other') is False
+
+
+def test_required_plugin_cannot_be_uninstalled(tmp_path: Path):
+    root = tmp_path / 'plugins'
+    _write_plugin(root, 'core', required=True)
+    registry = PluginRegistry(root, state_path=tmp_path / 'state.json')
+    with pytest.raises(PluginRegistryError, match='protected'):
+        registry.set_installed('core', False)
+
+
+@pytest.mark.parametrize('plugin_id', ['asana', 'airtable', 'hubspot', 'clickup'])
+def test_business_categories_are_independent_of_connection_transport(tmp_path: Path, plugin_id: str):
+    root = tmp_path / 'plugins'
+    _write_plugin(root, plugin_id)
+    registry = PluginRegistry(root, state_path=tmp_path / 'state.json')
+    record = registry.describe(plugin_id)
+    assert record['category'] == 'CRM & Communication'
+    assert record['type'] == 'connector'
+    assert record['enabled'] is True
+
+
 def test_catalog_normalizes_mcp_servers_without_claiming_lifecycle_control(tmp_path: Path):
     registry = PluginRegistry(tmp_path / "plugins", state_path=tmp_path / "state.json")
 

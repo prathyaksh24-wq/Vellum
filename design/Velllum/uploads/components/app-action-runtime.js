@@ -39,6 +39,7 @@
   var SURFACE_DEFAULTS = {
     workspace: { visible: true, location: "application", properties: { theme: "dark" } },
     sidebar: { visible: true, location: "left", properties: {} },
+    "plugin-sidebar": { visible: true, location: "left", properties: {} },
     settings: { visible: false, location: "overlay", properties: {} },
     "right-panel": { visible: false, location: "right", properties: {} },
     composer: { visible: true, location: "bottom", properties: { size: "comfortable" } },
@@ -48,6 +49,7 @@
   var SURFACE_DEFINITIONS = [
     { reference: "workspace", title: "Workspace", supportedLocations: ["application"], configurableProperties: ["theme"], controlKernel: true },
     { reference: "sidebar", title: "Sidebar", supportedLocations: ["left"], configurableProperties: [], controlKernel: false },
+    { reference: "plugin-sidebar", title: "Plugin sidebar", supportedLocations: ["left"], configurableProperties: [], controlKernel: false },
     { reference: "settings", title: "Settings", supportedLocations: ["overlay"], configurableProperties: [], controlKernel: false },
     { reference: "right-panel", title: "Right panel", supportedLocations: ["right"], configurableProperties: ["content", "chat_ratio"], controlKernel: false },
     { reference: "composer", title: "Composer", supportedLocations: ["bottom"], configurableProperties: ["size"], controlKernel: true },

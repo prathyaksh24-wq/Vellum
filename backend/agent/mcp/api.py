@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from agent.contracts.mcp_catalog import PublishedMcpCatalog
 
 from agent.mcp.plugin_approvals import (
     PluginMcpApprovalError,
@@ -13,6 +14,18 @@ from agent.mcp.plugin_approvals import (
 
 
 router = APIRouter(prefix="/plugins/mcp", tags=["plugin-mcp"])
+
+
+@router.get("/connectors/{plugin_id}/{connector_name}/tools", response_model=PublishedMcpCatalog)
+async def published_connector_tools(plugin_id: str, connector_name: str) -> dict[str, Any]:
+    """Inspect one enabled connector's catalog without executing its tools."""
+    from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError
+    from agent.plugins.registry import get_plugin_registry
+    try:
+        tools = await PluginMcpRuntime(get_plugin_registry()).list_tools(plugin_id, connector_name)
+    except PluginMcpRuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"plugin_id": plugin_id, "connector": connector_name, "tools": tools}
 
 
 @router.get("/approvals")

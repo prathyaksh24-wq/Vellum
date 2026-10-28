@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function FirecrawlConnection({enabled=true,onChanged}) {
+  function FirecrawlConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('firecrawl_oauth');return id?{flow_id:id,status:'pending',message:'Checking Firecrawl sign-in…'}:null;});
@@ -36,6 +36,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.firecrawlMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <section className="product-hunt-workspace firecrawl-workspace" aria-label="Firecrawl connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Firecrawl':'Connect Firecrawl'}</h2><p>{status?.message||'Checking Firecrawl connection…'}</p></div><img src="/design-uploads/assets/plugins/firecrawl.ico" alt="Firecrawl" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Search, scrape, map and crawl websites, parse documents, use research tools, and manage monitors through Firecrawl’s official hosted MCP server. Operations that make changes get a readable review before they run.</p>

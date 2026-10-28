@@ -1,0 +1,14 @@
+id: gitmcp
+name: GitMCP
+type: connector
+category: Developer Tools
+version: 1.0.0
+description: Find public GitHub repositories, read and search their documentation, search code, and fetch referenced pages through GitMCP. No account or API key is required.
+mcp_connectors:
+  - name: gitmcp
+    type: http
+    url: https://gitmcp.io/docs
+capabilities:
+  - gitmcp.documentation.read
+provides_tools:
+  - repo_docs

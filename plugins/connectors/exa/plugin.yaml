@@ -1,7 +1,7 @@
 id: exa
 name: Exa
 type: connector
-category: MCP
+category: Web & Research
 version: 1.0.0
 description: Search the web with advanced filters, fetch page content, and run multi-step research through Exa’s official MCP server. Includes all four currently documented tools.
 mcp_connectors:

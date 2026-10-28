@@ -1,7 +1,7 @@
 id: apify
 name: Apify
 type: connector
-category: MCP
+category: Web & Research
 version: 1.0.0
 description: Discover and run Actors, retrieve datasets and run results, and manage saved tasks and schedules through Apify’s official hosted MCP server.
 mcp_connectors:

@@ -1,7 +1,7 @@
 id: google-drive
 name: Google Drive
 type: connector
-category: Connectors
+category: Productivity
 version: 1.0.0
 default_enabled: false
 description: Read, create, edit, upload, move, share and delete Drive files and other published Drive operations with reviewed changes.

@@ -1,7 +1,7 @@
 id: linear
 name: Linear
 type: connector
-category: MCP
+category: Productivity
 version: 1.0.0
 description: Find and manage issues, projects, comments and more with Linear's official MCP server.
 mcp_connectors:

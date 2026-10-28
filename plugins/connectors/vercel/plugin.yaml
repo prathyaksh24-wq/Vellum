@@ -1,7 +1,7 @@
 id: vercel
 name: Vercel
 type: connector
-category: MCP
+category: Developer Tools
 version: 1.0.0
 description: Manage projects, deployments, logs, domains, analytics and other published operations through the official Vercel MCP server.
 mcp_connectors:

@@ -1,7 +1,7 @@
 id: supabase
 name: Supabase
 type: connector
-category: MCP
+category: Developer Tools
 version: 1.0.0
 description: Manage projects, database SQL and migrations, Edge Functions, branches and Storage through the official Supabase MCP server.
 mcp_connectors:

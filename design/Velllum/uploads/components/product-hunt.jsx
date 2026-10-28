@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState} = React;
-  function ProductHuntWorkspace({enabled=true,onStatus}) {
+  function ProductHuntWorkspace({enabled=true,onStatus,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[token,setToken]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [pending,setPending]=useState(null),[editing,setEditing]=useState(false),[posts,setPosts]=useState(null);
@@ -37,6 +37,7 @@
     const connected=!!status?.connected&&enabled;
     const showForm=!!status&&(!status.configured||editing);
     const safeLink=url=>{try{const value=new URL(url);return value.protocol==='https:'&&(value.hostname==='www.producthunt.com'||value.hostname==='producthunt.com')?value.href:null;}catch{return null;}};
+    if(render)return render({status,busy,error,pending,run,decide,token,setToken,stage});
     return <section className="product-hunt-workspace" aria-label="Product Hunt connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Product Hunt':'Connect Product Hunt'}</h2><p>{status?.message||'Checking connection…'}</p></div><span className="product-hunt-access">Official API</span></div>
       <p className="product-hunt-privacy">Your token stays in this device’s system credential store and is sent only to Product Hunt. Account reads are requested explicitly; follow changes require confirmation and provider Write permission.</p>

@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function VercelConnection({enabled=true,onChanged}) {
+  function VercelConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('vercel_oauth');return id?{flow_id:id,status:'pending',message:'Checking Vercel sign-in…'}:null;});
@@ -36,6 +36,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.vercelMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <section className="product-hunt-workspace vercel-workspace" aria-label="Vercel connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Vercel':'Connect Vercel'}</h2><p>{status?.message||'Checking Vercel connection…'}</p></div><img className="conn-logo-img brand-monochrome" src="/design-uploads/assets/plugins/vercel.svg" alt="Vercel" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Manage Vercel projects, deployments, logs, domains, analytics and the other operations published for your authorized connection. Changes get a readable review; Vercel team permissions and plan limits apply.</p>

@@ -1,7 +1,7 @@
 id: youtube
 name: YouTube
 type: connector
-category: Connectors
+category: Media & Entertainment
 version: 1.0.0
 description: Read-only YouTube account, subscriptions, and liked-video access for Vellum Personal Intelligence.
 capabilities:

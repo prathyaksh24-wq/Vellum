@@ -68,6 +68,7 @@ def test_catalog_exposes_actions_and_registered_surface_contracts() -> None:
     assert set(surfaces) == {
         "workspace",
         "sidebar",
+        "plugin-sidebar",
         "settings",
         "right-panel",
         "composer",
@@ -75,9 +76,25 @@ def test_catalog_exposes_actions_and_registered_surface_contracts() -> None:
     }
     assert surfaces["workspace"].default_presentation.properties == {"theme": "dark"}
     assert surfaces["sidebar"].supported_locations == ["left"]
+    assert surfaces["plugin-sidebar"].supported_locations == ["left"]
     assert surfaces["settings"].default_presentation.visible is False
     assert set(surfaces["composer.send"].configurable_properties) == {"label", "size"}
     assert surfaces["composer"].control_kernel is True
+
+
+def test_plugin_sidebar_visibility_changes_only_its_registered_surface() -> None:
+    receipt = runtime().dispatch(
+        AppActionRequest(action_id=SURFACE_ACTION_ID,
+            arguments={'reference': 'plugin-sidebar', 'visible': False}),
+        layout_context(source='ui', surfaces={
+            'sidebar': SurfacePresentation(visible=True, location='left'),
+            'plugin-sidebar': SurfacePresentation(visible=True, location='left'),
+        }),
+    )
+    assert receipt.status == 'applied'
+    assert receipt.result['workspace_layout_patch']['surfaces'] == {
+        'plugin-sidebar': {'visible': False, 'location': 'left', 'properties': {}}
+    }
 
 
 def test_ui_and_nlp_dispatch_cross_the_same_runtime_interface() -> None:

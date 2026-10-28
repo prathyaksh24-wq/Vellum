@@ -1,7 +1,7 @@
 id: google-contacts
 name: Google Contacts
 type: connector
-category: Connectors
+category: CRM & Communication
 version: 1.0.0
 default_enabled: false
 description: Read, create, update, edit and delete contacts and groups through the published People API with reviewed changes.

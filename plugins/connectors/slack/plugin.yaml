@@ -1,7 +1,7 @@
 id: slack
 name: Slack
 type: connector
-category: MCP
+category: CRM & Communication
 version: 1.0.0
 description: Search and read your Slack workspace, send messages, manage canvases and lists, and use every tool published by Slack's official MCP server.
 mcp_connectors:

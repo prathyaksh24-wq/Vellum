@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function SerpApiConnection({enabled=true,onChanged}) {
+  function SerpApiConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[key,setKey]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [pending,setPending]=useState(null),[tools,setTools]=useState(null),[query,setQuery]=useState('');
@@ -30,6 +30,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const value=await api.plugins.serpapiMcpTools(true);if(mounted.current)setTools(value.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,key,setKey});
     return <><window.VellumUI.WebSearchSettings/><section className="product-hunt-workspace" aria-label="SerpAPI connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to SerpAPI':'Connect SerpAPI'}</h2><p>{status?.message||'Checking SerpAPI connection…'}</p></div><img src="/design-uploads/assets/plugins/serpapi.png" alt="SerpAPI" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Search Google, YouTube, news, shopping and other supported engines. Vellum’s existing web search and the official MCP tools share this saved key. SerpAPI currently uses API-key authentication.</p>

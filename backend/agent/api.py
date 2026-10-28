@@ -159,12 +159,24 @@ from agent.plugins.search_connections import search_settings
 from agent.plugins.serpapi_connection import serpapi_plugin_status, SERVER as SERPAPI_OFFICIAL_MCP_URL
 from agent.plugins.serpapi_controls import serpapi_contribution
 from agent.plugins.serpapi_api import router as serpapi_router
+from agent.plugins.asana_connection import asana_plugin_status
+from agent.plugins.asana_controls import asana_contribution
+from agent.plugins.asana_api import router as asana_router, oauth_router as asana_oauth_router
 from agent.plugins.hubspot_connection import hubspot_plugin_status
 from agent.plugins.hubspot_controls import hubspot_contribution
 from agent.plugins.hubspot_api import router as hubspot_router, oauth_router as hubspot_oauth_router
 from agent.plugins.clickup_connection import clickup_plugin_status
 from agent.plugins.clickup_controls import clickup_contribution
 from agent.plugins.clickup_api import router as clickup_router, oauth_router as clickup_oauth_router
+from agent.plugins.swiggy_connection import swiggy_plugin_status
+from agent.plugins.swiggy_controls import swiggy_contribution
+from agent.plugins.swiggy_api import router as swiggy_router, oauth_router as swiggy_oauth_router
+from agent.plugins.zomato_connection import zomato_plugin_status
+from agent.plugins.zomato_controls import zomato_contribution
+from agent.plugins.zomato_api import router as zomato_router, oauth_router as zomato_oauth_router
+from agent.plugins.district_connection import district_plugin_status
+from agent.plugins.district_controls import district_contribution
+from agent.plugins.district_api import router as district_router, oauth_router as district_oauth_router
 from agent.plugins.vercel_connection import vercel_plugin_status
 from agent.plugins.vercel_controls import vercel_contribution
 from agent.plugins.vercel_api import router as vercel_router, oauth_router as vercel_oauth_router
@@ -253,18 +265,22 @@ _app_action_runtime.register_plugin_contribution(google_calendar_plugin_contribu
 _app_action_runtime.register_plugin_contribution(product_hunt_contribution())
 _app_action_runtime.register_plugin_contribution(linear_contribution())
 _app_action_runtime.register_plugin_contribution(github_contribution())
+_app_action_runtime.register_plugin_contribution(slack_contribution())
 _app_action_runtime.register_plugin_contribution(airtable_contribution())
 _app_action_runtime.register_plugin_contribution(notion_contribution())
-_app_action_runtime.register_plugin_contribution(firecrawl_contribution())
 _app_action_runtime.register_plugin_contribution(apify_contribution())
 _app_action_runtime.register_plugin_contribution(serpapi_contribution())
-_app_action_runtime.register_plugin_contribution(supabase_contribution())
+_app_action_runtime.register_plugin_contribution(swiggy_contribution())
+_app_action_runtime.register_plugin_contribution(zomato_contribution())
+_app_action_runtime.register_plugin_contribution(district_contribution())
 _app_action_runtime.register_plugin_contribution(vercel_contribution())
-_app_action_runtime.register_plugin_contribution(clickup_contribution())
+_app_action_runtime.register_plugin_contribution(asana_contribution())
 _app_action_runtime.register_plugin_contribution(hubspot_contribution())
+_app_action_runtime.register_plugin_contribution(clickup_contribution())
+_app_action_runtime.register_plugin_contribution(supabase_contribution())
 _app_action_runtime.register_plugin_contribution(exa_contribution())
 _app_action_runtime.register_plugin_contribution(tavily_contribution())
-_app_action_runtime.register_plugin_contribution(slack_contribution())
+_app_action_runtime.register_plugin_contribution(firecrawl_contribution())
 _app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
@@ -6743,10 +6759,18 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         "serpapi", configured=serpapi_plugin_status()["configured"], url_or_cmd=SERPAPI_OFFICIAL_MCP_URL,
         notes="Official SerpAPI MCP with deferred tool schemas and a user-owned connection.",
     ))
+    servers.append(_entry("asana", configured=asana_plugin_status()["configured"], url_or_cmd="https://mcp.asana.com/v2/mcp",
+        notes="Official Asana MCP; per-user OAuth, deferred published tools and reviewed changes."))
     servers.append(_entry("hubspot", configured=hubspot_plugin_status()["configured"], url_or_cmd="https://mcp.hubspot.com",
         notes="Official HubSpot MCP; per-user OAuth, deferred published tools and reviewed changes."))
     servers.append(_entry("clickup", configured=clickup_plugin_status()["configured"], url_or_cmd="https://mcp.clickup.com/mcp",
         notes="Official ClickUp MCP; per-user OAuth, deferred published tools and reviewed changes."))
+    servers.append(_entry("swiggy", configured=swiggy_plugin_status()["configured"], url_or_cmd="https://mcp.swiggy.com/food + https://mcp.swiggy.com/im",
+        notes="Official Swiggy MCP; per-user OAuth, deferred published tools and reviewed changes."))
+    servers.append(_entry("zomato", configured=zomato_plugin_status()["configured"], url_or_cmd="https://mcp-server.zomato.com/mcp",
+        notes="Official Zomato MCP; per-user OAuth, deferred published tools and reviewed changes."))
+    servers.append(_entry("district", configured=district_plugin_status()["configured"], url_or_cmd="https://mcp-server.district.in/mcp",
+        notes="Official District MCP; per-user OAuth, deferred published tools and reviewed changes."))
     servers.append(_entry("vercel", configured=vercel_plugin_status()["configured"], url_or_cmd="https://mcp.vercel.com",
         notes="Official Vercel MCP; per-user OAuth, deferred published tools and reviewed changes."))
     servers.append(_entry("supabase", configured=supabase_plugin_status()["configured"],
@@ -6876,7 +6900,9 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from agent.mcp.gitmcp_tools import plugin_status as gitmcp_status
     runtime_statuses = [
+        gitmcp_status(),
         memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status(probe=False).model_dump(),
         portable_spotify_status(),
@@ -6885,18 +6911,22 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         product_hunt_plugin_status(),
         linear_plugin_status(),
         github_plugin_status(),
+        slack_plugin_status(),
         airtable_plugin_status(),
         notion_plugin_status(),
-        firecrawl_plugin_status(),
         apify_plugin_status(),
         serpapi_plugin_status(),
-        supabase_plugin_status(),
-        vercel_plugin_status(),
-        clickup_plugin_status(),
+        asana_plugin_status(),
         hubspot_plugin_status(),
+        clickup_plugin_status(),
+        swiggy_plugin_status(),
+        zomato_plugin_status(),
+        district_plugin_status(),
+        vercel_plugin_status(),
+        supabase_plugin_status(),
         exa_plugin_status(),
         tavily_plugin_status(),
-        slack_plugin_status(),
+        firecrawl_plugin_status(),
         *google_plugin_statuses(),
     ]
     plugins = _plugin_registry().catalog(
@@ -6907,7 +6937,7 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         connector_runtime = PluginMcpRuntime(_plugin_registry())
         declared_connectors = {
             (connector.plugin_id, connector.name): connector.public()
-            for connector in connector_runtime.connectors(skip_invalid=True)
+            for connector in connector_runtime.connectors(skip_invalid=True, resolve_credentials=False)
         }
         invalid_connector_plugins = {item["plugin_id"] for item in connector_runtime.connector_diagnostics}
         connector_error = ""
@@ -6926,7 +6956,10 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
             runtime = declared_connectors.get((plugin_id, name))
             if runtime:
                 connector.update(runtime)
-                connector["status"] = "configured" if runtime["configured"] else "needs_configuration"
+                configured = (bool(plugin.get('configured')) and plugin.get('enabled') is not False
+                    if runtime.get('credentials_deferred') else runtime['configured'])
+                connector['configured'] = configured
+                connector["status"] = "configured" if configured else "needs_configuration"
             else:
                 connector.setdefault("status", "disabled" if plugin.get("enabled") is False else "declared")
             enriched.append(connector)
@@ -6938,9 +6971,15 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
 
 @router.get("/plugins")
 async def list_plugins() -> dict[str, Any]:
-    servers = await asyncio.to_thread(_mcp_server_configuration)
-    plugins = await asyncio.to_thread(_plugin_catalog, servers)
+    plugins = await asyncio.to_thread(_list_plugin_metadata)
     return {"plugins": plugins}
+
+
+def _list_plugin_metadata() -> list[dict[str, Any]]:
+    # Share one request-local manifest/state snapshot across configuration and
+    # catalog projection. Neither phase may launch provider credential refresh.
+    with _plugin_registry().read_snapshot():
+        return _plugin_catalog(_mcp_server_configuration())
 
 
 @router.post("/plugins/{plugin_id}/state")
@@ -7199,29 +7238,37 @@ router.include_router(linear_router)
 router.include_router(linear_oauth_router)
 router.include_router(github_router)
 router.include_router(github_oauth_router)
+router.include_router(slack_router)
+router.include_router(slack_oauth_router)
 router.include_router(airtable_router)
 router.include_router(airtable_oauth_router)
 router.include_router(notion_router)
 router.include_router(notion_oauth_router)
-router.include_router(firecrawl_router)
-router.include_router(firecrawl_oauth_router)
 router.include_router(apify_router)
 router.include_router(apify_oauth_router)
 router.include_router(serpapi_router)
-router.include_router(supabase_router)
-router.include_router(supabase_oauth_router)
-router.include_router(vercel_router)
-router.include_router(vercel_oauth_router)
+router.include_router(asana_router)
+router.include_router(hubspot_router)
+router.include_router(asana_oauth_router)
+router.include_router(hubspot_oauth_router)
 router.include_router(clickup_router)
 router.include_router(clickup_oauth_router)
-router.include_router(hubspot_router)
-router.include_router(hubspot_oauth_router)
+router.include_router(swiggy_router)
+router.include_router(zomato_router)
+router.include_router(district_router)
+router.include_router(vercel_router)
+router.include_router(swiggy_oauth_router)
+router.include_router(zomato_oauth_router)
+router.include_router(district_oauth_router)
+router.include_router(vercel_oauth_router)
+router.include_router(supabase_router)
+router.include_router(supabase_oauth_router)
 router.include_router(exa_router)
 router.include_router(exa_oauth_router)
 router.include_router(tavily_router)
 router.include_router(tavily_oauth_router)
-router.include_router(slack_router)
-router.include_router(slack_oauth_router)
+router.include_router(firecrawl_router)
+router.include_router(firecrawl_oauth_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
 

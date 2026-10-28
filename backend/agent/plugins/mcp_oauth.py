@@ -124,7 +124,7 @@ class OfficialMcpOAuthService(KeyringRecordStore):
         try:
             response = self.request(method, url, timeout=30, follow_redirects=False, **kwargs)
             if response.status_code >= 300:
-                if url == self.provider.token and (kwargs.get('data') or {}).get('grant_type') == 'refresh_token':
+                if url == self.provider.token and (kwargs.get('data') or kwargs.get('json') or {}).get('grant_type') == 'refresh_token':
                     try:
                         error = response.json().get('error')
                     except (ValueError, AttributeError):
@@ -180,12 +180,12 @@ class OfficialMcpOAuthService(KeyringRecordStore):
         from agent.mcp.plugin_runtime import PluginMcpConnector
         return PluginMcpConnector(plugin_id=self.provider.plugin_id, name=self.provider.plugin_id, root=Path(__file__).parent, transport='http', url=self.provider.server, headers={'Authorization': 'Bearer ' + data['access_token']})
 
-    def _catalog(self, data):
+    def _catalog(self, data, *, connector=None):
         from agent.mcp.plugin_runtime import SdkPluginMcpTransport
         from agent.tools.plugin_mcp import _run_async
         phase = 'transport'
         try:
-            values = _run_async(asyncio.wait_for((self.transport or SdkPluginMcpTransport()).list_tools(self.connector(data)), timeout=40))
+            values = _run_async(asyncio.wait_for((self.transport or SdkPluginMcpTransport()).list_tools(connector or self.connector(data)), timeout=40))
             phase = 'catalog_validation'
             if not values or len(values) > 1000:
                 raise ValueError()

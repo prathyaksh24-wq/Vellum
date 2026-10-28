@@ -1,7 +1,7 @@
 id: google-workspace
 name: Google
 type: connector
-category: Connectors
+category: Productivity
 version: 1.0.0
 description: Choose Gmail, Drive, Calendar and Contacts with one Google account connection.
 capabilities:

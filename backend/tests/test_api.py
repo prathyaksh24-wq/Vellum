@@ -1765,7 +1765,7 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert {"agent-reach", "serpapi"} <= plugin_ids
     memory_plugin = next(item for item in plugins.json()["plugins"] if item["id"] == "memory-orchestrator")
     assert memory_plugin["type"] == "system"
-    assert memory_plugin["category"] == "Memory"
+    assert memory_plugin["category"] == "Memory & Knowledge"
     assert memory_plugin["required"] is True
     assert "memory.run_dreaming" in memory_plugin["capabilities"]
     assert memory_plugin["metadata"]["portable_plugin"]["path"].endswith("plugins/memory/vellum-memory-orchestrator")
@@ -1811,7 +1811,7 @@ def test_plugin_catalog_does_not_block_the_async_api(monkeypatch):
         catalog_threads.append(threading.get_ident())
         return []
 
-    monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": []})
+    monkeypatch.setattr(api, "_mcp_server_configuration", lambda probe=False: [])
     monkeypatch.setattr(api, "_plugin_catalog", slow_catalog)
 
     assert asyncio.run(api.list_plugins()) == {"plugins": []}

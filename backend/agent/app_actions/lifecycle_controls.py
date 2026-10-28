@@ -13,6 +13,8 @@ from agent.tools.registry import CapabilityAccess
 
 PLUGIN_STATE_SET_ACTION_ID = "plugin.state.set"
 PLUGIN_ADD_ACTION_ID = 'plugin.add'
+PLUGIN_INSTALL_ACTION_ID = 'plugin.install'
+PLUGIN_UNINSTALL_ACTION_ID = 'plugin.uninstall'
 MARKETPLACE_ADD_ACTION_ID = 'plugin.marketplace.add'
 SKILL_MUTATION_SUBMIT_ACTION_ID = "skill.mutation.submit"
 SKILL_MUTATION_APPROVE_ACTION_ID = "skill.mutation.approve"
@@ -22,6 +24,8 @@ SKILL_UNINSTALL_ACTION_ID = "skill.uninstall"
 LIFECYCLE_CONTROL_ACTION_IDS = frozenset({
     PLUGIN_STATE_SET_ACTION_ID,
     PLUGIN_ADD_ACTION_ID,
+    PLUGIN_INSTALL_ACTION_ID,
+    PLUGIN_UNINSTALL_ACTION_ID,
     MARKETPLACE_ADD_ACTION_ID,
     SKILL_MUTATION_SUBMIT_ACTION_ID,
     SKILL_MUTATION_APPROVE_ACTION_ID,
@@ -64,6 +68,17 @@ class PluginSkillActionService:
         confirmed: bool = False,
     ) -> dict[str, Any]:
         try:
+            if action_id in {PLUGIN_INSTALL_ACTION_ID, PLUGIN_UNINSTALL_ACTION_ID}:
+                if not confirmed:
+                    raise LifecycleControlError('CONFIRMATION_REQUIRED', 'Review this plugin installation change.')
+                plugin_id = _required_string(arguments, 'plugin_id')
+                installed = action_id == PLUGIN_INSTALL_ACTION_ID
+                previous = self.plugin_registry.is_installed(plugin_id)
+                plugin = self.plugin_registry.set_installed(plugin_id, installed)
+                self.plugin_state_changed()
+                return {'changed': previous != installed, 'plugin': plugin,
+                    '_target_kind': 'plugin', '_target_id': plugin_id,
+                    '_message': f"{plugin.get('name') or plugin_id} {'installed' if installed else 'uninstalled from Vellum'}. Source files and account authorization were retained."}
             if action_id in {PLUGIN_ADD_ACTION_ID,MARKETPLACE_ADD_ACTION_ID}:
                 if not confirmed:
                     raise LifecycleControlError('CONFIRMATION_REQUIRED','Review this plugin source before adding it.')
@@ -191,6 +206,12 @@ def lifecycle_action_definitions() -> list[AppActionDefinition]:
         "result_schema": {"type": "object", "required": ["changed"]},
     }
     return [
+        *[AppActionDefinition(id=action_id, owner='plugin-registry', title=title,
+            description='Change this user\'s Vellum installation choice. Source-owned files and provider account grants are retained; uninstalled plugin tools and skills are unavailable.',
+            confirmation_rule='operation_bound', argument_schema={'type':'object', 'required':['plugin_id'],
+                'additionalProperties':False, 'properties':{'plugin_id':{'type':'string','minLength':1}}},
+            ui_reference='plugins', audit_label=action_id, **common)
+            for action_id, title in [(PLUGIN_INSTALL_ACTION_ID, 'Install plugin'), (PLUGIN_UNINSTALL_ACTION_ID, 'Uninstall plugin')]],
         AppActionDefinition(id=PLUGIN_ADD_ACTION_ID,owner='plugin-registry',title='Add plugin',
             description='Add a declarative plugin, custom MCP server, or scanned skill/MCP archive. Saving does not execute MCP tools.',
             confirmation_rule='operation_bound',argument_schema=PluginSetup.model_json_schema(),ui_reference='plugins',audit_label=PLUGIN_ADD_ACTION_ID,**common),

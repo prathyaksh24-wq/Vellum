@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function HubSpotConnection({enabled=true,onChanged}) {
+  function HubSpotConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('hubspot_oauth');return id?{flow_id:id,status:'pending',message:'Checking HubSpot sign-in…'}:null;});
@@ -48,6 +48,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.hubspotMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow,clientId,setClientId,clientSecret,setClientSecret,reviewSetup});
     return <section className="product-hunt-workspace hubspot-workspace" aria-label="HubSpot connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to HubSpot':'Connect HubSpot'}</h2><p>{status?.message||'Checking HubSpot connection…'}</p></div><img className="conn-logo-img" src="/design-uploads/assets/plugins/hubspot.svg" alt="HubSpot" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Search and manage CRM records, activities, marketing content and the other operations published by HubSpot’s official remote MCP server. Changes get a readable review; account permissions and subscription limits apply.</p>

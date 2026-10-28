@@ -31,6 +31,7 @@ def _default_surfaces() -> dict[str, SurfacePresentation]:
     return {
         "workspace": SurfacePresentation(visible=True, location="application", properties={"theme": "dark"}),
         "sidebar": SurfacePresentation(visible=True, location="left"),
+        "plugin-sidebar": SurfacePresentation(visible=True, location="left"),
         "settings": SurfacePresentation(visible=False, location="overlay"),
         "right-panel": SurfacePresentation(visible=False, location="right"),
         "composer": SurfacePresentation(

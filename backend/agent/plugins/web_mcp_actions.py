@@ -41,6 +41,9 @@ class WebMcpAdapter:
         self.runtime = runtime or PluginMcpRuntime(get_plugin_registry())
         self.provider = service.provider
 
+    def route(self, operation):
+        return self.provider.plugin_id, operation.tool_name
+
     def tool(self, operation):
         self.service.require()
         tool = next((item for item in self.service.catalog() if item['name'] == operation.tool_name), None)
@@ -66,8 +69,9 @@ class WebMcpAdapter:
         if not self.tool(operation)['read_only']:
             raise self.service.error_type('This operation requires an exact-input review. Use the provider change tool.')
         data = self.service.require()
-        result = self.run(self.runtime.call_tool(self.provider.plugin_id, self.provider.plugin_id,
-            operation.tool_name, operation.arguments, credential_digest=data['revision'], structured=True))
+        connector, name = self.route(operation)
+        result = self.run(self.runtime.call_tool(self.provider.plugin_id, connector,
+            name, operation.arguments, credential_digest=data['revision'], structured=True))
         provider_result(result, self.service.error_type)
         return result
 
@@ -76,9 +80,10 @@ class WebMcpAdapter:
         if tool['read_only']:
             raise self.service.error_type('Use the provider read tool for this operation.')
         data = self.service.require()
+        connector, name = self.route(operation)
         approval = self.runtime.approval_store.request(PluginMcpOperation.from_arguments(
-            plugin_id=self.provider.plugin_id, connector=self.provider.plugin_id,
-            tool_name=operation.tool_name, arguments=operation.arguments))
+            plugin_id=self.provider.plugin_id, connector=connector,
+            tool_name=name, arguments=operation.arguments))
         title = operation.tool_name.removeprefix(self.provider.plugin_id + '_').replace('_', ' ').replace('-', ' ').capitalize()
         preview = {'provider': self.provider.name, 'heading': f'Review {self.provider.name} operation',
             'confirm_label': f'Run {self.provider.name} operation', 'title': title,
@@ -101,8 +106,9 @@ class WebMcpAdapter:
                     or binding.get('schema_digest') != digest(tool)):
                 raise self.service.error_type('The authorization, schema or requested inputs changed. Review the operation again.')
             self.runtime.approval_store.approve(binding['approval_id'])
-            result = self.run(self.runtime.call_tool(self.provider.plugin_id, self.provider.plugin_id,
-                operation.tool_name, operation.arguments, approval_id=binding['approval_id'],
+            connector, name = self.route(operation)
+            result = self.run(self.runtime.call_tool(self.provider.plugin_id, connector,
+                name, operation.arguments, approval_id=binding['approval_id'],
                 credential_digest=data['revision'], structured=True))
             value = provider_result(result, self.service.error_type)
             if isinstance(value, dict) and isinstance(value.get('data'), dict):
@@ -127,7 +133,7 @@ class WebMcpAdapter:
                 '_message': f'{self.provider.name} accepted this operation. Read its run/job status and output before reporting completion; do not repeat the run.' if pending else f'{self.provider.name} confirmed this operation. Retrieve its output separately when the result provides storage IDs.'}
 
 
-def deferred_tools(service_factory, operation_model, name_for_tool):
+def deferred_tools(service_factory, operation_model, name_for_tool, *, adapter_factory=WebMcpAdapter):
     provider = service_factory().provider
 
     def catalog(query: str = '', offset: int = 0, limit: int = 15):
@@ -151,13 +157,13 @@ def deferred_tools(service_factory, operation_model, name_for_tool):
         try:
             operation = operation_model(tool_name=name, arguments=arguments)
             if write and provider.plugin_id == 'exa' and name == 'agent_run':
-                adapter = WebMcpAdapter(service_factory())
+                adapter = adapter_factory(service_factory())
                 if adapter.tool(operation)['read_only']:
                     return adapter.read(operation)
             if write:
                 from agent.tools.app_actions import app_action
                 return app_action.invoke({'operation': 'execute', 'action_id': provider.plugin_id + '.mcp.execute', 'arguments': operation.model_dump()})
-            return WebMcpAdapter(service_factory()).read(operation)
+            return adapter_factory(service_factory()).read(operation)
         except (ValueError, RuntimeError) as exc:
             return json.dumps({'ok': False, 'error': str(exc)})
 

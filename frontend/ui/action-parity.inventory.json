@@ -2,8 +2,8 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 965,
-      "sha256": "d2bc618811a331e97924d078c465145efdba529c5687211b358e0ab9a09fdcdb"
+      "count": 930,
+      "sha256": "7f35de6b9adeec908d713747bce330be324bdbf7b17421431604f3061abae152"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -128,6 +128,26 @@
     "design/Velllum/uploads/components/vercel.jsx": {
       "count": 8,
       "sha256": "3c88b245390f1cf4aa15ab4c725853697089f2542e2935fc69851f711821180f"
+    },
+    "design/Velllum/uploads/components/asana.jsx": {
+      "count": 11,
+      "sha256": "e75dc77dcea209366f20f8d02a2f9f658295cf7b6b21ebb75f4b06ede7312b71"
+    },
+    "design/Velllum/uploads/components/swiggy.jsx": {
+      "count": 9,
+      "sha256": "eadc372ec4d54519454fb4730a3d65d24e1a436e3018d25ee31b57722b8effbf"
+    },
+    "design/Velllum/uploads/components/zomato.jsx": {
+      "count": 8,
+      "sha256": "b6db29e6ad4a00fb45e486bae60f0da739d739c9cbfdb55b2a78c93b6fdef7c9"
+    },
+    "design/Velllum/uploads/components/district.jsx": {
+      "count": 8,
+      "sha256": "42e0e4cbd918d5eb8538c70fa2ca8a3167766bf6635a7e2e751ea359d1bde0d2"
+    },
+    "design/Velllum/uploads/components/plugin-workspace.jsx": {
+      "count": 118,
+      "sha256": "aac8242bbaab911ce8f3354e5488c1ff5d6834f679233a8562f8c65ad4d97850"
     }
   },
   "covered": [
@@ -1687,6 +1707,249 @@
         "path": "design/Velllum/uploads/components/hubspot.jsx",
         "text": "hubspot.connection.configure"
       }
+    },
+    {
+      "surface": "Asana",
+      "name": "sign in or reconnect",
+      "actionId": "asana.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/asana.jsx",
+        "text": "asana.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Asana",
+      "name": "cancel sign-in",
+      "actionId": "asana.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/asana.jsx",
+        "text": "asana.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Asana",
+      "name": "verify connection",
+      "actionId": "asana.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/asana.jsx",
+        "text": "asana.connection.verify"
+      }
+    },
+    {
+      "surface": "Asana",
+      "name": "review and confirm disconnection",
+      "actionId": "asana.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/asana.jsx",
+        "text": "asana.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Asana",
+      "name": "review and confirm exact provider changes",
+      "actionId": "asana.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "asana.mcp.execute"
+      }
+    },
+    {
+      "surface": "Asana",
+      "name": "review and save staged app credentials",
+      "actionId": "asana.connection.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/components/asana.jsx",
+        "text": "asana.connection.configure"
+      }
+    },
+    {
+      "surface": "Swiggy",
+      "name": "sign in or reconnect",
+      "actionId": "swiggy.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/swiggy.jsx",
+        "text": "swiggy.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Swiggy",
+      "name": "cancel sign-in",
+      "actionId": "swiggy.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/swiggy.jsx",
+        "text": "swiggy.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Swiggy",
+      "name": "verify connection",
+      "actionId": "swiggy.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/swiggy.jsx",
+        "text": "swiggy.connection.verify"
+      }
+    },
+    {
+      "surface": "Swiggy",
+      "name": "review and confirm disconnection",
+      "actionId": "swiggy.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/swiggy.jsx",
+        "text": "swiggy.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Swiggy",
+      "name": "review and confirm swiggyct provider changes",
+      "actionId": "swiggy.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "swiggy.mcp.execute"
+      }
+    },
+    {
+      "surface": "Swiggy",
+      "name": "choose Food and Instamart",
+      "actionId": "swiggy.connection.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/components/swiggy.jsx",
+        "text": "swiggy.connection.configure"
+      }
+    },
+    {
+      "surface": "Zomato",
+      "name": "sign in or reconnect",
+      "actionId": "zomato.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/zomato.jsx",
+        "text": "zomato.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "Zomato",
+      "name": "cancel sign-in",
+      "actionId": "zomato.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/zomato.jsx",
+        "text": "zomato.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "Zomato",
+      "name": "verify connection",
+      "actionId": "zomato.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/zomato.jsx",
+        "text": "zomato.connection.verify"
+      }
+    },
+    {
+      "surface": "Zomato",
+      "name": "review and confirm disconnection",
+      "actionId": "zomato.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/zomato.jsx",
+        "text": "zomato.connection.disconnect"
+      }
+    },
+    {
+      "surface": "Zomato",
+      "name": "review and confirm zomatoct provider changes",
+      "actionId": "zomato.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "zomato.mcp.execute"
+      }
+    },
+    {
+      "surface": "District",
+      "name": "sign in or reconnect",
+      "actionId": "district.connection.oauth.start",
+      "probe": {
+        "path": "design/Velllum/uploads/components/district.jsx",
+        "text": "district.connection.oauth.start"
+      }
+    },
+    {
+      "surface": "District",
+      "name": "cancel sign-in",
+      "actionId": "district.connection.oauth.cancel",
+      "probe": {
+        "path": "design/Velllum/uploads/components/district.jsx",
+        "text": "district.connection.oauth.cancel"
+      }
+    },
+    {
+      "surface": "District",
+      "name": "verify connection",
+      "actionId": "district.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/district.jsx",
+        "text": "district.connection.verify"
+      }
+    },
+    {
+      "surface": "District",
+      "name": "review and confirm disconnection",
+      "actionId": "district.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/district.jsx",
+        "text": "district.connection.disconnect"
+      }
+    },
+    {
+      "surface": "District",
+      "name": "review and confirm districtct provider changes",
+      "actionId": "district.mcp.execute",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "district.mcp.execute"
+      }
+    },
+    {
+      "surface": "Plugin workspace",
+      "name": "install reviewed plugin",
+      "actionId": "plugin.install",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "submit('plugin.install'"
+      }
+    },
+    {
+      "surface": "Plugin workspace",
+      "name": "uninstall reviewed plugin",
+      "actionId": "plugin.uninstall",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "applyReviewed('plugin.uninstall'"
+      }
+    },
+    {
+      "surface": "Plugin workspace",
+      "name": "plugin sidebar visibility",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchSurfacePresentation('plugin-sidebar'"
+      }
+    },
+    {
+      "surface": "Plugin workspace",
+      "name": "add declarative connection",
+      "actionId": "plugin.add",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "let action = 'plugin.add'"
+      }
+    },
+    {
+      "surface": "Plugin workspace",
+      "name": "add skill marketplace",
+      "actionId": "plugin.marketplace.add",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "action = 'plugin.marketplace.add'"
+      }
     }
   ],
   "exemptions": [
@@ -1789,6 +2052,10 @@
     {
       "scope": "HubSpot tool discovery, filters and OAuth status polling",
       "reason": "Read-only metadata and transient presentation; connection lifecycle and provider changes use typed App Actions and exact-input reviews."
+    },
+    {
+      "surface": "Anonymous public MCP catalog verification",
+      "reason": "Verify connection fetches only the enabled connector tool catalog through the existing PluginMcpRuntime. It does not save credentials, grant account access, enable the plugin, or execute a provider operation."
     }
   ],
   "deferred": [

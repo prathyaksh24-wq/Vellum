@@ -1,7 +1,7 @@
 id: serpapi
 name: SerpAPI
 type: connector
-category: MCP
+category: Web & Research
 version: 1.0.0
 description: Search Google, YouTube, Bing, shopping, news and other supported engines through SerpAPI’s official MCP server. Existing Vellum web search uses the same saved key.
 mcp_connectors:

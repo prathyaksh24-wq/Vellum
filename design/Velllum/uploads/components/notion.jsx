@@ -1,6 +1,6 @@
 (function () {
   const {useEffect,useRef,useState}=React;
-  function NotionConnection({enabled=true,onChanged}) {
+  function NotionConnection({enabled=true,onChanged,render}) {
     const api=window.VellumApi;
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const [flow,setFlow]=useState(()=>{const id=new URLSearchParams(location.search).get('notion_oauth');return id?{flow_id:id,status:'pending',message:'Checking Notion sign-in…'}:null;});
@@ -36,6 +36,7 @@
     const browse=async()=>{setBusy(true);setError('');try{const result=await api.plugins.notionMcpTools(true);if(mounted.current)setTools(result.tools);await refresh();}catch(err){if(mounted.current)setError(err.message);}finally{if(mounted.current)setBusy(false);}};
     const connected=enabled&&status?.connected;
     const filtered=tools?.filter(tool=>(tool.name+' '+tool.description).toLowerCase().includes(query.toLowerCase()));
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect,decide,flow});
     return <section className="product-hunt-workspace notion-workspace" aria-label="Notion connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Notion':'Connect Notion'}</h2><p>{status?.message||'Checking Notion connection…'}</p></div><img src="/design-uploads/assets/plugins/notion.png" alt="Notion" width="32" height="32"/></div>
       <p className="product-hunt-privacy">Search your workspace, read and create pages, work with databases, comments and every tool published by Notion’s official MCP server. Workspace permissions and plan limits apply. Changes get a readable review before they run.</p>
