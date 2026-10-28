@@ -71,7 +71,7 @@ def test_catalog_preview_never_resolves_provider_grants_and_is_not_an_executable
     assert preview.configured is False
     assert preview.public()['credentials_deferred'] is True
     # Metadata mode does not authorize a different plugin to use District's grant.
-    with pytest.raises(PluginMcpRuntimeError, match='Invalid official connector endpoint'):
+    with pytest.raises(PluginMcpRuntimeError, match='unavailable or disabled'):
         runtime.connector('demo', 'demo-server')
 
 
