@@ -125,8 +125,14 @@ class SwiggyService(OfficialMcpOAuthService):
         status = super().status()
         try:
             selected = self.selected(self.load())
-        except SwiggyError:
-            selected = []
+        except SwiggyError as exc:
+            # A locked store is not a user's choice to disable both services.
+            return status.model_copy(update={
+                'configured': False, 'connected': False,
+                'status': status.status if status.status == 'keyring_unavailable' else 'error',
+                'message': status.message if status.status == 'keyring_unavailable' else str(exc),
+                'services': [SwiggyServiceStatus(id=key, name=LABELS[key], enabled=False,
+                    connected=False, tool_count=0) for key in SERVERS]})
         return status.model_copy(update={'services': [SwiggyServiceStatus(id=key, name=LABELS[key], enabled=key in selected,
             connected=status.connected and key in selected,
             tool_count=sum(tool.get('service') == key for tool in self.tools)) for key in SERVERS],
@@ -143,7 +149,10 @@ def swiggy_service():
 def swiggy_plugin_status():
     service = swiggy_service()
     status = service.status()
-    tools = service.cached_tools()
+    try:
+        tools = service.cached_tools()
+    except SwiggyError:
+        tools = []
     return {'id': 'swiggy', 'configured': status.configured, 'status': status.status, 'notes': status.message,
         'tools': ['swiggy_mcp_catalog', 'swiggy_mcp_describe', 'swiggy_mcp_read', 'swiggy_mcp_execute',
             *[tool_name(tool['name']) for tool in tools]],

@@ -6685,7 +6685,7 @@ const DiscordWorkspace = () => {
   </section>;
 };
 const CalendarWorkspace = window.VellumUI.CalendarWorkspace;
-const BackendConnectorsView = props => <window.VellumUI.PluginWorkspace {...props} Logo={ConnLogo} SidebarIcon={IcPanel}/>;
+const BackendConnectorsView = props => <window.VellumUI.PluginWorkspace {...props} Logo={ConnLogo} SidebarIcon={IcPanel} renderDiscord={()=><DiscordWorkspace/>}/>;
 
 const ArchiveView = ({chats, onRestore, onDelete}) => {
   const archived = chats.filter(c => c.archived);

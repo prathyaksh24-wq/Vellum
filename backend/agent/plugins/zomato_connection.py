@@ -118,7 +118,10 @@ def zomato_service():
 def zomato_plugin_status():
     service = zomato_service()
     status = service.status()
-    tools = service.cached_tools()
+    try:
+        tools = service.cached_tools()
+    except ZomatoError:
+        tools = []
     return {'id': 'zomato', 'configured': status.configured, 'status': status.status, 'notes': status.message,
         'tools': ['zomato_mcp_catalog', 'zomato_mcp_describe', 'zomato_mcp_read', 'zomato_mcp_execute',
             *[tool_name(tool['name']) for tool in tools]],

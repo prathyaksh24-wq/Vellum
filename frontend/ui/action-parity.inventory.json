@@ -146,8 +146,8 @@
       "sha256": "42e0e4cbd918d5eb8538c70fa2ca8a3167766bf6635a7e2e751ea359d1bde0d2"
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
-      "count": 118,
-      "sha256": "aac8242bbaab911ce8f3354e5488c1ff5d6834f679233a8562f8c65ad4d97850"
+      "count": 123,
+      "sha256": "80151f31e28f978b7daa4e46aea86976bd380ff16cc384407f0355f1b1c0ae4b"
     }
   },
   "covered": [
@@ -2054,8 +2054,12 @@
       "reason": "Read-only metadata and transient presentation; connection lifecycle and provider changes use typed App Actions and exact-input reviews."
     },
     {
-      "surface": "Anonymous public MCP catalog verification",
-      "reason": "Verify connection fetches only the enabled connector tool catalog through the existing PluginMcpRuntime. It does not save credentials, grant account access, enable the plugin, or execute a provider operation."
+      "reason": "Verify connection fetches only the enabled connector tool catalog through the existing PluginMcpRuntime. It does not save credentials, grant account access, enable the plugin, or execute a provider operation.",
+      "scope": "Anonymous public MCP catalog verification"
+    },
+    {
+      "scope": "Discord bot authorization navigation and lazy workspace disclosure",
+      "reason": "Install bot reads the backend-generated Discord authorization URL and opens provider consent. Expanding the existing workspace authorizes its reads; writes retain its existing operation reviews and backend policy."
     }
   ],
   "deferred": [

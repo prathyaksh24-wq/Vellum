@@ -292,6 +292,29 @@
     serpapi: 'SerpApiConnection',
     'app-69b7bed23a9481919d2378ab225cddeb': 'ProductHuntWorkspace'
   };
+  function DiscordConnection({p,children}) {
+    const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+    const readStatus=async()=>{
+      setBusy(true);setError('');
+      try{const next=await window.VellumApi.plugins.discordStatus();setStatus({...next,message:next.connected?'Discord bot connection verified.':next.configured?'Verify the bot connection and install it in the intended server.':'Discord bot setup is managed by the backend.'});}
+      catch(e){setError(e.message||'Discord status could not be read.');}
+      finally{setBusy(false);}
+    };
+    useEffect(()=>{if(p.enabled!==false)readStatus();},[p.enabled]);
+    const connect=async()=>{
+      if(busy||p.enabled===false)return;
+      const popup=window.open('','vellum-discord-install','width=720,height=760');
+      setBusy(true);setError('');
+      try{
+        const result=await window.VellumApi.plugins.discordInstall();
+        const target=new URL(result.authorization_url);
+        if(target.origin!=='https://discord.com'||target.pathname!=='/oauth2/authorize'||target.username||target.password)throw Error('Discord returned an invalid bot authorization URL.');
+        if(popup)popup.location.href=target.href;else window.open(target.href,'_blank','noopener,noreferrer');
+      }catch(e){popup?.close();setError(e.message||'Discord installation could not be started.');}
+      finally{setBusy(false);}
+    };
+    return children({bot:true,status,busy,error,connect,readStatus});
+  }
   function PublicMcpConnection({p, children}) {
     const [tools,setTools]=useState(null), [busy,setBusy]=useState(false), [error,setError]=useState('');
     const enabled=p.enabled!==false && p.installed!==false;
@@ -322,6 +345,7 @@
       previousStatus.current = key;
       if (old !== null && key !== old) refresh();
     };
+    if(p.id==='discord')return <DiscordConnection p={p}>{children}</DiscordConnection>;
     if(p.metadata?.connection?.anonymous)return <PublicMcpConnection p={p}>{children}</PublicMcpConnection>;
     return C ? <C enabled={p.enabled !== false} onStatus={syncStatus} onChanged={refresh} revision={p.enabled} render={children} /> : children({
       status: p.metadata?.connection || {
@@ -367,6 +391,7 @@
       connected = c.status?.connected,
       account = c.status?.email || c.status?.account_name || c.status?.workspace_name || 'Authorized account',
       connect = () => c.status?.configured && !c.status?.connected && c.run ? c.run((p.id.startsWith('app-') ? 'producthunt' : p.id) + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+    if(c.bot)return <div className="ds"><h2 className="h2s">Discord bot connection</h2><p className="notice">{c.status?.message||'Checking Discord connection…'}</p><div className="df"><button className="bt" disabled={c.busy||p.enabled===false} onClick={c.connect}>Install bot</button><button className="bs" disabled={c.busy||p.enabled===false} onClick={c.readStatus}>Verify connection</button></div><Feedback p={p} c={c}/></div>;
     if(c.anonymous)return <div className="ds"><h2 className="h2s">Public MCP connection</h2><p className="notice">{c.status.message}</p><button className="bs" disabled={c.busy||p.enabled===false} onClick={c.browse}>{c.busy?'Verifying…':'Verify connection'}</button>{c.tools&&<p className="notice" role="status">Connected · {c.tools.length} published tools available</p>}<Feedback p={p} c={c}/></div>;
     return <><Setup p={p} c={c} />{connected ? <><h2 className="h2s">Connected accounts</h2><div className="lc" style={{
           marginTop: 0
@@ -403,8 +428,10 @@
         go,
         setDlg,
         tryNow,
-        skills
+        skills,
+        renderDiscord
       } = useX(),
+      [workspaceOpen,setWorkspaceOpen]=useState(false),
       [open, setOpen] = useState(false),
       items = usePluginMenus(p),
       ss = skills.filter(s => s.owner_plugin === p.id),
@@ -443,7 +470,7 @@
           t: 'app',
           p,
           app: a
-        })}><Tile p={p} sz={44} i={26} r={10} /><div className="m"><b>{name(a)}</b><span>{a.description || p.description}</span></div><Ic n="chevR" s={16} /></div>)}</>}{included.length > 0 && <><h2 className={settings ? 'h2s' : 'sc'}>Skills <span>{included.length}</span></h2><div className={settings ? 'lc' : ''} style={settings ? {
+        })}><Tile p={p} sz={44} i={26} r={10} /><div className="m"><b>{name(a)}</b><span>{a.description || p.description}</span></div><Ic n="chevR" s={16} /></div>)}</>}{p.id==='discord'&&renderDiscord&&<details className="ds" onToggle={e=>setWorkspaceOpen(e.currentTarget.open)}><summary>Discord workspace and data import</summary>{workspaceOpen&&renderDiscord()}</details>}{(p.mcp_connectors||[]).length>0&&<section aria-label="MCP servers"><h2 className="sc">MCP servers <span>{p.mcp_connectors.length}</span></h2>{p.mcp_connectors.map(server=><div className="sr" role="button" tabIndex={0} key={server.name||server.id} aria-label={'Open MCP server '+name(server)} onClick={()=>setDlg({t:'app',p,app:server,mcp:true})} onKeyDown={e=>e.target===e.currentTarget&&e.key==='Enter'&&setDlg({t:'app',p,app:server,mcp:true})}><Tile p={p} sz={44} i={26} r={10}/><div className="m"><b>{name(server)}</b><span>{server.description||p.description}</span></div><Ic n="chevR" s={16}/></div>)}</section>}{included.length > 0 && <><h2 className={settings ? 'h2s' : 'sc'}>Skills <span>{included.length}</span></h2><div className={settings ? 'lc' : ''} style={settings ? {
           marginTop: 0
         } : undefined}>{included.map(s => <div className={settings ? 'li' : 'sr'} key={s.id || s.name} role="button" tabIndex={0} onClick={() => setDlg({
             t: 'skill',
@@ -453,7 +480,7 @@
             s
           })}><Ic n="cubeo" s={22} /><div className="m"><b>{name(s)}</b><span>{s.description}</span></div><Ic n="chevR" s={16} /></div>)}</div></>}{settings ? <><h2 className="h2s">About</h2><div className="lc" style={{
           marginTop: 0
-        }}>{info.map(([a, b]) => <div className="ab" key={a}><span>{a}</span><span>{link(b) ? <a href={b} target="_blank" rel="noopener noreferrer">{b}</a> : b || 'Not supplied'}</span></div>)}</div></> : <><h2 className="sc">Information</h2><dl className="in">{[['Capabilities', (p.capabilities || []).join(', ') || 'Published tools'], ...info.slice(0, 2), ['Category', p.category], ['Source', meta.integration || p.source]].map(([a, b]) => <React.Fragment key={a}><dt>{a}</dt><dd>{b}</dd></React.Fragment>)}{[['Website', meta.website || p.website], ['Documentation', meta.documentation_url]].map(([a, b]) => <React.Fragment key={a}><dt>{a}</dt><dd>{link(b) ? <a href={b} target="_blank" rel="noopener noreferrer" aria-label={a}><Ic n="globe" /></a> : 'Not supplied'}</dd></React.Fragment>)}</dl><p className="lg">Manage account access and available tools in <ActionLink onClick={() => go({
+        }}>{info.map(([a, b]) => <div className="ab" key={a}><span>{a}</span><span>{link(b) ? <a href={b} target="_blank" rel="noopener noreferrer">{b}</a> : b || 'Not supplied'}</span></div>)}</div></> : <><h2 className="sc">Information</h2><dl className="in" aria-label="Plugin information">{[['Capabilities', (p.capabilities || []).join(', ') || 'Published tools'], ...info.slice(0, 2), ['Category', p.category], ['Source', meta.integration || p.source]].map(([a, b]) => <React.Fragment key={a}><dt>{a}</dt><dd>{b}</dd></React.Fragment>)}{[['Website', meta.website || p.website], ['Documentation', meta.documentation_url]].map(([a, b]) => <React.Fragment key={a}><dt>{a}</dt><dd>{link(b) ? <a href={b} target="_blank" rel="noopener noreferrer" aria-label={a}><Ic n="globe" /></a> : 'Not supplied'}</dd></React.Fragment>)}</dl><p className="lg">Manage account access and available tools in <ActionLink onClick={() => go({
             v: 'settings',
             p: p.id
           })}>plugin settings</ActionLink>.</p></>}</div>;
@@ -825,7 +852,7 @@
           const connected = !!c.status?.connected,
             provider = p.id.startsWith('app-') ? 'producthunt' : p.id,
             connect = () => c.status?.configured && !connected && c.run ? c.run(provider + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
-          if(c.anonymous)return <><Accounts p={p} c={c}/><PublishedTools p={p} c={c}/><div className="df"><button className="bs" onClick={close}>Close</button>{!install&&<button className="bs rd" disabled={!canRemove} onClick={()=>setDlg({t:'uninstall',p})}>Uninstall</button>}{install&&<button className="bt" disabled={!connected} onClick={close}>Done</button>}</div></>;
+          if(c.anonymous||c.bot)return <><Accounts p={p} c={c}/>{c.anonymous&&<PublishedTools p={p} c={c}/>}<div className="df"><button className="bs" onClick={close}>Close</button>{!install&&<button className="bs rd" disabled={!canRemove} onClick={()=>setDlg({t:'uninstall',p})}>Uninstall</button>}{install&&<button className="bt" disabled={!connected} onClick={close}>Done</button>}</div></>;
           return <><Setup c={c} p={p} />{install ? <p style={{
               color: 'var(--dim,#BDBDBD)',
               lineHeight: 1.8
@@ -1005,6 +1032,7 @@
     onNavigateSettings,
     onExit,
     Logo,
+    renderDiscord,
     onTry
   }) {
     const [r, setR] = useState(initialRoute || {
@@ -1199,6 +1227,7 @@
       setError,
       busy,
       Logo,
+      renderDiscord,
       tryNow,
       loading: catalogState?.loading
     }}><div className="vplug" data-ui-reference="plugins"><div className="bd"><div className="ct">{mode === 'directory' && sidebarVisible && <aside id="vellum-plugin-sidebar" data-ui-reference="plugin-sidebar" className="pn" aria-label="Customize"><div className="pnh"><h2>Customize</h2>{onSidebarVisibility&&<button className="ib" aria-label="Hide plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="true" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}</div><ActionLink className={'ni2' + (r.v !== 'skills' ? ' on' : '')} onClick={() => go({

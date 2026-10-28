@@ -107,7 +107,7 @@ def test_catalog_replaces_imported_linear_without_duplicate(tmp_path,connection)
     from agent.plugins.linear_mcp import published_tools
     assert len(result)==1 and result[0]["source"]=="portable"
     assert set(result[0]["tools"])=={"linear_"+tool["name"] for tool in published_tools()}
-    assert result[0]["category"]=="MCP" and len(result[0]["mcp_connectors"])==1
+    assert result[0]["category"]=="Productivity" and len(result[0]["mcp_connectors"])==1
 
 
 def test_http_local_origin_guards_and_removed_key_routes(connection,monkeypatch):

@@ -18,6 +18,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Add a styled web-search provider selector. Automatic prefers SerpAPI; an explicit choice is exclusive and persists as `WEB_SEARCH_BACKEND`. Existing search and extraction adapters reuse managed connections.
 
 ### Fixed
+- Keep Swiggy, District and Zomato catalog status available when the OS credential store is locked. Restore Discord's backend-owned bot install and lazy workspace in the plugin design, expose included MCP server details, and align CI fixtures and Action Parity metadata with the served components and canonical categories.
 - Request Tavily's exact `/mcp` OAuth resource so sign-in opens correctly; distinguish provider request rejection from declined consent. Keep keys out of Tavily MCP URLs, preserve failed replacement grants, and prevent disconnect from reviving older configured keys.
 
 - Save Slack authorization across bounded OS credential entries to avoid Windows'

@@ -53,3 +53,50 @@ test('plugin sidebar hide and show are driven by the applied visibility owner',a
   expect(visibility).toHaveBeenLastCalledWith(true);
   expect(onState).not.toHaveBeenCalled();
 });
+
+test('Discord opens backend-owned bot consent without claiming it connected',async()=>{
+  items=[{id:'discord',name:'Discord',enabled:true,installed:true,manageable:true}];
+  window.VellumApi.plugins.discordStatus=vi.fn().mockResolvedValue({configured:true,connected:false});
+  window.VellumApi.plugins.discordInstall=vi.fn().mockResolvedValue({authorization_url:'https://discord.com/oauth2/authorize?client_id=123&scope=bot'});
+  const popup={location:{href:''},close:vi.fn()};
+  vi.spyOn(window,'open').mockReturnValue(popup);
+  await render({initialRoute:{v:'settings',p:'discord'}});
+  await click(button('Install bot'));
+  expect(window.VellumApi.plugins.discordInstall).toHaveBeenCalledOnce();
+  expect(popup.location.href).toBe('https://discord.com/oauth2/authorize?client_id=123&scope=bot');
+  expect(host.textContent).not.toContain('Discord bot connection verified.');
+  expect(onAdd).not.toHaveBeenCalled();
+  window.VellumApi.plugins.discordStatus.mockResolvedValue({configured:true,connected:true});
+  await click(button('Verify connection'));
+  expect(host.textContent).toContain('Discord bot connection verified.');
+});
+
+test.each(['https://discord.com.attacker.invalid/oauth2/authorize','http://discord.com/oauth2/authorize','https://discord.com:8443/oauth2/authorize','https://user@discord.com/oauth2/authorize','https://discord.com/other'])('Discord rejects an untrusted install URL: %s',async authorization_url=>{
+  items=[{id:'discord',name:'Discord',enabled:true,installed:true,manageable:true}];
+  window.VellumApi.plugins.discordStatus=vi.fn().mockResolvedValue({configured:true,connected:false});
+  window.VellumApi.plugins.discordInstall=vi.fn().mockResolvedValue({authorization_url});
+  const popup={location:{href:''},close:vi.fn()};
+  vi.spyOn(window,'open').mockReturnValue(popup);
+  await render({initialRoute:{v:'settings',p:'discord'}});
+  await click(button('Install bot'));
+  expect(popup.close).toHaveBeenCalledOnce();
+  expect(popup.location.href).toBe('');
+  expect(host.textContent).toContain('Discord returned an invalid bot authorization URL.');
+});
+
+test('Discord workspace reads wait for explicit disclosure',async()=>{
+  items=[{id:'discord',name:'Discord',enabled:true,installed:true,manageable:true}];
+  const renderDiscord=vi.fn(()=>React.createElement('p',null,'Existing Discord workspace'));
+  await render({mode:'directory',initialRoute:{v:'detail',p:'discord'},renderDiscord});
+  expect(renderDiscord).not.toHaveBeenCalled();
+  const disclosure=host.querySelector('details');
+  await act(async()=>{disclosure.open=true;disclosure.dispatchEvent(new Event('toggle'));});
+  expect(host.textContent).toContain('Existing Discord workspace');
+});
+
+test('included MCP server opens its own published-catalog dialog',async()=>{
+  await render({mode:'directory',initialRoute:{v:'detail',p:'linear'}});
+  expect(host.querySelector('[aria-label="MCP servers"]')).toBeTruthy();
+  await click(host.querySelector('[aria-label="Open MCP server linear"]'));
+  expect(host.querySelector('[aria-label="Linear MCP server"]')).toBeTruthy();
+});

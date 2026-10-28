@@ -87,3 +87,32 @@ rewrites and other unsupported prototype actions are presented truthfully rather
 than simulated. Local uninstall disables availability without deleting source
 packages or revoking saved provider authorization. Restart Electron to load the
 expanded isolated OAuth-child allowlist.
+
+## Hosted CI correction
+
+CI run 40627378580 built the frontend successfully, then reported three frontend
+test failures and 13 backend failures (608 frontend and 3,685 backend tests passed).
+Eight backend failures shared an uncaught Swiggy credential-store read during
+catalog projection on the headless runner. District and Zomato had the same
+unguarded cached-tool access. Their status projections now preserve an honest
+unavailable status and empty cached catalog without weakening execution guards.
+Swiggy also retains the locked-store message instead of reporting both services
+as switched off.
+
+The frontend failures exposed a lost Discord install control as well as stale
+inline-source assertions and an invalid exemption field. The served plugin
+component now reuses the backend's bot authorization URL, validates its exact
+Discord origin/path, supports explicit connection verification and lazily
+discloses the existing Discord workspace/import UI. Included MCP servers open
+the existing catalog dialog. Backend fixtures now compose the new contributions,
+and category/source assertions target the intended taxonomy and served component.
+The exemption schema and reviewed handler fingerprint are corrected; no parity
+gate, workflow or credential guard was weakened.
+
+Added regression sources exercise locked stores, trusted/untrusted Discord
+authorization URLs, truthful bot verification, lazy workspace mounting and MCP
+detail navigation. No local test suite or build was run. Python AST parsing
+covered eight changed files, Babel parsed three changed JavaScript/JSX files,
+JSON parsed successfully, Git whitespace checks passed, and static Action Parity
+validation returned no errors. The plugin component has 123 reviewed handlers.
+The next commit will trigger the normal hosted PR workflows.

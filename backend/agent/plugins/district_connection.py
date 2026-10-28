@@ -153,7 +153,10 @@ def district_service():
 def district_plugin_status():
     service = district_service()
     status = service.status()
-    tools = service.cached_tools()
+    try:
+        tools = service.cached_tools()
+    except DistrictError:
+        tools = []
     return {'id': 'district', 'configured': status.configured, 'status': status.status, 'notes': status.message,
         'tools': ['district_mcp_catalog', 'district_mcp_describe', 'district_mcp_read', 'district_mcp_execute',
             *[tool_name(tool['name']) for tool in tools]],
