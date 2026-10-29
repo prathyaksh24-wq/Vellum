@@ -81,6 +81,8 @@
 <script type="text/babel" data-presets="react" src="components/PatternWaves.jsx"></script>
 <link rel="stylesheet" href="components/Particles.css"/>
 <script type="text/babel" data-presets="react" src="components/Particles.jsx"></script>
+<script src="components/dvk-motion-shaders.js"></script>
+<script type="text/babel" data-presets="react" src="components/DvkMotionBackground.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
 <script src="api/runtimes.js"></script>
@@ -2917,6 +2919,96 @@ const BACKGROUND_REGISTRY = [
     theme:{tone:'dark',base:'#090b12',surfaceRgb:'13,15,22',foreground:'#f6eddc',foregroundStrong:'#fff9eb',muted:'#c8bba6',faint:'#8d806f',accent:'#ffb45c',accent2:'#ff6f4b',shadow:'#030407',darkDensity:.82,lightDensity:.73,textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 24px rgba(0,0,0,.90)',asciiColor:'#f6c87b',asciiBackground:'#090b12'}
   },
   {
+    id:'nimbus', label:'Nimbus', description:'Wind-swept golden clouds over a deep blue sky.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/nimbus/bg.js', props:{variant:'nimbus'}, previewImage:'assets/backgrounds/dvk/nimbus/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#1b292e',surfaceRgb:'28,38,41',foreground:'#f8eddb',foregroundStrong:'#ffffff',muted:'#d6c2a5',faint:'#d6c2a5',accent:'#c8a577',accent2:'#c8a577',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'daybreak', label:'Daybreak', description:'A warm sunrise with the original breathing glow and heat shimmer.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/daybreak/bg.js', props:{variant:'daybreak'}, previewImage:'assets/backgrounds/dvk/daybreak/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#171313',surfaceRgb:'32,23,18',foreground:'#fff1d8',foregroundStrong:'#ffffff',muted:'#e0c2a2',faint:'#e0c2a2',accent:'#ffae46',accent2:'#ffae46',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'eclipse', label:'Eclipse', description:'A mint-lit eclipse with the original drift and film grain.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/eclipse/bg.js', props:{variant:'eclipse'}, previewImage:'assets/backgrounds/dvk/eclipse/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#10272b',surfaceRgb:'19,37,39',foreground:'#edf9f1',foregroundStrong:'#ffffff',muted:'#bad6cc',faint:'#bad6cc',accent:'#93cbb8',accent2:'#93cbb8',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'dusk', label:'Dusk', description:'The original flowing amber and blue dusk.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/dusk/bg.js', props:{variant:'dusk'}, previewImage:'assets/backgrounds/dvk/dusk/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#37454d',surfaceRgb:'37,42,46',foreground:'#fff3e8',foregroundStrong:'#ffffff',muted:'#dcc4b5',faint:'#dcc4b5',accent:'#f0ac6c',accent2:'#f0ac6c',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'meadow', label:'Meadow', description:'A flower-filled meadow with depth parallax and drifting petals.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/meadow/bg.js', props:{variant:'meadow'}, previewImage:'assets/backgrounds/dvk/meadow/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#193c36',surfaceRgb:'24,44,37',foreground:'#fff5df',foregroundStrong:'#ffffff',muted:'#d1d1ab',faint:'#d1d1ab',accent:'#c6d18b',accent2:'#c6d18b',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'stratosphere', label:'Stratosphere', description:'The original glowing horizon with sparse twinkling stars.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/stratosphere/bg.js', props:{variant:'stratosphere'}, previewImage:'assets/backgrounds/dvk/stratosphere/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#101a2d',surfaceRgb:'20,29,45',foreground:'#f1f2ff',foregroundStrong:'#ffffff',muted:'#bbc6dd',faint:'#bbc6dd',accent:'#d8a0b0',accent2:'#d8a0b0',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'cloudline', label:'Cloudline', description:'The original volumetric cloud sea at dawn.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/cloudline/bg.js', props:{variant:'cloudline'}, previewImage:'assets/backgrounds/dvk/cloudline/poster.png',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#5d6fae',surfaceRgb:'64,73,109',foreground:'#fff3ec',foregroundStrong:'#ffffff',muted:'#e1d3db',faint:'#e1d3db',accent:'#f3c6b5',accent2:'#f3c6b5',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'grotto', label:'Grotto', description:'The original animated grotto with depth parallax.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/grotto/bg.js', props:{variant:'grotto'}, previewImage:'assets/backgrounds/dvk/grotto/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#102c2a',surfaceRgb:'18,37,34',foreground:'#edf4df',foregroundStrong:'#ffffff',muted:'#bdcbb4',faint:'#bdcbb4',accent:'#b6ca8b',accent2:'#b6ca8b',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'evergreen', label:'Evergreen', description:'The original evergreen forest and drifting light.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/evergreen/bg.js', props:{variant:'evergreen'}, previewImage:'assets/backgrounds/dvk/evergreen/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#173328',surfaceRgb:'22,43,31',foreground:'#f0f2dd',foregroundStrong:'#ffffff',muted:'#bfcdb3',faint:'#bfcdb3',accent:'#b9cb82',accent2:'#b9cb82',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'sunset-ridge', label:'Sunset Ridge', description:'The original sunset ridge with its clean sky plate.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/sunset-ridge/bg.js', props:{variant:'sunset-ridge'}, previewImage:'assets/backgrounds/dvk/sunset-ridge/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#342127',surfaceRgb:'44,28,31',foreground:'#fff0e3',foregroundStrong:'#ffffff',muted:'#d8bcb3',faint:'#d8bcb3',accent:'#e7a77e',accent2:'#e7a77e',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'orbit-ascii', label:'Orbit ASCII', description:'The original ringed planet rendered with its glyph atlas.', kind:'ascii', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/orbit-ascii/bg.js', props:{variant:'orbit-ascii'}, previewImage:'assets/backgrounds/dvk/orbit-ascii/poster.png',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#030304',surfaceRgb:'16,15,16',foreground:'#f5eee3',foregroundStrong:'#ffffff',muted:'#c8bcae',faint:'#c8bcae',accent:'#d3af83',accent2:'#d3af83',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'twilight', label:'Twilight', description:'The original twilight scene and motion.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/twilight/bg.js', props:{variant:'twilight'}, previewImage:'assets/backgrounds/dvk/twilight/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#252d49',surfaceRgb:'29,34,53',foreground:'#f0edff',foregroundStrong:'#ffffff',muted:'#c3bdd7',faint:'#c3bdd7',accent:'#bca8db',accent2:'#bca8db',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'riptide', label:'Riptide', description:'The original flowing riptide scene.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/riptide/bg.js', props:{variant:'riptide'}, previewImage:'assets/backgrounds/dvk/riptide/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#163138',surfaceRgb:'21,39,43',foreground:'#e8f6ef',foregroundStrong:'#ffffff',muted:'#b0ccc8',faint:'#b0ccc8',accent:'#8ccabf',accent2:'#8ccabf',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'seascape', label:'Seascape', description:'The original procedural sea and sunlit horizon.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/seascape/bg.js', props:{variant:'seascape'}, previewImage:'assets/backgrounds/dvk/seascape/poster.png',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#2d4a50',surfaceRgb:'31,49,52',foreground:'#fff3df',foregroundStrong:'#ffffff',muted:'#d3cabb',faint:'#d3cabb',accent:'#e5bd8d',accent2:'#e5bd8d',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
+    id:'bokeh', label:'Bokeh', description:'The original glowing bokeh scene and motion.', kind:'shader', component:window.VellumUI.DvkMotionBackground,
+    sourceUrl:'https://dvklab.vercel.app/templates/bokeh/bg.js', props:{variant:'bokeh'}, previewImage:'assets/backgrounds/dvk/bokeh/scene_s.jpg',
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#292332',surfaceRgb:'35,29,41',foreground:'#faf0fd',foregroundStrong:'#ffffff',muted:'#d3bfd8',faint:'#d3bfd8',accent:'#d6a6cd',accent2:'#d6a6cd',shadow:'#030609',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'}
+  },
+  {
     id:'ember-clouds', label:'Ember Clouds', description:'Painterly clouds glowing in deep blue and ember light.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/ember-clouds.webp',position:'center'},
     tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
     theme:{modes:{
@@ -2962,7 +3054,7 @@ const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
     className={'bg-preview-card' + (selected ? ' on' : '')}
     onPointerEnter={animate} onPointerLeave={()=>setPreviewing(false)} onFocus={animate} onBlur={()=>setPreviewing(false)}
     onClick={() => onSelect(entry.id)}>
-    <span className="bg-live">{previewing || entry.kind==='image' ? <BackgroundRenderer entry={entry} preview/> : <img className="static-image-background" src={'assets/backgrounds/previews/'+entry.id+'.png'} alt="" loading="lazy" decoding="async"/>}</span>
+    <span className="bg-live">{previewing || entry.kind==='image' ? <BackgroundRenderer entry={entry} preview/> : <img className="static-image-background" src={entry.previewImage || 'assets/backgrounds/previews/'+entry.id+'.png'} alt="" loading="lazy" decoding="async"/>}</span>
     <span className="bg-preview-copy"><span className="bg-preview-name">{entry.label}</span><span className="bg-preview-kind">{entry.kind === 'image' ? 'static' : entry.kind}</span></span>
     {selected && <span className="bg-preview-check"><IcCheck size={13}/></span>}
   </button>

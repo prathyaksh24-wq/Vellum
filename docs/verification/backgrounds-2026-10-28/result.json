@@ -1,0 +1,69 @@
+{
+  "live_options": 14,
+  "selection_receipts": [
+    {
+      "patch": {
+        "background": "nimbus"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "daybreak"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "eclipse"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "dusk"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "meadow"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "stratosphere"
+      },
+      "status": "applied"
+    }
+  ],
+  "reload_persisted": true,
+  "page_errors": [],
+  "original_comparisons": [
+    {
+      "background": "nimbus",
+      "identical_pixels": true
+    },
+    {
+      "background": "daybreak",
+      "identical_pixels": true
+    },
+    {
+      "background": "eclipse",
+      "identical_pixels": true
+    },
+    {
+      "background": "dusk",
+      "identical_pixels": true
+    },
+    {
+      "background": "meadow",
+      "identical_pixels": true
+    },
+    {
+      "background": "stratosphere",
+      "identical_pixels": true
+    }
+  ]
+}

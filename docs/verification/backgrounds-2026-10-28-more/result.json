@@ -1,0 +1,123 @@
+{
+  "live_options": 23,
+  "selection_receipts": [
+    {
+      "patch": {
+        "background": "cloudline"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "grotto"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "evergreen"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "sunset-ridge"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "orbit-ascii"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "twilight"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "riptide"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "seascape"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "bokeh"
+      },
+      "status": "applied"
+    }
+  ],
+  "reload_persisted": true,
+  "page_errors": [],
+  "original_comparisons": [
+    {
+      "background": "nimbus",
+      "identical_pixels": true
+    },
+    {
+      "background": "daybreak",
+      "identical_pixels": true
+    },
+    {
+      "background": "eclipse",
+      "identical_pixels": true
+    },
+    {
+      "background": "dusk",
+      "identical_pixels": true
+    },
+    {
+      "background": "meadow",
+      "identical_pixels": true
+    },
+    {
+      "background": "stratosphere",
+      "identical_pixels": true
+    },
+    {
+      "background": "cloudline",
+      "identical_pixels": true
+    },
+    {
+      "background": "grotto",
+      "identical_pixels": true
+    },
+    {
+      "background": "evergreen",
+      "identical_pixels": true
+    },
+    {
+      "background": "sunset-ridge",
+      "identical_pixels": true
+    },
+    {
+      "background": "orbit-ascii",
+      "identical_pixels": true
+    },
+    {
+      "background": "twilight",
+      "identical_pixels": true
+    },
+    {
+      "background": "riptide",
+      "identical_pixels": true
+    },
+    {
+      "background": "seascape",
+      "identical_pixels": true
+    },
+    {
+      "background": "bokeh",
+      "identical_pixels": true
+    }
+  ]
+}

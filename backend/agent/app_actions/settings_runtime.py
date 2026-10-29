@@ -17,7 +17,11 @@ DEVICE_SETTINGS_UPDATE_ACTION_ID = "settings.device.update"
 DEVICE_SETTINGS_INSPECT_ACTION_ID = "settings.device.inspect"
 BACKGROUND_IDS = (
     "galaxy", "liquid-metal", "drifting-clouds", "god-rays", "grain-pastel",
-    "pattern-waves", "particles", "rocket-blast", "ember-clouds", "teal-horizon", "serenox-home",
+    "pattern-waves", "particles", "rocket-blast",
+    "nimbus", "daybreak", "eclipse", "dusk", "meadow", "stratosphere",
+    "cloudline", "grotto", "evergreen", "sunset-ridge", "orbit-ascii",
+    "twilight", "riptide", "seascape", "bokeh",
+    "ember-clouds", "teal-horizon", "serenox-home",
 )
 MEMORY_SETTINGS_UPDATE_ACTION_ID = "memory.settings.update"
 MEMORY_ENTRY_CREATE_ACTION_ID = "memory.entry.create"
