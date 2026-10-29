@@ -32,7 +32,7 @@
     const [busy,setBusy]=useState(false),[error,setError]=useState(''),[pending,setPending]=useState(null),[result,setResult]=useState(null);
     const [search,setSearch]=useState(''),[tools,setTools]=useState(null);
     const [oauth,setOAuth]=useState(()=>{const id=new URLSearchParams(window.location.search).get('linear_oauth');return id?{flow_id:id,status:'pending',message:'Checking Linear sign-in…'}:null;});
-    const mounted=useRef(true),pendingRef=useRef(null);
+    const mounted=useRef(true),pendingRef=useRef(null),popupRef=useRef(null);
     const accept=value=>{if(mounted.current){setStatus(value);onStatus?.(value);}};
     const refresh=async()=>{try{accept(await api.plugins.linearStatus());}catch(err){if(mounted.current)setError(err.message||'Linear status is unavailable.');}};
     useEffect(()=>{mounted.current=true;refresh();return()=>{mounted.current=false;const next=pendingRef.current;if(next)api.appActions.cancel(next.receipt.confirmation.token,{source:'ui'}).catch(()=>{});};},[]);
@@ -40,7 +40,7 @@
     useEffect(()=>{
       if(!oauth?.flow_id||oauth.status!=='pending')return;
       let stopped=false,checking=false;
-      const timer=setInterval(async()=>{if(checking)return;checking=true;try{const value=await api.plugins.linearOAuthStatus(oauth.flow_id);if(!stopped){setOAuth({...oauth,...value});if(value.status!=='pending'){clearReturn();await refresh();}}}catch(err){if(!stopped){clearReturn();setError('Could not finish Linear sign-in. Check the local server, then try signing in again.');setOAuth({...oauth,status:'failed',message:'Linear sign-in could not be verified.'});}}finally{checking=false;}},1500);
+      const timer=setInterval(async()=>{if(checking)return;checking=true;try{const value=await api.plugins.linearOAuthStatus(oauth.flow_id);if(!stopped){setOAuth({...oauth,...value});if(value.status!=='pending'){popupRef.current?.close();clearReturn();await refresh();}}}catch(err){if(!stopped){clearReturn();setError('Could not finish Linear sign-in. Check the local server, then try signing in again.');setOAuth({...oauth,status:'failed',message:'Linear sign-in could not be verified.'});}}finally{checking=false;}},1500);
       return()=>{stopped=true;clearInterval(timer);};
     },[oauth?.flow_id,oauth?.status]);
     const remember=value=>{pendingRef.current=value;if(mounted.current)setPending(value);};
@@ -53,8 +53,19 @@
       if(receipt.result?.connection)accept(receipt.result.connection);
       return receipt.result;
     };
-    const signIn=async()=>{setBusy(true);setError('');try{const next=await action('linear.connection.oauth.start',{return_url:window.location.origin+window.location.pathname+(new URLSearchParams(window.location.search).get('desktop')==='1'?'?desktop=1':'')});if(next)setOAuth({...next,status:'pending',message:'Continue to Linear and approve access to your workspace.'});}catch(err){setError(err.message);}finally{setBusy(false);}};
-    const cancelSignIn=async()=>{setBusy(true);try{await action('linear.connection.oauth.cancel',{flow_id:oauth.flow_id});setOAuth({...oauth,status:'cancelled',message:'Linear sign-in cancelled.'});}catch(err){setError(err.message);}finally{setBusy(false);}};
+    const authorizationTarget=value=>{const target=new URL(value);if(target.protocol!=='https:'||!['linear.app','mcp.linear.app'].includes(target.hostname)||target.port||target.username||target.password)throw Error('Linear returned an invalid sign-in address.');return target.href;};
+    const signIn=async()=>{
+      if(busy||!enabled)return;
+      const desktop=window.VellumDesktop?.runtime==='electron';
+      const popup=desktop?null:window.open('about:blank','vellum-linear-oauth','popup,width=680,height=780');
+      popupRef.current=popup;setBusy(true);setError('');
+      try{const next=await action('linear.connection.oauth.start',{return_url:window.location.origin+window.location.pathname+(new URLSearchParams(window.location.search).get('desktop')==='1'?'?desktop=1':''),popup:true});
+        if(next){const target=authorizationTarget(next.authorization_url);setOAuth({...next,status:'pending',message:'Continue to Linear and approve access to your workspace.'});if(desktop)popupRef.current=window.open(api.plugins.linearOAuthWindowUrl(next.flow_id),'vellum-linear-oauth','popup,width=680,height=780');else if(popup)popup.location.href=target;}
+        else popup?.close();
+      }catch(err){popup?.close();setError(err.message);}finally{setBusy(false);}
+    };
+    const continueSignIn=()=>{if(!oauth?.authorization_url)return;try{const target=authorizationTarget(oauth.authorization_url);popupRef.current=window.open(window.VellumDesktop?.runtime==='electron'?api.plugins.linearOAuthWindowUrl(oauth.flow_id):target,'vellum-linear-oauth','popup,width=680,height=780');}catch(err){setError(err.message);}};
+    const cancelSignIn=async()=>{if(busy||!oauth?.flow_id)return;setBusy(true);setError('');try{await action('linear.connection.oauth.cancel',{flow_id:oauth.flow_id});popupRef.current?.close();setOAuth({...oauth,status:'cancelled',message:'Linear sign-in cancelled.'});clearReturn();}catch(err){setError(err.message);}finally{setBusy(false);}};
     const decide=async confirmed=>{if(!pending||busy)return;const next=pending;setBusy(true);setError('');
       try{const receipt=confirmed?await api.appActions.confirm(next.receipt.confirmation.token,next.request,{source:'ui'}):await api.appActions.cancel(next.receipt.confirmation.token,{source:'ui'});
         if(confirmed&&receipt.status!=='applied')throw new Error(receipt.message||'Linear did not complete this action.');
@@ -62,11 +73,11 @@
       }catch(err){if(mounted.current)setError(err.message||'Linear did not complete this action.');}
       finally{remember(null);await refresh();if(mounted.current){setBusy(false);}}
     };
-    const run=async actionId=>{setBusy(true);setError('');try{await action(actionId);}catch(err){setError(err.message);}finally{await refresh();setBusy(false);}};
+    const run=async(actionId,args={})=>{setBusy(true);setError('');try{await action(actionId,args);}catch(err){setError(err.message);}finally{await refresh();setBusy(false);}};
     const browse=async()=>{setBusy(true);setError('');try{const catalog=await api.plugins.linearMcpTools();if(mounted.current)setTools(catalog.tools);}catch(err){if(mounted.current)setError(err.message);}finally{await refresh();if(mounted.current)setBusy(false);}};
     const readIssues=async()=>{setBusy(true);setError('');try{setResult(await api.plugins.linearMcpRead({tool_name:'list_issues',arguments:{limit:5,orderBy:'createdAt',fields:['id','title','url']}}));}catch(err){setError(err.message);}finally{await refresh();setBusy(false);}};
     const connected=!!status?.connected&&enabled;
-    if(render)return render({status,busy,error,pending,tools,browse,run,connect:signIn,decide,flow:oauth});
+    if(render)return render({status,busy,error,pending,tools,browse,run,connect:signIn,decide,flow:oauth,continueSignIn,cancelSignIn});
     return <section className="product-hunt-workspace linear-workspace" aria-label="Linear connection" aria-busy={busy}>
       <div className="product-hunt-summary"><div><h2>{connected?'Connected to Linear':'Connect Linear'}</h2><p>{status?.message||'Checking connection…'}</p></div><span className="product-hunt-access">Official MCP</span></div>
       <p className="product-hunt-privacy">Your authorization is saved in this device’s system credential store and sent only to Linear. Reads use your workspace access; every write requires review and confirmation.</p>

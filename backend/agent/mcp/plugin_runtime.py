@@ -214,6 +214,15 @@ class PluginMcpRuntime:
 
     async def _list_tools(self, connector):
         plugin_id,connector_name=connector.plugin_id,connector.name
+        if plugin_id in {'brave', 'context7'} and connector_name == plugin_id:
+            from agent.plugins.keyed_mcp import keyed_mcp_service
+            service = keyed_mcp_service(plugin_id)
+            if service.require()['revision'] != connector.credential_digest:
+                raise PluginMcpRuntimeError('The connection changed. Refresh its published tools.')
+            tools = await asyncio.to_thread(service.catalog)
+            if service.require()['revision'] != connector.credential_digest:
+                raise PluginMcpRuntimeError('The connection changed during catalog discovery.')
+            return tools
         if plugin_id == 'swiggy':
             from agent.plugins.swiggy_connection import swiggy_service, SERVERS
             if connector_name not in SERVERS or connector.url != SERVERS[connector_name]:
@@ -466,6 +475,24 @@ def _connector(
     url = str(payload.get("url") or payload.get("serverUrl") or "").strip()
     if plugin_id == 'gitmcp' and name == 'gitmcp':
         url = get_settings().gitmcp_mcp_url
+    if payload.get('credential_provider') in {'brave', 'context7'}:
+        from agent.plugins.keyed_mcp import keyed_mcp_service, KeyedMcpError, CONTEXT7_URL, BRAVE_ARGS
+        provider = payload['credential_provider']
+        valid = plugin_id == name == provider
+        valid = valid and (url == CONTEXT7_URL if provider == 'context7' else
+            not url and payload.get('command') == 'npx' and tuple(payload.get('args') or ()) == BRAVE_ARGS)
+        if not valid:
+            raise PluginMcpRuntimeError('Credentials are restricted to this provider’s official MCP transport.')
+        public = dict(plugin_id=plugin_id, name=name, root=root,
+            transport='http' if url else 'stdio', url=url, command='' if url else 'npx',
+            args=() if url else BRAVE_ARGS)
+        if not resolve_credentials:
+            return PluginMcpConnector(**public, credentials_deferred=True)
+        try:
+            service = keyed_mcp_service(provider)
+            return service.connector(service.require())
+        except KeyedMcpError:
+            return PluginMcpConnector(**public, missing_env=(provider + ' connection',))
     env, env_missing = _resolved_mapping(payload.get("env"))
     headers, header_missing = _resolved_mapping(payload.get("headers"))
     missing = tuple(dict.fromkeys([*env_missing, *header_missing]))

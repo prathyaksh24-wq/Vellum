@@ -100,3 +100,30 @@ test('included MCP server opens its own published-catalog dialog',async()=>{
   await click(host.querySelector('[aria-label="Open MCP server linear"]'));
   expect(host.querySelector('[aria-label="Linear MCP server"]')).toBeTruthy();
 });
+
+test('keyed MCP setup sends only an opaque staged reference to the action runtime',async()=>{
+  items=[{id:'context7',name:'Context7',enabled:true,installed:true,manageable:true}];
+  window.VellumApi.plugins.keyedMcpStatus=vi.fn().mockResolvedValue({configured:false,connected:false,configured_key_available:true});
+  window.VellumApi.plugins.keyedMcpStage=vi.fn().mockResolvedValue({credential_id:'opaque-reference-for-this-connection'});
+  window.VellumApi.plugins.keyedMcpDiscard=vi.fn().mockResolvedValue({discarded:true});
+  window.VellumApi.appActions={dispatch:vi.fn().mockResolvedValue({status:'applied',result:{connection:{configured:true,connected:true}}}),cancel:vi.fn()};
+  await render({initialRoute:{v:'settings',p:'context7'}});
+  await fill(host.querySelector('input[type="password"]'),'fixture-key-private');
+  await act(async()=>host.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(window.VellumApi.plugins.keyedMcpStage).toHaveBeenCalledWith('context7','fixture-key-private');
+  expect(window.VellumApi.appActions.dispatch).toHaveBeenCalledWith(expect.objectContaining({action_id:'context7.connection.connect',arguments:{credential_id:'opaque-reference-for-this-connection'}}),{source:'ui'});
+  expect(JSON.stringify(window.VellumApi.appActions.dispatch.mock.calls)).not.toContain('fixture-key-private');
+  expect(host.querySelector('input[type="password"]').value).toBe('');
+  expect(window.VellumApi.plugins.keyedMcpDiscard).toHaveBeenCalledWith('context7','opaque-reference-for-this-connection');
+});
+
+test('redesigned Linear dialog exposes continuation and cancels the actual owner flow',async()=>{
+  const resume=vi.fn(),cancel=vi.fn(),run=vi.fn();
+  window.VellumUI.LinearWorkspace=({render})=>render({status:{configured:true,connected:false,reconnect_required:true},flow:{flow_id:'actual-flow',status:'pending'},connect:vi.fn(),run,continueSignIn:resume,cancelSignIn:cancel});
+  await render({initialRoute:{v:'settings',p:'linear'}});
+  await click(button('Continue to Linear'));
+  expect(resume).toHaveBeenCalledOnce();
+  await click(button('Cancel sign-in'));
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(run).not.toHaveBeenCalled();
+});

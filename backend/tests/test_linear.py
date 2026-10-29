@@ -15,9 +15,10 @@ TOKEN="Bearer linear-oauth-test-only-secret"
 ROOT=Path(__file__).resolve().parents[2]
 
 class MemoryKeyring:
-    value=None
-    def get_password(self,*_):return self.value
-    def set_password(self,_service,_entry,value):self.value=value
+    def __init__(self):self.values={}
+    def get_password(self,service,entry):return self.values.get((service,entry))
+    def set_password(self,service,entry,value):self.values[(service,entry)]=value
+    def delete_password(self,service,entry):self.values.pop((service,entry),None)
 
 @pytest.fixture
 def connection():
