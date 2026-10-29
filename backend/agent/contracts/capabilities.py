@@ -79,7 +79,7 @@ def build_capability_contract() -> CapabilityContract:
             ),
             "automation_notifications": FeatureContract(
                 enabled=True, source="agent.automations.store",
-                endpoints={"list": "/api/automations/notifications", "read": "/api/app-actions/dispatch"},
+                endpoints={"list": "/api/automations/notifications", "read": "/api/app-actions/dispatch", "events": "/api/automations/notifications/events"},
                 notes="Local notification pings, a 24-hour unread inbox, and searchable retained history; no conversation is created.",
             ),
             "browser": FeatureContract(
@@ -152,6 +152,7 @@ def build_capability_contract() -> CapabilityContract:
                     "status": "/api/plugins/youtube/status",
                     "history_status": "/api/plugins/youtube/history/status",
                     "creators": "/api/plugins/youtube/creators",
+                    "push_status": "/api/plugins/youtube/creators/push",
                     "oauth_start": "/api/plugins/youtube/oauth/start",
                     "oauth_callback": "/api/plugins/youtube/oauth/callback",
                     "sync": "/api/plugins/youtube/sync",
@@ -247,6 +248,11 @@ def build_capability_contract() -> CapabilityContract:
                     "books_import": "/api/knowledge/core/books/epub",
                     "books_status": "/api/knowledge/core/books/imports/{import_id}",
                     "books_document": "/api/knowledge/core/books/documents",
+                    "books_reader": "/api/knowledge/core/books/library/{import_id}/reader",
+                    "books_reader_section": "/api/knowledge/core/books/library/{import_id}/reader/{section_id}",
+                    "books_reader_full": "/api/knowledge/core/books/library/{import_id}/reader/full",
+                    "books_file_import": "/api/app-actions/books/import",
+                    "books_url_import": "/api/app-actions/books/import-url",
                     "books_quality": "/api/knowledge/core/books/documents/{document_id}/quality",
                     "books_materialization": "/api/knowledge/core/books/documents/{document_id}/materializations",
                     "bootstrap": "/api/knowledge/core/bootstrap",

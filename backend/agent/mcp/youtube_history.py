@@ -2,6 +2,7 @@
 import hashlib
 import re
 import time
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 HISTORY_URL = "https://www.youtube.com/feed/history"
@@ -35,9 +36,11 @@ HISTORY_DOM = r"""() => {
 }"""
 
 
-async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, can_continue=lambda:True):
-    from agent.contracts.youtube_history import YouTubeHistoryConfig
+async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, can_continue=lambda:True, day_label='', now=None):
+    from agent.contracts.youtube_history import BrowserHistoryReadRequest, YouTubeHistoryConfig
+    from agent.plugins.youtube_browser_history import history_day
     YouTubeHistoryConfig(url=history_url)
+    BrowserHistoryReadRequest(day_label=day_label)
     def allowed():
         parsed = urlsplit(page.url)
         return (parsed.scheme == "https" and parsed.hostname in {"youtube.com", "www.youtube.com"}
@@ -61,7 +64,15 @@ async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, ca
     if not identity:
         return {"status":"account_unknown"}
     account_id = hashlib.sha256(identity.encode()).hexdigest()
+    reference = now or datetime.now(UTC)
+    timezone = first.get('timezone') or 'UTC'
+    requested_day = history_day(day_label, now=reference, timezone=timezone) if day_label else ''
+    if requested_day:
+        scroll_limit = max(scroll_limit, 24)
     rows = {}
+    seen = set()
+    earliest = ''
+    reached_older = False
     current = first
     stable = 0
     for step in range(scroll_limit + 1):
@@ -69,15 +80,22 @@ async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, ca
             raise ValueError('The browser was paused or taken over during the history read.')
         if not current.get('signed_in') or current.get('identity') != identity:
             return {"status":"account_changed"}
-        before = len(rows)
+        before = len(seen)
         for item in current.get('items') or []:
             if not re.fullmatch(r'[A-Za-z0-9_-]{11}', str(item.get('video_id') or '')):
                 continue
             key = (item['video_id'], item.get('day_label') or '')
+            seen.add(key)
+            day = history_day(item.get('day_label') or '', now=reference, timezone=timezone)
+            if day:
+                earliest = min(earliest or day, day)
+                reached_older = reached_older or bool(requested_day and day < requested_day)
+            if requested_day and day != requested_day:
+                continue
             if key not in rows and len(rows) < 100:
                 rows[key] = {**item, 'url':'https://www.youtube.com/watch?v=' + item['video_id']}
-        stable = stable + 1 if len(rows) == before else 0
-        if step == scroll_limit or len(rows) >= 100 or stable >= 2 or time.monotonic() >= deadline:
+        stable = stable + 1 if len(seen) == before else 0
+        if step == scroll_limit or len(rows) >= 100 or stable >= 2 or reached_older or time.monotonic() >= deadline:
             break
         await page.mouse.wheel(0, 1200)
         await page.wait_for_timeout(500)
@@ -91,7 +109,8 @@ async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, ca
     final = await page.evaluate(HISTORY_DOM)
     if not final.get('signed_in') or final.get('identity') != identity:
         return {"status":"account_changed"}
-    if not rows and not final.get('empty'):
+    if not rows and not final.get('empty') and not (requested_day and seen):
         return {"status":"page_unreadable"}
     return {'status':'ready' if rows else 'empty', 'account_id':account_id, 'items':list(rows.values()),
-        'coverage':'recent_page', 'timezone':first.get('timezone') or 'UTC', 'truncated':len(rows) >= 100 or stable < 2 and scroll_limit > 0}
+        'coverage':'recent_page', 'timezone':timezone, 'requested_day':requested_day, 'earliest_loaded_day':earliest,
+        'truncated':len(rows) >= 100 or (stable < 2 and not reached_older and scroll_limit > 0)}

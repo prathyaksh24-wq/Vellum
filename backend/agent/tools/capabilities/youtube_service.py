@@ -11,6 +11,8 @@ from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistr
 from agent.tools.serpapi import SerpApiClient
 from agent.tools.web import extract_web_sources, web_search
 from agent.contracts.youtube_tracking import CreatorTrackingRead
+from agent.contracts.youtube_requests import YoutubeNotificationRead
+from agent.contracts.automation_notifications import AutomationNotifications
 
 
 logger = logging.getLogger(__name__)
@@ -60,13 +62,13 @@ class YoutubeCapabilityService:
         self.browser_history_backend = browser_history_backend
 
     def build_registry(self) -> ToolRegistry:
+        from agent.contracts.youtube_history import BrowserHistoryReadRequest
         registry = ToolRegistry()
         allowed_agents = frozenset({"YoutubeAgent", "VellumAgent", "ResearchAgent", "MemoryAgent"})
         registry.register(CapabilityRecord(name="youtube.watch_history", namespace="youtube",
             access=CapabilityAccess.READ, allowed_agents=frozenset({"YoutubeAgent"}),
             stream_label="Read current browser watch history", adapter=self.watch_history,
-            input_schema={"type":"object", "properties":{"limit":{"type":"integer", "minimum":1, "maximum":100},
-                "channel":{"type":"string", "maxLength":200}, "day_label":{"enum":["","Today","Yesterday"]}}, "additionalProperties":False}))
+            input_schema=BrowserHistoryReadRequest.model_json_schema()))
         registry.register(
             CapabilityRecord(
                 name="youtube.account",
@@ -138,6 +140,11 @@ class YoutubeCapabilityService:
                 input_schema=CreatorTrackingRead.model_json_schema(),
             )
         )
+        registry.register(CapabilityRecord(
+            name="youtube.notifications", namespace="youtube",
+            access=CapabilityAccess.READ, allowed_agents=frozenset({"YoutubeAgent"}),
+            stream_label="Read saved YouTube upload notifications", adapter=self.notifications,
+            input_schema=YoutubeNotificationRead.model_json_schema()))
         registry.register(
             CapabilityRecord(
                 name="youtube.personal_context",
@@ -192,7 +199,8 @@ class YoutubeCapabilityService:
 
     def watch_history(self, payload: dict[str, Any]) -> dict[str, Any]:
         from agent.contracts.youtube_history import BrowserHistoryReadRequest
-        from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService
+        from datetime import UTC, datetime
+        from agent.plugins.youtube_browser_history import YouTubeBrowserHistory, YouTubeBrowserHistoryService, history_day
         from agent.plugins.youtube_takeout import filter_channel_history
         payload = BrowserHistoryReadRequest.model_validate(payload).model_dump()
         from agent.profiles.execution import get_profile_execution
@@ -200,18 +208,56 @@ class YoutubeCapabilityService:
         execution = get_profile_execution()
         if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
             raise ValueError("Watch history is local only. Select a local model to read it.")
-        result = dict(self.browser_history_backend() if self.browser_history_backend else YouTubeBrowserHistoryService().refresh())
+        reader = None if self.browser_history_backend else YouTubeBrowserHistoryService()
+        result = dict(self.browser_history_backend() if self.browser_history_backend else reader.refresh(day_label=payload['day_label']))
         limit = min(_positive_int(payload.get('limit'), default=20), 100)
         items = list(result.get('items') or [])
         channel = str(payload.get('channel') or '').strip()[:200]
         if channel:
             items = filter_channel_history(items, channel)
         day = str(payload.get('day_label') or '')
+        requested_day = ''
+        saved_count = 0
+        captured = datetime.fromisoformat(result['refreshed_at'].replace('Z', '+00:00')) if result.get('refreshed_at') else datetime.now(UTC)
+        timezone = result.get('timezone') or 'UTC'
+        items = [{**item, 'history_day':item.get('history_day') or history_day(str(item.get('day_label') or ''),
+            now=captured, timezone=timezone)} for item in items]
         if day:
-            items = [item for item in items if str(item.get('day_label') or '').casefold() == day.casefold()]
+            captured = datetime.fromisoformat(result['refreshed_at'].replace('Z', '+00:00')) if result.get('refreshed_at') else datetime.now(UTC)
+            timezone = result.get('timezone') or 'UTC'
+            requested_day = history_day(day, now=captured, timezone=timezone)
+            dates = [item.get('history_day') or history_day(str(item.get('day_label') or ''), now=captured, timezone=timezone)
+                for item in result.get('items') or []]
+            items = [item for item in items if (item.get('history_day') or history_day(str(item.get('day_label') or ''),
+                now=captured, timezone=timezone)) == requested_day]
+            result['earliest_loaded_day'] = result.get('earliest_loaded_day') or min((value for value in dates if value), default='')
+            result['requested_day'] = requested_day
+            if reader is not None:
+                # A fresh read establishes the currently signed-in account first.
+                # Never use another account or a failed refresh as evidence.
+                saved = YouTubeBrowserHistory(store=reader.store).history(day=requested_day,
+                    account_id=result['account_id'], channel=channel, limit=100)
+                saved_count = saved['total']
+                merged = {item['video_id']:item for item in saved['items']}
+                merged.update({item['video_id']:item for item in items})
+                items = list(merged.values())
+                result['coverage'] = 'fresh_and_accumulated_day'
+                result['saved_matches'] = saved_count
+        elif payload['include_accumulated'] and reader is not None:
+            saved = YouTubeBrowserHistory(store=reader.store).history(account_id=result['account_id'], channel=channel, limit=500)
+            # Saved observations are keyed by account, video and resolved day.
+            # Fresh identity verification above must succeed before these are read.
+            saved_count = saved['total']
+            merged = {(item['video_id'], item.get('history_day') or ''):item for item in items}
+            for item in saved['items']:
+                merged.setdefault((item['video_id'], item.get('history_day') or ''),
+                    {**item, 'day_label':item.get('history_day') or item.get('day_label') or ''})
+            items = sorted(merged.values(), key=lambda item:item.get('history_day') or '', reverse=True)
+            result['coverage'] = 'fresh_and_accumulated'
+            result['saved_matches'] = saved_count
         items = [{**item, 'channel':item.get('channel_title') or ''} for item in items]
         return {**result, 'action':'youtube.watch_history', 'snapshot_total':result.get('total', len(items)),
-            'total':len(items), 'items':items[:limit]}
+            'total':max(len(items), saved_count), 'items':items[:limit]}
 
     def takeout_history(self, payload: dict[str, Any]) -> dict[str, Any]:
         kind = "search" if str(payload.get("kind") or "").casefold() == "search" else "watch"
@@ -247,16 +293,28 @@ class YoutubeCapabilityService:
 
     def subscription_feed(self, _payload: dict[str, Any]) -> dict[str, Any]:
         from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
-        from agent.profiles.execution import get_profile_execution
-        from agent.llm.routing.models import provider_for_model
-        execution = get_profile_execution()
-        if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
-            raise ValueError("Creator tracking is local only. Select a local model to read it.")
+        self._require_local_creator_access()
         request = CreatorTrackingRead.model_validate(_payload)
         tracking=YouTubeCreatorTracking()
         result = tracking.saved_uploads(creator=request.creator,day_label=request.day_label,limit=request.limit) \
             if request.creator or request.day_label else tracking.snapshot(limit=request.limit)
         return {"action": "youtube.subscription_feed", "available": result["configured"], **result}
+
+    @staticmethod
+    def _require_local_creator_access() -> None:
+        from agent.profiles.execution import get_profile_execution
+        from agent.llm.routing.models import provider_for_model
+        execution = get_profile_execution()
+        if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
+            raise ValueError("Creator tracking is local only. Select a local model to read it.")
+
+    def notifications(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from agent.automations.api import get_store
+        self._require_local_creator_access()
+        request = YoutubeNotificationRead.model_validate(payload)
+        snapshot = get_store().notification_snapshot(limit=request.limit, view=request.view,
+            builtin_key="youtube_creator_tracking")
+        return {"action": "youtube.notifications", **AutomationNotifications(**snapshot).model_dump()}
 
     def search_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query") or "").strip()

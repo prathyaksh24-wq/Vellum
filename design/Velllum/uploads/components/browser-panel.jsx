@@ -215,7 +215,7 @@
     </section>;
   }
 
-  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false}) {
+  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false, overlayVisible=false}) {
     const api = window.VellumApi.browser;
     const native = state.render_transport === 'native';
     const nativeBridge = window.VellumDesktop?.browser;
@@ -383,7 +383,7 @@
       const update=async()=>{
         const currentRevision=++revision;
         const resizing=screenRef.current?.closest('.browser-resizing');
-        const visible=state.running && !home && !document.hidden && !suspended && !resizing && !moreOpen && !downloadsOpen && !(addressOpen && suggestions.length);
+        const visible=state.running && !home && !document.hidden && !suspended && !overlayVisible && !resizing && !moreOpen && !downloadsOpen && !(addressOpen && suggestions.length);
         const rect=screenRef.current.getBoundingClientRect();
         try {
           if (!visible && !home && !suspended && !document.hidden) {
@@ -411,7 +411,7 @@
       document.addEventListener('visibilitychange',update);
       update();
       return ()=>{cancelled=true;observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);document.removeEventListener('visibilitychange',update);};
-    }, [native,state.running,state.native_target_id,home,expanded,suspended,moreOpen,downloadsOpen,addressOpen,suggestions.length]);
+    }, [native,state.running,state.native_target_id,home,expanded,suspended,overlayVisible,moreOpen,downloadsOpen,addressOpen,suggestions.length]);
     useEffect(()=>()=>{if(native)nativeBridge?.mount({visible:false}).catch(()=>{});},[native,nativeBridge]);
 
     useEffect(()=>{

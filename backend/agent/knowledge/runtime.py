@@ -7,7 +7,6 @@ import os
 from agent.knowledge.windows_ocr import WindowsBookOCR
 
 from agent.config import REPO_ROOT, get_settings
-from agent.knowledge.windows_antimalware import WindowsAntimalwareScanner
 from agent.knowledge.service import KnowledgeCore
 from agent.knowledge.store import KnowledgeStore
 
@@ -27,7 +26,7 @@ def build_knowledge_core() -> KnowledgeCore:
         read_enabled=settings.knowledge_read_enabled,
         tool_learning_enabled=settings.knowledge_tool_observation_learning,
         book_ocr_provider=WindowsBookOCR() if os.name == "nt" else None,
-        book_malware_scanner=WindowsAntimalwareScanner(),
+        book_malware_scan_enabled=False,
     )
 
 

@@ -137,7 +137,8 @@ def _defender_version(executable: Path) -> str:
 class BookIngestionPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    version: str = "book-epub-security-v1"
+    version: str = "book-epub-security-v2"
+    malware_scan_enabled: bool = True
     max_asset_bytes: int = Field(default=64 * 1024 * 1024, ge=1024)
     max_entries: int = Field(default=5000, ge=4)
     max_expanded_bytes: int = Field(default=256 * 1024 * 1024, ge=1024)
@@ -172,7 +173,7 @@ class BookIngestionPipeline:
         self.coordinator = IngestionCoordinator(store)
 
     def import_epub(self, request: BookImportRequest, content: bytes) -> BookImportStatus:
-        if request.scan_approved is not True:
+        if self.policy.malware_scan_enabled and request.scan_approved is not True:
             raise ValueError("Local malware scan approval is required.")
         raw = bytes(content)
         asset_sha256 = hashlib.sha256(raw).hexdigest()
@@ -278,45 +279,53 @@ class BookIngestionPipeline:
                 blob_path=blob_path,
             )
         )
-        try:
-            scan = MalwareScanResult.model_validate(
-                self.scanner.scan(self.store.blobs.resolve(blob_path))
-            )
-        except Exception:
-            return self._fail(
-                request.user_id,
-                status,
-                "failed_retryable",
-                "MALWARE_SCAN_FAILED",
-                stage="quarantined",
-                stage_version="malware-scan-v1",
-            )
-        scan_metadata = {
-            **self._policy_metadata(),
-            "scanner": _safe_scanner_label(scan.scanner, default="unknown"),
-            "scanner_version": _safe_scanner_label(scan.scanner_version, default=""),
-            "scan_outcome": scan.outcome,
-        }
-        if scan.outcome == "detected":
-            return self._fail(
-                request.user_id,
-                status,
-                "rejected",
-                "MALWARE_DETECTED",
-                stage="quarantined",
-                stage_version="malware-scan-v1",
-                metadata=scan_metadata,
-            )
-        if scan.outcome in {"unavailable", "error"}:
-            return self._fail(
-                request.user_id,
-                status,
-                "failed_retryable",
-                _scanner_failure_code(scan),
-                stage="quarantined",
-                stage_version="malware-scan-v1",
-                metadata=scan_metadata,
-            )
+        if self.policy.malware_scan_enabled:
+            try:
+                scan = MalwareScanResult.model_validate(
+                    self.scanner.scan(self.store.blobs.resolve(blob_path))
+                )
+            except Exception:
+                return self._fail(
+                    request.user_id,
+                    status,
+                    "failed_retryable",
+                    "MALWARE_SCAN_FAILED",
+                    stage="quarantined",
+                    stage_version="malware-scan-v1",
+                )
+            scan_metadata = {
+                **self._policy_metadata(),
+                "scanner": _safe_scanner_label(scan.scanner, default="unknown"),
+                "scanner_version": _safe_scanner_label(scan.scanner_version, default=""),
+                "scan_outcome": scan.outcome,
+            }
+            if scan.outcome == "detected":
+                return self._fail(
+                    request.user_id,
+                    status,
+                    "rejected",
+                    "MALWARE_DETECTED",
+                    stage="quarantined",
+                    stage_version="malware-scan-v1",
+                    metadata=scan_metadata,
+                )
+            if scan.outcome in {"unavailable", "error"}:
+                return self._fail(
+                    request.user_id,
+                    status,
+                    "failed_retryable",
+                    _scanner_failure_code(scan),
+                    stage="quarantined",
+                    stage_version="malware-scan-v1",
+                    metadata=scan_metadata,
+                )
+        else:
+            scan_metadata = {
+                **self._policy_metadata(),
+                "scanner": "disabled-by-user-policy",
+                "scanner_version": "",
+                "scan_outcome": "skipped",
+            }
         try:
             validate_epub_archive(raw, self.policy)
         except EpubValidationError as exc:
@@ -331,7 +340,7 @@ class BookIngestionPipeline:
                 input_digest=asset_sha256,
                 output_digest=asset_sha256,
                 status="succeeded",
-                reason_code="VALIDATED",
+                reason_code="VALIDATED" if self.policy.malware_scan_enabled else "VALIDATED_SCAN_SKIPPED",
                 metadata=scan_metadata,
                 media_type="application/epub+zip",
             )
@@ -366,6 +375,7 @@ class BookIngestionPipeline:
     def _policy_metadata(self) -> dict[str, Any]:
         return {
             "policy_version": self.policy.version,
+            "malware_scan_enabled": self.policy.malware_scan_enabled,
             "limits": {
                 "max_asset_bytes": self.policy.max_asset_bytes,
                 "max_entries": self.policy.max_entries,
@@ -530,5 +540,5 @@ def _scanner_failure_code(scan: MalwareScanResult) -> str:
 
 def _reject_active_xml(raw: bytes) -> None:
     upper = raw.upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+    if b"<!ENTITY" in upper:
         raise EpubValidationError("UNSAFE_XML_DECLARATION")

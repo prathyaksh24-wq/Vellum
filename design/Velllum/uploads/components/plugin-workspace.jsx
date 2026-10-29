@@ -365,6 +365,25 @@
     return children({anonymous:true,tools:enabled?tools:null,busy,error,browse,status:{configured:enabled,connected:enabled&&tools!==null,
       message:enabled?'Public MCP server. No sign-in or API key required.':'Enable this plugin to use its public MCP server.'}});
   }
+  function YouTubeConnection({children}) {
+    const [status,setStatus]=useState(null), [busy,setBusy]=useState(false), [error,setError]=useState('');
+    const active=useRef(false);
+    const readStatus=async()=>{
+      if(!active.current)return;
+      setBusy(true);
+      try{const next=await window.VellumApi.plugins.youtubeStatus();if(active.current){setStatus(next);setError('');}}
+      catch(_){if(active.current)setError('YouTube connection status is unavailable. Refresh or open the connection to retry.');}
+      finally{if(active.current)setBusy(false);}
+    };
+    useEffect(()=>{
+      active.current=true;readStatus();
+      const complete=event=>{if(event.origin===window.location.origin && event.data?.type==='vellum:youtube-oauth-complete')readStatus();};
+      window.addEventListener('focus',readStatus);window.addEventListener('message',complete);
+      return()=>{active.current=false;window.removeEventListener('focus',readStatus);window.removeEventListener('message',complete);};
+    },[]);
+    return children({youtube:true,status,busy,error,readStatus,
+      connect:()=>window.dispatchEvent(new Event('vellum:youtube-connection-open'))});
+  }
   function Connection({
     p,
     children
@@ -381,6 +400,7 @@
       previousStatus.current = key;
       if (old !== null && key !== old) refresh();
     };
+    if(p.id==='youtube')return <YouTubeConnection>{children}</YouTubeConnection>;
     if(['brave','context7'].includes(p.id))return <KeyedConnection p={p}>{children}</KeyedConnection>;
     if(p.id==='discord')return <DiscordConnection p={p}>{children}</DiscordConnection>;
     if(p.metadata?.connection?.anonymous)return <PublicMcpConnection p={p}>{children}</PublicMcpConnection>;
@@ -428,6 +448,12 @@
       connected = c.status?.connected,
       account = c.status?.email || c.status?.account_name || c.status?.workspace_name || 'Authorized account',
       connect = () => c.status?.configured && !c.status?.connected && !c.status?.reconnect_required && c.run ? c.run((p.id.startsWith('app-') ? 'producthunt' : p.id) + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+    if(c.youtube)return <section className="ds" aria-label="YouTube Google connection"><h2 className="h2s">YouTube Google connection</h2>
+      <p className="notice">{c.status?.channel_title || (c.busy?'Checking connection…':'Read-only YouTube access')}</p>
+      {c.status?.authorization_required ? <p className="error" role="alert">Reconnect with Google to resume upload notifications. Saved uploads and creator choices are retained.</p> : c.status?.connected && <p className="notice">Google connection ready.</p>}
+      {c.status?.authorization_expires_at && <p className="notice" role={c.status.authorization_expiring?'alert':'status'}>Google access expires {new Date(c.status.authorization_expires_at).toLocaleString()}. Renew access before then to keep notifications running.</p>}
+      <div className="df"><button className="bt" disabled={p.enabled===false} onClick={c.connect}>{c.status?.authorization_required?'Reconnect with Google':c.status?.connected?'Manage Google connection':'Connect with Google'}</button><button className="bs" disabled={c.busy} onClick={c.readStatus}>Refresh status</button></div><Feedback p={p} c={c}/>
+    </section>;
     if(c.apiKey)return <div className="ds"><h2 className="h2s">{p.name} connection</h2><p className="notice">{c.status?.message||'Checking connection…'}</p><Setup p={p} c={c}/><div className="df">{c.status?.configured_key_available&&<button className="bs" disabled={c.busy||!!c.pending||p.enabled===false} onClick={()=>c.run(p.id+'.connection.use_configured')}>Use configured API key</button>}{c.status?.configured&&<><button className="bs" disabled={c.busy||!!c.pending||p.enabled===false} onClick={()=>c.run(p.id+'.connection.verify')}>Verify connection</button><button className="bs rd" disabled={c.busy||!!c.pending} onClick={()=>c.run(p.id+'.connection.disconnect')}>Disconnect</button></>}</div><Feedback p={p} c={c}/></div>;
     if(c.bot)return <div className="ds"><h2 className="h2s">Discord bot connection</h2><p className="notice">{c.status?.message||'Checking Discord connection…'}</p><div className="df"><button className="bt" disabled={c.busy||p.enabled===false} onClick={c.connect}>Install bot</button><button className="bs" disabled={c.busy||p.enabled===false} onClick={c.readStatus}>Verify connection</button></div><Feedback p={p} c={c}/></div>;
     if(c.anonymous)return <div className="ds"><h2 className="h2s">Public MCP connection</h2><p className="notice">{c.status.message}</p><button className="bs" disabled={c.busy||p.enabled===false} onClick={c.browse}>{c.busy?'Verifying…':'Verify connection'}</button>{c.tools&&<p className="notice" role="status">Connected · {c.tools.length} published tools available</p>}<Feedback p={p} c={c}/></div>;
@@ -456,7 +482,7 @@
           minHeight: 64
         }}><span className="gr">{p.name}</span><button className="cb" disabled={p.enabled === false || c.busy || !!c.pending || c.flow?.status === 'pending' || c.unsupported || !c.connect && !c.choose} onClick={connect}>{c.busy ? 'Connecting…' : c.status?.reconnect_required ? 'Sign in with '+p.name : c.status?.configured && c.run ? 'Verify connection' : 'Connect'}</button></div></div>}{p.id === 'swiggy' && c.status?.services && <div className="ds">{c.status.services.map(s => <div className="ln" key={s.id}><span className="gr">{s.name}</span><Sw label={s.name} value={s.enabled} disabled={c.busy} onChange={v => c.run('swiggy.connection.configure', {
             services: c.status.services.filter(x => x.id === s.id ? v : x.enabled).map(x => x.id)
-          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
+          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source installation.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
   }
   function Detail({
     p,
@@ -500,7 +526,7 @@
               }} items={items} />}<button className="bt" onClick={() => tryNow(p)}><Ic n="chat" s={14} />Try now</button></> : <button className="bt" onClick={() => setDlg({
               t: 'install',
               p
-            })}><Ic n="plus" s={14} />Install plugin</button>}</div></div><p className="sub">{p.description}</p></div>}{settings ? <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c} />}</Connection> : <><div className="hero">{(A.prompts[brand(p)] || [p.description, p.notes || 'Use the connected account’s available tools.', meta.integration || p.category || 'Explore this plugin']).map((t, i) => <div className="pr" key={i}><Tile p={p} sz={20} i={16} r={4} /><p><b>{p.name}</b> {t}</p><button className="ar" aria-label="Try this prompt" onClick={() => tryNow(p, t)}><Ic n="fwd" s={14} /></button></div>)}</div><p className="ds0">{p.notes || p.description}</p><h2 className="sc">Apps <span>{p.apps?.length || 0}</span></h2>{(p.apps || []).map(a => <div className="sr" role="button" tabIndex={0} key={a.id || a.name} onClick={() => setDlg({
+            })}><Ic n="plus" s={14} />Install plugin</button>}</div></div><p className="sub">{p.description}</p></div>}{!settings && p.id==='youtube' && <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c}/>}</Connection>}{settings ? <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c} />}</Connection> : <><div className="hero">{(A.prompts[brand(p)] || [p.description, p.notes || 'Use the connected account’s available tools.', meta.integration || p.category || 'Explore this plugin']).map((t, i) => <div className="pr" key={i}><Tile p={p} sz={20} i={16} r={4} /><p><b>{p.name}</b> {t}</p><button className="ar" aria-label="Try this prompt" onClick={() => tryNow(p, t)}><Ic n="fwd" s={14} /></button></div>)}</div><p className="ds0">{p.notes || p.description}</p><h2 className="sc">Apps <span>{p.apps?.length || 0}</span></h2>{(p.apps || []).map(a => <div className="sr" role="button" tabIndex={0} key={a.id || a.name} onClick={() => setDlg({
           t: 'app',
           p,
           app: a

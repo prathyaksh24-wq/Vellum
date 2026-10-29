@@ -308,3 +308,11 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## Release History
 
 No version has been tagged yet. The first release should move the verified entries above into a dated version section and create a fresh `[Unreleased]` section.
+
+## Books library, YouTube delivery and notification updates
+
+- Replace the Books prototype with the supplied shelf and upload components, Vellum theme integration, real covers and a full-book reader.
+- Accept standard EPUB metadata/XML, resolve source anchors, keep the import responsive while compilation continues, and detect books already on the shelf. Desktop imports skip the malware scanner and repeated consent prompts, recording the skipped policy truthfully.
+- Add reader progress and confirmed shelf removal with Keep/Esc/inactivity cancellation; rebuild the shelf without freezing its canvas. Remove obsolete Books details/settings controls.
+- Add optional YouTube push/hosted-relay delivery, account authorization recovery and grant deadlines, creator rotation/preferences, saved-upload queries and date-aware browser-history follow-ups.
+- Keep notification previews in the navigation bell, retain searchable history and deliver change events without replaying retained notifications on startup.

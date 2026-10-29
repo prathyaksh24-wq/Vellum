@@ -1,5 +1,30 @@
 import {expect, test, vi} from 'vitest';
 
+test('confirmed shelf removal dispatches its App Action, closes details and refreshes the shelf', async()=>{
+  await import('../../design/Velllum/uploads/components/books-state.js');
+  const onAction=vi.fn(async()=>({action_id:'book.remove',status:'applied',result:{library:{removed_import_id:'book',removed:true}}}));
+  const api={detail:vi.fn(async()=>({book:{id:'book',title:'A book'}})),list:vi.fn(async()=>({items:[],total:0,offset:0,limit:40}))};
+  const controller=window.VellumBooks.createController(api,{onAction});
+  await controller.open('book');
+  expect(await controller.remove('book')).toBe(true);
+  expect(onAction).toHaveBeenCalledWith('book.remove',{import_id:'book'},{confirmedFromUi:true});
+  expect(controller.getState().detail).toBeNull();
+  expect(controller.getState().total).toBe(0);
+  expect(api.detail).toHaveBeenCalledTimes(1);
+  controller.destroy();
+});
+
+test('failed removal keeps the selected book visible and reports the error', async()=>{
+  await import('../../design/Velllum/uploads/components/books-state.js');
+  const api={detail:vi.fn(async()=>({book:{id:'book'}})),list:vi.fn()};
+  const onAction=vi.fn(async()=>({action_id:'book.remove',status:'failed',message:'Removal failed'}));
+  const controller=window.VellumBooks.createController(api,{onAction});await controller.open('book');
+  expect(await controller.remove('book')).toBe(false);
+  expect(controller.getState().detail.id).toBe('book');
+  expect(controller.getState().error).toBe('Removal failed');
+  expect(api.list).not.toHaveBeenCalled();controller.destroy();
+});
+
 test('loads canonical Books state without inventing entries on a network error', async () => {
   await import('../../design/Velllum/uploads/components/books-state.js');
   const api = {list:vi.fn().mockResolvedValueOnce({items:[{id:'installed',title:'An installed book'}],total:1,offset:0,limit:40}).mockRejectedValueOnce(new Error('Offline'))};

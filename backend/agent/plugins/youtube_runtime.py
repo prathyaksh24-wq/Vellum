@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from functools import lru_cache
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -70,11 +71,23 @@ def youtube_status() -> dict[str, Any]:
         connected = False
         metadata = {}
         credential_status = "keyring_unavailable"
+    deadline = None
+    try:
+        value = float(metadata.get('refresh_token_expires_at') or 0)
+        if connected and math.isfinite(value) and 0 < value <= 253402300799:
+            deadline = datetime.fromtimestamp(value, UTC)
+    except (TypeError, ValueError, OSError):
+        pass
+    now = datetime.now(UTC)
+    if deadline and deadline <= now:
+        credential_status = 'authorization_required'
     return {
         "configured": bool(settings.youtube_oauth_client_id),
         "connected": connected,
         "status": credential_status if settings.youtube_oauth_client_id else "not_configured",
         "authorization_required": credential_status == "authorization_required",
+        "authorization_expires_at": deadline.isoformat() if deadline else '',
+        "authorization_expiring": bool(deadline and 0 < (deadline-now).total_seconds() <= 86400),
         "account_label": settings.youtube_oauth_account_label,
         "channel_id": str(metadata.get("channel_id") or ""),
         "channel_title": str(metadata.get("channel_title") or ""),

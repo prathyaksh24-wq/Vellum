@@ -127,3 +127,25 @@ test('redesigned Linear dialog exposes continuation and cancels the actual owner
   expect(cancel).toHaveBeenCalledOnce();
   expect(run).not.toHaveBeenCalled();
 });
+
+
+test.each(['settings','detail'])('YouTube connection in plugin %s opens the shared agent OAuth UI',async v=>{
+  items=[{id:'youtube',name:'YouTube',description:'Creator uploads',enabled:true,installed:true,manageable:true}];
+  window.VellumApi.plugins.youtubeStatus=vi.fn().mockResolvedValue({configured:true,connected:true,status:'authorization_required',authorization_required:true,channel_title:'My channel'});
+  const open=vi.fn();window.addEventListener('vellum:youtube-connection-open',open);
+  try{
+    await render({mode:v==='detail'?'directory':'manage',initialRoute:{v,p:'youtube'}});
+    expect(host.textContent).toContain('My channel');
+    expect(host.querySelector('[role=alert]').textContent).toContain('Reconnect');
+    await click(button('Reconnect with Google'));
+    expect(open).toHaveBeenCalledOnce();expect(onAdd).not.toHaveBeenCalled();
+  }finally{window.removeEventListener('vellum:youtube-connection-open',open);}
+});
+
+test('YouTube plugin shows the known Google grant deadline without claiming a permanent connection',async()=>{
+  items=[{id:'youtube',name:'YouTube',enabled:true,installed:true,manageable:true}];
+  window.VellumApi.plugins.youtubeStatus=vi.fn().mockResolvedValue({configured:true,connected:true,status:'ready',channel_title:'My channel',authorization_expires_at:'2026-11-05T12:13:01+00:00',authorization_expiring:false});
+  await render({initialRoute:{v:'settings',p:'youtube'}});
+  expect(host.textContent).toContain('Google access expires');
+  expect(button('Manage Google connection')).toBeTruthy();
+});

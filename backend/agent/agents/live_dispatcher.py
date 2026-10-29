@@ -400,7 +400,11 @@ class LiveAgentDispatcher:
                 r"\b(?:post|posts|tweet|tweets|timeline|feed|bookmark|like|repost|retweet|unrepost|unretweet|reply|replies)\b",
                 r"\bwhat\s+did\s+(?:he|she|they)\s+(?:say|post)\b",
             ),
-            "YoutubeAgent": (r"\b(?:video|videos|channel|upload|watch)\b",),
+            "YoutubeAgent": (
+                r"\b(?:video|videos|channel|upload|watch)\b",
+                r"^(?:please\s+)?(?:try|check|refresh)(?:\s+again)?(?:\s+now)?[?.!]?$",
+                r"\b(?:analysis|analyse|analyze|trends?|patterns?|summary|summari[sz]e)\b.*\b(?:that|it|those|based on)\b",
+            ),
             "BooksAgent": (r"\b(?:book|chapter|author|passage|quote)\b",),
         }
         return any(re.search(pattern, lowered) for pattern in patterns.get(agent_name, ()))

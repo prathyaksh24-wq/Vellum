@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from agent.contracts.youtube_history import YouTubeHistoryStatus
 from agent.contracts.youtube_tracking import CreatorTrackingSnapshot
+from agent.contracts.youtube_push import YouTubePushStatus
 
 from agent.config import get_settings
 from agent.knowledge.runtime import get_knowledge_core
@@ -30,6 +31,17 @@ from agent.plugins.youtube_runtime import (
 
 
 router = APIRouter(prefix="/plugins/youtube", tags=["youtube"])
+
+
+@router.get('/creators/push', response_model=YouTubePushStatus)
+async def get_youtube_push_status(response: Response) -> YouTubePushStatus:
+    from agent.plugins.youtube_push import YouTubePushDelivery
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        service = YouTubePushDelivery()
+    except ValueError:
+        return YouTubePushStatus(status='invalid_endpoint', warnings=['Configure a public HTTPS callback origin.'])
+    return await asyncio.to_thread(service.status)
 
 
 @router.get("/creators", response_model=CreatorTrackingSnapshot)
@@ -67,6 +79,8 @@ def _controls() -> Any:
 
 class YouTubeStatusResponse(BaseModel):
     authorization_required: bool = False
+    authorization_expires_at: str = ''
+    authorization_expiring: bool = False
     configured: bool
     connected: bool
     status: str
@@ -126,6 +140,11 @@ async def youtube_oauth_callback(
         await asyncio.to_thread(store.save_profile, profile)
     except (YouTubeAuthError, YouTubeAPIError):
         return _callback_page(False, "YouTube connection failed. Start the connection again from Vellum.", status_code=400)
+    from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+    try:
+        await asyncio.to_thread(YouTubeCreatorTracking().resume_after_authorization, str(profile.get('channel_id') or ''))
+    except Exception:
+        return _callback_page(True, "YouTube is connected. Background upload checks are deferred; return to Vellum to check their status.")
     return _callback_page(True, "YouTube is connected. You can close this tab and return to Vellum.")
 
 
