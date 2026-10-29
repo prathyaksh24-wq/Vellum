@@ -1,6 +1,10 @@
 {
   "version": 1,
   "handlerFingerprints": {
+    "design/Velllum/uploads/components/DvkMotionBackground.jsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
       "count": 930,
       "sha256": "7f35de6b9adeec908d713747bce330be324bdbf7b17421431604f3061abae152"

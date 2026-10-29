@@ -1,0 +1,152 @@
+{
+  "nimbus": {
+    "source": "https://dvklab.vercel.app/templates/nimbus/bg.js",
+    "sourceSha256": "bd44085e08f538d6fdea51ce982745cb5cfe7f6906a4ceed4eb432591af7c90d",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "dbd408f17cf2f9ba322ae514ea00966c9aaad053d7f020cd280dd16ce91c1844",
+    "assets": {
+      "scene.jpg": "e7efd6a6901d9692dd404e0890ca59d42b89492b90dc5191e2aded907d67f8e5",
+      "scene_s.jpg": "1503bd7f8f2dcf51e48bc9af5a8fe376fa631a486d5e3c837fcab7be45b09ffe"
+    }
+  },
+  "daybreak": {
+    "source": "https://dvklab.vercel.app/templates/daybreak/bg.js",
+    "sourceSha256": "fc60704b2334332e4d979efb9cc63ee49636c23c945e9f5c0354ba7be5ab8f8d",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "5f82fbbefc9bca70c064bbc5236d24e2a81eaed583ef605efa4f81bdea169fcb",
+    "assets": {
+      "scene.jpg": "8013604a3b5cb8762a0831eee7789ff6b72203e2b63e4a7623a62830e5c391af",
+      "scene_s.jpg": "29d8b883793c3a0d5bb45528fdef8daae263c100fd0d8a389d2aae5b9e6aee65"
+    }
+  },
+  "eclipse": {
+    "source": "https://dvklab.vercel.app/templates/eclipse/bg.js",
+    "sourceSha256": "e566895b954c722ef8db16e4ed307d734039ded69e401384cd7180bf2ecee514",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "54105433cd520582d00a05e5e5c91853c944e4a824266a82dd9421c33023e7bd",
+    "assets": {
+      "scene.jpg": "0eb93e9e29c74e88ef4259098459a0d1024934c7c93a6a9aafd4b21326973fd1",
+      "scene_s.jpg": "dffc4f0a94c0c1bdcdb2ce1f75637b2c5bd6ec20e3b5201dc1ea3444c3987bd3"
+    }
+  },
+  "dusk": {
+    "source": "https://dvklab.vercel.app/templates/dusk/bg.js",
+    "sourceSha256": "5668c862d76b98f2a686d0d44d2201dc7112fc8ca4f6d5b1cd07f8be726ac503",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "9710c24a44a78bb23906ef405b0532f0a4abd5b9410b40c7e8ca5e6ed7a54471",
+    "assets": {
+      "scene.jpg": "01379ae8c62665d7cde19f34ba83124581d44ff9375f311974e333e6367bf3c4",
+      "scene_s.jpg": "c6bda63c702134681d84332d26bcdbedbc585eb287563c6b7333fe3cb9bae33f"
+    }
+  },
+  "meadow": {
+    "source": "https://dvklab.vercel.app/templates/meadow/bg.js",
+    "sourceSha256": "66b2819f6ee3c6c0108909233b5660ecccdd496a8584d7679e04a85a837b1358",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "21d19e58f1699c3a3c7c45ba9a5f24f2bc589c5b2d219c9bb74c86757817f483",
+    "assets": {
+      "scene.jpg": "58b2c8e6ad2c0ed574f58e1526374f2d56cba7146ed0be19faa90c58d8efb5e1",
+      "scene_s.jpg": "df0ed424ee389ab61e52cd3bddb01f7327f99e6354257001dd215cb36a415f4c",
+      "maps.png": "c9a14c6c985e9f73056c9ce1f7c5052cedd9b9f835d95c9fb165f423f9393aca"
+    }
+  },
+  "stratosphere": {
+    "source": "https://dvklab.vercel.app/templates/stratosphere/bg.js",
+    "sourceSha256": "8a2d106daca4af0d7a053328e4470dbd242dd8bfaff54489a7cc35159e6555cf",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "e7432863414a37be887c0d5d30de77e1d37be60c51a4d7c35b5ac8f0d425b551",
+    "assets": {
+      "scene.jpg": "a4f6db01ee58a04dadf7e5b9678e818301f857b92c12f0b6e2c7a841f6538d96",
+      "scene_s.jpg": "3b990d518cb6e131fe99fbceb2caee9c655dffbaeffcc5c0598371e0ea0058c2"
+    }
+  },
+  "cloudline": {
+    "source": "https://dvklab.vercel.app/templates/cloudline/bg.js",
+    "sourceSha256": "b2bcf44c06b2a4ba41ff8b7fdde218c41f301d79e6d195ebf1b8a8151a90c83d",
+    "vertexSha256": "e963cb66075647ffe9a4005faa66764917aa9314818b36c08f27e12a890348a4",
+    "fragmentSha256": "be19da433f867ff9f2d4742dee96bd7c6829af1b646867f273e7316f440c037d",
+    "assets": {}
+  },
+  "grotto": {
+    "source": "https://dvklab.vercel.app/templates/grotto/bg.js",
+    "sourceSha256": "37668d554f66f9b5d5567a7348ab6c9d4778da2d8aca05c87e5560ca87cf3e85",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "17138fab72f9f794e4fece3de6c3d55fd054446ebb1c328764d2fde981165c42",
+    "assets": {
+      "scene.jpg": "7a932253ba2e00a72a367058ab27fab20a7636e05f42781e2505b96aa12dab49",
+      "scene_s.jpg": "f3da0310f344920dc53f9db4173e9598a3570c0fc78ebbe5468da2a9a39eee11",
+      "maps.png": "c8c2f4ee38e867edc1263961672ce5f046c60eb06748767c858def5d2c756c1d"
+    }
+  },
+  "evergreen": {
+    "source": "https://dvklab.vercel.app/templates/evergreen/bg.js",
+    "sourceSha256": "c4454d7d6edd1b76db824457a5afc2fc9ea83e675aeffe238e68e8502ac76a1d",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "5a39b008a597bac55ea97cd3de3a8507415cfe5b64ec6257a6e6d11fc8546fd8",
+    "assets": {
+      "scene.jpg": "96b69c9b62d7c2e7a2cedf46f9a1f1b3b22f5c5305fc12deed8010fd6631e927",
+      "scene_s.jpg": "594a5b12006f036b38683419806c574d64591bad22f481be1e45df1e7ddff8e6",
+      "maps.png": "5fe8e2321499c64580a3ed8f8f53993f7ea5dd7191c5098730acd22f30a209f9"
+    }
+  },
+  "sunset-ridge": {
+    "source": "https://dvklab.vercel.app/templates/sunset-ridge/bg.js",
+    "sourceSha256": "447166fb3f0a5dfeb2bb2904d720f08616408d54bd089aea2a34c5a01447887e",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "1c26a58c5b4a41938c0e28c2bcd82b3983bc7af68b16bac557f021fed76e00e0",
+    "assets": {
+      "scene.jpg": "320e094e2cd18cd2039f52bef9066e70e6f0aa3a973d11aaec912d4eec104fb0",
+      "scene_s.jpg": "6b1284b02dd1a8af3dc615af1826c3540b3e565e07ffd1be3afbbf5a52abce5a",
+      "maps.png": "7ef556a5d65e3bc321e5ec7fd08ea5c9928f40b3f3c05af8844bda813743896c",
+      "sky.jpg": "216ba3746a336d6d752b3c59eeda35a99a75f7fdaf929097df23483d56738dc0",
+      "sky_s.jpg": "b228aa3adf0a9121edf86a7061e346de894cebcca797ac489185264b8f93639c"
+    }
+  },
+  "orbit-ascii": {
+    "source": "https://dvklab.vercel.app/templates/orbit-ascii/bg.js",
+    "sourceSha256": "3292588a28b6b979ac82d42868ab4911a80927c8c8661c9057b9be37d13f3fc3",
+    "vertexSha256": "fdb765a979265fece7c0ef1a59ae0ccb01c414bbc72cdf3c5e00588c9ca2c967",
+    "fragmentSha256": "2034d535066f4cff8530ac7b23665ce21388aa6fda023eaac905f8b028e0b188",
+    "assets": {
+      "glyphs.png": "841821ccf8e492ccd080fdf3eb3edb6e9a4e72983b343756cfa2437f11c8ac7d"
+    },
+    "glyphSha256": "6bbc7a983302d426258a25ac83701e69d664587c43fc3c9754d6b767e74f0117"
+  },
+  "twilight": {
+    "source": "https://dvklab.vercel.app/templates/twilight/bg.js",
+    "sourceSha256": "382d76f01a50722375ff7a8c077c8c1461fed8e56779b17b8c61a99fb4f67e42",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "1381e69fa0cfd4d98eeece1407e0acb398393a0b741e2479fb3e381a5a32f66b",
+    "assets": {
+      "scene.jpg": "8d2b3134eb8b3ea9c43708dbeb10e8d9de2f70b581086e2772953a3c47f28136",
+      "scene_s.jpg": "0f88f56414ea1d653e858c3f6620f698282e931af783475721e5a017820c75ee"
+    }
+  },
+  "riptide": {
+    "source": "https://dvklab.vercel.app/templates/riptide/bg.js",
+    "sourceSha256": "ac48eb11ca9355483a04c68637c2d42f40f69006ee1df9ca8cf6e9dbf36ece63",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "5a17b1e17cb5ad708ad367e243eceb75fcc28b90a8b21f0ac0af26955d7debc1",
+    "assets": {
+      "scene.jpg": "f6c31531301df9ca6eba8225d49943123b8f705a2cfc6b4289b31a0e8b62fc3b",
+      "scene_s.jpg": "aaf7c6ee3abee3765fd9a5c35644361c811070a78cf09b3e8d11f81f8118a581"
+    }
+  },
+  "seascape": {
+    "source": "https://dvklab.vercel.app/templates/seascape/bg.js",
+    "sourceSha256": "a8771b54dffa93e5ae16425b8588fd32ba74bf27ac4c5538db41b5d344177dfa",
+    "vertexSha256": "e963cb66075647ffe9a4005faa66764917aa9314818b36c08f27e12a890348a4",
+    "fragmentSha256": "9fc225b3e43eb59e79f33162755faa610fe108298f0dc63e93c18077521c0862",
+    "assets": {}
+  },
+  "bokeh": {
+    "source": "https://dvklab.vercel.app/templates/bokeh/bg.js",
+    "sourceSha256": "780ca3a20bd1992bcb164a02b009341fb4f70d75d870274e3f67b623e659747c",
+    "vertexSha256": "c4aaa195260a4e3eb908bb7039e4d13055950f40a777b7a32aa56e50b0b85aff",
+    "fragmentSha256": "34ac31d1d86f2d615a90855c6e177682bc5b54a53c42933c1ef2276c7da62dbe",
+    "assets": {
+      "scene.jpg": "7333ea94ab3eed086e600c40f6abb0998c4a857090a454b4ebb0213789f0f76f",
+      "scene_s.jpg": "0717a4809231493ee3272638019a1b36cd83879f6e3e3b7e00000a9a31f7709b"
+    }
+  }
+}

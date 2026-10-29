@@ -130,7 +130,7 @@ describe('React Bits background lifecycle', () => {
   });
 });
 
-test.each(['pattern-waves', 'particles'])('%s uses the existing device setting receipt and persists across reload', async id => {
+test.each(['pattern-waves', 'particles', 'nimbus', 'daybreak', 'eclipse', 'dusk', 'meadow', 'stratosphere', 'cloudline', 'grotto', 'evergreen', 'sunset-ridge', 'orbit-ascii', 'twilight', 'riptide', 'seascape', 'bokeh'])('%s uses the existing device setting receipt and persists across reload', async id => {
   vi.resetModules();
   await import('../../design/Velllum/uploads/components/app-action-runtime.js');
   const AppActions = window.VellumUI.AppActions;

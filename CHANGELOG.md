@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Add 15 original DVK Lab motion backgrounds to Appearance, with locally bundled shaders/assets, device-local selection, source-faithful procedural and ASCII rendering, and canvas/GPU lifecycle cleanup.
+
 ### Added
 
 - Integrate the supplied plugin directory and plugin settings design inside Vellum, with real catalog/skill data, canonical CRM and functional categories, reviewed persistent plugin installation choices, and independent sidebar visibility. Plugin pages, dialogs, Settings, and Music follow the selected Vellum appearance.

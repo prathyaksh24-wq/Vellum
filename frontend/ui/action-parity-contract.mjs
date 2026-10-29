@@ -57,6 +57,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/automation-notifications.jsx",
   "design/Velllum/uploads/components/PatternWaves.jsx",
   "design/Velllum/uploads/components/Particles.jsx",
+  "design/Velllum/uploads/components/DvkMotionBackground.jsx",
 ];
 
 function reactScripts(content) {
