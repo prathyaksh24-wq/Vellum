@@ -25,7 +25,7 @@ def linear_contribution(*, service=None):
             if operation == "oauth.start":
                 from agent.plugins.linear_oauth import start_oauth
                 args=LinearOAuthRequest.model_validate(payload.get("arguments") or {})
-                return {"changed":True, **start_oauth(current,args.return_url).model_dump(), "_message":"Continue in Linear to approve Vellum's access."}
+                return {"changed":True, **start_oauth(current,args.return_url,popup=args.popup).model_dump(), "_message":"Continue in Linear to approve Vellum's access."}
             if operation == "oauth.cancel":
                 from agent.plugins.linear_oauth import cancel_oauth
                 args=payload.get("arguments") or {}

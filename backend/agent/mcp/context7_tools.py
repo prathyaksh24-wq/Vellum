@@ -37,7 +37,8 @@ ACTION_TO_TOOL = {
 
 
 def _context7_api_key() -> str:
-    return get_settings().context7_api_key
+    from agent.plugins.keyed_mcp import keyed_mcp_service
+    return keyed_mcp_service('context7').api_key()
 
 
 def _context7_headers() -> dict[str, str]:

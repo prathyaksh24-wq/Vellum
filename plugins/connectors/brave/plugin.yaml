@@ -1,0 +1,19 @@
+id: brave
+name: Brave Search
+type: connector
+category: Web & Research
+version: 1.0.0
+description: Search the web, images, videos, news and local places using Brave’s official MCP server. Requires a Brave Search API key and Node.js 22 or later; plan and usage limits apply.
+capabilities:
+  - web.search
+  - brave.search
+  - brave.connection.connect
+  - brave.connection.use_configured
+  - brave.connection.verify
+  - brave.connection.disconnect
+provides_tools: [web_search, plugin_mcp]
+mcp_connectors:
+  - name: brave
+    command: npx
+    args: ['-y', '@brave/brave-search-mcp-server@2.1.4', '--transport', 'stdio']
+    credential_provider: brave

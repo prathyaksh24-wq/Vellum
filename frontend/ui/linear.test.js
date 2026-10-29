@@ -15,6 +15,7 @@ const click=async node=>{expect(node).toBeTruthy();await act(async()=>node.click
 const enter=async(node,value)=>{await act(async()=>{Object.getOwnPropertyDescriptor(node.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(node,value);node.dispatchEvent(new Event('input',{bubbles:true}));});};
 const render=async props=>{new Function('React','window',code)(React,window);await act(async()=>root.render(React.createElement(window.VellumUI.LinearWorkspace,props)));};
 beforeEach(()=>{
+  vi.spyOn(window,'open').mockReturnValue({location:{href:''},close:vi.fn()});
   globalThis.IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.append(host);root=createRoot(host);
   status={enabled:true,configured:false,connected:false,status:'not_connected',mcp_tool_count:68};
   api={plugins:{linearStatus:vi.fn(async()=>status),linearMcpRead:vi.fn(async()=>({tool_name:'list_issues',result:'{}'})),linearMcpTools:vi.fn(async()=>({tools:[{name:'list_issues',description:'Read issues',read_only:true,input_schema:{type:'object'}},{name:'save_issue',description:'Create or update an issue',read_only:false,input_schema:{type:'object'}}]})),linearOAuthStatus:vi.fn(async()=>({flow_id:'flow',status:'pending'}))},appActions:{dispatch:vi.fn(async()=>({status:'confirmation_required',message:'Confirm issueUpdate in Workspace',confirmation:{token:'confirm'}})),confirm:vi.fn(async()=>{status={...status,connected:true,configured:true};return {status:'applied',result:{connection:status}};}),cancel:vi.fn(async()=>({status:'cancelled'}))}};
@@ -47,8 +48,28 @@ test('recent-issues control uses the official MCP read contract',async()=>{
 test('OAuth uses the user-driven App Action and provider link without entering a key',async()=>{
   api.appActions.dispatch.mockResolvedValue({status:'applied',result:{flow_id:'flow',authorization_url:'https://linear.app/oauth/authorize?state=test'}});
   await render();await click(button('Sign in with Linear'));
+  expect(window.open).toHaveBeenCalledWith('about:blank','vellum-linear-oauth','popup,width=680,height=780');
+  expect(window.open.mock.results[0].value.location.href).toBe('https://linear.app/oauth/authorize?state=test');
   expect(api.appActions.dispatch.mock.calls[0][0].action_id).toBe('linear.connection.oauth.start');expect(host.querySelector('a[href*="oauth/authorize"]').href).toBe('https://linear.app/oauth/authorize?state=test');expect(api.appActions.confirm).not.toHaveBeenCalled();
   await click(button('Cancel sign-in'));expect(api.appActions.dispatch.mock.calls[1][0].action_id).toBe('linear.connection.oauth.cancel');
+  expect(api.appActions.dispatch.mock.calls[1][0].arguments).toEqual({flow_id:'flow'});
+});
+
+test('blocked Linear popup retains a visible provider continuation link',async()=>{
+  window.open.mockReturnValue(null);
+  api.appActions.dispatch.mockResolvedValue({status:'applied',result:{flow_id:'flow',authorization_url:'https://mcp.linear.app/authorize?state=fixture'}});
+  await render();await click(button('Sign in with Linear'));
+  expect(host.querySelector('a[href*="mcp.linear.app/authorize"]')).toBeTruthy();
+});
+
+test('Linear rejects a non-provider OAuth destination and closes the reserved window',async()=>{
+  const popup=window.open.getMockImplementation()();
+  window.open.mockReturnValue(popup);
+  api.appActions.dispatch.mockResolvedValue({status:'applied',result:{flow_id:'flow',authorization_url:'https://linear.app.attacker.invalid/authorize'}});
+  await render();await click(button('Sign in with Linear'));
+  expect(popup.close).toHaveBeenCalledOnce();
+  expect(popup.location.href).toBe('');
+  expect(host.textContent).toContain('invalid sign-in address');
 });
 test('OAuth completion refreshes the connected identity and stops polling',async()=>{
   vi.useFakeTimers();api.appActions.dispatch.mockResolvedValue({status:'applied',result:{flow_id:'flow',authorization_url:'https://linear.app/oauth/authorize'}});
