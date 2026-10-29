@@ -23,7 +23,11 @@ class BraveProvider(WebSearchProvider):
         return "Brave"
 
     def is_available(self) -> bool:
-        return bool(getattr(get_settings(), "brave_api_key", ""))
+        from agent.plugins.keyed_mcp import keyed_mcp_service, KeyedMcpError
+        try:
+            return bool(keyed_mcp_service('brave').api_key())
+        except KeyedMcpError:
+            return False
 
     def supports_search(self) -> bool:
         return True

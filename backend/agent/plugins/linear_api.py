@@ -1,4 +1,6 @@
 """Local Linear UI transport; secrets never cross the action boundary."""
+import secrets
+from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
@@ -72,6 +74,18 @@ def oauth_callback(code:str="",state:str="",error:str=""):
         headers={"Cache-Control":"no-store","Referrer-Policy":"no-referrer"})
 
 
+@oauth_router.get('/oauth/open')
+def oauth_open(flow_id: str):
+    from agent.plugins.linear_oauth import return_flow
+    headers = {'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'}
+    try:
+        flow = return_flow(flow_id)
+    except LinearError:
+        return HTMLResponse('<h1>Linear sign-in expired</h1><p>Return to Vellum and connect again.</p>', status_code=400, headers=headers)
+    destination = flow.url if flow.status == 'pending' else '/api/plugins/linear/oauth/return?flow_id=' + flow.id
+    return RedirectResponse(destination, status_code=303, headers=headers)
+
+
 @oauth_router.get("/oauth/return")
 def oauth_return(flow_id:str):
     from html import escape
@@ -81,6 +95,20 @@ def oauth_return(flow_id:str):
     except LinearError:
         return HTMLResponse("<h1>Linear sign-in expired</h1><p>Open Vellum and connect again.</p>",status_code=400,headers=headers)
     if flow.status!="pending":
+        if getattr(flow, 'popup', False):
+            nonce = secrets.token_urlsafe(24)
+            target = urlsplit(flow.return_url)
+            origin = target.scheme + '://' + target.netloc
+            headers['Content-Security-Policy'] = f"default-src 'none'; script-src 'nonce-{nonce}'; frame-ancestors 'none'; base-uri 'none'"
+            title = 'Linear connected' if flow.status == 'connected' else 'Linear sign-in finished'
+            script = '''(()=>{try{if(window.opener&&!window.opener.closed){const d=document.body.dataset;
+window.opener.postMessage({type:"vellum:linear:oauth",flow_id:d.flowId},d.targetOrigin);
+window.opener.focus();}}catch{}window.close();})();'''
+            return HTMLResponse('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+                f'<title>{title}</title><body data-flow-id="{escape(flow.id,quote=True)}" data-target-origin="{escape(origin,quote=True)}">'
+                f'<h1>{title}</h1><p>{escape(flow.message)}</p><p>Continue in your original Vellum window.</p>'
+                f'<p><a href="{escape(flow.return_url,quote=True)}" target="_blank" rel="noopener noreferrer">Open Vellum</a></p>'
+                f'<script nonce="{nonce}">{script}</script></body></html>', headers=headers)
         return RedirectResponse(flow.return_url,status_code=303,headers=headers)
     # The clean return page refreshes while the SDK exchanges the code, verifies
     # the MCP identity and persists authorization. Never claim success early.

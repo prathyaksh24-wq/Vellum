@@ -26,7 +26,10 @@ class BraveClient:
         timeout_seconds: int = 45,
     ) -> None:
         settings = get_settings()
-        self.api_key = api_key if api_key is not None else settings.brave_api_key
+        if api_key is None:
+            from agent.plugins.keyed_mcp import keyed_mcp_service
+            api_key = keyed_mcp_service('brave').api_key()
+        self.api_key = api_key
         self.base_url = base_url or settings.brave_base_url
         self.log_path = Path(log_path if log_path is not None else settings.brave_log_path)
         self.timeout_seconds = timeout_seconds

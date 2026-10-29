@@ -50,8 +50,11 @@ class OAuthStorage:
                 current=self.service._require()
                 if current.get("auth_type")!="oauth" or current.get("oauth_tokens")!=self.connection.get("oauth_tokens"):
                     raise LinearError("The Linear connection changed. Retry with the current connection.")
+                if not value.get('refresh_token') and (current.get('oauth_tokens') or {}).get('refresh_token'):
+                    value['refresh_token'] = current['oauth_tokens']['refresh_token']
                 self.service.update_connection(oauth_tokens=value,token="Bearer "+value["access_token"],
-                    oauth_expires_at=self.service.clock()+value.get("expires_in",3600))
+                    oauth_expires_at=self.service.clock()+value.get("expires_in",3600),
+                    oauth_refresh_generation=current.get('oauth_refresh_generation',0)+1)
                 self.connection=self.service._require()
         else:self.tokens=value
 
@@ -65,10 +68,20 @@ class OAuthStorage:
         else:self.client_info=value
 
 
+class ExpiringOAuthClientProvider(OAuthClientProvider):
+    async def _initialize(self):
+        await super()._initialize()
+        # The SDK loads stored tokens without restoring its in-memory deadline.
+        # Restore it before the first request, so an expired grant refreshes rather
+        # than taking the interactive authorization branch on a 401 response.
+        if self.context.current_tokens:
+            self.context.update_token_expiry(self.context.current_tokens)
+
+
 def stored_auth(service,connection=None):
     # No interactive handlers here: expired/revoked grants require a user-driven
     # reconnect. Valid refresh tokens are handled by the official MCP SDK.
-    return OAuthClientProvider(SERVER,metadata(),OAuthStorage(service,connection))
+    return ExpiringOAuthClientProvider(SERVER,metadata(),OAuthStorage(service,connection))
 
 
 def oauth_connector(auth):
@@ -97,7 +110,7 @@ async def identity_from_mcp(connector):
 
 
 class Flow:
-    def __init__(self, service, return_url=None):
+    def __init__(self, service, return_url=None, popup=False):
         self.id=secrets.token_urlsafe(32)
         self.service=service
         self.started=time.monotonic()
@@ -109,6 +122,7 @@ class Flow:
         self.message="Approve Vellum in Linear to finish connecting."
         self.original_token=service._load().get("token")
         self.phase="authorization"
+        self.popup=popup
         self.finished=threading.Event()
         target=urlsplit(LinearOAuthRequest(**({"return_url":return_url} if return_url else {})).return_url)
         query=parse_qs(target.query)
@@ -171,7 +185,7 @@ def _flows(service):
     return service._oauth_flows
 
 
-def start_oauth(service=None,return_url=None):
+def start_oauth(service=None,return_url=None,popup=False):
     service=service or linear_service()
     if not service.enabled():raise LinearError("Enable Linear before connecting.")
     with service._lock:
@@ -179,7 +193,7 @@ def start_oauth(service=None,return_url=None):
         for previous in flows.values():
             if previous.status=="pending":cancel_oauth(previous.id,service)
         flows.clear()
-        flow=Flow(service,return_url)
+        flow=Flow(service,return_url,popup=popup)
         flows[flow.id]=flow
     threading.Thread(target=lambda:asyncio.run(flow.run()),daemon=True,name="vellum-linear-oauth").start()
     if not flow.ready.wait(timeout=15) or not flow.url:

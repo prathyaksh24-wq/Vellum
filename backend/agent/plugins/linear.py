@@ -2,12 +2,14 @@
 from datetime import datetime, timezone
 from functools import lru_cache
 import json
+import secrets
 from threading import RLock
 import time
 
 
 from agent.contracts.linear import PLUGIN_ID, LinearStatus
 from agent.plugins.product_hunt import serialized
+from agent.plugins.credentials import KeyringRecordStore
 
 
 
@@ -30,12 +32,42 @@ def scrub(value, token=""):
     return value
 
 
-class LinearService:
+def connection_failure(error):
+    """Preserve useful failure categories without exposing OAuth response text."""
+    pending, seen = [error], set()
+    while pending and len(seen) < 32:
+        item = pending.pop()
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        if isinstance(item, LinearError):
+            return item
+        if type(item).__name__ == 'OAuthFlowError' and str(item) in {
+            'No redirect handler provided for authorization code grant',
+            'No callback handler provided for authorization code grant'}:
+            return LinearError('Linear authorization needs to be renewed. Choose Sign in with Linear and approve access again. Your saved connection has not been deleted.', 'authorization_required')
+        pending.extend(getattr(item, 'exceptions', ()) or ())
+        if item.__cause__ is not None:
+            pending.append(item.__cause__)
+        elif item.__context__ is not None:
+            pending.append(item.__context__)
+    return LinearError('Linear MCP could not complete this request. Verify the connection and check permissions. Check Linear before retrying a write.')
+
+
+def same_authorization(before, after):
+    if any(before.get(key) != after.get(key) for key in ('actor_id', 'workspace_id', 'grant_id')):
+        return False
+    return before.get('token') == after.get('token') or (
+        after.get('oauth_refresh_generation', 0) > before.get('oauth_refresh_generation', 0))
+
+
+class LinearService(KeyringRecordStore):
     def __init__(self, *, keyring=None, enabled=None, clock=time.time):
         if keyring is None:
             import keyring as system_keyring
             keyring = system_keyring
         self.keyring = keyring
+        super().__init__(keyring, service='vellum.plugins.linear', error_type=LinearError, account='connection-v1')
         self.enabled = enabled or self._plugin_enabled
         self.clock = clock
         self._lock = RLock()
@@ -49,18 +81,14 @@ class LinearService:
 
     def _load(self):
         try:
-            raw = self.keyring.get_password("vellum.plugins.linear", "connection-v1")
-            value = json.loads(raw) if raw else {}
-            if not isinstance(value, dict):
-                raise ValueError()
-            return value
-        except Exception:
+            return self.load()
+        except LinearError:
             raise LinearError("Unlock the system credential store and retry.", "keyring_unavailable") from None
 
     def _save(self, value):
         try:
-            self.keyring.set_password("vellum.plugins.linear", "connection-v1", json.dumps(value))
-        except Exception:
+            self.save(value)
+        except LinearError:
             raise LinearError("Linear could not be saved in the system credential store.", "keyring_unavailable") from None
 
     def status(self):
@@ -75,16 +103,19 @@ class LinearService:
         if state == "ready" and not 0 <= self.clock() - data.get("checked_epoch", 0) < 86400:
             state = "not_checked"
         connected = configured and state == "ready" and base["enabled"]
+        reconnect_required = configured and state in {'authorization_required', 'unauthorized', 'invalid_grant'}
         message = ("Verified Linear account and workspace. Your account permissions apply."
                    if connected else "Authorization is saved. Verify the connection before using it." if configured
                    else "Sign in with Linear to connect its official MCP server.")
         if not base["enabled"]:
             message = "Enable Linear to use its connection."
+        elif reconnect_required:
+            message = 'Sign in with Linear again to renew authorization. Your existing connection is retained until a replacement is verified.'
         return LinearStatus(**base, configured=configured, connected=connected,
             status=state if base["enabled"] else "disabled", message=message,
             verified_at=data.get("verified_at"), account_name=data.get("account_name"), workspace_name=data.get("workspace_name"),
             read_access="verified" if connected else "not_verified", write_access=data.get("write_access", "not_verified"),
-            auth_type="oauth",mcp_tool_count=data.get("mcp_tool_count",len(published_tools())),mcp_status=data.get("mcp_status","not_checked"))
+            auth_type="oauth",mcp_tool_count=data.get("mcp_tool_count",len(published_tools())),mcp_status=data.get("mcp_status","not_checked"),reconnect_required=reconnect_required)
 
     def _require(self):
         if not self.enabled():
@@ -123,6 +154,7 @@ class LinearService:
         if not all(identity.get(key) for key in ("actor_id","workspace_id","account_name","workspace_name")):
             raise LinearError("Linear did not verify this account and workspace.")
         self._save({"token":"Bearer "+tokens["access_token"], **identity,
+                    "grant_id": secrets.token_urlsafe(32), "oauth_refresh_generation": 0,
                     "status":"ready", "checked_epoch":self.clock(),
                     "verified_at":datetime.fromtimestamp(self.clock(),timezone.utc).isoformat(),
                     "auth_type":"oauth","oauth_tokens":tokens,"oauth_client_info":client_info,
@@ -137,15 +169,25 @@ class LinearService:
             raise LinearError("The Linear connection changed. Verify it again.")
         return _run(identity_from_mcp(oauth_connector(stored_auth(self,connection=data))))
 
-    @serialized
     def verify(self):
-        data = self._require()
+        # Network verification may refresh OAuth on another event-loop thread.
+        # Never hold this lock while waiting for it, or overwrite refreshed tokens.
+        with self._lock:
+            data = self._require()
         try:
-            self._save({**data, **self._identity(data["token"]),"status":"ready","checked_epoch":self.clock(),
-                        "verified_at":datetime.fromtimestamp(self.clock(),timezone.utc).isoformat()})
+            identity = self._identity(data['token'])
         except LinearError as exc:
-            self._save({**data, "status": exc.status})
+            with self._lock:
+                current = self._require()
+                if current.get('token') == data.get('token'):
+                    self._save({**current, 'status': exc.status})
             raise
+        with self._lock:
+            current = self._require()
+            if not same_authorization(data, current):
+                raise LinearError('The Linear account changed. Verify its current connection again.')
+            self._save({**current, **identity, 'status': 'ready', 'checked_epoch': self.clock(),
+                'verified_at': datetime.fromtimestamp(self.clock(), timezone.utc).isoformat()})
         return self.status()
 
     @serialized

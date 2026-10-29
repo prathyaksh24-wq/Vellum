@@ -1,0 +1,19 @@
+id: context7
+name: Context7
+type: connector
+category: Developer Tools
+version: 1.0.0
+description: Resolve software libraries and read current documentation and code examples through Context7’s official MCP server. Connect your own API key or verify the key already configured in Vellum.
+capabilities:
+  - documentation.read
+  - context7.documentation
+  - context7.connection.connect
+  - context7.connection.use_configured
+  - context7.connection.verify
+  - context7.connection.disconnect
+provides_tools: [library_docs, plugin_mcp]
+mcp_connectors:
+  - name: context7
+    type: http
+    url: https://mcp.context7.com/mcp
+    credential_provider: context7

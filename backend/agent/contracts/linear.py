@@ -20,6 +20,7 @@ class LinearStatus(BaseModel):
     auth_type: Literal["oauth"] = "oauth"
     mcp_tool_count: int = 0
     mcp_status: str = "not_checked"
+    reconnect_required: bool = False
 
 
 class LinearOAuthStatus(BaseModel):
@@ -36,6 +37,7 @@ class LinearOAuthStart(BaseModel):
 class LinearOAuthRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     return_url: str = "http://127.0.0.1:5173/design-uploads/Vellum%20Default%20Re-designed.html"
+    popup: bool = False
 
     @field_validator("return_url")
     @classmethod
