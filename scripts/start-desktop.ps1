@@ -1,44 +1,37 @@
-param()
+param([switch]$SkipHoncho)
 
-$ErrorActionPreference = "Stop"
-$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$CargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
-$CargoTargetDir = "D:\VellumOffloaded\VellumBuild\src-tauri-target"
+$ErrorActionPreference = 'Stop'
+$Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-& (Join-Path $PSScriptRoot "start.ps1")
+# Reuse the existing service owners. Nothing is stopped or replaced here.
+& (Join-Path $PSScriptRoot 'start.ps1') -SkipHoncho:$SkipHoncho
+if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Vellum services did not start.' }
 
-Push-Location (Join-Path $Root "desktop")
+Push-Location (Join-Path $Root 'desktop')
 try {
-  if (-not (Test-Path "node_modules")) {
-    npm.cmd install
+  $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if ($null -ne $npm) {
+    if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) {
+      & $npm.Source ci --no-fund
+      if ($LASTEXITCODE -ne 0) { throw 'Desktop dependency installation failed.' }
+    }
+    & $npm.Source run dev
+  } else {
+    # Codex's bundled Node/pnpm is also supported without a global installation.
+    $runtimeRoot = Join-Path $env:USERPROFILE '.cache/codex-runtimes/codex-primary-runtime/dependencies/node'
+    $node = Join-Path $runtimeRoot 'bin/node.exe'
+    $pnpm = Join-Path $runtimeRoot 'node_modules/pnpm/bin/pnpm.cjs'
+    if (-not (Test-Path -LiteralPath $node) -or -not (Test-Path -LiteralPath $pnpm)) {
+      throw 'Node.js and npm are required to launch Vellum desktop.'
+    }
+    $env:Path = (Split-Path $node) + ';' + $env:Path
+    if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) {
+      & $node $pnpm dlx npm@11 ci --no-fund
+      if ($LASTEXITCODE -ne 0) { throw 'Desktop dependency installation failed.' }
+    }
+    & $node $pnpm run dev
   }
-
-  if (Test-Path $CargoBin) {
-    $env:Path = "$CargoBin;$env:Path"
-  }
-  New-Item -ItemType Directory -Force -Path $CargoTargetDir | Out-Null
-  $env:CARGO_TARGET_DIR = $CargoTargetDir
-
-  $vcVarsCandidates = @(
-    "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
-    "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-  )
-  $vcVars = $vcVarsCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-  if ($null -eq $vcVars) {
-    Write-Host "Visual Studio C++ Build Tools were not found. Install Visual Studio Build Tools with the C++ workload, then run this again."
-    exit 1
-  }
-
-  $kernel32 = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Recurse -Filter kernel32.lib -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($null -eq $kernel32) {
-    Write-Host "Windows SDK libraries were not found. Finish or install the Windows SDK, then run this again."
-    Write-Host "Missing library: kernel32.lib"
-    exit 1
-  }
-
-  $cmd = "call `"$vcVars`" && set `"PATH=$CargoBin;%PATH%`" && set `"CARGO_TARGET_DIR=$CargoTargetDir`" && npm.cmd run dev"
-  cmd.exe /d /s /c $cmd
+  if ($LASTEXITCODE -ne 0) { throw 'Vellum desktop exited with an error.' }
 } finally {
   Pop-Location
 }

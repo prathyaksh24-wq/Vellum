@@ -224,19 +224,21 @@ def test_langchain_agent_uses_shared_routed_model(monkeypatch):
     sentinel = object()
     captured = {}
 
-    def fake_routed(model=None, reasoning_mode=None):
+    def fake_routed(model=None, reasoning_mode=None, *, context_role="specialist"):
         captured["model"] = model
+        captured["context_role"] = context_role
         return sentinel
 
     monkeypatch.setattr(react_agent, "get_routed_chat_model", fake_routed)
 
     assert react_agent.build_llm("primary/test") is sentinel
+    assert captured["context_role"] == "main"
     assert captured["model"] == "primary/test"
 
 
 def test_legacy_fallback_builder_is_alias_for_routed_model(monkeypatch):
     sentinel = object()
-    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None, reasoning_mode=None: sentinel)
+    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None, reasoning_mode=None, **kwargs: sentinel)
 
     assert react_agent.build_llm_with_fallback("primary/test") is sentinel
 
@@ -278,7 +280,7 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     }
     # plugin_mcp is the deferrable surface of the tool-search bridge
     assert "plugin_mcp" in captured["deferred_names"]
-    assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
+    assert "Use local vault and memory evidence when a request depends on the user's notes" in react_agent.VELLUM_SYSTEM_PROMPT
 
 
 def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monkeypatch):

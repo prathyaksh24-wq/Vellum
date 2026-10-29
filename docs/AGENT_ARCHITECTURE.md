@@ -23,12 +23,11 @@
 ┌────────────────────────────────▼────────────────────────────────────┐
 │                         AGENT CORE                                  │
 │                                                                     │
-│   LangGraph create_react_agent                                      │
-│   System prompt (SOUL.md values + operational rules)                │
+│   LangGraph StateGraph (model/tool loop when supported)              │
+│   Compact prompt + runtime model and specialist directory           │
 │   SqliteSaver checkpointer (thread persistence)                     │
-│   Skill loader (.skills/active/ → injects into system prompt)       │
-│   Tool registry (search_my_notes, web_search, filesystem, apify,   │
-│                  create_note, append_to_note, search_amazon)        │
+│   Matched main skills (specialist skills remain profile-scoped)      │
+│   Core tools + deferred capability discovery                        │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
          ┌───────────────────────┼───────────────────────┐
@@ -36,8 +35,8 @@
 ┌────────▼────────┐   ┌──────────▼──────────┐  ┌────────▼────────┐
 │  PRIVACY LAYER  │   │    MEMORY SYSTEM     │  │  INFERENCE      │
 │                 │   │                      │  │                 │
-│ Classifier      │   │ Short-term:          │  │ OpenRouter API  │
-│ Presidio scrub  │   │   SqliteSaver        │  │ ZDR enforced    │
+│ Classifier      │   │ Short-term:          │  │ Provider routing│
+│ Presidio scrub  │   │   SqliteSaver        │  │ Ollama / cloud  │
 │ <PROTECTED> tag │   │                      │  │                 │
 │ Folder policy   │   │ Long-term:           │  │ Gemma 4 31B     │
 │                 │   │   Honcho (Docker)    │  │ Qwen 3.5 35B    │
@@ -67,13 +66,13 @@
 
 ────────────────────────── DOCKER SERVICES ──────────────────────────
 
-  qdrant      → localhost:6333   (vector index — invisible in use)
-  honcho      → localhost:8001   (user modeling — queried per turn)
-  honcho-db   → internal only    (PostgreSQL backing Honcho)
-  sqlite      → data/memory/     (checkpoints, FTS5, resolved cache)
+  honcho          → localhost:8001   (user modeling API)
+  honcho-deriver  → internal only    (background model updates via Ollama)
+  honcho-db       → internal only    (pgvector backing Honcho)
+  honcho-cache    → internal only    (Redis work queue/cache)
+  sqlite          → data/memory/     (checkpoints, FTS5, resolved cache)
 
-  All Docker volumes are local. No data leaves your machine.
-  /reindex rebuilds Qdrant from scratch if ever needed.
+  All Docker volumes and Honcho model calls are local.
   Honcho data persists in honcho_data Docker volume.
 
 ─────────────────────── DEVELOPER TOOLING ───────────────────────────
@@ -132,83 +131,104 @@ to the Coding assistant mode and is not the default Vellum reasoning stream.
 ## 2. Agent Core
 
 ### Framework
-LangGraph `create_react_agent` — not a custom graph, not a multi-node pipeline.
-The LLM decides which tools to call, in what order, how many times.
-
-```python
-agent = create_react_agent(
-    model=openrouter_llm,
-    tools=[
-        search_my_notes,   # RAG + privacy + folder policy
-        web_search,        # DuckDuckGo, privacy-gated
-        search_amazon,     # Apify, always private
-        read_file,         # Filesystem MCP, vault-restricted
-        list_files,        # Filesystem MCP, vault-restricted
-        browser_action,    # Playwright MCP, isolated browser control
-        github_read,       # GitHub MCP, repository context
-        github_write,      # GitHub MCP, gated repository mutation
-        git_action,        # Local git status/log/pull/commit/push
-        obsidian_api,      # Obsidian Local REST API MCP
-        create_note,       # Write to Agent/ only
-        append_to_note,    # Write to Agent/ only
-    ],
-    checkpointer=SqliteSaver.from_conn_string("data/memory/checkpoints.db"),
-    state_modifier=VELLUM_SYSTEM_PROMPT,
-)
-```
+The main agent uses a manual LangGraph `StateGraph` with a model node and a
+tool node. The tool loop is compiled only when the selected model supports tool
+calls. `search_my_notes`, `web_search`, and `delegate_to_agent` are the core
+entry points; less common general capabilities are discovered through
+`tool_search` and invoked through `tool_call`.
 
 ### System Prompt Location
-`agent/graph/agent.py` — the `VELLUM_SYSTEM_PROMPT` constant.
-The prompt encodes: identity (from SOUL.md), voice rules (from BRAND.md),
-operational constraints (from CLAUDE.md), and the three values (truth, curiosity, care).
+`backend/agent/graph/agent.py` — the provider-neutral `VELLUM_SYSTEM_PROMPT`
+constant and dynamic `vellum_prompt` builder. Each turn adds the runtime date and
+selected model, thread identity and relevant memory, a compact specialist
+directory, and only query-matched main-agent skill instructions.
 
 The system prompt is versioned in git. It is never modified by the agent.
 Changes to the system prompt are made by the user, deliberately, in the file.
 
 ### Skill Loading
-Before each agent invocation, the skill loader checks `.skills/active/`:
-
-```python
-def load_relevant_skills(query: str) -> str:
-    """
-    Returns a skill block to prepend to the system prompt,
-    or empty string if no skills match.
-    """
-    query_embedding = embedder.embed(query)
-    active_skills = load_active_skills()
-    matches = []
-    for skill in active_skills:
-        trigger_embedding = embedder.embed(" ".join(skill["trigger"]))
-        similarity = cosine_similarity(query_embedding, trigger_embedding)
-        if similarity > skill["confidence_threshold"]:
-            matches.append(skill)
-    if not matches:
-        return ""
-    skill_block = "\n\n## Active Skills\n"
-    for skill in matches:
-        skill_block += f"\n### {skill['name']}\n{skill['instructions']}\n"
-    return skill_block
-```
-
-Skills are loaded into the system prompt for the current turn only.
-They do not persist across turns unless triggered again.
+The main agent activates only packages matched to the current user request.
+Packages owned by specialist profiles are excluded from that activation and from
+the main agent's skill-list and skill-view tools. During a specialist run, the
+active profile policy limits skill discovery to that profile's allowlist.
+Instructions are loaded for the current task and do not persist across turns.
 
 ### Profile-Based Specialist Delegation
 
-Runtime specialist configuration is split into persistent profiles and ephemeral runs.
+Every specialist is a first-class agent with a persistent profile and ephemeral
+delegation runs. A profile owns the agent's instructions, allowed tools,
+Hermes-compatible skills, private memory scope, shared-memory policy, cache policy,
+delegation policy, model or deterministic executor, and response schema.
 
-`agent/profiles/` owns the strict profile schema, safe built-in defaults, YAML loading, diagnostics, instruction-path containment, and context-local tool policy. Profile YAML is loaded from `data/agent_profiles/`. Existing deterministic agents remain registered through `PupilRegistry`; a newly discovered `executor: llm` profile can be selected directly by an active routing skill without a Python pupil class.
+`AgentCatalog` is the single owner of profiles and runtime executors. It loads
+strict version-2-or-newer profiles from `data/agent_profiles/`, applies safe built-in
+fallbacks, contains instruction paths, exposes redacted diagnostics, and binds
+the current Browser, Music, X, YouTube, Memory, Sports, Books, Discord and Calendar executors to their
+profiles. There is no parallel pupil or delegation registry.
 
-`agent/master/runtime.py` creates a fresh `DelegationRunResult` for every specialist task. Deterministic profiles receive only the current goal through their existing `answer(query)` contract. LLM profiles receive a new two-message invocation containing their profile system instructions and a human task packet with the goal, explicit context, and profile-approved memory. Parent chat history and LangGraph checkpoints are not inherited.
+The process-wide accessor in `agent/master/live_runtime.py` supplies the same
+catalog and runtime to the API and main-model agent tools. Test-local dispatchers
+may create an uncached runtime, but they still enter through `DelegationRequest`.
 
-Routing order is:
+`agent/master/runtime.py` accepts only a typed `DelegationRequest` and creates a
+fresh `DelegationRunResult` for every task. It resolves the complete profile and
+executor from `AgentCatalog`, enforces delegation admission and depth, and applies
+the profile tool policy for the run. Deterministic profiles receive only the
+current goal through `answer(query)`. LLM profiles receive profile instructions
+plus a bounded task packet containing the goal, explicit context, and
+profile-approved memory. Parent chat history and LangGraph checkpoints are not
+inherited.
 
-1. Pending confirmed action, which never enters cache.
-2. Active routing skill targeting a registered pupil or profile-only LLM agent.
-3. Deterministic `PupilRegistry.match()` fallback.
-4. Return control to Vellum.
+Deterministic agents invoke external capabilities through the shared
+`ToolRegistry`, where profile allowlists and confirmation narrowing are enforced.
+LLM and hybrid profiles use a bounded allowlisted loop for permitted reads,
+capability schema discovery, own skills and authorized memory packets. Mixed
+capabilities expose only declared read operations. Writes execute the unchanged
+task through the existing domain handler and return its exact receipt/preview;
+model text cannot supply confirmation or report unobserved success. Hybrid
+profiles retain fast handlers for recognized requests and confirmations.
+
+All inner planning/synthesis calls inherit a task-local profile execution context:
+contained instructions, selected/pinned model and reasoning, scoped memory,
+Hermes skills and the specialist's own thread context. They do not inherit the
+main conversation checkpoint. Local profiles reject external inference; the
+existing disclosure broker continues to govern profiles explicitly allowing it.
+
+Profiles declare `memory.share_with`, `receive_from` and `share_scopes`. Agents
+request relevant packets with `specialist_memory`; the main agent can request
+them through `delegate_to_agent(memory_from=[...])`. Memory Orchestrator checks
+both policies and retrieves attributed, bounded evidence with purpose, expiry,
+user/thread identity and evidence-only authority. Calendar and Discord share
+only approved shared-scope memories by default. Packet delivery is ephemeral;
+it neither grants action permission nor changes durable shared knowledge.
+
+Private agent memory remains in `agent:<AgentId>`. Agents may read validated
+shared Knowledge Core context when their profile allows it. Shared writes are
+proposal-only: agents cannot directly mutate canonical shared knowledge. Book
+skills and all other procedural knowledge remain Hermes packages selected by the
+owning agent, not invoked directly by the main model.
+
+The main model infers which specialist owns a request from natural wording and
+the compact catalog directory; users do not need to name an agent or use a
+special command. It calls `delegate_to_agent` with a bounded task when the
+intent is clear, including ordinary shorthand such as a live score question or
+a request to find what a named person posted on X. `LiveAgentDispatcher` handles
+explicit specialist selection and pending-action confirmation or cancellation.
+It does not route by automatic skill matching or deterministic executor
+matching. Both entry points use the same catalog, delegation runtime, and
+pending-action store.
 
 Tool authorization is intersection-based: the capability registry's existing `allowed_agents` and confirmation rules still apply, and the active profile allowlist can only narrow them.
+
+MusicAgent's profile includes `music_kworb` in the shared capability registry for
+public listener statistics, artist/song rankings and dated daily/weekly country
+charts. Recognized reads use the existing typed delegation runtime and preserve
+source links, retrieval timestamps and chart dates. Kworb reads have bounded
+downloads and a six-hour, 16-page process cache; they receive no personal music
+history or credentials. Album discovery verifies release dates through the
+existing Spotify adapter. Explicit chart playback uses that adapter's existing
+playback tool; a chart read cannot authorize playback. Monthly-listener read
+failures retain the main agent's canonical public-web fallback.
 
 ### Specialist Response Cache
 
@@ -275,9 +295,10 @@ long-term memory layer, replacing the raw SQLite fact store.
 - Before every agent response: query Honcho for context relevant to the current query
 - Nightly: Honcho's model is stable — no batch rebuild needed
 
-**Docker service:** `honcho` + `honcho-db` (PostgreSQL)
+**Docker services:** `honcho`, `honcho-deriver`, `honcho-db` (pgvector), and `honcho-cache` (Redis)
 **Data location:** `honcho_data` Docker volume — your machine only
-**Client:** `agent/memory/honcho_client.py`
+**Reasoning:** local Ollama `gemma4:12b`; embeddings use local `nomic-embed-text`
+**Client:** `backend/agent/memory/honcho_client.py`
 
 ### Resolved Questions Cache
 `data/memory/resolved.db` — SQLite (Docker volume).
@@ -393,8 +414,9 @@ When new content enters the vault, this is the sequence:
 
 ```
 1. SELECTION
-   User adds a book (via import_book.py), a Twitter archive
-   (via import_twitter_via_apify.py), or any note manually.
+   User adds a Twitter archive (via import_twitter_via_apify.py)
+   or a note manually. Book ingestion is owned by Knowledge Core and
+   BooksAgent under docs/adr/0001 through 0007.
 
 2. CLEANING
    Importers strip metadata, scrub PII for private folders,
@@ -439,8 +461,9 @@ Nothing leaves your machine except:
 - Apify scraping calls (your Apify token, results return to your machine)
 - DuckDuckGo web searches (no account, no tracking)
 
-Honcho runs locally. Its PostgreSQL database is a Docker volume on your machine.
-No Honcho data is sent to Plastic Labs' servers in the self-hosted configuration.
+Honcho runs locally. Its PostgreSQL database is a Docker volume on your machine,
+and its configured derivation, dialectic, and embedding routes point to local
+Ollama. No Honcho data is sent to Plastic Labs' servers in this configuration.
 
 ### OpenRouter
 - `data_collection: deny` on every request.
@@ -498,9 +521,9 @@ Parallel context gathering
 Folder policy check (strip chunks from private folders)
   │
   ▼
-Skill loader
-  │  Check .skills/active/ for matching skills
-  │  Inject matching skill instructions into system prompt
+Main skill activation
+  │  Match packages to the current request
+  │  Exclude specialist-owned skills from main-agent context
   │
   ▼
 Prompt construction
@@ -511,10 +534,13 @@ Prompt construction
   │  + conversation history (SqliteSaver)
   │
   ▼
-Model routing (primary / fast / fallback based on retrieval confidence)
+Select runtime model and provider; disable the tool loop when unsupported
+  │
+  ├── Main model may call delegate_to_agent for a catalog specialist
+  │     Specialist receives the bounded task and allowed context
   │
   ▼
-OpenRouter API call (ZDR enforced, data_collection: deny)
+Local Ollama inference or configured cloud provider route
   │
   ▼
 Response received (streaming tokens to UI)
@@ -551,7 +577,8 @@ Response displayed to user
 
 | Path | Purpose |
 |---|---|
-| `agent/graph/agent.py` | Core agent: create_react_agent, system prompt, tool list |
+| `backend/agent/graph/agent.py` | Main StateGraph, provider-neutral prompt, and tool discovery |
+| `backend/agent/tools/delegation.py` | Typed main-agent specialist delegation entry point |
 | `agent/tools/vault_search.py` | Main RAG tool with privacy + folder policy |
 | `agent/tools/web.py` | DuckDuckGo search tool |
 | `agent/tools/apify.py` | Amazon scraper tool |
@@ -582,7 +609,6 @@ Response displayed to user
 | `agent/scheduler/reflection.py` | Weekly/monthly reflection jobs |
 | `agent/scheduler/skill_detector.py` | Skill signal detection job |
 | `agent/cli.py` | Fallback CLI |
-| `scripts/import_book.py` | EPUB book importer |
 | `scripts/import_twitter_archive.py` | Twitter archive importer |
 | `scripts/import_twitter_via_apify.py` | Twitter Apify importer |
 | `scripts/ledger.py` | Standalone ledger CLI |
@@ -594,7 +620,7 @@ Response displayed to user
 | `.skills/active/` | Approved, active skills |
 | `.env` | Configuration (never committed) |
 | `SOUL.md` | Identity and learning philosophy |
-| `docker-compose.yml` | Qdrant + Honcho + PostgreSQL services |
+| `docker-compose.yml` | Honcho API, deriver, pgvector, and Redis services |
 | `CLAUDE.md` | Technical operations manual |
 | `AGENT_ARCHITECTURE.md` | This file |
 | `BRAND.md` | Brand identity |

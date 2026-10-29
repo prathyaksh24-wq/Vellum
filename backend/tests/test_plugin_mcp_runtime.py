@@ -58,6 +58,23 @@ def test_runtime_resolves_stdio_args_inside_plugin_root(tmp_path: Path) -> None:
     assert connector.cwd == root.resolve()
 
 
+def test_catalog_preview_never_resolves_provider_grants_and_is_not_an_executable_connection(tmp_path, monkeypatch):
+    from agent.plugins import district_connection
+    registry, _ = _plugin(tmp_path, {'url': 'https://mcp-server.district.in/mcp',
+        'credential_provider': 'district'})
+    def forbidden():
+        raise AssertionError('Catalog browsing must not resolve or refresh provider credentials')
+    monkeypatch.setattr(district_connection, 'district_service', forbidden)
+    runtime = PluginMcpRuntime(registry)
+    preview = runtime.connectors(resolve_credentials=False)[0]
+    assert preview.headers == {} and preview.auth is None
+    assert preview.configured is False
+    assert preview.public()['credentials_deferred'] is True
+    # Metadata mode does not authorize a different plugin to use District's grant.
+    with pytest.raises(PluginMcpRuntimeError, match='unavailable or disabled'):
+        runtime.connector('demo', 'demo-server')
+
+
 def test_runtime_rejects_stdio_path_escape(tmp_path: Path) -> None:
     registry, _ = _plugin(
         tmp_path,
@@ -73,6 +90,61 @@ def test_runtime_does_not_expose_disabled_plugin_connectors(tmp_path: Path) -> N
     registry.set_enabled("demo", False)
 
     assert PluginMcpRuntime(registry).connectors() == []
+    with pytest.raises(PluginMcpRuntimeError,match="unavailable"):
+        PluginMcpRuntime(registry).connector('demo','demo-server')
+
+
+def test_targeted_lookup_does_not_resolve_unrelated_servers_and_observes_enablement(tmp_path,monkeypatch):
+    from agent.mcp import plugin_runtime as module
+    registry,root=_plugin(tmp_path,{'url':'https://mcp.example.test/mcp'})
+    (root/'.mcp.json').write_text(json.dumps({'mcpServers':{
+        'demo-server':{'url':'https://mcp.example.test/mcp'},
+        'unrelated-server':{'url':'https://unrelated.example/mcp','credential_provider':'linear'},
+    }}),encoding='utf-8')
+    original=module._connector;resolved=[]
+    def resolve(plugin_id,root,item):
+        resolved.append(item['name'])
+        return original(plugin_id,root,item)
+    monkeypatch.setattr(module,'_connector',resolve)
+    runtime=PluginMcpRuntime(registry)
+    assert runtime.connector('demo','demo-server').name=='demo-server'
+    assert resolved==['demo-server']
+    registry.set_enabled('demo',False)
+    with pytest.raises(PluginMcpRuntimeError):runtime.connector('demo','demo-server')
+    assert resolved==['demo-server']
+    registry.set_enabled('demo',True)
+    assert runtime.connector('demo','demo-server').name=='demo-server'
+
+
+def test_catalog_can_isolate_invalid_connector_without_weakening_path_validation(tmp_path: Path) -> None:
+    registry, _ = _plugin(tmp_path, {"command": "node", "args": ["../../../../outside.mjs"]})
+    runtime = PluginMcpRuntime(registry)
+    assert runtime.connectors(skip_invalid=True) == []
+    assert runtime.connector_diagnostics == [{"plugin_id":"demo", "status":"unavailable"}]
+    with pytest.raises(PluginMcpRuntimeError):
+        runtime.connectors()
+
+
+@pytest.mark.asyncio
+async def test_invalid_connector_does_not_block_valid_tool_discovery(tmp_path: Path) -> None:
+    registry, root = _plugin(tmp_path, {"url": "https://mcp.example.test/mcp"})
+    (root / ".mcp.json").write_text(json.dumps({"mcpServers": {
+        "demo-server": {"url": "https://mcp.example.test/mcp"},
+        "invalid-server": {"command": "node", "args": ["../../../../outside.mjs"]},
+    }}), encoding="utf-8")
+
+    class FakeTransport:
+        async def list_tools(self, connector):
+            assert connector.name == "demo-server"
+            return [{"name": "lookup", "read_only": True}]
+
+    runtime = PluginMcpRuntime(registry, transport=FakeTransport(),
+                               audit_log=McpAuditLog(tmp_path / "mcp-audit.jsonl"))
+    assert (await runtime.list_tools("demo", "demo-server"))[0]["name"] == "lookup"
+    with pytest.raises(PluginMcpRuntimeError, match="unavailable"):
+        runtime.connector("demo", "invalid-server")
+    with pytest.raises(PluginMcpRuntimeError, match="outside its plugin root"):
+        runtime.connectors()
 
 
 @pytest.mark.asyncio

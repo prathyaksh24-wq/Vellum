@@ -38,8 +38,17 @@ class CuratorBackupStore:
     def create(self, reason: str) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
         identifier = now.strftime("%Y%m%dT%H%M%S.%fZ")
-        target = self.directory / identifier
-        target.mkdir(parents=True, exist_ok=False)
+        base_identifier = identifier
+        for collision in range(10000):
+            identifier = base_identifier + (f'-{collision:04d}' if collision else '')
+            target = self.directory / identifier
+            try:
+                target.mkdir(parents=True, exist_ok=False)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise FileExistsError('Could not reserve a unique curator backup directory')
         archive = target / "skills.tar.gz"
         with tarfile.open(archive, "w:gz") as handle:
             if self.root.exists():

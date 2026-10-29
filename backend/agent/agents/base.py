@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from typing import Literal, Protocol
+import re
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
 
+def user_query_text(message: str) -> str:
+    """Read user intent without UI annotations being treated as user requests."""
+    text = re.sub(r"^\[Vellum UI context:[^\n]*\]\s*", "", str(message or ""))
+    return re.split(r"\n\n\[(?:Conversation source context|Attachment context|Conversation follow-up context|Current conversation follow-up)\]", text, maxsplit=1)[0].strip()
+
 SpecialistStatus = Literal["answered", "needs_fetch", "stale", "blocked", "error"]
-SourceKind = Literal["vault", "web", "api", "memory"]
+SourceKind = Literal["vault", "web", "api", "memory", "book"]
 Freshness = Literal["live", "recent", "stale", "historical"]
-MemoryScope = Literal["sports", "x", "youtube", "memory", "mcp", "shared"]
+MemoryScope = Literal["sports", "x", "youtube", "discord", "calendar", "memory", "mcp", "shared"]
 
 
 class SpecialistSource(BaseModel):
@@ -37,6 +43,7 @@ class SpecialistResponse(BaseModel):
     memory_proposals: list[MemoryProposal] = Field(default_factory=list)
     action_request: dict = Field(default_factory=dict)
     activity_events: list[dict] = Field(default_factory=list)
+    structured_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class SpecialistAgent(Protocol):

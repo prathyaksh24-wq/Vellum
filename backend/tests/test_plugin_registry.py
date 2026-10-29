@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from agent.plugins.registry import PluginRegistry, PluginRegistryError
+from agent.plugins.sources import PluginSourceRecord
 
 
 def _write_plugin(root: Path, plugin_id: str, *, required: bool = False) -> Path:
@@ -66,6 +67,49 @@ def test_required_plugin_cannot_be_disabled(tmp_path: Path):
         registry.set_enabled("core", False)
 
 
+def test_uninstall_choice_survives_reload_and_keeps_source_files(tmp_path: Path):
+    root = tmp_path / 'plugins'
+    source = _write_plugin(root, 'demo')
+    _write_plugin(root, 'other')
+    state = tmp_path / 'state.json'
+    registry = PluginRegistry(root, state_path=state)
+    assert registry.set_installed('demo', False)['installed'] is False
+    assert (source / 'plugin.yaml').exists()
+    assert (source / 'skills' / 'demo-skill' / 'SKILL.md').exists()
+    restored = PluginRegistry(root, state_path=state)
+    restored.set_enabled('other', False)
+    assert restored.is_installed('demo') is False
+    with pytest.raises(PluginRegistryError, match='Install demo'):
+        restored.set_enabled('demo', True)
+    with pytest.raises(PluginRegistryError, match='Install demo'):
+        restored.set_enabled_many({'demo': True, 'other': True})
+    assert restored.is_enabled('demo') is False
+    assert not any(owner == 'demo' for owner in restored.skill_roots().values())
+    with restored.read_snapshot():
+        assert restored.describe('demo')['installed'] is False
+    assert restored.set_installed('demo', True)['enabled'] is True
+    assert restored.is_enabled('other') is False
+
+
+def test_required_plugin_cannot_be_uninstalled(tmp_path: Path):
+    root = tmp_path / 'plugins'
+    _write_plugin(root, 'core', required=True)
+    registry = PluginRegistry(root, state_path=tmp_path / 'state.json')
+    with pytest.raises(PluginRegistryError, match='protected'):
+        registry.set_installed('core', False)
+
+
+@pytest.mark.parametrize('plugin_id', ['asana', 'airtable', 'hubspot', 'clickup'])
+def test_business_categories_are_independent_of_connection_transport(tmp_path: Path, plugin_id: str):
+    root = tmp_path / 'plugins'
+    _write_plugin(root, plugin_id)
+    registry = PluginRegistry(root, state_path=tmp_path / 'state.json')
+    record = registry.describe(plugin_id)
+    assert record['category'] == 'CRM & Communication'
+    assert record['type'] == 'connector'
+    assert record['enabled'] is True
+
+
 def test_catalog_normalizes_mcp_servers_without_claiming_lifecycle_control(tmp_path: Path):
     registry = PluginRegistry(tmp_path / "plugins", state_path=tmp_path / "state.json")
 
@@ -77,3 +121,68 @@ def test_catalog_normalizes_mcp_servers_without_claiming_lifecycle_control(tmp_p
     assert records[0]["type"] == "mcp"
     assert records[0]["manageable"] is False
     assert records[0]["mcp_connectors"][0]["id"] == "context7"
+
+
+def test_catalog_snapshots_external_skill_roots_once(tmp_path: Path):
+    class CountingSource:
+        def __init__(self) -> None:
+            self.skill_root_calls = 0
+
+        def discover(self):
+            return [
+                PluginSourceRecord(
+                    id=plugin_id,
+                    name=plugin_id.title(),
+                    version="1.0.0",
+                    description="Test source",
+                    category="Test",
+                    developer="Test",
+                    source="test",
+                    root=tmp_path / plugin_id,
+                )
+                for plugin_id in ("first", "second")
+            ]
+
+        def skill_roots(self):
+            self.skill_root_calls += 1
+            return {}
+
+    source = CountingSource()
+    registry = PluginRegistry(
+        tmp_path / "plugins",
+        state_path=tmp_path / "state.json",
+        sources=[source],
+    )
+
+    assert len(registry.catalog()) == 2
+    assert source.skill_root_calls == 1
+
+
+def test_native_plugin_override_does_not_activate_imported_duplicate_skills(tmp_path):
+    root = tmp_path / "plugins" / "gmail"
+    root.mkdir(parents=True)
+    (root / "plugin.yaml").write_text("id: gmail\nname: Gmail\ntype: connector\ncategory: Connectors\n")
+    imported = tmp_path / "imported-gmail"
+    imported.mkdir()
+    class Source:
+        def discover(self):
+            return [PluginSourceRecord(id="gmail", name="Gmail", version="1", description="Imported", category="Connectors", developer="Test", source="test", root=imported, skills_root=imported)]
+        def skill_roots(self):
+            return {imported: "gmail"}
+    registry = PluginRegistry(tmp_path / "plugins", state_path=tmp_path / "state.json", sources=[Source()])
+    assert imported not in registry.skill_roots()
+    assert len(registry.catalog()) == 1
+
+
+def test_bundle_selection_is_atomic_and_new_connectors_can_default_off(tmp_path):
+    for identifier in ("first", "second"):
+        root = tmp_path / "plugins" / identifier
+        root.mkdir(parents=True)
+        (root / "plugin.yaml").write_text(f"id: {identifier}\nname: {identifier}\ntype: connector\ncategory: Connectors\ndefault_enabled: false\n")
+    registry = PluginRegistry(tmp_path / "plugins", state_path=tmp_path / "state.json")
+    assert not registry.is_enabled("first")
+    with pytest.raises(KeyError):
+        registry.set_enabled_many({"first": True, "missing": True})
+    assert not registry.is_enabled("first")
+    registry.set_enabled_many({"first": True, "second": False})
+    assert registry.is_enabled("first") and not registry.is_enabled("second")

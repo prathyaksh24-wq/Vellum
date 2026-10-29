@@ -117,6 +117,62 @@ def test_each_outbound_message_is_classified_and_tagged_independently(tmp_path) 
     assert "Jane Doe" not in prepared.messages[1].content
 
 
+def test_attachment_text_is_scrubbed_and_converted_only_at_disclosure_seam(tmp_path) -> None:
+    prepared = _broker(tmp_path).prepare_messages(
+        [HumanMessage(content=[
+            {"type": "text", "text": "Summarize this"},
+            {
+                "type": "vellum_attachment_text",
+                "name": "private note.txt",
+                "text": "Jane Doe can be reached at jane@example.com.",
+                "egress_scope": "current_turn",
+                "metadata_stripped": True,
+            },
+        ])],
+        destination="openrouter",
+        model="google/test",
+        purpose="chat",
+        thread_id="thread-1",
+    )
+
+    parts = prepared.messages[0].content
+    assert [part["type"] for part in parts] == ["text", "text"]
+    assert "vellum_attachment" not in str(parts)
+    assert "Jane Doe" not in str(parts)
+    assert "jane@example.com" not in str(parts)
+    assert "<ATTACHED_DOCUMENT" in parts[1]["text"]
+    restored = prepared.restore_message(AIMessage(content=parts[1]["text"]))
+    assert "Jane Doe" in restored.content
+    assert "jane@example.com" in restored.content
+
+
+def test_attachment_binary_requires_current_intent_and_stripped_metadata(tmp_path) -> None:
+    broker = _broker(tmp_path)
+    unsafe = HumanMessage(content=[{
+        "type": "vellum_attachment_image",
+        "name": "photo.png",
+        "mime_type": "image/png",
+        "data_url": "data:image/png;base64,ZmFrZQ==",
+        "egress_scope": "",
+        "metadata_stripped": False,
+    }])
+
+    with pytest.raises(DisclosureBlocked, match="attachment disclosure"):
+        broker.prepare_messages(
+            [unsafe], destination="openrouter", model="google/test", purpose="chat", thread_id="thread-1"
+        )
+
+    safe = unsafe.model_copy(update={"content": [{
+        **unsafe.content[0], "egress_scope": "current_turn", "metadata_stripped": True,
+    }]})
+    prepared = broker.prepare_messages(
+        [safe], destination="openrouter", model="google/test", purpose="chat", thread_id="thread-1"
+    )
+    assert prepared.messages[0].content == [{
+        "type": "image_url", "image_url": {"url": "data:image/png;base64,ZmFrZQ=="}
+    }]
+
+
 def test_full_context_keeps_context_but_still_aliases_identifiers(tmp_path) -> None:
     broker = _broker(tmp_path, mode=ProtectionMode.full_context)
     grant = DisclosureGrant(

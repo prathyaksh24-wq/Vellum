@@ -19,14 +19,20 @@ def test_spotify_connection_ui_contract_is_present():
     assert "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback" in html
     assert "https://developer.spotify.com/dashboard" in html
     assert "Spotify Premium" in html
+    assert "dispatchConversationAction('spotify.connection.start'" in html
+    assert "dispatchConversationAction('spotify.connection.disconnect'" in html
+    assert "SpotifyAPI.start(value)" not in html
+    assert "SpotifyAPI.logout()" not in html
+    assert "API.appActions.catalog()" in html
 
 
 def test_global_spotify_player_contract_is_present():
     html = HTML_PATH.read_text(encoding="utf-8")
 
     assert "const SpotifyPlayer" in html
-    assert "/plugins/spotify/player" in html
-    assert "/plugins/spotify/player/action" in html
+    assert "API.plugins.spotifyPlayer(details)" in html
+    assert "API.plugins.spotifyAction(body)" in html
+    assert 'components/spotify-playback.js' in html
     assert "document.visibilityState" in html
     assert "spotify-player-pill" in html
     assert "spotify-player-panel" in html

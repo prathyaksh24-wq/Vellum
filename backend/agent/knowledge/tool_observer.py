@@ -28,13 +28,21 @@ class KnowledgeToolObserver:
         self.core = core
 
     def __call__(self, invocation: ToolInvocation) -> None:
+        if invocation.namespace == "spotify":
+            # Music searches and playback are not automatic Knowledge Core learning sources.
+            return
         if invocation.access != CapabilityAccess.READ:
+            return
+        if invocation.name in {"books.discover", "books.verify_candidate"}:
+            # Discovery has canonical job receipts; catalog candidates are not learned sources.
             return
         source_ids: list[str] = []
         if invocation.namespace == "x":
             source_ids = self._record_x(invocation)
         elif invocation.namespace == "youtube":
             source_ids = self._record_youtube(invocation)
+        elif invocation.namespace == "discord":
+            source_ids = self._record_discord(invocation)
         self.core.record_tool_result(
             tool_name=invocation.name,
             payload=self._request_metadata(invocation.payload),
@@ -48,7 +56,15 @@ class KnowledgeToolObserver:
         )
 
     def _record_x(self, invocation: ToolInvocation) -> list[str]:
-        if invocation.name not in {"x.search_posts", "x.bookmarks", "x.timeline", "x.likes", "x.read_tweet"}:
+        if invocation.name not in {
+            "x.search_posts",
+            "x.bookmarks",
+            "x.timeline",
+            "x.likes",
+            "x.profile",
+            "x.user_posts",
+            "x.read_tweet",
+        }:
             return []
         items = invocation.result.get("items")
         if not isinstance(items, list):
@@ -80,10 +96,15 @@ class KnowledgeToolObserver:
                 )
             )
             source_ids.append(str(result["source_id"]))
-            self._annotate_x_observation(str(result["source_id"]), invocation)
+            self._annotate_x_observation(str(result["source_id"]), invocation, item)
         return source_ids
 
-    def _annotate_x_observation(self, source_id: str, invocation: ToolInvocation) -> None:
+    def _annotate_x_observation(
+        self,
+        source_id: str,
+        invocation: ToolInvocation,
+        item: dict[str, Any],
+    ) -> None:
         if invocation.name in {"x.likes", "x.bookmarks", "x.timeline"}:
             labels = ["ambiguous_engagement"]
             context = invocation.name.removeprefix("x.")
@@ -102,6 +123,40 @@ class KnowledgeToolObserver:
                 eligible_for_preference=False,
                 eligible_for_style=False,
                 metadata={"observed_via": invocation.name},
+            )
+        )
+        if invocation.name != "x.bookmarks":
+            return
+        intelligence = item.get("bookmark_intelligence")
+        if not isinstance(intelligence, dict):
+            return
+        assignments = intelligence.get("assignments")
+        if not isinstance(assignments, list):
+            return
+        valid = [entry for entry in assignments if isinstance(entry, dict) and entry.get("category")]
+        if not valid:
+            return
+        confidence = max(float(entry.get("confidence") or 0.0) for entry in valid)
+        self.core.store.upsert_content_annotation(
+            ContentAnnotationInput(
+                target_type="source",
+                target_id=source_id,
+                labels=[f"x_bookmark:{entry['category']}" for entry in valid],
+                context="x_bookmark_category",
+                stance="unknown",
+                intent="organize_saved_content",
+                confidence=confidence,
+                eligible_for_preference=False,
+                eligible_for_style=False,
+                taxonomy_version=str(
+                    intelligence.get("taxonomy_version") or "siftly-inspired-v1"
+                ),
+                metadata={
+                    "observed_via": invocation.name,
+                    "assignments": valid,
+                    "entities": intelligence.get("entities") or {},
+                    "origin": "siftly-inspired-local-categorizer",
+                },
             )
         )
 
@@ -161,12 +216,51 @@ class KnowledgeToolObserver:
             source_ids.append(str(result["source_id"]))
         return source_ids
 
+    def _record_discord(self, invocation: ToolInvocation) -> list[str]:
+        if invocation.name != "discord.messages":
+            return []
+        items = invocation.result.get("items")
+        if not isinstance(items, list):
+            return []
+        channel_id = str(invocation.result.get("channel_id") or invocation.payload.get("channel_id") or "")
+        source_ids: list[str] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            message_id = str(item.get("id") or "").strip()
+            if not message_id:
+                continue
+            author = item.get("author") if isinstance(item.get("author"), dict) else {}
+            title = f"Discord message from {str(author.get('username') or 'unknown')}"
+            result = self.core.store.upsert_source(
+                SourceItemInput(
+                    kind="discord_message",
+                    external_id=f"discord:message:{channel_id}:{message_id}",
+                    title=title,
+                    content=json.dumps(item, ensure_ascii=False, sort_keys=True, indent=2, default=str),
+                    uri=f"discord://channels/{channel_id}/messages/{message_id}",
+                    account_id="",
+                    sensitivity=Sensitivity.PRIVATE_LOCAL_ONLY,
+                    external_policy=ExternalPolicy.DENY_RAW,
+                    trust="official_bot_api",
+                    metadata={
+                        "connector": "discord_bot",
+                        "channel_id": channel_id,
+                        "observed_via": invocation.name,
+                        "agent_name": invocation.agent_name,
+                        "preference_evidence": False,
+                    },
+                )
+            )
+            source_ids.append(str(result["source_id"]))
+        return source_ids
+
     @staticmethod
     def _request_metadata(payload: dict[str, Any]) -> dict[str, Any]:
         return {
             key: value
             for key, value in payload.items()
-            if key in {"query", "video_id", "handle", "username", "max_results"}
+            if key in {"query", "video_id", "handle", "username", "max_results", "guild_id", "channel_id", "limit"}
         }
 
     @staticmethod

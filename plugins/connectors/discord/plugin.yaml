@@ -1,0 +1,20 @@
+id: discord
+name: Discord
+type: connector
+category: CRM & Communication
+version: 1.0.0
+description: Scoped Discord bot access for Vellum reads and policy-controlled messages.
+capabilities:
+  - discord.account
+  - discord.guilds
+  - discord.channels
+  - discord.messages
+  - discord.archive_history
+  - discord.send_message
+  - discord.reply_message
+  - discord.edit_own_message
+  - discord.delete_own_message
+  - discord.add_reaction
+  - discord.create_thread
+  - discord.send_thread_message
+  - discord.send_attachment

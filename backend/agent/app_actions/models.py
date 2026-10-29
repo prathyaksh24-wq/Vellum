@@ -1,0 +1,261 @@
+"""Typed App Action requests, contexts, catalogs, and receipts."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal
+from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+ActionSource = Literal["nlp", "ui"]
+ActionStatus = Literal[
+    "applied",
+    "confirmation_required",
+    "unavailable",
+    "failed",
+    "undone",
+    "cancelled",
+]
+PersistenceMode = Literal["device", "session"]
+
+
+class SurfacePresentation(BaseModel):
+    visible: bool = True
+    location: str = ""
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+def _default_surfaces() -> dict[str, SurfacePresentation]:
+    return {
+        "workspace": SurfacePresentation(visible=True, location="application", properties={"theme": "dark"}),
+        "sidebar": SurfacePresentation(visible=True, location="left"),
+        "plugin-sidebar": SurfacePresentation(visible=True, location="left"),
+        "settings": SurfacePresentation(visible=False, location="overlay"),
+        "right-panel": SurfacePresentation(visible=False, location="right"),
+        "composer": SurfacePresentation(
+            visible=True,
+            location="bottom",
+            properties={"size": "comfortable"},
+        ),
+        "composer.send": SurfacePresentation(
+            visible=True,
+            location="composer-action",
+            properties={"label": "Send", "size": "medium"},
+        ),
+    }
+
+
+AdaptiveScope = Literal["global", "device", "agent", "project", "window"]
+
+
+class AdaptiveUIRule(BaseModel):
+    id: str
+    signature: str
+    arguments: dict[str, Any]
+    scope: AdaptiveScope
+    scope_id: str = ""
+    origin: Literal["explicit", "inferred"]
+    evidence_count: int = Field(default=1, ge=1)
+    enabled: bool = True
+    suppressed: bool = False
+    explained: bool = False
+
+
+class AdaptiveUISignal(BaseModel):
+    signature: str
+    arguments: dict[str, Any]
+    scope: AdaptiveScope
+    scope_id: str = ""
+    count: int = Field(default=1, ge=1)
+
+
+class AdaptiveUIState(BaseModel):
+    revision: int = Field(default=0, ge=0)
+    rules: list[AdaptiveUIRule] = Field(default_factory=list)
+    signals: list[AdaptiveUISignal] = Field(default_factory=list)
+    suppressions: list[str] = Field(default_factory=list)
+    last_rule_id: str = ""
+
+
+class WorkspaceLayoutSnapshot(BaseModel):
+    version: int = Field(default=1, ge=1)
+    revision: int = Field(default=0, ge=0)
+    surfaces: dict[str, SurfacePresentation] = Field(default_factory=_default_surfaces)
+    adaptive_ui: AdaptiveUIState = Field(default_factory=AdaptiveUIState)
+
+
+class DevicePersonalizationSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    custom: str = ""
+    nickname: str = ""
+    occupation: str = ""
+    about: str = ""
+    fastAnswers: bool = False
+    recordHist: bool = False
+    webSearch: bool = False
+    canvas: bool = False
+    voice: bool = False
+    advVoice: bool = False
+    connector: bool = False
+    baseStyle: Literal["default", "professional", "friendly", "candid", "quirky", "efficient", "cynical"] = "default"
+    warm: Literal["default", "more", "less"] = "default"
+    enthusiastic: Literal["default", "more", "less"] = "default"
+    headers: Literal["default", "more", "less"] = "default"
+    emoji: Literal["default", "more", "less"] = "default"
+
+
+class DeviceSettingsValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    background: str | None = None
+    previous_background: str | None = None
+    profile: dict[str, str] = Field(default_factory=dict)
+    accent: str | None = None
+    dock_position: str | None = None
+    dock_locked: bool | None = None
+    computer_use_preview: bool | None = None
+    personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)
+
+
+class DeviceSettingsSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(default=1, ge=1)
+    revision: int = Field(default=0, ge=0)
+    values: DeviceSettingsValues = Field(default_factory=DeviceSettingsValues)
+
+
+class AppActionContext(BaseModel):
+    source: ActionSource
+    adaptive_learning_signal: bool = False
+    invocation_conversation_id: str = ""
+    device_id: str = "local-device"
+    project_id: str = ""
+    window_id: str = ""
+    workspace_layout: WorkspaceLayoutSnapshot = Field(default_factory=WorkspaceLayoutSnapshot)
+    focused_ui_reference: str = ""
+    selected_ui_reference: str = ""
+    music_collection_uri: str = Field(default="", max_length=160, pattern=r'^(?:spotify:(?:playlist|album):[A-Za-z0-9]+)?$')
+    visible_ui_references: list[str] = Field(default_factory=list)
+    attachment_digests: list[str] = Field(default_factory=list)
+    active_agent: str = ""
+    selected_model: str = ""
+    reasoning_mode: str = ""
+    store_to_memory: bool = True
+    petdex: dict[str, Any] = Field(default_factory=dict)
+    device_settings: DeviceSettingsSnapshot = Field(default_factory=DeviceSettingsSnapshot)
+
+
+class AppActionRequest(BaseModel):
+    request_id: str = Field(default_factory=lambda: f"action_{uuid4().hex}")
+    action_id: str = Field(min_length=1)
+    action_version: str = "1"
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ActionAuthorization(BaseModel):
+    decision: Literal["allowed", "denied"]
+    access_class: str
+    confirmation_required: bool = False
+    agent_name: str
+
+
+class ActionTarget(BaseModel):
+    kind: str
+    id: str
+    revision: int | None = None
+
+
+class ActionUndo(BaseModel):
+    token: str
+    action_id: str
+    arguments: dict[str, Any]
+    expires_at: datetime
+    target_revision: int
+
+
+class ActionConfirmation(BaseModel):
+    token: str
+    expires_at: datetime
+    target_revision: int
+
+
+class ActionReceipt(BaseModel):
+    receipt_id: str
+    request_id: str
+    action_id: str
+    action_version: str
+    source: ActionSource
+    status: ActionStatus
+    authorization: ActionAuthorization
+    target: ActionTarget
+    result: dict[str, Any] = Field(default_factory=dict)
+    undo: ActionUndo | None = None
+    confirmation: ActionConfirmation | None = None
+    message: str = ""
+    error_code: str = ""
+    audit_label: str = ""
+    created_at: datetime
+
+
+class AppActionDefinition(BaseModel):
+    id: str
+    version: str
+    owner: str
+    title: str
+    description: str
+    scope: str
+    access_class: str
+    confirmation_rule: str
+    executor_location: str
+    supports_undo: bool
+    idempotent: bool
+    argument_schema: dict[str, Any]
+    result_schema: dict[str, Any]
+    ui_reference: str
+    audit_label: str
+    plugin_id: str = ""
+    required_permissions: list[str] = Field(default_factory=list)
+
+
+class UISurfaceDefinition(BaseModel):
+    reference: str
+    owner: str
+    title: str
+    aliases: list[str] = Field(default_factory=list)
+    default_presentation: SurfacePresentation
+    supported_locations: list[str]
+    configurable_properties: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    control_kernel: bool = False
+    plugin_id: str = ""
+    required_permissions: list[str] = Field(default_factory=list)
+
+
+class AppActionCatalog(BaseModel):
+    version: int = 1
+    actions: list[AppActionDefinition]
+    surfaces: list[UISurfaceDefinition] = Field(default_factory=list)
+
+
+class AppActionDispatchEnvelope(BaseModel):
+    request: AppActionRequest
+    context: AppActionContext
+
+
+class AppActionUndoEnvelope(BaseModel):
+    token: str = Field(min_length=1)
+    context: AppActionContext
+
+
+class AppActionConfirmEnvelope(BaseModel):
+    token: str = Field(min_length=1)
+    request: AppActionRequest
+    context: AppActionContext
+
+
+class AppActionCancelEnvelope(BaseModel):
+    token: str = Field(min_length=1)
+    context: AppActionContext

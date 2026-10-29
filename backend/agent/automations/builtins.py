@@ -24,6 +24,21 @@ logger = logging.getLogger(__name__)
 
 BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
+        "key": "youtube_creator_tracking",
+        "destination": {"kind": "notification"},
+        "name": "YouTube creator uploads",
+        "instructions": "Assess saved creator activity locally and check selected public YouTube Atom feeds. Baseline quietly; deliver only new relevant uploads with creator, title, and link. Explicit exclusions override inferred activity. No language model is called for polling.",
+        "schedule": "every 15m",
+        "state": "paused",
+    },
+    {
+        "key": "youtube_browser_history",
+        "name": "YouTube history refresh",
+        "instructions": "Accumulate recent YouTube watch-history entries locally from Vellum's signed-in browser profile. Read in a temporary background tab without presenting the Browser panel or switching the user's page. Skip during pause or user control; report sign-in or reader failures. Repeated reads do not duplicate saved video/day entries.",
+        "schedule": "every 15m",
+        "state": "paused",
+    },
+    {
         "key": "memory_dreaming",
         "name": "Memory dreaming",
         "instructions": (
@@ -49,6 +64,12 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
         "name": "YouTube intelligence projection",
         "instructions": "Rebuild local YouTube intelligence projections incrementally.",
         "schedule": "30 2 * * *",
+    },
+    {
+        "key": "discord_intelligence_sync",
+        "name": "Discord intelligence sync",
+        "instructions": "Index recent messages from allowlisted Discord channels into Knowledge Core.",
+        "schedule": "every 1m",
     },
     {
         "key": "skill_curator_tick",
@@ -78,14 +99,14 @@ def seed_builtins(
         )
         if existing is not None:
             continue
-        state = "active"
+        state = definition.get("state", "active")
         if enabled is not None and enabled.get(key) is False:
             state = "paused"
         record = store.create(
             name=definition["name"],
             instructions=definition["instructions"],
             schedule=parse_schedule(definition["schedule"]).to_dict(),
-            destination={"kind": "new_chat"},
+            destination=definition.get("destination", {"kind": "new_chat"}),
             permission={"full_access": True},
             builtin=True,
             builtin_key=key,
@@ -105,9 +126,9 @@ def reset_builtin(store: AutomationStore, record: dict[str, Any]) -> dict[str, A
         name=definition["name"],
         instructions=definition["instructions"],
         schedule=parse_schedule(definition["schedule"]).to_dict(),
-        destination={"kind": "new_chat"},
+        destination=definition.get("destination", {"kind": "new_chat"}),
         permission={"full_access": True},
-        state="active",
+        state=definition.get("state", "active"),
     )
 
 
@@ -148,16 +169,36 @@ async def _youtube_projection_handler() -> None:
     await asyncio.to_thread(run_projection)
 
 
+async def _discord_sync_handler() -> None:
+    from agent.scheduler.discord_intelligence import run_sync
+
+    await asyncio.to_thread(run_sync)
+
+
 async def _curator_tick_handler() -> None:
     from agent.skills.curator_runtime import get_curator_runtime
 
     await asyncio.to_thread(get_curator_runtime().tick)
 
 
+async def _youtube_history_handler() -> None:
+    from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+    result = await asyncio.to_thread(YouTubeBrowserHistory().refresh, automatic=True)
+    if result["status"] not in {"ready", "empty", "browser_busy"}:
+        raise RuntimeError(result["message"])
+
+
+async def _youtube_creator_handler() -> dict[str, Any]:
+    from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+    return await asyncio.to_thread(YouTubeCreatorTracking().refresh)
+
 _HANDLERS: dict[str, Any] = {
+    "youtube_creator_tracking": _youtube_creator_handler,
+    "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
     "nightly_digest": _nightly_digest_handler,
     "vault_retention": _vault_retention_handler,
     "youtube_intelligence_projection": _youtube_projection_handler,
+    "discord_intelligence_sync": _discord_sync_handler,
     "skill_curator_tick": _curator_tick_handler,
 }

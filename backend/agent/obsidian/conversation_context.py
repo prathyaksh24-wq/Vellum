@@ -108,6 +108,40 @@ class ConversationContextStore:
             )
         return int(cursor.rowcount)
 
+    def copy(self, source_conversation_id: str, destination_conversation_id: str) -> int:
+        source = source_conversation_id.strip()
+        destination = destination_conversation_id.strip()
+        if not source or not destination or source == destination:
+            raise ValueError("Distinct source and destination conversations are required.")
+        copied = 0
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT kind,ref,title,mode,content_hash,snapshot_text,attached_at FROM conversation_context WHERE conversation_id=? ORDER BY attached_at",
+                (source,),
+            ).fetchall()
+            for row in rows:
+                item = dict(row)
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO conversation_context(
+                        id,conversation_id,kind,ref,title,mode,content_hash,snapshot_text,attached_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        uuid4().hex,
+                        destination,
+                        item["kind"],
+                        item["ref"],
+                        item["title"],
+                        item["mode"],
+                        item["content_hash"],
+                        item["snapshot_text"],
+                        item["attached_at"],
+                    ),
+                )
+                copied += int(cursor.rowcount)
+        return copied
+
     def resolve(self, conversation_id: str, *, vault_root: str | Path, max_chars: int = 12000) -> dict[str, Any]:
         resolved: list[dict[str, Any]] = []
         remaining = max(1000, int(max_chars))

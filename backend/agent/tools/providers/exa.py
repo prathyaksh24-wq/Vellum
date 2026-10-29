@@ -33,7 +33,8 @@ class ExaProvider(WebSearchProvider):
         return "Exa"
 
     def is_available(self) -> bool:
-        return bool(getattr(get_settings(), "exa_api_key", ""))
+        from agent.plugins.search_connections import available
+        return available('exa')
 
     def supports_search(self) -> bool:
         return True

@@ -25,3 +25,11 @@ describe("Vellum API client backend selection", () => {
     expect(client.backendBase()).toBe("http://127.0.0.1:8000");
   });
 });
+
+test("API errors retain structured Calendar conflict details", async()=> {
+  const client=await loadClient();
+  const detail={message:"Conflict",availability:{available:false}};
+  vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,status:409,json:async()=>({detail})})));
+  await expect(client.request("/api/plugins/google-calendar/events")).rejects.toMatchObject({status:409,message:"Conflict",detail});
+  vi.unstubAllGlobals();
+});

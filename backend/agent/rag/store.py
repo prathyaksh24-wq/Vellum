@@ -8,7 +8,7 @@ competing clients on the same storage path.
 The public interface (get_vector_store / VectorStore.upsert / search /
 delete_by_metadata / ensure_collections / collection_names) is unchanged from
 the previous vector wrapper, so callers don't care which engine backs it.
-We always pass our own embeddings (sentence-transformers, see embedder.py);
+We always pass our own embeddings (the shared local owner in embedder.py);
 Chroma's built-in embedding function is never used.
 """
 
@@ -82,10 +82,19 @@ class VectorStore:
     def _collection(self, name: str):
         coll = self._collections.get(name)
         if coll is None:
+            from agent.rag.embedder import get_embedder
+            embedder = get_embedder()
+            metadata = {"hnsw:space": "cosine", "vellum:embedding_profile": embedder.fingerprint,
+                        "vellum:embedding_model": embedder.model_name, "vellum:embedding_revision": embedder.revision,
+                        "vellum:embedding_dimensions": embedder.dimensions}
             # cosine space for similarity (mirrors the prior cosine setup).
             coll = self.client.get_or_create_collection(
-                name=name, metadata={"hnsw:space": "cosine"}
+                name=name, metadata=metadata
             )
+            legacy_bge = (embedder.backend == 'sentence_transformers' and embedder.model_name == 'BAAI/bge-m3'
+                          and not (getattr(coll, 'metadata', None) or {}).get('vellum:embedding_profile'))
+            if hasattr(coll, 'metadata') and not legacy_bge and (coll.metadata or {}).get('vellum:embedding_profile') != embedder.fingerprint:
+                raise ValueError("Embedding index belongs to a different or unknown model. Rebuild into a fresh CHROMA_PATH; do not mix vectors.")
             self._collections[name] = coll
         return coll
 

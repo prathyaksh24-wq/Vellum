@@ -38,6 +38,23 @@ ACTION_TO_TOOL = {
 }
 
 
+def plugin_status() -> dict[str, Any]:
+    """Describe anonymous configuration without making a network request."""
+    url = get_settings().gitmcp_mcp_url
+    return {
+        "id": "gitmcp", "configured": bool(url), "status": "available",
+        "developer": "GitMCP contributors",
+        "metadata": {
+            "provider": "GitMCP", "website": "https://gitmcp.io",
+            "documentation_url": "https://github.com/idosal/git-mcp#readme",
+            "integration": "https://github.com/idosal/git-mcp",
+            "connection": {"auth_type": "None", "anonymous": True,
+                           "configured": bool(url), "connected": False,
+                           "message": "Public MCP server. No sign-in or API key required."},
+        },
+    }
+
+
 def _action_name(params: dict[str, Any]) -> str:
     return str(params.get("action") or params.get("tool") or "").strip().casefold().replace("-", "_")
 
@@ -77,6 +94,9 @@ def _tool_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _run_tool_inner(params: dict[str, Any]) -> str:
+    from agent.plugins.registry import get_plugin_registry
+    if not get_plugin_registry().is_enabled("gitmcp"):
+        return "GitMCP is disabled. Enable it in Plugins before using repository documentation."
     action = _action_name(params)
     tool_name = ACTION_TO_TOOL.get(action)
     if tool_name is None:

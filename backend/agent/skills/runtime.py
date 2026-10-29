@@ -32,6 +32,7 @@ CORE_TOOL_NAMES = {
     "browser_type",
     "browser_vision",
     "browser_wait",
+    "books_agent",
     "computer_use",
     "computer_use_route",
     "context_mode",
@@ -107,6 +108,7 @@ def build_skill_activation_block(
     query: str,
     registry: SkillRegistry | None = None,
     *,
+    excluded_skills: set[str] | frozenset[str] = frozenset(),
     max_skills: int = 3,
     max_chars: int = 12_000,
 ) -> str:
@@ -118,6 +120,8 @@ def build_skill_activation_block(
     active_registry = registry or get_skill_registry()
     ranked: list[tuple[int, str, str]] = []
     for package in active_registry.list_packages():
+        if package.metadata.name in excluded_skills:
+            continue
         vellum = package.metadata.metadata.vellum
         negative = [_normalize_phrase(value) for value in vellum.negative_trigger]
         if any(value and value in normalized_query for value in negative):

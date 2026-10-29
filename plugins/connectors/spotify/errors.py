@@ -10,6 +10,14 @@ class SpotifyAPIError(SpotifyError):
     code = "spotify_api_error"
 
 
+class SpotifyAccessDenied(SpotifyAPIError):
+    code = "access_denied"
+
+
+class SpotifyResourceUnavailable(SpotifyAPIError):
+    code = "resource_unavailable"
+
+
 class SpotifyPremiumRequired(SpotifyError):
     code = "premium_required"
 

@@ -9,13 +9,22 @@ import os
 from pathlib import Path
 import secrets
 import tempfile
+import threading
 import time
+import weakref
 from urllib.parse import urlencode
 
 from .errors import SpotifyAuthError
 
 
+# All in-process clients for the same credential file share token transactions.
+_token_locks = weakref.WeakValueDictionary()
+_token_locks_guard = threading.Lock()
+
+
 DEFAULT_SCOPES = (
+    "streaming",
+    "user-read-email",
     "user-read-playback-state",
     "user-modify-playback-state",
     "user-read-currently-playing",
@@ -35,14 +44,41 @@ class SpotifyAuthStore:
         self.root = Path(root)
         self.auth_path = self.root / "auth.json"
         self.flow_path = self.root / "oauth-flow.json"
+        lock_key = os.path.normcase(str(self.auth_path.resolve()))
+        with _token_locks_guard:
+            self.token_lock = _token_locks.get(lock_key)
+            if self.token_lock is None:
+                self.token_lock = threading.RLock()
+                _token_locks[lock_key] = self.token_lock
 
     def save_tokens(self, payload: dict) -> None:
-        self._atomic_write(self.auth_path, payload)
+        with self.token_lock:
+            self._atomic_write(self.auth_path, payload)
 
     def load_tokens(self) -> dict:
-        if not self.auth_path.exists():
-            raise SpotifyAuthError("Spotify is not connected")
-        return self._read_json(self.auth_path)
+        with self.token_lock:
+            if not self.auth_path.exists():
+                raise SpotifyAuthError("Spotify is not connected")
+            return self._read_json(self.auth_path)
+
+    def linked_playlists(self) -> list[dict]:
+        """Connection-scoped references, removed together with this connection."""
+        rows = self.load_tokens().get("linked_playlists", [])
+        return rows if isinstance(rows, list) else []
+
+    def remember_playlists(self, account_id: str, rows: list[dict], *, connection_token: str = '') -> list[dict]:
+        with self.token_lock:
+            saved = self.load_tokens()
+            if connection_token and saved.get('refresh_token') != connection_token:
+                raise SpotifyAuthError('Spotify connection changed while linking playlists; try again')
+            previous = saved.get("linked_playlists", []) if saved.get("linked_account") == account_id else []
+            merged = {row["id"]: row for row in previous if isinstance(row, dict) and row.get("id")}
+            merged.update({row["id"]: row for row in rows})
+            if len(merged) > 500:
+                raise SpotifyAuthError("Vellum supports up to 500 linked playlists per connection")
+            saved.update(linked_account=account_id, linked_playlists=list(merged.values()))
+            self.save_tokens(saved)
+            return list(merged.values())
 
     def save_flow(self, payload: dict) -> None:
         self._atomic_write(self.flow_path, payload)
@@ -61,8 +97,9 @@ class SpotifyAuthStore:
         return flow
 
     def logout(self) -> None:
-        self.auth_path.unlink(missing_ok=True)
-        self.flow_path.unlink(missing_ok=True)
+        with self.token_lock:
+            self.auth_path.unlink(missing_ok=True)
+            self.flow_path.unlink(missing_ok=True)
 
     @staticmethod
     def _read_json(path: Path) -> dict:

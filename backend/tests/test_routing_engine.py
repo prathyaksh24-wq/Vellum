@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import pytest
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
@@ -91,6 +92,34 @@ def build_engine(tmp_path, *, openrouter_outcomes, openai_outcomes=()):
     return store, engine, openrouter, openai
 
 
+def test_invocation_deadline_cancels_provider_and_releases_credential(tmp_path):
+    async def scenario():
+        store, engine, adapter, _ = build_engine(tmp_path, openrouter_outcomes=[])
+        add_credential(store, "openrouter", "deadline-key")
+        cancelled = []
+        class SlowModel:
+            async def ainvoke(self, messages, **kwargs):
+                try:
+                    await asyncio.sleep(10)
+                finally:
+                    cancelled.append(True)
+        adapter.build_model = lambda **kwargs:SlowModel()
+        releases = []
+        release = engine.pool.release
+        async def record_release(lease):
+            releases.append(lease.id)
+            await release(lease)
+        engine.pool.release = record_release
+        with pytest.raises(TimeoutError):
+            await engine.ainvoke(messages=[HumanMessage(content="test")], primary_model="google/primary", request_timeout=.02)
+        assert cancelled == [True]
+        assert len(releases) == 1
+        # A subsequent request can use the same credential.
+        adapter.build_model = lambda **kwargs:FakeModel(adapter, AIMessage(content="ready"))
+        assert (await engine.ainvoke(messages=[], primary_model="google/primary", request_timeout=1)).content == "ready"
+    asyncio.run(scenario())
+
+
 def test_pool_rotation_precedes_model_fallback(tmp_path) -> None:
     async def scenario() -> None:
         store, engine, adapter, _ = build_engine(
@@ -136,6 +165,19 @@ def test_catalog_openai_model_uses_openrouter_when_no_native_route_is_configured
     plan = engine.build_plan("openai/gpt-5.6-sol")
 
     assert plan.targets[0].provider == "openrouter"
+
+
+def test_local_primary_does_not_silently_fallback_to_cloud(tmp_path) -> None:
+    store, engine, _, _ = build_engine(tmp_path, openrouter_outcomes=[])
+    store.replace_fallbacks(
+        [FallbackTarget(provider="openai", model="openai/fallback")]
+    )
+
+    plan = engine.build_plan("ollama/qwen3.5:9b")
+
+    assert [(target.provider, target.model) for target in plan.targets] == [
+        ("ollama", "ollama/qwen3.5:9b")
+    ]
 
 
 def test_model_unavailable_uses_fallback_and_next_call_restores_primary(tmp_path) -> None:

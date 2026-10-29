@@ -1,0 +1,22 @@
+id: supabase
+name: Supabase
+type: connector
+category: Developer Tools
+version: 1.0.0
+description: Manage projects, database SQL and migrations, Edge Functions, branches and Storage through the official Supabase MCP server.
+mcp_connectors:
+  - name: supabase
+    type: http
+    url: https://mcp.supabase.com/mcp?features=docs,account,database,debugging,development,functions,branching,storage
+    credential_provider: supabase
+capabilities:
+  - supabase.connection.oauth.start
+  - supabase.connection.oauth.cancel
+  - supabase.connection.verify
+  - supabase.connection.disconnect
+  - supabase.mcp.execute
+provides_tools:
+  - supabase_mcp_catalog
+  - supabase_mcp_describe
+  - supabase_mcp_read
+  - supabase_mcp_execute

@@ -26,8 +26,9 @@ from agent.mcp.plugin_approvals import (
     PluginMcpApprovalStore,
     get_plugin_mcp_approval_store,
 )
-from agent.mcp.results import summarize_mcp_text
+from agent.mcp.results import summarize_mcp_text, structured_mcp_text
 from agent.plugins.registry import PluginRegistry
+from agent.plugins.credential_binding import credential_digest as bind_credential
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 
@@ -37,6 +38,15 @@ _ENV_REFERENCE = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
 
 class PluginMcpRuntimeError(ValueError):
     pass
+
+
+def operation_read_only(plugin_id, tool, arguments):
+    """Exa publishes one tool for starting research and polling its existing run."""
+    if (plugin_id == 'exa' and tool.get('name') == 'agent_run'
+            and set(arguments) == {'runId'} and isinstance(arguments.get('runId'), str)
+            and arguments['runId'].strip()):
+        return True
+    return bool(tool.get('read_only'))
 
 
 @dataclass(frozen=True)
@@ -52,10 +62,13 @@ class PluginMcpConnector:
     env: dict[str, str] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
     missing_env: tuple[str, ...] = ()
+    auth: Any = field(default=None, repr=False, compare=False)
+    credential_digest: str = field(default="",repr=False,compare=False)
+    credentials_deferred: bool = field(default=False, repr=False)
 
     @property
     def configured(self) -> bool:
-        return not self.missing_env and bool(self.url or self.command)
+        return not self.credentials_deferred and not self.missing_env and bool(self.url or self.command)
 
     def public(self) -> dict[str, Any]:
         return {
@@ -66,6 +79,7 @@ class PluginMcpConnector:
             "missing_env": list(self.missing_env),
             "url": _public_url(self.url),
             "command": Path(self.command).name if self.command else "",
+            **({"credentials_deferred": True} if self.credentials_deferred else {}),
         }
 
 
@@ -90,6 +104,7 @@ class SdkPluginMcpTransport:
                 headers=connector.headers,
                 timeout=timeout,
                 sse_read_timeout=timeout,
+                auth=connector.auth,
             ) as (read, write, _get_session_id):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
@@ -109,8 +124,16 @@ class SdkPluginMcpTransport:
 
     async def list_tools(self, connector: PluginMcpConnector) -> list[dict[str, Any]]:
         async with self._session(connector) as session:
-            result = await session.list_tools()
-        return [_public_tool(tool) for tool in getattr(result, "tools", [])]
+            tools, cursor, seen = [], None, set()
+            while True:
+                result = await session.list_tools(cursor=cursor) if cursor else await session.list_tools()
+                tools.extend(_public_tool(tool) for tool in getattr(result, "tools", []))
+                cursor = getattr(result, "nextCursor", None)
+                if not cursor:
+                    return tools
+                if cursor in seen or len(tools) > 500:
+                    raise PluginMcpRuntimeError("MCP tool pagination exceeded its bound.")
+                seen.add(cursor)
 
     async def call_tool(
         self,
@@ -120,6 +143,8 @@ class SdkPluginMcpTransport:
     ) -> str:
         async with self._session(connector) as session:
             result = await session.call_tool(tool_name, arguments)
+        if getattr(result, "isError", False):
+            raise PluginMcpRuntimeError("The MCP server rejected this operation. Check the tool arguments and account permissions before retrying.")
         return content_text(result) or f"{tool_name} completed."
 
 
@@ -138,35 +163,181 @@ class PluginMcpRuntime:
         self.transport = transport or SdkPluginMcpTransport()
         self.approval_store = approval_store or get_plugin_mcp_approval_store()
         self.audit_log = audit_log or McpAuditLog()
+        self.connector_diagnostics: list[dict[str, str]] = []
 
-    def connectors(self) -> list[PluginMcpConnector]:
+    def connectors(self, *, skip_invalid: bool = False, resolve_credentials: bool = True) -> list[PluginMcpConnector]:
         connectors: list[PluginMcpConnector] = []
-        for manifest in self.registry.manifests():
+        self.connector_diagnostics = []
+        def append_connector(plugin_id, root, item):
+            try:
+                connectors.append(_connector(plugin_id, root, item, resolve_credentials=resolve_credentials))
+            except PluginMcpRuntimeError:
+                if not skip_invalid:
+                    raise
+                self.connector_diagnostics.append({"plugin_id": plugin_id, "status": "unavailable"})
+        manifests = self.registry.manifests()
+        portable_ids = {manifest.id for manifest in manifests}
+        for manifest in manifests:
             if not self.registry.is_enabled(manifest.id):
                 continue
-            connectors.extend(
-                _connector(manifest.id, manifest.path.resolve(), item)
-                for item in manifest.mcp_connectors
-            )
+            for item in manifest.mcp_connectors:
+                append_connector(manifest.id, manifest.path.resolve(), item)
         for record in self.registry.source_records():
+            if record.id in portable_ids:
+                continue
             if not self.registry.is_enabled(record.id):
                 continue
-            connectors.extend(
-                _connector(record.id, record.root.resolve(), item)
-                for item in record.mcp_connectors
-            )
+            for item in record.mcp_connectors:
+                append_connector(record.id, record.root.resolve(), item)
         return sorted(connectors, key=lambda item: (item.plugin_id, item.name))
 
     def connector(self, plugin_id: str, connector_name: str) -> PluginMcpConnector:
         normalized_plugin = plugin_id.strip()
         normalized_name = connector_name.strip()
-        for item in self.connectors():
-            if item.plugin_id == normalized_plugin and item.name == normalized_name:
-                return item
+        # A call to one service must not resolve credentials/configuration for
+        # every installed MCP server. Reuse the registry's request-local view;
+        # enablement and manifest changes are still observed on the next call.
+        with self.registry.read_snapshot():
+            manifest=next((item for item in self.registry.manifests() if item.id==normalized_plugin),None)
+            record=manifest or next((item for item in self.registry.source_records() if item.id==normalized_plugin),None)
+            if record is not None and self.registry.is_enabled(normalized_plugin):
+                root=manifest.path.resolve() if manifest else record.root.resolve()
+                for item in record.mcp_connectors:
+                    if str(item.get("name") or "").strip()!=normalized_name:continue
+                    try:return _connector(normalized_plugin,root,item)
+                    except PluginMcpRuntimeError:break
         raise PluginMcpRuntimeError("Plugin MCP connector is unavailable or disabled.")
 
     async def list_tools(self, plugin_id: str, connector_name: str) -> list[dict[str, Any]]:
         connector = self.connector(plugin_id, connector_name)
+        return await self._list_tools(connector)
+
+    async def _list_tools(self, connector):
+        plugin_id,connector_name=connector.plugin_id,connector.name
+        if plugin_id == 'swiggy':
+            from agent.plugins.swiggy_connection import swiggy_service, SERVERS
+            if connector_name not in SERVERS or connector.url != SERVERS[connector_name]:
+                raise PluginMcpRuntimeError("Invalid official Swiggy endpoint.")
+            service = swiggy_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Swiggy catalog changed. Refresh the connection.")
+            return service.tools_for(connector_name)
+        if plugin_id == 'serpapi' and connector_name == 'serpapi':
+            from agent.plugins.serpapi_connection import serpapi_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = serpapi_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The SerpAPI catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'asana' and connector_name == 'asana':
+            from agent.plugins.asana_connection import asana_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = asana_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Asana catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'hubspot' and connector_name == 'hubspot':
+            from agent.plugins.hubspot_connection import hubspot_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = hubspot_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The HubSpot catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'clickup' and connector_name == 'clickup':
+            from agent.plugins.clickup_connection import clickup_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = clickup_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The ClickUp catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'zomato' and connector_name == 'zomato':
+            from agent.plugins.zomato_connection import zomato_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = zomato_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Zomato catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'district' and connector_name == 'district':
+            from agent.plugins.district_connection import district_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = district_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The District catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'vercel' and connector_name == 'vercel':
+            from agent.plugins.vercel_connection import vercel_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = vercel_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Vercel catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'supabase' and connector_name == 'supabase':
+            from agent.plugins.supabase_connection import supabase_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = supabase_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Supabase catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'exa' and connector_name == 'exa':
+            from agent.plugins.exa_connection import exa_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = exa_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Exa catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == 'tavily' and connector_name == 'tavily':
+            from agent.plugins.tavily_connection import tavily_service, SERVER
+            if connector.url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            service = tavily_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Tavily catalog changed. Refresh the connection.")
+            return service.cached_tools()
+        if plugin_id == "firecrawl" and connector_name == "firecrawl" and connector.url == "https://mcp.firecrawl.dev/v2/mcp-oauth":
+            from agent.plugins.firecrawl_connection import firecrawl_service
+            service = firecrawl_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Firecrawl catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "apify" and connector_name == "apify" and connector.url == "https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,report-problem,apify/rag-web-browser,apify/web-fetch&telemetry-enabled=false":
+            from agent.plugins.apify_connection import apify_service
+            service = apify_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Apify catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "notion" and connector_name == "notion" and connector.url == "https://mcp.notion.com/mcp":
+            from agent.plugins.notion import notion_service
+            service = notion_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Notion catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "airtable" and connector_name == "airtable" and connector.url == "https://mcp.airtable.com/mcp":
+            from agent.plugins.airtable import airtable_service
+            service = airtable_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Airtable catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "slack" and connector_name == "slack" and connector.url == "https://mcp.slack.com/mcp":
+            from agent.plugins.slack import slack_service
+            service = slack_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The Slack catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
+        if plugin_id == "github" and connector_name == "github" and connector.url == "https://api.githubcopilot.com/mcp/x/all":
+            from agent.plugins.github_connection import github_service
+            service = github_service()
+            if service.tools_revision != connector.credential_digest:
+                raise PluginMcpRuntimeError("The GitHub catalog changed. Refresh its connection before retrying.")
+            return service.cached_tools()
         if not connector.configured:
             missing = ", ".join(connector.missing_env)
             raise PluginMcpRuntimeError(f"Plugin MCP connector needs environment configuration: {missing}")
@@ -176,6 +347,11 @@ class PluginMcpRuntime:
                 self.transport.list_tools(connector),
                 timeout=get_settings().mcp_timeout_seconds,
             )
+            # Upstream omits readOnlyHint for its documented public readers.
+            if plugin_id == 'gitmcp' and connector_name == 'gitmcp' and connector.url == 'https://gitmcp.io/docs':
+                from agent.mcp.gitmcp_tools import ACTION_TO_TOOL
+                readers = frozenset(ACTION_TO_TOOL.values())
+                result = [{**item, 'read_only': True} if item.get('name') in readers else item for item in result]
         except BaseException:
             self._audit(
                 plugin_id,
@@ -204,14 +380,18 @@ class PluginMcpRuntime:
         arguments: dict[str, Any],
         *,
         approval_id: str = "",
+        credential_digest: str = "",
+        structured: bool = False,
     ) -> str:
         connector = self.connector(plugin_id, connector_name)
-        tools = await self.list_tools(plugin_id, connector_name)
+        if credential_digest and connector.credential_digest != credential_digest:
+            raise PluginMcpRuntimeError("The connector credential changed. Review this operation again.")
+        tools = await self._list_tools(connector)
         tool = next((item for item in tools if item.get("name") == tool_name), None)
         if tool is None:
             raise PluginMcpRuntimeError("Plugin MCP tool is not exposed by this connector.")
         clean_arguments = _privacy_safe_arguments(arguments)
-        if not tool.get("read_only"):
+        if not operation_read_only(plugin_id, tool, clean_arguments):
             operation = PluginMcpOperation.from_arguments(
                 plugin_id=plugin_id,
                 connector=connector_name,
@@ -252,7 +432,7 @@ class PluginMcpRuntime:
             started=started,
             outcome="success",
         )
-        return summarize_mcp_text(result)
+        return structured_mcp_text(result) if structured else summarize_mcp_text(result)
 
     def _audit(
         self,
@@ -278,20 +458,229 @@ def _connector(
     plugin_id: str,
     root: Path,
     payload: dict[str, Any],
+    *, resolve_credentials: bool = True,
 ) -> PluginMcpConnector:
     name = str(payload.get("name") or "").strip()
     if not name:
         raise PluginMcpRuntimeError("Plugin MCP connector name is required.")
     url = str(payload.get("url") or payload.get("serverUrl") or "").strip()
+    if plugin_id == 'gitmcp' and name == 'gitmcp':
+        url = get_settings().gitmcp_mcp_url
     env, env_missing = _resolved_mapping(payload.get("env"))
     headers, header_missing = _resolved_mapping(payload.get("headers"))
     missing = tuple(dict.fromkeys([*env_missing, *header_missing]))
     if url:
+        auth = None
+        credential_digest = ""
         parsed_url = urlsplit(url)
         if parsed_url.scheme.lower() not in {"http", "https"} or not parsed_url.hostname:
             raise PluginMcpRuntimeError("Plugin MCP URL must use HTTP or HTTPS.")
         if parsed_url.username or parsed_url.password:
             raise PluginMcpRuntimeError("Plugin MCP URL must not contain credentials.")
+        if not resolve_credentials:
+            # Browsing may describe a declaration, never refresh grants or open
+            # provider sessions. Real connector() calls still take the pinned,
+            # credential-resolving path below for the selected provider only.
+            return PluginMcpConnector(plugin_id=plugin_id, name=name, root=root,
+                transport='http', url=url, missing_env=missing,
+                credentials_deferred=bool(payload.get('credential_provider')))
+        if payload.get("credential_provider") == "linear":
+            if plugin_id != "linear" or url != "https://mcp.linear.app/mcp":
+                raise PluginMcpRuntimeError("Linear credentials are restricted to its official MCP endpoint.")
+            from agent.plugins.linear import linear_service, LinearError
+            try:
+                service=linear_service()
+                data=service._require()
+                token=data["token"]
+                credential_digest=bind_credential(token,provider="linear")
+                from agent.plugins.linear_oauth import stored_auth
+                headers,auth={},stored_auth(service,connection=data)
+            except LinearError:
+                headers, missing = {}, ("Linear connection",)
+        if payload.get("credential_provider") == 'swiggy':
+            from agent.plugins.swiggy_connection import swiggy_service, SERVERS
+            if plugin_id != 'swiggy' or name not in SERVERS or url != SERVERS[name]:
+                raise PluginMcpRuntimeError("Invalid official Swiggy endpoint.")
+            try:
+                service = swiggy_service()
+                data = service.require()
+                if name not in service.selected(data):
+                    raise PluginMcpRuntimeError("This Swiggy service is switched off.")
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data['revision']
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Swiggy connection or service selection",)
+        if payload.get("credential_provider") == 'serpapi':
+            from agent.plugins.serpapi_connection import serpapi_service, SERVER
+            if plugin_id != 'serpapi' or name != 'serpapi' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = serpapi_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("SerpAPI connection",)
+        if payload.get("credential_provider") == 'asana':
+            from agent.plugins.asana_connection import asana_service, SERVER
+            if plugin_id != 'asana' or name != 'asana' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = asana_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Asana connection",)
+        if payload.get("credential_provider") == 'hubspot':
+            from agent.plugins.hubspot_connection import hubspot_service, SERVER
+            if plugin_id != 'hubspot' or name != 'hubspot' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = hubspot_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("HubSpot connection",)
+        if payload.get("credential_provider") == 'clickup':
+            from agent.plugins.clickup_connection import clickup_service, SERVER
+            if plugin_id != 'clickup' or name != 'clickup' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = clickup_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("ClickUp connection",)
+        if payload.get("credential_provider") == 'zomato':
+            from agent.plugins.zomato_connection import zomato_service, SERVER
+            if plugin_id != 'zomato' or name != 'zomato' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = zomato_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Zomato connection",)
+        if payload.get("credential_provider") == 'district':
+            from agent.plugins.district_connection import district_service, SERVER
+            if plugin_id != 'district' or name != 'district' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = district_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("District connection",)
+        if payload.get("credential_provider") == 'vercel':
+            from agent.plugins.vercel_connection import vercel_service, SERVER
+            if plugin_id != 'vercel' or name != 'vercel' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = vercel_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Vercel connection",)
+        if payload.get("credential_provider") == 'supabase':
+            from agent.plugins.supabase_connection import supabase_service, SERVER
+            if plugin_id != 'supabase' or name != 'supabase' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = supabase_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Supabase connection",)
+        if payload.get("credential_provider") == 'exa':
+            from agent.plugins.exa_connection import exa_service, SERVER
+            if plugin_id != 'exa' or name != 'exa' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = exa_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Exa connection",)
+        if payload.get("credential_provider") == 'tavily':
+            from agent.plugins.tavily_connection import tavily_service, SERVER
+            if plugin_id != 'tavily' or name != 'tavily' or url != SERVER:
+                raise PluginMcpRuntimeError("Invalid official connector endpoint.")
+            try:
+                service = tavily_service()
+                data = service.require()
+                headers = {"Authorization": "Bearer " + data["access_token"]}
+                credential_digest = data["revision"]
+            except (ValueError, RuntimeError):
+                headers, missing = {}, ("Tavily connection",)
+        if payload.get("credential_provider") == "firecrawl":
+            if plugin_id != "firecrawl" or name != "firecrawl" or url != "https://mcp.firecrawl.dev/v2/mcp-oauth":
+                raise PluginMcpRuntimeError("Firecrawl authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.firecrawl_connection import FirecrawlError, firecrawl_service
+            try:
+                service = firecrawl_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except FirecrawlError:
+                headers, missing = {}, ("Firecrawl OAuth connection",)
+        if payload.get("credential_provider") == "apify":
+            if plugin_id != "apify" or name != "apify" or url != "https://mcp.apify.com?tools=actors,docs,runs,storage,tasks,schedules,report-problem,apify/rag-web-browser,apify/web-fetch&telemetry-enabled=false":
+                raise PluginMcpRuntimeError("Apify authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.apify_connection import ApifyError, apify_service
+            try:
+                service = apify_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except ApifyError:
+                headers, missing = {}, ("Apify OAuth connection",)
+        if payload.get("credential_provider") == "notion":
+            if plugin_id != "notion" or name != "notion" or url != "https://mcp.notion.com/mcp":
+                raise PluginMcpRuntimeError("Notion authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.notion import NotionError, notion_service
+            try:
+                service = notion_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except NotionError:
+                headers, missing = {}, ("Notion OAuth connection",)
+        if payload.get("credential_provider") == "airtable":
+            if plugin_id != "airtable" or name != "airtable" or url != "https://mcp.airtable.com/mcp":
+                raise PluginMcpRuntimeError("Airtable authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.airtable import AirtableError, airtable_service
+            try:
+                service = airtable_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except AirtableError:
+                headers, missing = {}, ("Airtable OAuth connection",)
+        if payload.get("credential_provider") == "slack":
+            if plugin_id != "slack" or name != "slack" or url != "https://mcp.slack.com/mcp":
+                raise PluginMcpRuntimeError("Slack authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.slack import SlackError, slack_service
+            try:
+                service = slack_service()
+                data = service.require()
+                headers, credential_digest = service.connector(data).headers, data["revision"]
+            except SlackError:
+                headers, missing = {}, ("Slack OAuth connection",)
+        if payload.get("credential_provider") == "github":
+            if plugin_id != "github" or name != "github" or url != "https://api.githubcopilot.com/mcp/x/all":
+                raise PluginMcpRuntimeError("GitHub authorization is restricted to its official MCP endpoint.")
+            from agent.plugins.github_connection import GitHubConnectionError, github_service
+            try:
+                service = github_service()
+                data = service.require()
+                headers = service.connector(data).headers
+                credential_digest = data["revision"]
+            except GitHubConnectionError:
+                headers, missing = {}, ("GitHub OAuth connection",)
         return PluginMcpConnector(
             plugin_id=plugin_id,
             name=name,
@@ -301,6 +690,8 @@ def _connector(
             env=env,
             headers=headers,
             missing_env=missing,
+            auth=auth,
+            credential_digest=credential_digest,
         )
 
     command = str(payload.get("command") or "").strip()

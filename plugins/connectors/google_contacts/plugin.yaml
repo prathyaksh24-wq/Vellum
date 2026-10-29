@@ -1,0 +1,32 @@
+id: google-contacts
+name: Google Contacts
+type: connector
+category: CRM & Communication
+version: 1.0.0
+default_enabled: false
+description: Read, create, update, edit and delete contacts and groups through the published People API with reviewed changes.
+provides_tools:
+  - google_contacts_contact_groups_batch_get
+  - google_contacts_contact_groups_create
+  - google_contacts_contact_groups_delete
+  - google_contacts_contact_groups_get
+  - google_contacts_contact_groups_list
+  - google_contacts_contact_groups_update
+  - google_contacts_contact_groups_members_modify
+  - google_contacts_other_contacts_c_copy_other_contact_t_f38d7b
+  - google_contacts_other_contacts_list
+  - google_contacts_other_contacts_search
+  - google_contacts_people_batch_create_contacts
+  - google_contacts_people_batch_delete_contacts
+  - google_contacts_people_batch_update_contacts
+  - google_contacts_people_create_contact
+  - google_contacts_people_delete_contact
+  - google_contacts_people_delete_contact_photo
+  - google_contacts_people_get
+  - google_contacts_people_get_batch_get
+  - google_contacts_people_list_directory_people
+  - google_contacts_people_search_contacts
+  - google_contacts_people_search_directory_people
+  - google_contacts_people_update_contact
+  - google_contacts_people_update_contact_photo
+  - google_contacts_people_connections_list

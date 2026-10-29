@@ -81,8 +81,16 @@ def estimate_tokens(text: str) -> int:
 # hoofdstuk), matching the ToC languages added alongside. "ch.?" stays last so
 # the longer words match in full. Captures the number (bounded to 1..99 — drops
 # years like "2025.") and whatever follows it on the line, so we can reject prose.
+_EN_NUMBER_WORD_PATTERN = (
+    r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+    r"(?:[- ](?:one|two|three|four|five|six|seven|eight|nine))?)"
+)
 _EXPLICIT_CHAPTER = re.compile(
-    r"^\s*(?:chapter|chapitre|kapitel|cap[ií]tulo|capitolo|hoofdstuk|ch\.?)\s*(?:(\d{1,2})|(?P<roman>[IVXLCDMivxlcdm]{1,7}))\b(?P<rest>.*)$",
+    rf"^\s*(?:chapter|chapitre|kapitel|cap[ií]tulo|capitolo|hoofdstuk|ch\.?)\s*"
+    rf"(?:(\d{{1,2}})|(?P<roman>[IVXLCDMivxlcdm]{{1,7}})|(?P<word>{_EN_NUMBER_WORD_PATTERN}))"
+    rf"\b(?P<rest>.*)$",
     re.IGNORECASE,
 )
 # A heading's number is followed by end-of-line, punctuation (“. : - —“), or a
@@ -99,6 +107,14 @@ _HEADING_TAIL = re.compile(r"^\s*$|^\s*[.:\-—–]|^\s+[A-ZÀ-Þ0-9\"“(]")
 _ROMAN_HEAD = re.compile(r"^\s*([IVXLCDM]+)\s*[:.]\s+[A-ZÀ-Þ0-9\"“(]")
 _LC_MD_ROMAN = re.compile(r"^\s*#{1,6}\s+([ivxlcdm]+)\s*[:.]\s+[A-Za-zÀ-Þ\"“(]")
 _ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+_EN_NUMBER_VALUES = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
+    "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
 
 # Optional Markdown / AsciiDoc heading prefix ("## Chapter 1", "== Section").
 # Stripped in _chapter_number() as a second pass so the CJK/Thai/Korean
@@ -297,7 +313,10 @@ def _match_chapter_number(line: str) -> int | None:
     if m and _HEADING_TAIL.match(m.group("rest")):
         if m.group(1):
             return int(m.group(1))
-        return _roman_to_int(m.group("roman").upper())
+        if m.group("roman"):
+            return _roman_to_int(m.group("roman").upper())
+        words = m.group("word").casefold().replace("-", " ").split()
+        return sum(_EN_NUMBER_VALUES[word] for word in words)
     rm = _ROMAN_HEAD.match(s) or _LC_MD_ROMAN.match(s)
     if rm:
         return _roman_to_int(rm.group(1))

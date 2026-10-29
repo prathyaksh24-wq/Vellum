@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import time
+import threading
+import re
+from uuid import uuid4
 from typing import Any
 
 import httpx
@@ -10,6 +13,8 @@ import httpx
 from .auth import SpotifyAuthStore
 from .errors import (
     SpotifyAPIError,
+    SpotifyAccessDenied,
+    SpotifyResourceUnavailable,
     SpotifyAuthError,
     SpotifyNoActiveDevice,
     SpotifyPremiumRequired,
@@ -30,6 +35,178 @@ class SpotifyClient:
         self.auth_store = auth_store
         self.transport = transport
         self.timeout = timeout
+        self._device_lock = threading.RLock()
+        self._web_player = None
+        self._sdk_refresh_at = float("-inf")
+
+    def get_linked_playlists(self) -> list[dict]:
+        return self.auth_store.linked_playlists()
+
+    def remember_playlist_links(self, uris: list[str], *, labels: dict | None = None) -> dict:
+        # Validate the entire batch before any read or write. No arbitrary URLs.
+        if not uris or len(uris) > 20 or any(not isinstance(uri, str) or not re.fullmatch(r"spotify:playlist:[A-Za-z0-9]+", uri) for uri in uris):
+            raise SpotifyAPIError("Use up to 20 exact Spotify playlist URIs")
+        labels = labels or {}
+        if not isinstance(labels, dict) or any(key not in uris or not isinstance(value, str) or not value.strip() or len(value) > 300 for key, value in labels.items()):
+            raise SpotifyAPIError('Labels must name one of these exact playlist URIs')
+        connection_token = str(self.auth_store.load_tokens().get('refresh_token') or '')
+        account = self.get_profile().get("id")
+        if not account:
+            raise SpotifyAuthError("Spotify did not verify the connected account")
+        rows = []
+        for uri in dict.fromkeys(uris):
+            identity = uri.rsplit(":", 1)[1]
+            url = "https://open.spotify.com/playlist/" + identity
+            row = {"id": identity, "uri": uri, "name": "Linked playlist " + identity[-6:],
+                   "external_urls": {"spotify": url}, "linked": True, "images": []}
+            try:
+                data = self.request("GET", "/playlists/" + identity)
+                row.update(name=data.get("name") or row["name"], images=data.get("images") or [], metadata_source="api")
+            except (SpotifyAccessDenied, SpotifyAPIError) as exc:
+                if isinstance(exc, (SpotifyAuthError, SpotifyRateLimited)):
+                    raise
+                # Public metadata for this exact link only; never send OAuth headers.
+                try:
+                    with httpx.Client(transport=self.transport, timeout=min(self.timeout, 8)) as public:
+                        response = public.get("https://open.spotify.com/oembed", params={"url": url})
+                        response.raise_for_status()
+                        data = response.json()
+                    if isinstance(data, dict) and data.get("title"):
+                        row.update(name=str(data["title"])[:300],
+                                   images=[{"url": data["thumbnail_url"]}] if data.get("thumbnail_url") else [],
+                                   metadata_source="oembed")
+                except (httpx.HTTPError, ValueError):
+                    pass  # Keep the exact reference with an explicitly unknown name.
+            if not row.get('metadata_source') and labels.get(uri):
+                row.update(name=labels[uri].strip(), metadata_source='provided_label')
+            rows.append(row)
+        self.auth_store.remember_playlists(str(account), rows, connection_token=connection_token)
+        return {"items": rows, "total": len(rows)}
+
+    def playback_token(self, *, force_refresh: bool = False) -> dict:
+        """Only the trusted playback view consumes this; never expose as a tool."""
+        with self.auth_store.token_lock:
+            token = self._get_access_token()
+            if force_refresh and time.monotonic() - self._sdk_refresh_at >= 60:
+                token = self._get_access_token(rejected_token=token)
+                self._sdk_refresh_at = time.monotonic()
+            saved = self.auth_store.load_tokens()
+            required = {"streaming", "user-read-email", "user-read-private"}
+            if not required.issubset(set(str(saved.get("scope") or "").split())):
+                raise SpotifyAuthError("Reconnect Spotify to allow playback inside Vellum")
+            return {"access_token": token, "expires_at": float(saved.get("expires_at") or 0)}
+
+    def claim_web_player(self, owner_id: str) -> dict:
+        with self._device_lock:
+            current = self._web_player
+            if current and current["owner_id"] != owner_id and current["expires_at"] > time.monotonic():
+                unavailable = False
+                # Heartbeats alone cannot keep a disconnected SDK device alive.
+                # Preserve newly connecting owners and every verified live device.
+                if current.get('device_id') and time.monotonic()-current.get('device_registered_at',time.monotonic()) >= 30:
+                    try:
+                        devices = self.get_devices().get('devices')
+                        unavailable = isinstance(devices,list) and not any(d.get('id')==current['device_id'] for d in devices if isinstance(d,dict))
+                    except Exception:
+                        pass  # An unavailable read grants no ownership transfer.
+                if not unavailable:
+                    raise SpotifyNoActiveDevice("Vellum playback is already running in another window")
+            self._web_player = {"owner_id": owner_id, "device_id": "", "expires_at": time.monotonic() + 90}
+            return {"status": "connecting"}
+
+    def update_web_player(self, owner_id: str, device_id: str, diagnostics: list[dict] | None = None,
+                          *, observation: dict | None = None, volume_percent: int | None = None, volume_ack: str = '') -> dict:
+        with self._device_lock:
+            if not self._web_player or self._web_player["owner_id"] != owner_id:
+                raise SpotifyNoActiveDevice("This window no longer owns Vellum playback. Enable playback again.")
+            if self._web_player['device_id'] != device_id:
+                self._web_player['device_registered_at'] = time.monotonic()
+                self._web_player.pop('observation', None)
+                self._web_player.pop('volume_percent', None)
+                pending = self._web_player.pop('volume_request',None)
+                if pending:
+                    pending['done'].set()
+            self._web_player.update(device_id=device_id, expires_at=time.monotonic() + 90)
+            if diagnostics:
+                self._web_player["diagnostics"] = [*self._web_player.get("diagnostics", []), *diagnostics][-32:]
+            if device_id and observation is not None:
+                self._web_player.update(observation=observation, observed_at=time.monotonic())
+            if device_id and volume_percent is not None:
+                self._web_player.update(volume_percent=volume_percent, volume_observed_at=time.monotonic())
+            pending = self._web_player.get('volume_request')
+            if pending and volume_ack == pending['id']:
+                pending['observed'] = volume_percent
+                pending['done'].set()
+                self._web_player.pop('volume_request', None)
+            pending = self._web_player.get('volume_request')
+            result = {"status": "ready" if device_id else "reconnecting"}
+            if pending:
+                result['volume_request'] = {'id':pending['id'], 'percent':pending['percent']}
+            return result
+
+    def set_player_volume(self, percent: int, device_id: str = '') -> dict:
+        """Use the leased SDK for its local volume; other devices use Web API."""
+        if not isinstance(percent, int) or not 0 <= percent <= 100:
+            raise SpotifyAPIError('Invalid volume percentage')
+        preferred = self.preferred_device_id()
+        selected = device_id or preferred
+        if not preferred or selected != preferred:
+            return self.request('PUT', '/me/player/volume', params={'volume_percent':percent, **({'device_id':selected} if selected else {})})
+        with self._device_lock:
+            current = self._web_player
+            if not current or current.get('device_id') != selected:
+                raise SpotifyNoActiveDevice('Vellum player is not ready')
+            if current.get('volume_request'):
+                raise SpotifyAPIError('A Vellum volume change is still pending; wait before trying again')
+            pending = {'id':str(uuid4()), 'percent':percent, 'done':threading.Event()}
+            current['volume_request'] = pending
+        completed = pending['done'].wait(5)
+        with self._device_lock:
+            if current.get('volume_request') is pending:
+                current.pop('volume_request',None)
+        if not completed or pending.get('observed') != percent:
+            raise SpotifyAPIError('Vellum did not verify the volume change; the command was not repeated')
+        return {'volume_percent':percent}
+
+    def local_player_state(self) -> dict | None:
+        with self._device_lock:
+            current = self._web_player
+            now = time.monotonic()
+            if not current or not current.get('device_id') or current['expires_at'] <= now:
+                return None
+            if 'observation' not in current or now-current.get('observed_at',0) > 5:
+                return None
+            state = dict(current['observation'])
+            device = {'id':current['device_id'], 'name':'Vellum', 'is_active':True}
+            if now-current.get('volume_observed_at',0) <= 5 and 'volume_percent' in current:
+                device.update(volume_percent=current['volume_percent'], supports_volume=True)
+            state.update(device=device, state_source='sdk')
+            return state
+
+    def release_web_player(self, owner_id: str | None = None) -> dict:
+        with self._device_lock:
+            if owner_id is None or (self._web_player and self._web_player["owner_id"] == owner_id):
+                self._web_player = None
+            return {"status": "disabled"}
+
+    def preferred_device_id(self) -> str:
+        with self._device_lock:
+            if self._web_player is None:
+                return ""
+            if not self._web_player["device_id"] or self._web_player["expires_at"] <= time.monotonic():
+                raise SpotifyNoActiveDevice("Vellum player is not ready. Enable playback in Vellum's Spotify player.")
+            return self._web_player["device_id"]
+
+    def web_playback_status(self) -> dict:
+        with self._device_lock:
+            if self._web_player is None:
+                return {"status": "disabled"}
+            current = self._web_player
+            live = current["expires_at"] > time.monotonic()
+            return {"status": "ready" if live and current["device_id"] else "reconnecting",
+                    "device_id": current['device_id'] if live else '',
+                    "diagnostics": list(current.get("diagnostics", [])),
+                    "commands": dict(current.get("commands", {}))}
 
     def request(
         self,
@@ -40,6 +217,12 @@ class SpotifyClient:
         json_body: Any = None,
         content: Any = None,
     ) -> dict:
+        if method.upper() != "GET" and path.startswith("/me/player"):
+            with self._device_lock:
+                if self._web_player is not None:
+                    commands = self._web_player.setdefault("commands", {})
+                    key = method.upper() + " " + path
+                    commands[key] = commands.get(key, 0) + 1
         return self._request(
             method,
             path,
@@ -59,11 +242,9 @@ class SpotifyClient:
         content: Any,
         retried: bool,
     ) -> dict:
-        saved = self.auth_store.load_tokens()
-        token = str(saved.get("access_token") or "")
-        if not token:
-            raise SpotifyAuthError("Spotify access token is missing")
-        with httpx.Client(transport=self.transport, timeout=self.timeout) as client:
+        token = self._get_access_token()
+        timeout = min(self.timeout, 4.0) if path.startswith('/me/player') else self.timeout
+        with httpx.Client(transport=self.transport, timeout=timeout) as client:
             response = client.request(
                 method.upper(),
                 self.API_BASE + "/" + path.lstrip("/"),
@@ -73,7 +254,7 @@ class SpotifyClient:
                 headers={"Authorization": f"Bearer {token}"},
             )
         if response.status_code == 401 and not retried:
-            self.refresh()
+            self._get_access_token(rejected_token=token)
             return self._request(
                 method,
                 path,
@@ -83,7 +264,9 @@ class SpotifyClient:
                 retried=True,
             )
         if response.status_code == 204:
-            return {"is_playing": False, "item": None}
+            if method.upper() == "GET" and "/" + path.strip("/") in {"/me/player", "/me/player/currently-playing"}:
+                return {"is_playing": False, "item": None}
+            return {}
         self._raise_for_status(response)
         if not response.content:
             return {}
@@ -117,7 +300,27 @@ class SpotifyClient:
         return saved
 
     def refresh(self) -> dict:
-        saved = self.auth_store.load_tokens()
+        with self.auth_store.token_lock:
+            return self._refresh_tokens(self.auth_store.load_tokens())
+
+    def _get_access_token(self, *, rejected_token: str | None = None) -> str:
+        with self.auth_store.token_lock:
+            saved = self.auth_store.load_tokens()
+            token = str(saved.get("access_token") or "")
+            if not token:
+                raise SpotifyAuthError("Spotify access token is missing")
+            expires_at = saved.get("expires_at")
+            try:
+                expiring = expires_at is not None and float(expires_at) <= time.time() + 60
+            except (TypeError, ValueError) as exc:
+                raise SpotifyAuthError("Spotify token expiry is invalid") from exc
+            # A concurrent client may have already replaced the rejected token.
+            if expiring or (rejected_token is not None and rejected_token == token):
+                saved = self._refresh_tokens(saved)
+                token = str(saved["access_token"])
+            return token
+
+    def _refresh_tokens(self, saved: dict) -> dict:
         client_id = str(saved.get("client_id") or "")
         refresh_token = str(saved.get("refresh_token") or "")
         if not client_id or not refresh_token:
@@ -189,6 +392,10 @@ class SpotifyClient:
             raise SpotifyPremiumRequired("Spotify Premium is required for this action")
         if response.status_code == 401:
             raise SpotifyAuthError("Spotify authorization expired")
+        if response.status_code == 403:
+            raise SpotifyAccessDenied("Spotify does not allow this app to access this resource")
+        if response.status_code == 404:
+            raise SpotifyResourceUnavailable("Spotify has not exposed this resource to Vellum")
         raise SpotifyAPIError(f"Spotify request failed with status {response.status_code}")
 
     def get_profile(self) -> dict:
@@ -201,7 +408,21 @@ class SpotifyClient:
         return self.request("GET", "/me/player/queue")
 
     def get_player(self) -> dict:
-        payload = self.request("GET", "/me/player")
+        local = self.local_player_state()
+        if local is not None:
+            return local
+        payload = self.request("GET", "/me/player", params={"additional_types":"track,episode"})
+        # Volume has its own freshness clock. A paused device can return no
+        # track snapshot while its SDK still measures controllable local audio.
+        with self._device_lock:
+            current = self._web_player
+            now = time.monotonic()
+            remote_device = payload.get('device') or {}
+            if (current and current.get('device_id') and current['expires_at'] > now
+                and 'volume_percent' in current and now-current.get('volume_observed_at',0) <= 5
+                and (not remote_device.get('id') or remote_device['id'] == current['device_id'])):
+                payload['device'] = {**remote_device, 'id':current['device_id'], 'name':'Vellum',
+                    'volume_percent':current['volume_percent'], 'supports_volume':True}
         item = payload.get("item") if isinstance(payload.get("item"), dict) else None
         if not item:
             return {
@@ -217,9 +438,12 @@ class SpotifyClient:
                 "repeat": str(payload.get("repeat_state") or "off"),
             }
         album = item.get("album") if isinstance(item.get("album"), dict) else {}
-        images = album.get("images") if isinstance(album.get("images"), list) else []
+        show = item.get("show") if isinstance(item.get("show"), dict) else {}
+        images = item.get("images") or album.get("images") or show.get("images") or []
         artwork = images[0].get("url", "") if images and isinstance(images[0], dict) else ""
         artists = item.get("artists") if isinstance(item.get("artists"), list) else []
+        if not artists and show.get("name"):
+            artists = [{"name":show["name"]}]
         return {
             "is_playing": bool(payload.get("is_playing")),
             "progress_ms": int(payload.get("progress_ms") or 0),
@@ -230,7 +454,7 @@ class SpotifyClient:
                 "name": str(item.get("name") or ""),
             },
             "artists": [str(artist.get("name") or "") for artist in artists if isinstance(artist, dict)],
-            "album": str(album.get("name") or ""),
+            "album": str(album.get("name") or show.get("name") or ""),
             "artwork_url": str(artwork),
             "device": payload.get("device"),
             "shuffle": bool(payload.get("shuffle_state")),

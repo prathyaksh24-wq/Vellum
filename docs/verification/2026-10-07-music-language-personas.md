@@ -1,0 +1,81 @@
+# Music language and automatic player verification — 2026-10-07
+
+Actual local model: `ollama/gemma4:12b`. These persona labels are public test scenarios, not inferred user traits. The evaluation invokes the real local planner without Spotify tools, then checks canonical MusicAgent interpretation with a read-only capture adapter. Provider catalog resolution and playback were tested separately through the running API and the actual registered Brave SDK device. No cloud model, alternate runtime or new context store was introduced.
+
+The first 30-case model run passed 20 cases. Song requests sometimes used `track_query` or `songs` instead of `query`, shuffle became random playlist playback, and playlist creation omitted required songs. Explicit schema examples and clearer field instructions fixed those errors. A further eight scenarios used additional wording not copied from those examples. Final live model interpretation passed **37/38**; the remaining error classified a named emoji playlist as a random saved selection. The existing explicit playlist parser preserves that name before model interpretation. Final routing and typed interpretation passed **38/38** against those captured outputs. This second figure is a read-only replay through final application code, not another live inference run or a production playback score.
+
+Warm local inference ranged from 0.37 to 1.22 seconds (median 0.62). An earlier cold invocation took 10.10 seconds. These are planner timings; live API/device round trips were generally around one to five seconds.
+
+| Scenario | Request | Raw Gemma | Final route / typed intent |
+|---|---|---|---|
+| formal eclectic | Would you mind picking a tune from whichever of my playlists you fancy? | Pass | Pass |
+| casual eclectic | yo chuck on a tune from whatever playlist, idc | Pass | Pass |
+| casual Hindi | yo chuck on a tune from my Hindi playlist pls | Pass | Pass |
+| indecisive | play a song. choose any playlist u want | Pass | Pass |
+| typo casual | play a song from my playslist | Pass | Pass |
+| liked collection | play the 1st song from the liked song playlist | Pass | Pass |
+| liked casual | gimme something from my liked songs | Pass | Pass |
+| emoji playlist | Could you play a song from my ❤️ playlist? | Fail: random playlist | Pass |
+| numeric artist | play a song from 69 | Pass | Pass |
+| numeric playlist | play a song from my 69 playlist | Pass | Pass |
+| K pop | Could you put Dynamite by BTS on for me? | Pass | Pass |
+| Latin pop | yo spin the song DESPACITO by Luis Fonsi pls | Pass | Pass |
+| French dance | Please play a song by David Guetta | Pass | Pass |
+| Japanese album | Would you play the latest album from 宇多田ヒカル? | Pass | Pass |
+| hip hop album | can u play j cole latest album | Pass | Pass |
+| original pop | play Blinding Lights | Pass | Pass |
+| short typo | paues | Pass | Pass |
+| resume typo | resuem | Pass | Pass |
+| navigation | go back | Pass | Pass |
+| explicit navigation | go back to the previous song | Pass | Pass |
+| seek | move back 45 secs | Pass | Pass |
+| restart | go back to the beginning of the song | Pass | Pass |
+| quiet listener | Would you lower the volume to 25 percent please? | Pass | Pass |
+| party shuffle | put on the shuffle for this playlist | Pass | Pass |
+| provider abbreviation | play Blinding Lights on YT music/player | Pass | Pass |
+| provider first | On YT music, play Blinding Lights | Pass | Pass |
+| Apple listener | play As It Was on Apple Music | Pass | Pass |
+| suggest first | recommend a mellow song for winding down; suggest first | Pass | Pass |
+| podcast | play a podcasts from wtf | Pass | Pass |
+| playlist creator | Make a playlist named Night Drive with Blinding Lights by The Weeknd and As It Was by Harry Styles | Pass | Pass |
+| formal holdout | Could you choose one of my saved playlists and put some music on? | Pass | Pass |
+| casual holdout | hey put on a track by Dua Lipa, your choice | Pass | Pass |
+| rock holdout | I wanna hear the album Meteora by Linkin Park | Pass | Pass |
+| Kannada holdout | Would you play something from my Kannada bangers playlist please? | Pass | Pass |
+| control holdout | Can you make the volume 30 percent? | Pass | Pass |
+| rewind holdout | rewind the song by 15 seconds | Pass | Pass |
+| formal correction | no from Post Malone | Pass | Pass |
+| collection followup | any | Pass | Pass |
+
+Implementation extends the existing MusicAgent, MusicPlan, Spotify capability adapter, scoped delegation context and browser playback controller. Whole-command pause/resume typos stay controls; quoted titles remain titles. Random requests select from saved playlists, and fresh `any` after listing playlists resolves to that collection. Numeric shorthand `69` is the artist 6ix9ine as explicitly defined by the user; `my 69 playlist` stays a playlist name. Artist-only playback selects a playable track whose Spotify credits match the requested artist. Source IDs generated by the model are discarded. Provider aliases, including provider-first wording, cannot silently become Spotify. Successful UI skip receipts retain semantic navigation so bare `go back` uses previous; expired context cannot authorize it. Restart and seconds remain separate intents. Polite recommendations and pause/current-song questions do not enable playback.
+
+Initial language regressions failed 13 tests; UI navigation and activation regressions also failed before their corresponding changes. Later live tests found that a polite absolute volume request could become a relative drop to zero, and Spotify rejected the new artist search with limit 20. The absolute control parser now accepts trailing politeness, and artist searches use the live-supported limit 10 with verified credits. A provider boundary regression simulates the rejected larger page size.
+
+Final backend/API verification passed **483 tests** across the MusicAgent, language, collection, compound, playback-consistency, Kworb, Spotify, delegation and API suites in **140.32 seconds**. This includes capability discovery, pending approvals, expired context and applied UI receipt routing. The only warning was the existing Starlette/AnyIO deprecation. All **280 frontend tests across 36 files** passed after the final recommendation-activation guard. Production build and scoped diff checks passed; existing classic-script bundling warnings remain.
+
+Live final sequence:
+
+| Check | Observed result |
+|---|---|
+| Saved library and random playlist | Actual API returned 19 saved playlists; generic random selection started one of that collection. |
+| Skip then go back | Sariyaagi → Belageddu → Sariyaagi, with exactly one next and one previous write per sequence. |
+| Typo pause | `paues` returned Spotify paused and SDK reported paused. |
+| Polite volume, mute, unmute | Measured volume 50% → 25% → 0% → 25%; restored to 50% at the end. |
+| Shuffle | Measured shuffle on/off agreed with acknowledgements. |
+| Numeric artist | `play a song from 69` played FEFE credited to 6ix9ine, Nicki Minaj and Murda Beatz. A second sequence also selected a verified 6ix9ine song. |
+| Formal K-pop request | `Could you put Dynamite by BTS on for me?` played Dynamite by BTS. |
+| Latest album and current song | J. Cole request played The Fall-Off; current-song response agreed with live J. Cole track metadata. |
+| Provider-first alias | `On YT music, play Blinding Lights` reported unconnected YouTube Music; Spotify command counters did not change. |
+| Suggest first | Proposed a song and nine continuation tracks without playback; canceled the pending proposal. |
+| Playlist creation | Showed exact two-song private-playlist confirmation preview; canceled without creating it. |
+| Actual emoji playlist | `play a song from my 🔥 playlist` played Congratulations; live playback context matched the exact saved 🔥 playlist URI. |
+| Actual Liked Songs | `gimme something from my liked songs` played Mr. Right Now; the Spotify library contains endpoint verified membership. |
+| Automatic activation in Brave | User disabled playback, hard reloaded, and sent `can u play j cole latest album` without enabling first; confirmed that it automatically activated and played. |
+
+The final complete API sequence contained 22 chat requests and 15 explicit measured-state checks, all passing. Additional emoji and Liked Songs checks passed. One intermediate run overlapped the requested browser disable/reload: the device lease disappeared and a new device registered, so its mute/playback failures were excluded and repeated successfully after registration. Early read-back at 400 ms also preceded the SDK track update; final checks wait up to five seconds for measured state without repeating a mutation. Action-only stream replies use `response.completed`, while specialist replies can use `final`; the verification harness handles both.
+
+Native browser automation failed to initialize with a Windows sandbox helper error on two attempts. Automatic activation therefore has a human Brave confirmation as well as SDK lifecycle tests; the automation cannot claim to have observed physical speaker output. Playback requests used separate test threads with memory storage disabled. Recommendation and playlist writes stopped at the existing confirmation boundary and were canceled. The player was left ready, paused and at 50% volume.
+
+The reusable read-only evaluator is `scripts/verify-music-language.py`. Run with `PYTHONPATH=backend` using the repository virtualenv and an explicit `--output` path. `--replay` rechecks captured model outputs and must not be reported as live inference. It sends public test wording to the selected local model, captures typed plans without Spotify actions, and never claims that its capture adapter establishes real provider support.
+
+This proves the enumerated requests in this session, including repeated navigation/control sequences. It does not establish all vocabulary, every artist/catalog item, or days/months of uptime. Remaining raw-model emoji weakness is documented rather than scored as a Gemma success. Task-specific raw captures and scratch harnesses are removed after recording this report; unrelated workspace changes are preserved.

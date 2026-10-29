@@ -9,9 +9,12 @@ def test_skill_ui_uses_persisted_api_actions_and_exposes_archived_state() -> Non
     ui_source = (ROOT / "design" / "Velllum" / "uploads" / "Vellum Default Re-designed.html").read_text(encoding="utf-8")
 
     assert 'client.request("/api/skills/action"' in api_source
-    assert "API.plugins.skillAction({action,name:payload.name})" in ui_source
+    assert "onSkillAction('skill.mutation.submit'" in ui_source
+    assert "onSkillAction('skill.mutation.approve'" in ui_source
+    assert "onSkillAction('skill.mutation.reject'" in ui_source
+    assert "onSkillAction('skill.uninstall'" in ui_source
     assert "['archived','Archived']" in ui_source
-    assert "API.plugins.pendingApprove(payload.id)" in ui_source
+    assert "onSkillAction=skillActionDispatcher" in ui_source
     assert "detail.skill_md" in ui_source
     assert "repository_url" in ui_source
 
@@ -30,6 +33,23 @@ def test_reasoning_composer_exposes_codex_style_categorized_slash_menu() -> None
     assert 'role="listbox"' in ui_source
     assert "onOpenPlugins" in ui_source
     assert "plugin-manage" in ui_source
-    assert "[['plugins','Plugins'],['apps','Apps'],['mcps','MCPs'],['skills','Skills']]" in ui_source
-    assert "Select an item to inspect its apps, MCPs, skills, and status." in ui_source
+    workspace = (ROOT / "design" / "Velllum" / "uploads" / "components" / "plugin-workspace.jsx").read_text(encoding="utf-8")
+    assert 'src="components/plugin-workspace.jsx"' in ui_source
+    for key, label in [('plugins', 'Plugins'), ('apps', 'Apps'), ('mcps', 'MCPs'), ('skills', 'Skills')]:
+        assert f"['{key}', '{label}']" in workspace
+    assert 'aria-label="MCP servers"' in workspace
+    assert 'aria-label="Plugin information"' in workspace
+    assert "p.source" in workspace
+    assert "p.mcp_connectors" in workspace
     assert "onOpenSkills={() => nav('skills')}" in ui_source
+
+
+def test_discord_plugin_exposes_local_data_package_import() -> None:
+    api_source = (ROOT / "design" / "Velllum" / "uploads" / "api" / "plugins.js").read_text(encoding="utf-8")
+    ui_source = (ROOT / "design" / "Velllum" / "uploads" / "Vellum Default Re-designed.html").read_text(encoding="utf-8")
+
+    assert 'client.request("/api/plugins/discord/archive/import"' in api_source
+    assert '"X-Vellum-Confirm":"true"' in api_source
+    assert "API.plugins.discordArchiveStatus()" in ui_source
+    assert "API.plugins.discordImportArchive(archiveFile)" in ui_source
+    assert "authored messages · local-only" in ui_source

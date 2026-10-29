@@ -16,10 +16,9 @@ function copyStaticUiAssets() {
       cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
       cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'components'), resolve(here, 'ui-dist/components'), { recursive: true });
-      const booksPrototype = resolve(designUploadsRoot, 'books-agent-prototype.jsx');
-      if (existsSync(booksPrototype)) {
-        cpSync(booksPrototype, resolve(here, 'ui-dist/books-agent-prototype.jsx'));
-      }
+      cpSync(resolve(designUploadsRoot, 'assets/browser-home'), resolve(here, 'ui-dist/assets/browser-home'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/backgrounds'), resolve(here, 'ui-dist/assets/backgrounds'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/music'), resolve(here, 'ui-dist/assets/music'), { recursive: true });
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
@@ -39,6 +38,7 @@ function serveDesignUploads() {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
   };
   return {
     name: 'serve-design-uploads',
@@ -61,10 +61,12 @@ function serveDesignUploads() {
         res.end(readFileSync(target));
       });
       server.middlewares.use((req, res, next) => {
-        const path = (req.url || '').split('?')[0];
-        if (['/Vellum Default Re-designed.html', '/ui/Vellum Default Re-designed.html'].includes(decodeURIComponent(path))) {
+        const url = req.url || '';
+        const path = url.split('?')[0];
+        if (['/', '/index.html', '/Vellum Default Re-designed.html', '/ui/Vellum Default Re-designed.html'].includes(decodeURIComponent(path))) {
+          const query = url.includes('?') ? url.slice(url.indexOf('?')) : '';
           res.statusCode = 302;
-          res.setHeader('Location', '/design-uploads/Vellum%20Default%20Re-designed.html');
+          res.setHeader('Location', '/design-uploads/Vellum%20Default%20Re-designed.html' + query);
           res.end();
           return;
         }
@@ -75,6 +77,8 @@ function serveDesignUploads() {
 }
 
 export default defineConfig({
+  cacheDir: resolve(here, '.vite'),
+  resolve: {alias: {three: resolve(here, 'node_modules/three/build/three.module.js')}},
   plugins: [react(), serveDesignUploads(), copyStaticUiAssets()],
   root: designUploadsRoot,
   publicDir: false,

@@ -1,0 +1,60 @@
+id: google-calendar
+name: Google Calendar
+type: connector
+category: Productivity
+version: 1.0.0
+description: Private calendar reads and confirmation-controlled event management for Vellum.
+capabilities:
+  - calendar.account
+  - calendar.calendars
+  - calendar.events
+  - calendar.event
+  - calendar.free_busy
+  - calendar.availability
+  - calendar.create_event
+  - calendar.update_event
+  - calendar.delete_event
+  - calendar.connection.start
+  - calendar.connection.disconnect
+  - calendar.event.create
+  - calendar.event.update
+  - calendar.event.delete
+provides_tools:
+  - google_calendar_acl_delete
+  - google_calendar_acl_get
+  - google_calendar_acl_insert
+  - google_calendar_acl_list
+  - google_calendar_acl_patch
+  - google_calendar_acl_update
+  - google_calendar_acl_watch
+  - google_calendar_calendar_list_delete
+  - google_calendar_calendar_list_get
+  - google_calendar_calendar_list_insert
+  - google_calendar_calendar_list_list
+  - google_calendar_calendar_list_patch
+  - google_calendar_calendar_list_update
+  - google_calendar_calendar_list_watch
+  - google_calendar_calendars_clear
+  - google_calendar_calendars_delete
+  - google_calendar_calendars_get
+  - google_calendar_calendars_insert
+  - google_calendar_calendars_patch
+  - google_calendar_calendars_transfer_ownership
+  - google_calendar_calendars_update
+  - google_calendar_channels_stop
+  - google_calendar_colors_get
+  - google_calendar_events_delete
+  - google_calendar_events_get
+  - google_calendar_events_import
+  - google_calendar_events_insert
+  - google_calendar_events_instances
+  - google_calendar_events_list
+  - google_calendar_events_move
+  - google_calendar_events_patch
+  - google_calendar_events_quick_add
+  - google_calendar_events_update
+  - google_calendar_events_watch
+  - google_calendar_freebusy_query
+  - google_calendar_settings_get
+  - google_calendar_settings_list
+  - google_calendar_settings_watch

@@ -628,6 +628,34 @@ def _bundled_official_catalog(skills_root: str | os.PathLike[str]) -> dict[str, 
     return catalog
 
 
+class RegisteredMarketplaceSource(GitHubSource):
+    """Read the existing taps owner on each search; no second marketplace store."""
+    source_id='marketplaces'
+    searchable=True
+
+    def __init__(self,root,http=None):
+        super().__init__(http)
+        from agent.skills.hub import TapsManager
+        self.taps=TapsManager(root)
+
+    def search(self,query,limit=10):
+        from urllib.parse import quote
+        rows=[]
+        for tap in self.taps.list()[:20]:
+            repo=tap['repo'];path=tap.get('path','skills/')
+            entries=self.http.get_json('https://api.github.com/repos/'+repo+'/contents/'+quote(path,safe='/'))
+            if not isinstance(entries,list):continue
+            for entry in entries[:200]:
+                if entry.get('type')!='dir':continue
+                name=str(entry.get('name') or '')
+                if query and query.casefold() not in name.casefold():continue
+                skill_path=str(entry.get('path') or '')
+                if not skill_path or '..' in skill_path.split('/'):continue
+                rows.append(HubSkillMeta(name,'Skill from '+repo,self.source_id,'github/'+repo+'/'+skill_path,'community',{'repository_url':'https://github.com/'+repo}))
+                if len(rows)>=min(limit,50):return rows
+        return rows
+
+
 def create_skill_source_router(
     http=None,
     *,
@@ -637,7 +665,7 @@ def create_skill_source_router(
     if official_catalog is None and skills_root is not None:
         official_catalog = _bundled_official_catalog(skills_root)
     client = http or GuardedHttpClient()
-    return [
+    sources = [
         OfficialSkillSource(official_catalog),
         UrlSkillSource(client),
         SkillsShSource(http),
@@ -647,3 +675,6 @@ def create_skill_source_router(
         BrowseShSource(client),
         SkillsMpSource(http),
     ]
+    if skills_root is not None:
+        sources.append(RegisteredMarketplaceSource(skills_root,client))
+    return sources

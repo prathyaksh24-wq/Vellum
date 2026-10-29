@@ -1,9 +1,8 @@
 """Firecrawl content extraction provider (extract-only).
 
-Direct REST call to the Firecrawl scrape endpoint (``POST /v1/scrape``)
-with the shared ``FIRECRAWL_API_KEY``. The Firecrawl MCP surface
-(``web_extract`` action tool + ``web_extract.*`` capability records) is
-unchanged and separate from this provider.
+Managed connections use the same hosted MCP connection and saved authorization
+as the plugin directory and agent tools. The pre-migration REST path remains for
+unmanaged operator configurations. Explicit disconnect never reactivates it.
 
 Config::
 
@@ -21,6 +20,7 @@ import urllib.request
 from agent.config import get_settings
 from agent.tools.providers.base import WebSearchProvider
 from agent.tools.providers.registry import register_provider
+from agent.mcp.firecrawl_tools import _managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +35,27 @@ class FirecrawlProvider(WebSearchProvider):
         return "Firecrawl"
 
     def is_available(self) -> bool:
+        try:
+            if _managed_connection():
+                from agent.plugins.firecrawl_connection import firecrawl_service
+                status = firecrawl_service().status()
+                return status.enabled and status.configured
+        except (ValueError, RuntimeError):
+            return False
         return bool(getattr(get_settings(), "firecrawl_api_key", ""))
 
     def supports_extract(self) -> bool:
         return True
 
     def _scrape(self, url: str, char_limit: int) -> Dict[str, Any]:
+        if _managed_connection():
+            from agent.mcp.firecrawl_tools import _managed_read
+            payload = json.loads(_managed_read({'action': 'fetch', 'url': url}))
+            if payload.get('untrusted_provider_data'):
+                payload = payload.get('data')
+            if not isinstance(payload, dict):
+                raise ValueError('Firecrawl did not return page data.')
+            return payload if 'data' in payload else {'data': payload}
         settings = get_settings()
         api_key = settings.firecrawl_api_key
         if not api_key:

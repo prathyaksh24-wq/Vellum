@@ -1,0 +1,23 @@
+id: hubspot
+name: HubSpot
+type: connector
+category: CRM & Communication
+version: 1.0.0
+description: Search and manage CRM records, activities, marketing content and other published operations through the official HubSpot remote CRM MCP server.
+mcp_connectors:
+  - name: hubspot
+    type: http
+    url: https://mcp.hubspot.com
+    credential_provider: hubspot
+capabilities:
+  - hubspot.connection.configure
+  - hubspot.connection.oauth.start
+  - hubspot.connection.oauth.cancel
+  - hubspot.connection.verify
+  - hubspot.connection.disconnect
+  - hubspot.mcp.execute
+provides_tools:
+  - hubspot_mcp_catalog
+  - hubspot_mcp_describe
+  - hubspot_mcp_read
+  - hubspot_mcp_execute

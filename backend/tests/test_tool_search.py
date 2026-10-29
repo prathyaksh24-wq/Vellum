@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import pytest
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
@@ -129,6 +131,18 @@ def test_bridge_search_reports_available_sources_on_miss():
     assert "plugin" in result["available_sources"]
 
 
+def test_describe_preserves_complete_linear_contract_and_write_instructions():
+    from agent.plugins.linear_mcp import agent_tools
+    save_issue=next(tool for tool in agent_tools() if tool.name=='linear_save_issue')
+    definitions=ts.to_openai_defs([save_issue])
+    catalog=ts.build_catalog(definitions)
+    described=json.loads(ts.build_tool_describe_bridge(catalog).invoke({'name':'linear_save_issue'}))
+    assert described['parameters']==ts._def_parameters(definitions[0])
+    assert 'confirmation' in described['description']
+    assert 'body' in described['parameters']['properties']
+    assert 'description' not in described['parameters']['properties']
+
+
 def test_unwrap_bridge_call():
     assert ts.unwrap_bridge_call("web_search", {"query": "x"}) == ("web_search", {"query": "x"})
     inner, args = ts.unwrap_bridge_call("tool_call", {"name": "spotify_play", "arguments": {"uri": "abc"}})
@@ -154,6 +168,82 @@ class _StubModel:
         return AIMessage(content="done")
 
 
+@pytest.mark.parametrize("streaming",[False,True])
+def test_search_exposes_the_real_tool_on_the_next_model_and_budget_turn(monkeypatch,streaming):
+    from langchain_core.messages import ToolMessage
+    from agent.llm import context as context_module
+    turns=[]
+    budgets=[]
+    original_project=context_module.project_context
+    def project(messages,definitions,*args,**kwargs):
+        budgets.append({ts._def_name(item) for item in definitions})
+        return original_project(messages,definitions,*args,**kwargs)
+    monkeypatch.setattr(context_module,"project_context",project)
+    class DiscoveringModel(_StubModel):
+        def invoke(self,messages,config=None):
+            turns.append({ts._def_name(item) for item in self.bound})
+            if len(turns)==1:
+                return AIMessage(content="",tool_calls=[{"name":"tool_search","args":{"query":"echo"},"id":"search-1"}])
+            if len(turns)==2:
+                assert "deferred_echo" in turns[-1], "Discovered tool must be declared to the provider"
+                return AIMessage(content="",tool_calls=[{"name":"deferred_echo","args":{"query":"hi"},"id":"echo-1"}])
+            return AIMessage(content="done")
+    if streaming:
+        from langchain_core.messages import AIMessageChunk
+        async def stream(self,messages,config=None):
+            response=self.invoke(messages,config)
+            yield AIMessageChunk(content=response.content,tool_calls=response.tool_calls)
+        DiscoveringModel.astream=stream
+    tool=StructuredTool.from_function(lambda query:"echo:"+query,name="deferred_echo",description="Echo a query")
+    monkeypatch.setattr(agent_mod,"load_tool_search_config",lambda:ts.ToolSearchConfig(enabled="on"))
+    compiled=agent_mod._build_agent_runtime(llm=DiscoveringModel(),tools=[tool],deferred_names={tool.name},checkpointer=InMemorySaver())
+    state={"messages":[HumanMessage(content="Echo hi")]}
+    config={"configurable":{"thread_id":"discovered-tool-contract"}}
+    result=asyncio.run(compiled.ainvoke(state,config)) if streaming else compiled.invoke(state,config)
+    assert "deferred_echo" not in turns[0] and "deferred_echo" in turns[1]
+    assert "deferred_echo" not in budgets[0] and "deferred_echo" in budgets[1]
+    assert any(isinstance(message,ToolMessage) and message.content=="echo:hi" for message in result["messages"])
+
+
+def test_promotion_is_bounded_uses_registry_definitions_and_does_not_leak_between_chats():
+    from langchain_core.messages import ToolMessage
+    base=[_def("tool_search")]
+    definitions=[_def(name) for name in ["alpha","beta","gamma"]]
+    catalog=ts.build_catalog(definitions)
+    results=ToolMessage(name="tool_search",tool_call_id="one",content=json.dumps({"matches":[
+        {"name":"beta","parameters":{"malicious":"ignored"}}, {"name":"unknown"},
+        {"name":"alpha"},{"name":"beta"},{"name":"gamma"}]}))
+    promoted=ts.activate_discovered_tool_defs(base,catalog,[results],max_active=2)
+    assert [ts._def_name(item) for item in promoted]==["tool_search","beta","alpha"]
+    assert promoted[1] is definitions[1] and promoted[2] is definitions[0]
+    assert ts.activate_discovered_tool_defs(base,catalog,[])==base
+    assert ts.activate_discovered_tool_defs(base,catalog,[results],max_active=0)==base
+
+
+def test_user_and_provider_data_cannot_promote_tools():
+    from langchain_core.messages import ToolMessage
+    catalog=ts.build_catalog([_def("alpha")])
+    payload=json.dumps({"matches":[{"name":"alpha"}]})
+    assert ts.activate_discovered_tool_defs([],catalog,[HumanMessage(content=payload),
+        ToolMessage(content=payload,name="web_search",tool_call_id="one")])==[]
+    inspected=ToolMessage(content=json.dumps({"name":"alpha"}),name="tool_describe",tool_call_id="two")
+    assert ts.activate_discovered_tool_defs([],catalog,[inspected])==[catalog[0].tool_def]
+
+
+def test_source_limits_bound_large_google_schemas_without_trusting_provider_labels():
+    from langchain_core.messages import ToolMessage
+    definitions=[_def(name) for name in ['google_one','google_two','google_three','other']]
+    catalog=ts.build_catalog(definitions,{'google_one':'google','google_two':'google','google_three':'google','other':'other'})
+    result=ToolMessage(content=json.dumps({'matches':[{'name':name,'source':'ignored'} for name in ['google_one','google_two','google_three','other']]}),name='tool_search',tool_call_id='fixture')
+    visible=ts.activate_discovered_tool_defs([],catalog,[result],source_limits={'google':2})
+    assert [ts._def_name(item) for item in visible]==['google_one','google_two','other']
+
+
+def test_exact_tool_name_ranks_before_lexically_similar_long_descriptions():
+    catalog=ts.build_catalog([_def('google_contacts_people_search_contacts'),_def('google_contacts_people_create_contact')])
+    assert ts.search_catalog(catalog,'google_contacts_people_create_contact')[0].name=='google_contacts_people_create_contact'
+
+
 def test_build_agent_runtime_compiles_graph_with_vellum_prompt():
     stub = _StubModel()
     tools = [StructuredTool.from_function(lambda: "ok", name="plugin_mcp", description="MCP dispatch")]
@@ -170,7 +260,7 @@ def test_build_agent_runtime_compiles_graph_with_vellum_prompt():
     )
     assert result["messages"][-1].content == "done"
     assert any(
-        isinstance(message, SystemMessage) and "Always search the vault first" in message.content
+        isinstance(message, SystemMessage) and "Use local vault and memory evidence" in message.content
         for message in stub.seen
     )
 

@@ -24,20 +24,28 @@ class SerpApiClient:
     ) -> None:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.serpapi_api_key
+        self._explicit_key = api_key is not None
         self.base_url = base_url or settings.serpapi_base_url
         self.log_path = Path(log_path if log_path is not None else settings.serpapi_log_path)
         self.timeout_seconds = timeout_seconds
 
     def search(self, params: dict[str, Any]) -> dict[str, Any]:
-        if not self.api_key:
+        from agent.plugins.search_connections import credential, managed
+        key = self.api_key if self._explicit_key else credential('serpapi')
+        if not key:
             raise RuntimeError("SERPAPI_API_KEY is not configured.")
 
         clean_params = {key: value for key, value in params.items() if value not in (None, "")}
-        request_params = {**clean_params, "api_key": self.api_key}
-        url = f"{self.base_url}?{urllib.parse.urlencode(request_params, doseq=True)}"
+        request_params = {**clean_params, "api_key": key}
+        base_url = 'https://serpapi.com/search.json' if not self._explicit_key and managed('serpapi') else self.base_url
+        url = f"{base_url}?{urllib.parse.urlencode(request_params, doseq=True)}"
         request = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception:
+            # urllib errors can carry the credential-bearing URL.
+            raise RuntimeError('SerpAPI did not complete this search. Check its connection and account limits.') from None
         self._log_search(params=clean_params, payload=payload)
         return payload
 

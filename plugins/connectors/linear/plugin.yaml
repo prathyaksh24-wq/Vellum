@@ -1,0 +1,88 @@
+id: linear
+name: Linear
+type: connector
+category: Productivity
+version: 1.0.0
+description: Find and manage issues, projects, comments and more with Linear's official MCP server.
+mcp_connectors:
+  - name: linear
+    type: http
+    url: https://mcp.linear.app/mcp
+    credential_provider: linear
+capabilities:
+  - linear.connection.verify
+  - linear.connection.disconnect
+  - linear.connection.oauth.start
+  - linear.connection.oauth.cancel
+  - linear.mcp.read
+  - linear.mcp.tools
+  - linear.mcp.execute
+provides_tools:
+  - linear_get_attachment
+  - linear_prepare_attachment_upload
+  - linear_create_attachment_from_upload
+  - linear_create_attachment
+  - linear_delete_attachment
+  - linear_list_agent_skills
+  - linear_get_agent_skill
+  - linear_list_comments
+  - linear_save_comment
+  - linear_delete_comment
+  - linear_list_cycles
+  - linear_list_custom_views
+  - linear_get_document
+  - linear_list_documents
+  - linear_save_document
+  - linear_extract_images
+  - linear_get_issue
+  - linear_list_issues
+  - linear_save_issue
+  - linear_list_issue_statuses
+  - linear_get_issue_status
+  - linear_list_issue_labels
+  - linear_save_issue_label
+  - linear_create_issue_label
+  - linear_retire_issue_label
+  - linear_restore_issue_label
+  - linear_list_projects
+  - linear_get_project
+  - linear_save_project
+  - linear_list_project_labels
+  - linear_retire_project_label
+  - linear_restore_project_label
+  - linear_save_project_label
+  - linear_list_release_pipelines
+  - linear_list_releases
+  - linear_get_release
+  - linear_save_release
+  - linear_list_release_notes
+  - linear_get_release_note
+  - linear_save_release_note
+  - linear_share_issue
+  - linear_unshare_issue
+  - linear_list_milestones
+  - linear_get_milestone
+  - linear_save_milestone
+  - linear_get_notifications
+  - linear_mark_notification
+  - linear_list_teams
+  - linear_get_team
+  - linear_get_triage_responsibility
+  - linear_list_templates
+  - linear_get_template
+  - linear_list_users
+  - linear_get_user
+  - linear_get_workspace
+  - linear_search_documentation
+  - linear_get_diff
+  - linear_list_diffs
+  - linear_get_diff_threads
+  - linear_save_diff_comment
+  - linear_resolve_diff_thread
+  - linear_delete_diff_comment
+  - linear_submit_diff_review
+  - linear_update_diff
+  - linear_merge_diff
+  - linear_get_status_updates
+  - linear_save_status_update
+  - linear_delete_status_update

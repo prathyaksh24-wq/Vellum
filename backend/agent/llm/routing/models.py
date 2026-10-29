@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 ProviderSort = Literal["price", "latency", "throughput"]
-ApiProvider = Literal["openrouter", "openai"]
+ApiProvider = Literal["ollama", "openrouter", "openai"]
 OPENROUTER_DEFAULT_PROVIDER_ORDER = ("Fireworks", "Together", "DeepInfra")
 
 
@@ -126,6 +126,14 @@ class FallbackTarget(BaseModel):
     @property
     def identity(self) -> tuple[str, str]:
         return self.provider.casefold(), self.model.casefold()
+
+
+def provider_for_model(model: str) -> ApiProvider:
+    """Resolve provider-qualified local IDs without changing cloud ID semantics."""
+
+    if model.strip().casefold().startswith("ollama/"):
+        return "ollama"
+    return "openrouter"
 
 
 class CredentialRecord(BaseModel):

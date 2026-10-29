@@ -10,6 +10,26 @@ from agent.tools.capabilities.agent_reach_x_provider import (
     AgentReachTimeoutError,
     AgentReachXProvider,
 )
+
+
+def test_available_uses_configured_credentials_without_network_status_preflight(monkeypatch):
+    monkeypatch.setattr(
+        "agent.tools.capabilities.agent_reach_x_provider.shutil.which",
+        lambda name: f"C:/bin/{name}.exe",
+    )
+    provider = AgentReachXProvider()
+    monkeypatch.setattr(
+        provider,
+        "_twitter_subprocess_env",
+        lambda: {"TWITTER_AUTH_TOKEN": "configured", "TWITTER_CT0": "configured"},
+    )
+    monkeypatch.setattr(
+        provider,
+        "_twitter_status",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("network preflight must not run")),
+    )
+
+    assert provider.available() is True
 from agent.plugins.models import PluginStatus
 
 
@@ -102,14 +122,16 @@ def test_agent_reach_provider_write_methods_use_agent_reach_commands():
 
     def fake_runner(args, **_kwargs):
         calls.append(args)
-        return subprocess.CompletedProcess(args, 0, stdout='{"id":"tweet-1","text":"hello"}', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout='{"id":"123","text":"hello"}', stderr="")
 
     provider = AgentReachXProvider(runner=fake_runner)
 
     result = provider.post_tweet("hello")
 
     assert calls[0] == ["twitter", "post", "hello", "--json"]
-    assert result["id"] == "tweet-1"
+    assert result["id"] == "123"
+    assert result["verification"] == "read_back"
+    assert calls[1] == ["twitter", "tweet", "123", "--json"]
 
 
 def test_agent_reach_provider_read_private_and_timeline_commands():
@@ -170,7 +192,7 @@ def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_fl
 
     def fake_runner(args, **_kwargs):
         calls.append(args)
-        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"123"}', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"123","text":"reply text"}', stderr="")
 
     provider = AgentReachXProvider(runner=fake_runner)
 
@@ -180,9 +202,10 @@ def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_fl
     provider.delete("123")
 
     assert calls[0] == ["twitter", "reply", "123", "reply text", "--json"]
-    assert calls[1] == ["twitter", "like", "123", "--json"]
-    assert calls[2] == ["twitter", "retweet", "123", "--json"]
-    assert calls[3] == ["twitter", "delete", "123", "--yes", "--json"]
+    assert calls[1] == ["twitter", "tweet", "123", "--json"]
+    assert calls[2] == ["twitter", "like", "123", "--json"]
+    assert calls[3] == ["twitter", "retweet", "123", "--json"]
+    assert calls[4] == ["twitter", "delete", "123", "--yes", "--json"]
 
 
 def test_agent_reach_provider_normalizes_status_urls_for_write_commands():
@@ -270,7 +293,7 @@ def test_agent_reach_provider_reports_capability_health_without_claiming_edit_su
             status="ready",
         ),
     )
-    monkeypatch.setattr(provider, "_twitter_version", lambda: "0.8.6")
+    monkeypatch.setattr(provider, "_twitter_version", lambda: "0.8.5")
     monkeypatch.setattr(
         provider,
         "search",
@@ -280,7 +303,7 @@ def test_agent_reach_provider_reports_capability_health_without_claiming_edit_su
     health = provider.health(probe_search=True)
 
     assert health["status"] == "degraded"
-    assert health["twitter_cli"]["version"] == "0.8.6"
+    assert health["twitter_cli"]["version"] == "0.8.5"
     assert health["capabilities"]["search"]["status"] == "degraded"
     assert health["capabilities"]["edit"]["status"] == "unsupported"
     assert health["capabilities"]["post"]["automatic_retries"] == 0
@@ -291,7 +314,7 @@ def test_agent_reach_provider_exposes_supported_confirmation_safe_commands():
 
     def fake_runner(args, **_kwargs):
         calls.append(args)
-        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true}', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"456","text":"comment"}', stderr="")
 
     provider = AgentReachXProvider(runner=fake_runner)
     provider.bookmark("123")
@@ -308,9 +331,116 @@ def test_agent_reach_provider_exposes_supported_confirmation_safe_commands():
         ["twitter", "unlike", "123", "--json"],
         ["twitter", "unretweet", "123", "--json"],
         ["twitter", "quote", "123", "comment", "--json"],
+        ["twitter", "tweet", "456", "--json"],
         ["twitter", "follow", "openai", "--json"],
         ["twitter", "unfollow", "openai", "--json"],
     ]
+
+
+def test_agent_reach_provider_configures_explicit_cookie_export_through_stdin():
+    calls = []
+
+    def fake_runner(args, **kwargs):
+        calls.append((args, kwargs.get("input")))
+        if args[0] == "agent-reach":
+            return subprocess.CompletedProcess(args, 0, stdout="saved", stderr="")
+        if "--json" in args:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"data":{"authenticated":true,"user":{"username":"vellum"}}}',
+                stderr="",
+            )
+        return subprocess.CompletedProcess(args, 0, stdout="authenticated: true", stderr="")
+
+    provider = AgentReachXProvider(runner=fake_runner)
+    result = provider.configure_cookie_export("auth_token=secret; ct0=csrf")
+
+    assert result["configured"] is True
+    assert result["account"]["username"] == "vellum"
+    assert calls[0] == (
+        [
+            "agent-reach",
+            "configure",
+            "twitter-cookies",
+            "--stdin",
+            "--sync-legacy-twitter",
+        ],
+        "secret csrf",
+    )
+
+
+def test_agent_reach_provider_passes_saved_agent_reach_credentials_to_twitter_child(monkeypatch):
+    calls = []
+
+    class FakeConfig:
+        def __init__(self, *, read_only):
+            assert read_only is True
+
+        def get(self, key):
+            return {"twitter_auth_token": "saved-auth", "twitter_ct0": "saved-ct0"}.get(key)
+
+    def fake_runner(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, stdout='{"data":[]}', stderr="")
+
+    monkeypatch.delenv("TWITTER_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("TWITTER_CT0", raising=False)
+    monkeypatch.setattr(
+        "agent.tools.capabilities.agent_reach_x_provider.AgentReachConfig",
+        FakeConfig,
+    )
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    provider.timeline(max_results=1)
+
+    child_env = calls[0][1]["env"]
+    assert child_env["TWITTER_AUTH_TOKEN"] == "saved-auth"
+    assert child_env["TWITTER_CT0"] == "saved-ct0"
+
+
+def test_agent_reach_provider_normalizes_cookie_editor_json_before_subprocess():
+    calls = []
+
+    def fake_runner(args, **kwargs):
+        calls.append((args, kwargs.get("input")))
+        if args[0] == "agent-reach":
+            return subprocess.CompletedProcess(args, 0, stdout="saved", stderr="")
+        if "--json" in args:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"data":{"authenticated":true,"user":{"username":"vellum"}}}',
+                stderr="",
+            )
+        return subprocess.CompletedProcess(args, 0, stdout="authenticated: true", stderr="")
+
+    cookie_json = """[
+        {"domain": ".x.com", "name": "guest_id", "value": "unused"},
+        {"domain": ".x.com", "name": "auth_token", "value": "auth-value"},
+        {"domain": ".x.com", "name": "ct0", "value": "csrf-value"}
+    ]"""
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    result = provider.configure_cookie_export(cookie_json)
+
+    assert result["configured"] is True
+    assert calls[0][1] == "auth-value csrf-value"
+    assert "guest_id" not in calls[0][1]
+    assert cookie_json != calls[0][1]
+
+
+def test_agent_reach_provider_rejects_cookie_editor_json_missing_required_cookie():
+    calls = []
+    provider = AgentReachXProvider(runner=lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    with pytest.raises(AgentReachCommandError, match="auth_token and ct0") as exc:
+        provider.configure_cookie_export(
+            '[{"domain":".x.com","name":"auth_token","value":"secret-value"}]'
+        )
+
+    assert "secret-value" not in str(exc.value)
+    assert calls == []
 
 
 def test_agent_reach_provider_marks_outdated_twitter_cli_search_degraded(monkeypatch):
@@ -327,7 +457,7 @@ def test_agent_reach_provider_marks_outdated_twitter_cli_search_degraded(monkeyp
             status="ready",
         ),
     )
-    monkeypatch.setattr(provider, "_twitter_version", lambda: "0.8.5")
+    monkeypatch.setattr(provider, "_twitter_version", lambda: "0.8.4")
 
     def fail_if_searched(*_args, **_kwargs):
         raise AssertionError("outdated twitter-cli should fail health before live search")
@@ -338,8 +468,19 @@ def test_agent_reach_provider_marks_outdated_twitter_cli_search_degraded(monkeyp
 
     assert health["status"] == "degraded"
     assert health["twitter_cli"] == {
-        "version": "0.8.5",
-        "minimum_version": "0.8.6",
+        "version": "0.8.4",
+            "minimum_version": "0.8.6",
         "version_supported": False,
     }
     assert health["capabilities"]["search"]["status"] == "degraded"
+
+
+def test_write_error_uses_structured_api_failure_instead_of_startup_warning():
+    calls = []
+    def fake_runner(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 1, stdout='{"error":{"message":"Repost rejected by X (code 123)."}}', stderr="WARNING: ClientTransaction unavailable")
+    provider = AgentReachXProvider(runner=fake_runner)
+    with pytest.raises(AgentReachCommandError, match="Repost rejected by X"):
+        provider.repost("1234567890123456789")
+    assert len(calls) == 1

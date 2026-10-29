@@ -38,6 +38,7 @@ def test_firecrawl_extract_per_url_failure(monkeypatch):
 
 
 def test_firecrawl_is_available(monkeypatch):
+    monkeypatch.setattr(firecrawl_module, "_managed_connection", lambda: False)
     monkeypatch.setattr(
         firecrawl_module,
         "get_settings",

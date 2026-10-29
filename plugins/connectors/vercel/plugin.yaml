@@ -1,0 +1,22 @@
+id: vercel
+name: Vercel
+type: connector
+category: Developer Tools
+version: 1.0.0
+description: Manage projects, deployments, logs, domains, analytics and other published operations through the official Vercel MCP server.
+mcp_connectors:
+  - name: vercel
+    type: http
+    url: https://mcp.vercel.com
+    credential_provider: vercel
+capabilities:
+  - vercel.connection.oauth.start
+  - vercel.connection.oauth.cancel
+  - vercel.connection.verify
+  - vercel.connection.disconnect
+  - vercel.mcp.execute
+provides_tools:
+  - vercel_mcp_catalog
+  - vercel_mcp_describe
+  - vercel_mcp_read
+  - vercel_mcp_execute

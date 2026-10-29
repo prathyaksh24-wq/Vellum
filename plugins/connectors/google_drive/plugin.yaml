@@ -1,0 +1,72 @@
+id: google-drive
+name: Google Drive
+type: connector
+category: Productivity
+version: 1.0.0
+default_enabled: false
+description: Read, create, edit, upload, move, share and delete Drive files and other published Drive operations with reviewed changes.
+provides_tools:
+  - google_drive_about_get
+  - google_drive_accessproposals_get
+  - google_drive_accessproposals_list
+  - google_drive_accessproposals_resolve
+  - google_drive_approvals_approve
+  - google_drive_approvals_cancel
+  - google_drive_approvals_comment
+  - google_drive_approvals_decline
+  - google_drive_approvals_get
+  - google_drive_approvals_list
+  - google_drive_approvals_reassign
+  - google_drive_approvals_start
+  - google_drive_apps_get
+  - google_drive_apps_list
+  - google_drive_changes_get_start_page_token
+  - google_drive_changes_list
+  - google_drive_changes_watch
+  - google_drive_channels_stop
+  - google_drive_comments_create
+  - google_drive_comments_delete
+  - google_drive_comments_get
+  - google_drive_comments_list
+  - google_drive_comments_update
+  - google_drive_drives_create
+  - google_drive_drives_delete
+  - google_drive_drives_get
+  - google_drive_drives_hide
+  - google_drive_drives_list
+  - google_drive_drives_unhide
+  - google_drive_drives_update
+  - google_drive_files_copy
+  - google_drive_files_create
+  - google_drive_files_delete
+  - google_drive_files_download
+  - google_drive_files_empty_trash
+  - google_drive_files_export
+  - google_drive_files_generate_cse_token
+  - google_drive_files_generate_ids
+  - google_drive_files_get
+  - google_drive_files_list
+  - google_drive_files_list_labels
+  - google_drive_files_modify_labels
+  - google_drive_files_update
+  - google_drive_files_watch
+  - google_drive_operations_get
+  - google_drive_permissions_create
+  - google_drive_permissions_delete
+  - google_drive_permissions_get
+  - google_drive_permissions_list
+  - google_drive_permissions_update
+  - google_drive_replies_create
+  - google_drive_replies_delete
+  - google_drive_replies_get
+  - google_drive_replies_list
+  - google_drive_replies_update
+  - google_drive_revisions_delete
+  - google_drive_revisions_get
+  - google_drive_revisions_list
+  - google_drive_revisions_update
+  - google_drive_teamdrives_create
+  - google_drive_teamdrives_delete
+  - google_drive_teamdrives_get
+  - google_drive_teamdrives_list
+  - google_drive_teamdrives_update

@@ -26,6 +26,7 @@ class ExaClient:
     ) -> None:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.exa_api_key
+        self._explicit_key = api_key is not None
         self.base_url = base_url or settings.exa_base_url
         self.contents_url = contents_url or settings.exa_contents_url
         self.log_path = Path(log_path if log_path is not None else settings.exa_log_path)
@@ -39,6 +40,13 @@ class ExaClient:
         search_type: str = "auto",
         contents: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        from agent.plugins.search_connections import managed, mcp_read
+        if not self._explicit_key and managed('exa'):
+            value = mcp_read('exa', 'web_search_advanced_exa', {'query': query, 'numResults': num_results,
+                'type': search_type, 'enableHighlights': True})
+            if not isinstance(value, dict) or not isinstance(value.get('results'), list):
+                raise RuntimeError('Exa did not return search results. Check the connection or narrow the query.')
+            return value
         if not self.api_key:
             raise RuntimeError("EXA_API_KEY is not configured.")
 
@@ -69,6 +77,23 @@ class ExaClient:
 
     def get_contents(self, urls: list[str], *, max_characters: int = 15000) -> dict[str, Any]:
         """Fetch clean page content for one or more URLs (Exa /contents)."""
+        from agent.plugins.search_connections import managed, mcp_read
+        if not self._explicit_key and managed('exa'):
+            value = mcp_read('exa', 'web_fetch_exa', {'urls': urls, 'maxCharacters': max_characters})
+            if isinstance(value, dict) and isinstance(value.get('results'), list):
+                return value
+            # Official web_fetch_exa currently returns '# Title\nURL: ...\n...'.
+            # Associate content only with an exact requested URL; never invent results.
+            import re
+            text = value if isinstance(value, str) else ''
+            results = []
+            for match in re.finditer(r'^# ([^\n]+)\nURL: (https?://[^\n]+)\n(.*?)(?=^# [^\n]+\nURL: |\Z)', text, re.M | re.S):
+                title, url, content = match.groups()
+                if url.strip() in urls:
+                    results.append({'title': title, 'url': url.strip(), 'text': content.strip()})
+            if not results:
+                raise RuntimeError('Exa did not return page content for the requested URLs.')
+            return {'results': results}
         if not self.api_key:
             raise RuntimeError("EXA_API_KEY is not configured.")
 

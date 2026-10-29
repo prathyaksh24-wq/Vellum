@@ -1,4 +1,4 @@
-"""Reward tracking for Master/Pupil delegation."""
+"""Reward tracking for agent delegation."""
 
 from agent.reward.models import RewardRecord, RewardSignal
 from agent.reward.scorer import RewardScorer

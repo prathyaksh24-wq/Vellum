@@ -1,0 +1,87 @@
+id: gmail
+name: Gmail
+type: connector
+category: CRM & Communication
+version: 1.0.0
+default_enabled: false
+description: Read, compose, send, edit and delete email, drafts, labels and other published Gmail operations with reviewed changes.
+provides_tools:
+  - gmail_users_get_profile
+  - gmail_users_stop
+  - gmail_users_watch
+  - gmail_users_drafts_create
+  - gmail_users_drafts_delete
+  - gmail_users_drafts_get
+  - gmail_users_drafts_list
+  - gmail_users_drafts_send
+  - gmail_users_drafts_update
+  - gmail_users_history_list
+  - gmail_users_labels_create
+  - gmail_users_labels_delete
+  - gmail_users_labels_get
+  - gmail_users_labels_list
+  - gmail_users_labels_patch
+  - gmail_users_labels_update
+  - gmail_users_messages_batch_delete
+  - gmail_users_messages_batch_modify
+  - gmail_users_messages_delete
+  - gmail_users_messages_get
+  - gmail_users_messages_import
+  - gmail_users_messages_insert
+  - gmail_users_messages_list
+  - gmail_users_messages_modify
+  - gmail_users_messages_send
+  - gmail_users_messages_trash
+  - gmail_users_messages_untrash
+  - gmail_users_messages_attachments_get
+  - gmail_users_settings_get_auto_forwarding
+  - gmail_users_settings_get_imap
+  - gmail_users_settings_get_language
+  - gmail_users_settings_get_pop
+  - gmail_users_settings_get_vacation
+  - gmail_users_settings_update_auto_forwarding
+  - gmail_users_settings_update_imap
+  - gmail_users_settings_update_language
+  - gmail_users_settings_update_pop
+  - gmail_users_settings_update_vacation
+  - gmail_users_settings_cse_identities_create
+  - gmail_users_settings_cse_identities_delete
+  - gmail_users_settings_cse_identities_get
+  - gmail_users_settings_cse_identities_list
+  - gmail_users_settings_cse_identities_patch
+  - gmail_users_settings_cse_keypairs_create
+  - gmail_users_settings_cse_keypairs_disable
+  - gmail_users_settings_cse_keypairs_enable
+  - gmail_users_settings_cse_keypairs_get
+  - gmail_users_settings_cse_keypairs_list
+  - gmail_users_settings_cse_keypairs_obliterate
+  - gmail_users_settings_delegates_create
+  - gmail_users_settings_delegates_delete
+  - gmail_users_settings_delegates_get
+  - gmail_users_settings_delegates_list
+  - gmail_users_settings_filters_create
+  - gmail_users_settings_filters_delete
+  - gmail_users_settings_filters_get
+  - gmail_users_settings_filters_list
+  - gmail_users_settings_forwarding_addresses_create
+  - gmail_users_settings_forwarding_addresses_delete
+  - gmail_users_settings_forwarding_addresses_get
+  - gmail_users_settings_forwarding_addresses_list
+  - gmail_users_settings_send_as_create
+  - gmail_users_settings_send_as_delete
+  - gmail_users_settings_send_as_get
+  - gmail_users_settings_send_as_list
+  - gmail_users_settings_send_as_patch
+  - gmail_users_settings_send_as_update
+  - gmail_users_settings_send_as_verify
+  - gmail_users_settings_send_as_smime_info_delete
+  - gmail_users_settings_send_as_smime_info_get
+  - gmail_users_settings_send_as_smime_info_insert
+  - gmail_users_settings_send_as_smime_info_list
+  - gmail_users_settings_send_as_smime_info_set_default
+  - gmail_users_threads_delete
+  - gmail_users_threads_get
+  - gmail_users_threads_list
+  - gmail_users_threads_modify
+  - gmail_users_threads_trash
+  - gmail_users_threads_untrash

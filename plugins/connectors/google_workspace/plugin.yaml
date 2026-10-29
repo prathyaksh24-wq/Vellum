@@ -1,0 +1,13 @@
+id: google-workspace
+name: Google
+type: connector
+category: Productivity
+version: 1.0.0
+description: Choose Gmail, Drive, Calendar and Contacts with one Google account connection.
+capabilities:
+  - google.connection.configure
+  - google.connection.disconnect
+  - google.api.execute
+provides_tools:
+  - google_workspace_read
+  - google_api_describe

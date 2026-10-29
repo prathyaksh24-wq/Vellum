@@ -63,9 +63,9 @@ describe("Vellum default activity status", () => {
   test("memory summary controls persist through the live memory API", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
-    expect(html).toContain("API.settings.createMemory({text");
-    expect(html).toContain("API.settings.memoryImportConversations()");
-    expect(html).toContain("API.settings.memoryDreamingRun()");
+    expect(html).toContain("onMemoryAction('memory.entry.create', {text");
+    expect(html).toContain("onMemoryAction('memory.conversations.import', {})");
+    expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
     expect(html).toContain('value={draft}');
     expect(html).toContain('onChange={e => setDraft(e.target.value)}');
     expect(html).not.toContain("Updated 8 hours ago");
@@ -76,9 +76,9 @@ describe("Vellum default activity status", () => {
     const settingsClient = fs.readFileSync(settingsClientPath, "utf8");
 
     expect(html).toContain("API.settings.memorySaved()");
-    expect(html).toContain("API.settings.archiveMemory(m.id)");
-    expect(html).toContain("API.settings.deleteMemory(m.id)");
-    expect(html).toContain("API.settings.updateMemory(m.id");
+    expect(html).toContain("onMemoryAction('memory.entry.archive', {memory_id:m.id})");
+    expect(html).toContain("onMemoryAction('memory.entry.delete', {memory_id:m.id})");
+    expect(html).toContain("onMemoryAction('memory.entry.update', {memory_id:m.id");
     expect(html).toContain("Saved (");
     expect(html).toContain("Old (");
     expect(html).toContain("Recent (");
@@ -116,7 +116,7 @@ describe("Vellum default activity status", () => {
   test("dreaming console triggers the backend consolidation job", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
-    expect(html).toContain("API.settings.memoryDreamingRun()");
+    expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
     expect(html).toContain("refreshMemoryData");
     expect(html).not.toContain("setTimeout(() => {\n      setDreams");
   });
@@ -125,7 +125,7 @@ describe("Vellum default activity status", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
     expect(html).toContain("API.settings.memorySettings()");
-    expect(html).toContain("API.settings.updateMemorySettings");
+    expect(html).toContain("onMemorySettings({[settingsKey]: value})");
     expect(html).toContain("setMemoryToggle('memory', 'memory_enabled'");
     expect(html).toContain("setMemoryToggle('refHistory', 'reference_history_enabled'");
     expect(html).toContain("setMemoryToggle('dreaming', 'dreaming_enabled'");

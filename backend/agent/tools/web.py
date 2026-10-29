@@ -4,8 +4,8 @@ Returns structured JSON: ``{"success": bool, "data": {"web": [{title, url,
 description, position}]}}`` or ``{"success": False, "error": str}``.
 
 Backend selection: ``WEB_SEARCH_BACKEND`` -> ``WEB_BACKEND`` -> availability
-walk (serpapi -> exa -> brave -> tavily -> ddgs). On a transient failure the
-next available provider is tried within the same call.
+walk (serpapi -> exa -> brave -> tavily -> ddgs). Only automatic selection
+uses fallbacks. Explicit provider selection never silently changes destination.
 """
 
 import json
@@ -38,6 +38,10 @@ def web_search(query: str, limit: int = 5) -> str:
     Use web_extract_pages to read full content from specific URLs.
     """
 
+    from agent.personalization import tool_preference_error
+    preference_error = tool_preference_error('web_search', 'web')
+    if preference_error:
+        return json.dumps({'success':False, 'error':preference_error})
     data_class, reason = classify(query)
     if data_class == DataClass.RED:
         return json.dumps(
@@ -53,10 +57,12 @@ def web_search(query: str, limit: int = 5) -> str:
 
     providers = provider_chain("search")
     if not providers:
+        from agent.tools.providers.registry import configured_backend
+        selected = configured_backend('search')
         return json.dumps(
             {
                 "success": False,
-                "error": (
+                "error": f'The selected web search provider ({selected}) is unavailable. Connect or enable it in Plugins, or choose another provider. No fallback was used.' if selected else (
                     "No web search provider configured. Configure a search backend "
                     "(SerpAPI, Exa, Brave, or Tavily API key) or set WEB_SEARCH_BACKEND."
                 ),
@@ -73,7 +79,7 @@ def web_search(query: str, limit: int = 5) -> str:
             failed.append(provider.display_name)
             continue
         if response.get("success") and response.get("data", {}).get("web"):
-            return json.dumps(response, indent=2, ensure_ascii=False)
+            return json.dumps({**response, 'provider': provider.name}, indent=2, ensure_ascii=False)
         failed.append(provider.display_name)
 
     return json.dumps(

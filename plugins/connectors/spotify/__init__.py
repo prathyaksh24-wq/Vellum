@@ -14,6 +14,7 @@ TOOL_BINDINGS = (
     (schemas.SPOTIFY_PLAYLISTS, tools.spotify_playlists),
     (schemas.SPOTIFY_ALBUMS, tools.spotify_albums),
     (schemas.SPOTIFY_LIBRARY, tools.spotify_library),
+    (schemas.SPOTIFY_PODCASTS, tools.spotify_podcasts),
 )
 
 

@@ -2,27 +2,134 @@ import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
+const pluginWorkspace = readFileSync(resolve(here, "../../design/Velllum/uploads/components/plugin-workspace.jsx"), "utf8");
 const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
   "utf8",
 );
-const booksPrototype = readFileSync(
-  resolve(here, "../../design/Velllum/uploads/books-agent-prototype.jsx"),
+const booksView = readFileSync(
+  resolve(here, "../../design/Velllum/uploads/components/books-view.jsx"),
+  "utf8",
+);
+const mcpSetup = readFileSync(
+  resolve(here, "terminal/vellum/setup/screens/09-mcp.jsx"),
   "utf8",
 );
 
 describe("Vellum default redesigned frontend", () => {
+  test('dictation keeps the text field and placeholder available above the recording toolbar', () => {
+    expect(html).toContain("const dictationActive = !['idle','error'].includes(dictation.state);");
+    expect(html).toContain("{!text && (() => {");
+    expect(html).toContain('{dictationActive && dictationUi}');
+    expect(html).not.toContain('.dictation-draft-empty');
+  });
+
+  test('offers manual compaction through the existing composer slash menu', () => {
+    expect(html).toContain("k: 'compact', label: 'Compact context'");
+    expect(html).toContain("item.run === 'compact'");
+    expect(html).toContain("setText('/compact')");
+  });
+  test("the production inline React script parses as JSX", () => {
+    const require = createRequire(import.meta.url);
+    const babel = createRequire(require.resolve('@vitejs/plugin-react'))('@babel/parser');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const scripts = [...doc.querySelectorAll('script[type="text/babel"]')].filter(script => !script.src);
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) {
+      expect(() => babel.parse(script.textContent, {sourceType:'script',plugins:['jsx']})).not.toThrow();
+    }
+  });
+  test("binds every React hook used at application startup", () => {
+    expect(html).toContain("const {useState, useRef, useEffect, useMemo} = React;");
+    expect(html).toContain("const availableAgents = useMemo(");
+  });
+
+  test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
+    expect(html).toContain('<script src="api/books.js"></script>');
+    expect(html).toContain('<script src="components/books-state.js"></script>');
+    expect(html).toContain('src="components/books-view.jsx"');
+    expect(html).toContain('src="/books-entry.js"');
+    expect(html).toContain("DefaultAgentView={DefaultAgentView}");
+    expect(html).toContain("bookDraft.text");
+    expect(html).not.toContain("IcArrowLeft");
+  });
+
+  test("routes composer EPUBs through the canonical Book-to-Skill import", () => {
+    expect(booksView).toContain("BooksImportDialog:ImportDialog");
+    expect(html).toContain("API.books.importEpub(file, consent)");
+    expect(html).toContain("book_import_id:result.book.id");
+    expect(html).toContain("result.book?.skill_status !== 'compiled'");
+    expect(html).toContain("const regularFiles = files.filter(file => !isEpubFile(file))");
+    expect(html).not.toContain("reader.readAsDataURL(epub)");
+  });
+
+  test("routes Knowledge, Books, YouTube, and feed mutations through App Actions", () => {
+    expect(html).toContain("onAction('knowledge.health.check', {})");
+    expect(html).toContain("onAction('knowledge.index.rebuild', {})");
+    expect(html).toContain("dispatchKnowledgeAction('composer.attachment.import', {source:'picker'})");
+    expect(html).toContain("onAction('youtube.connection.start'");
+    expect(html).toContain("onAction('youtube.sync'");
+    expect(html).toContain("dispatchKnowledgeAction('youtube.connection.disconnect'");
+    expect(html).toContain("dispatchKnowledgeAction('plugin.state.set'");
+    expect(html).toContain("receipt.action_id === 'book.import'");
+    expect(html).toContain("Sports stays available on demand without a background feed");
+    expect(html).not.toContain("runWikiAction(() => API.knowledge.indexRebuild())");
+    expect(html).not.toContain("runWikiAction(() => API.knowledge.lint())");
+    expect(html).not.toContain("sources: [item, ...(p.sources || [])]");
+  });
+
   test("loads the modular frontend API bridge used by backend integrations", () => {
     expect(html).toMatch(/<script src="api\/client\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/chat.js"></script>');
+    expect(html).toContain('<script src="api/app-actions.js"></script>');
+    expect(html).toContain('<script src="components/app-action-runtime.js"></script>');
+    expect(html).toContain('<script src="components/observability-action-runtime.js"></script>');
+    expect(html).toContain('<script src="components/coding-action-runtime.js"></script>');
+    expect(html).toContain('<script src="components/attachment-runtime.js"></script>');
     expect(html).toContain('<script src="api/conversations.js"></script>');
     expect(html).toContain('<script src="api/plugins.js"></script>');
     expect(html).toMatch(/<script src="api\/settings\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toMatch(/<script src="api\/knowledge\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/runtimes.js"></script>');
+  });
+
+  test("routes submitted NLP and sidebar controls through App Action receipts", () => {
+    expect(html).toContain("action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)");
+    expect(html).toContain("actionReceipt: (receipt, turn) =>");
+    expect(html).toContain("workspaceActionRuntimeRef.current.applyReceipt(receipt)");
+    expect(html).toContain("onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}");
+    expect(html).toContain("onExpand={() => dispatchSidebarVisibility(true, {learn:true})}");
+    expect(html).toContain("className=\"toast-action\"");
+    expect(html).toContain("adaptiveRuleReceipt");
+    expect(html).toContain("Don't learn this");
+    expect(html).not.toContain("setSidebarPinned");
+  });
+
+  test("keeps mixed App Action turns in the visible conversation", () => {
+    expect(html).not.toContain('rollbackAppActionTurn');
+  });
+
+  test("normalizes picker, drop, paste, and NLP attachment routes through one record path", () => {
+    expect(html).toContain("AttachmentRuntime.prepareFiles(files, attach, API.appActions)");
+    expect(html).toContain("onDrop={event =>");
+    expect(html).toContain("onPaste={event =>");
+    expect(html).toContain("vellum:attachment-action");
+    expect(html).toContain("result.attachments");
+  });
+
+  test("routes fork, native-window, and share controls through conversation actions", () => {
+    expect(html).toContain("dispatchConversationAction('conversation.fork'");
+    expect(html).toContain("dispatchConversationAction('conversation.window.open'");
+    expect(html).toContain("dispatchConversationAction('conversation.share'");
+    expect(html).toContain("invoke('open_conversation_window'");
+    expect(html).toContain("through_message_id:messageId");
+    expect(html).toContain("conversationActionRuntimeRef.current.cancel");
+    expect(html).toContain("Local export ready:");
+    expect(html).not.toContain('title="Sharing is not in this preview"');
   });
 
   test("loads the shared select component outside the application shell", () => {
@@ -33,37 +140,6 @@ describe("Vellum default redesigned frontend", () => {
     expect(selectComponent).toContain('role="combobox"');
     expect(selectComponent).toContain('role="listbox"');
     expect(selectComponent).toContain('event.key === "ArrowDown"');
-  });
-
-  test("keeps uploaded files in Library and scopes the book collection to Books Agent", () => {
-    expect(html).toContain("const LibraryView = ({library, setLibrary}) =>");
-    expect(html).toContain("view === 'library' && <LibraryView");
-    expect(html).toContain('src="books-agent-prototype.jsx"');
-    expect(html).toContain("props.agent?.id === 'books'");
-    expect(html).toContain("get('booksPrototype') === '1'");
-    expect(booksPrototype).toContain("<h1>Books Agent</h1>");
-    expect(booksPrototype).toContain(">Chat</button>");
-    expect(booksPrototype).toContain(">Library</button>");
-    expect(booksPrototype).toContain(">Discovery</button>");
-    expect(booksPrototype).toContain(">Wisdom</button>");
-    expect(booksPrototype).toContain(">View source<IcChevR");
-    expect(booksPrototype).not.toContain("Add to Library");
-    expect(booksPrototype).toContain("three@0.180.0/build/three.module.min.js");
-    expect(booksPrototype).toContain("BooksPrototypeShelf3D");
-    expect(booksPrototype).toContain("BooksPrototypeBookModel3D");
-    expect(booksPrototype).toContain("BooksPrototypeDetail");
-    expect(booksPrototype).toContain('className="bpd-rail"');
-    expect(booksPrototype).toContain("Drag to rotate");
-    expect(booksPrototype).toContain("BooksPrototypeOpenReader");
-    expect(booksPrototype).toContain("bar-turning-sheet");
-    expect(booksPrototype).toContain("Drag a page edge to turn");
-    expect(booksPrototype).toContain('<BooksPrototypeCover book={book} size="micro"/>');
-    expect(booksPrototype).not.toContain("BooksPrototypeSwitcher");
-    expect(booksPrototype).not.toContain("BOOKS_PROTOTYPE_VARIANTS");
-    expect(booksPrototype).not.toContain("bar-loupe");
-    expect(booksPrototype).not.toContain("Toggle magnifier");
-    expect(booksPrototype).toContain("searchParams.set('view', 'agent')");
-    expect(booksPrototype).not.toContain("libraryPrototype");
   });
 
   test("keeps the approved web UI shell instead of the old desktop chrome", () => {
@@ -77,9 +153,9 @@ describe("Vellum default redesigned frontend", () => {
 
   test("includes Spotify plugin controls and player API integration", () => {
     expect(html).toContain("const SpotifyAPI");
-    expect(html).toContain("/api/plugins/spotify/status");
-    expect(html).toContain("/api/plugins/spotify/oauth/start");
-    expect(html).toContain("/api/plugins/spotify/player/action");
+    expect(html).toContain("API.plugins.spotifyStatus()");
+    expect(html).toContain("API.plugins.spotifyStart(clientId)");
+    expect(html).toContain("API.plugins.spotifyAction(body)");
     expect(html).toContain("SpotifyPlayer");
   });
 
@@ -92,6 +168,41 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("clientSecret");
     expect(html).not.toContain("Email or phone");
     expect(html).not.toContain("Manage videos and drafts on your behalf");
+  });
+
+  test("installs Discord through the backend-owned bot authorization contract", () => {
+    expect(pluginWorkspace).toContain("window.VellumApi.plugins.discordInstall()");
+    expect(pluginWorkspace).toContain("vellum-discord-install");
+    expect(pluginWorkspace).toContain("Install bot");
+    expect(pluginWorkspace).not.toContain("DISCORD_BOT_TOKEN");
+    expect(html).not.toContain("DISCORD_BOT_TOKEN");
+  });
+
+  test("provides confirmation-gated Discord operations in the plugin detail", () => {
+    expect(html).toContain("const DiscordWorkspace");
+    expect(html).toContain("API.plugins.discordMessages");
+    expect(html).toContain("API.plugins.discordReply");
+    expect(html).toContain("API.plugins.discordEditOwn");
+    expect(html).toContain("API.plugins.discordDeleteOwn");
+    expect(html).toContain("API.plugins.discordReact");
+    expect(html).toContain("API.plugins.discordCreateThread");
+    expect(html).toContain("API.plugins.discordSendAttachment");
+    expect(html).toContain("Confirm Discord action");
+  });
+
+  test("uses the backend-owned Google Calendar plugin without the legacy MCP duplicate", () => {
+    const calendar=readFileSync(resolve(here,"../../design/Velllum/uploads/components/calendar-workspace.jsx"),"utf8");
+    expect(html).toContain("const CalendarWorkspace = window.VellumUI.CalendarWorkspace");
+    expect(html).toContain('src="components/calendar-workspace.jsx"');
+    for(const call of ["calendarEvents","calendarAvailability"]){
+      expect(calendar.includes("api."+call)).toBe(true);
+    }
+    expect(calendar.includes("calendar.connection.start")).toBe(true);
+    expect(calendar.includes("calendar.connection.disconnect")).toBe(true);
+    expect(calendar.includes("calendar.event.${pending.kind}")).toBe(true);
+    expect(calendar.includes("Confirm Google Calendar")).toBe(true);
+    expect(html.includes("@modelcontextprotocol/server-gcal")).toBe(false);
+    expect(mcpSetup.includes("mcp://gcal")).toBe(false);
   });
 
   test("keeps model selection request-scoped and persisted with conversations", () => {
@@ -112,19 +223,68 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("modelFamily");
     expect(html).toContain("label: 'OpenAI'");
     expect(html).toContain("label: 'Claude'");
-    expect(html).toContain("updateChat(activeChatId, chat => ({...chat, model: id}), true)");
+    expect(html).toContain("dispatchConversationAction('model.select', {model_id:id})");
+    expect(html).toContain("updateChat(chatId, chat => ({...chat, model: id}), true)");
     expect(html).not.toContain("API.settings.setActiveModel(id)");
+  });
+
+  test("routes visible agent, model, and per-chat memory controls through App Actions", () => {
+    expect(html).toContain("dispatchConversationAction('agent.select', {agent:id})");
+    expect(html).toContain('window.VellumUI.AgentCatalog.merge(AGENTS, subagents');
+    expect(html).toContain('agents={availableAgents}');
+    expect(html).toContain('agents: availableAgents');
+    expect(html).toContain("dispatchConversationAction('model.select', {model_id:id})");
+    expect(html).toContain("dispatchConversationAction('memory.conversation.set', {enabled})");
+    expect(html).toContain("store: opts.storeToMemory !== false");
+    expect(html).toContain("reasoning_mode: opts.reasoningMode || null");
+    expect(html).toContain("applySessionControl: (controlPatch, receipt)");
+  });
+
+  test("routes plugin and skill lifecycle controls through App Actions", () => {
+    expect(html).toContain("dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})");
+    expect(html).toContain("onSkillAction('skill.mutation.submit'");
+    expect(html).toContain("onSkillAction('skill.mutation.approve'");
+    expect(html).toContain("onSkillAction('skill.mutation.reject'");
+    expect(html).toContain("onSkillAction('skill.uninstall'");
+  });
+
+  test("routes observability navigation and controls through App Actions", () => {
+    expect(html).toContain("dispatchObservabilityAction('observability.open', {})");
+    expect(html).toContain("dispatchControl('observability.stream.set', {enabled:true})");
+    expect(html).toContain("dispatchControl('observability.stream.set', {enabled:paused})");
+    expect(html).toContain("dispatchControl('observability.refresh', {period})");
+    expect(html).toContain("ObservabilityActions.applyReceipt(current, receipt)");
+    expect(html).toContain("navigation.view === 'ledger'");
+    expect(html).not.toContain("onClick={() => setPaused");
+  });
+
+  test("routes the visible coding control and NLP receipts through App Actions", () => {
+    expect(html).toContain("dispatchConversationAction('coding.workspace.open', {},");
+    expect(html).toContain("onCoding={dispatchCodingAction}");
+    expect(html).toContain("codingActionRuntimeRef.current.applyReceipt(receipt)");
+    expect(html).not.toContain("window.location.assign('vellum-workspace.html')");
+  });
+
+  test("applies automation receipts from chat and visible controls to one UI state", () => {
+    expect(html).toContain("const applyAutomationReceipt = receipt =>");
+    expect(html).toContain("String(receipt.action_id || '').startsWith('automation.')");
+    expect(html).toContain("const dispatchAutomationAction = async (actionId, arguments_, options = {}) =>");
+    expect(html).toContain("applyAutomationReceipt(receipt)");
+    expect(html).toContain("applyAppActionReceipt(confirmed)");
   });
 
   test("does not contain unresolved Git conflict markers", () => {
     expect(html).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
   });
 
-  test("includes routing, OpenRouter, memory, and Hermes-compatible plugin surfaces", () => {
+  test("includes routing, OpenRouter, memory, and source-aware plugin management", () => {
     expect(html).toContain("OpenRouter");
     expect(html).toContain("Provider routing, fallback models, and credential pools");
     expect(html).toContain("memoryDreamingRun");
-    expect(html).toContain("Portable plugins are loaded through Vellum's Hermes-compatible");
+    expect(pluginWorkspace).toContain('aria-label="Plugin information"');
+    expect(pluginWorkspace).toContain("p.source");
+    expect(pluginWorkspace).toContain("p.mcp_connectors.length");
+    expect(pluginWorkspace).toContain('aria-label="MCP servers"');
     expect(html).toContain("API.runtimes.subagents()");
   });
 

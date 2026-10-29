@@ -1,21 +1,23 @@
 import json
+from types import SimpleNamespace
 
 from agent.agents.base import SpecialistResponse
+from agent.master.runtime import DelegationRequest
 from agent.tools import x as x_tool
 
 
-class FakeXAgent:
+class FakeXRuntime:
     def __init__(self, response):
         self.response = response
-        self.queries = []
+        self.requests = []
 
-    def answer(self, query):
-        self.queries.append(query)
-        return self.response
+    def delegate(self, request):
+        self.requests.append(request)
+        return SimpleNamespace(response=self.response)
 
 
 def test_x_agent_tool_delegates_to_specialist(monkeypatch):
-    runtime = FakeXAgent(
+    runtime = FakeXRuntime(
         SpecialistResponse(
             agent="XAgent",
             status="answered",
@@ -24,17 +26,25 @@ def test_x_agent_tool_delegates_to_specialist(monkeypatch):
             confidence=0.8,
         )
     )
-    monkeypatch.setattr(x_tool, "_build_x_agent", lambda: runtime)
+    monkeypatch.setattr(x_tool, "_get_x_runtime", lambda: runtime)
 
-    result = json.loads(x_tool.x_agent.func(query="Search X for Vellum"))
+    result = json.loads(
+        x_tool.x_agent.func(
+            query="Search X for Vellum",
+            config={"configurable": {"thread_id": "thread-x"}},
+        )
+    )
 
-    assert runtime.queries == ["Search X for Vellum"]
+    assert len(runtime.requests) == 1
+    assert isinstance(runtime.requests[0], DelegationRequest)
+    assert runtime.requests[0].task == "Search X for Vellum"
+    assert runtime.requests[0].parent_thread_id == "thread-x"
     assert result["agent"] == "XAgent"
     assert result["summary"] == "X result"
 
 
 def test_x_agent_tool_preserves_confirmation_request(monkeypatch):
-    runtime = FakeXAgent(
+    runtime = FakeXRuntime(
         SpecialistResponse(
             agent="XAgent",
             status="blocked",
@@ -42,7 +52,7 @@ def test_x_agent_tool_preserves_confirmation_request(monkeypatch):
             action_request={"action": "x.publish_post", "payload": {"text": "hello"}},
         )
     )
-    monkeypatch.setattr(x_tool, "_build_x_agent", lambda: runtime)
+    monkeypatch.setattr(x_tool, "_get_x_runtime", lambda: runtime)
 
     result = json.loads(x_tool.x_agent.func(query='Post "hello" on X'))
 
@@ -51,7 +61,7 @@ def test_x_agent_tool_preserves_confirmation_request(monkeypatch):
 
 
 def test_x_agent_tool_rejects_empty_queries_without_building_runtime(monkeypatch):
-    monkeypatch.setattr(x_tool, "_build_x_agent", lambda: (_ for _ in ()).throw(AssertionError("not called")))
+    monkeypatch.setattr(x_tool, "_get_x_runtime", lambda: (_ for _ in ()).throw(AssertionError("not called")))
 
     result = json.loads(x_tool.x_agent.func(query="   "))
 
@@ -60,11 +70,11 @@ def test_x_agent_tool_rejects_empty_queries_without_building_runtime(monkeypatch
 
 
 def test_x_agent_tool_does_not_expose_runtime_errors(monkeypatch):
-    class FailingXAgent:
-        def answer(self, _query):
+    class FailingXRuntime:
+        def delegate(self, _request):
             raise RuntimeError("TEST_MARKER_NOT_A_CREDENTIAL")
 
-    monkeypatch.setattr(x_tool, "_build_x_agent", FailingXAgent)
+    monkeypatch.setattr(x_tool, "_get_x_runtime", FailingXRuntime)
 
     result = x_tool.x_agent.func(query="Search X")
 
@@ -73,7 +83,7 @@ def test_x_agent_tool_does_not_expose_runtime_errors(monkeypatch):
 
 
 def test_x_agent_tool_persists_pending_confirmation_with_thread_config(monkeypatch):
-    runtime = FakeXAgent(
+    runtime = FakeXRuntime(
         SpecialistResponse(
             agent="XAgent",
             status="blocked",
@@ -90,7 +100,7 @@ def test_x_agent_tool_persists_pending_confirmation_with_thread_config(monkeypat
             self.calls.append((thread_id, action))
 
     store = FakePendingStore()
-    monkeypatch.setattr(x_tool, "_build_x_agent", lambda: runtime)
+    monkeypatch.setattr(x_tool, "_get_x_runtime", lambda: runtime)
     monkeypatch.setattr(x_tool, "_pending_action_store", store)
 
     result = json.loads(

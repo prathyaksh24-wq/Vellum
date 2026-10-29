@@ -30,6 +30,7 @@ def test_spotify_tools_present_when_authenticated(monkeypatch):
         "spotify_playlists",
         "spotify_albums",
         "spotify_library",
+        "spotify_podcasts",
     }
 
 
@@ -59,7 +60,8 @@ def test_registered_spotify_context_contains_connector_and_tools():
 
     assert isinstance(ctx, PortablePluginContext)
     assert "spotify" in ctx.connectors
-    assert len(ctx.tools) == 7
+    assert len(ctx.tools) == 8
+    assert "spotify_podcasts" in ctx.tools
 
 
 def test_spotify_runtime_imports_from_backend_working_directory():

@@ -1,0 +1,22 @@
+id: zomato
+name: Zomato
+type: connector
+category: Food & Experiences
+version: 1.0.0
+description: Discover restaurants, browse menus, manage carts and track orders through the official Zomato MCP server.
+mcp_connectors:
+  - name: zomato
+    type: http
+    url: https://mcp-server.zomato.com/mcp
+    credential_provider: zomato
+capabilities:
+  - zomato.connection.oauth.start
+  - zomato.connection.oauth.cancel
+  - zomato.connection.verify
+  - zomato.connection.disconnect
+  - zomato.mcp.execute
+provides_tools:
+  - zomato_mcp_catalog
+  - zomato_mcp_describe
+  - zomato_mcp_read
+  - zomato_mcp_execute

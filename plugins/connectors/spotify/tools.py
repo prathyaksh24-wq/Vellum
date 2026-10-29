@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,6 +16,7 @@ from .errors import SpotifyError, SpotifyNoActiveDevice, SpotifyRateLimited
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+@lru_cache(maxsize=1)
 def get_spotify_service() -> SpotifyClient:
     return SpotifyClient(SpotifyAuthStore(REPO_ROOT / "data" / "plugins" / "spotify"))
 
@@ -79,6 +82,7 @@ def _player_request(
     device_id: str = "",
     json_body: dict | None = None,
 ) -> dict:
+    device_id = device_id or _preferred_device(service)
     params = {"device_id": device_id} if device_id else None
     request_kwargs: dict[str, Any] = {"params": params}
     if json_body is not None:
@@ -103,10 +107,19 @@ def _player_request(
         return service.request(method, path, **retry_kwargs)
 
 
+def _preferred_device(service: SpotifyClient) -> str:
+    # Compatibility for embedders supplying an older service implementation.
+    return service.preferred_device_id() if hasattr(service, "preferred_device_id") else ""
+
+
+def _target_params(service: SpotifyClient, args: dict) -> dict:
+    device_id = str(args.get("device_id") or "") or _preferred_device(service)
+    return {"device_id": device_id} if device_id else {}
+
+
 def spotify_playback(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     action = args.get("action")
-    device = _params(args, "device_id")
     if action == "get_state":
         return _result(service.get_player)
     if action == "get_currently_playing":
@@ -159,7 +172,7 @@ def spotify_playback(args: dict, **kwargs) -> str:
             return _invalid(*missing)
         return _result(
             lambda: service.request(
-                "PUT", "/me/player/seek", params={**_params(args, "position_ms"), **device}
+                "PUT", "/me/player/seek", params={**_params(args, "position_ms"), **_target_params(service, args)}
             )
         )
     if action == "set_repeat":
@@ -167,22 +180,24 @@ def spotify_playback(args: dict, **kwargs) -> str:
         if missing:
             return _invalid(*missing)
         return _result(
-            lambda: service.request("PUT", "/me/player/repeat", params={"state": args["state"], **device})
+            lambda: service.request("PUT", "/me/player/repeat", params={"state": args["state"], **_target_params(service, args)})
         )
     if action == "set_shuffle":
         missing = _missing(args, "shuffle")
         if missing:
             return _invalid(*missing)
         return _result(
-            lambda: service.request("PUT", "/me/player/shuffle", params={"state": args["shuffle"], **device})
+            lambda: service.request("PUT", "/me/player/shuffle", params={"state": args["shuffle"], **_target_params(service, args)})
         )
     if action == "set_volume":
         missing = _missing(args, "volume_percent")
         if missing:
             return _invalid(*missing)
+        if hasattr(service, 'set_player_volume'):
+            return _result(lambda: service.set_player_volume(args['volume_percent'], str(args.get('device_id') or '')))
         return _result(
             lambda: service.request(
-                "PUT", "/me/player/volume", params={"volume_percent": args["volume_percent"], **device}
+                "PUT", "/me/player/volume", params={"volume_percent": args["volume_percent"], **_target_params(service, args)}
             )
         )
     if action == "recently_played":
@@ -217,8 +232,7 @@ def spotify_queue(args: dict, **kwargs) -> str:
         missing = _missing(args, "uri")
         if missing:
             return _invalid(*missing)
-        params = {"uri": args["uri"], **_params(args, "device_id")}
-        return _result(lambda: service.request("POST", "/me/player/queue", params=params))
+        return _result(lambda: service.request("POST", "/me/player/queue", params={"uri": args["uri"], **_target_params(service, args)}))
     return _invalid("action")
 
 
@@ -250,27 +264,55 @@ def spotify_search(args: dict, **kwargs) -> str:
 def spotify_playlists(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     action = args.get("action")
+    if action == "remember_links":
+        if args.get("confirm") is not True:
+            return _invalid("confirm")
+        return _result(lambda: service.remember_playlist_links(args.get("uris") or [], labels=args.get('labels')))
     if action == "list":
-        return _result(
-            lambda: service.request("GET", "/me/playlists", params=_params(args, "limit", "offset") or None)
-        )
+        def collection() -> dict:
+            reader = getattr(service, "get_linked_playlists", None)
+            linked = reader() if callable(reader) else []
+            if not isinstance(linked, list) or not linked:
+                return service.request("GET", "/me/playlists", params=_params(args, "limit", "offset") or None)
+            rows, seen = [], set()
+            deadline = time.monotonic() + 12
+            for offset in range(0, 100001, 50):
+                if time.monotonic() >= deadline:
+                    raise SpotifyError("Spotify playlist enumeration timed out; collection is incomplete")
+                page = service.request("GET", "/me/playlists", params={"limit": 50, "offset": offset})
+                entries = [row for row in page.get("items", []) if isinstance(row, dict) and row.get("id") not in seen]
+                rows.extend(entries)
+                seen.update(row.get("id") for row in entries)
+                if not page.get("next"):
+                    break
+                if not entries:
+                    raise SpotifyError("Spotify repeated a playlist page; collection is incomplete")
+            else:
+                raise SpotifyError("Spotify playlist enumeration exceeded its limit")
+            rows.extend(row for row in linked if row.get("id") not in seen)
+            offset, limit = int(args.get("offset") or 0), int(args.get("limit") or 50)
+            return {"items": rows[offset:offset+limit], "total": len(rows),
+                    "next": "linked-collection" if offset+limit < len(rows) else None}
+        return _result(collection)
     if action == "get":
         missing = _missing(args, "playlist_id")
         if missing:
             return _invalid(*missing)
         return _result(lambda: service.request("GET", f"/playlists/{args['playlist_id']}"))
+    if action in {"tracks", "get_tracks"}:
+        missing = _missing(args, "playlist_id")
+        if missing:
+            return _invalid(*missing)
+        return _result(lambda: service.request("GET", f"/playlists/{args['playlist_id']}/items",
+            params=_params(args, "limit", "offset") or None))
     if action == "create":
         missing = _missing(args, "name")
         if missing:
             return _invalid(*missing)
 
         def create() -> dict:
-            profile = service.get_profile()
-            user_id = profile.get("id")
-            if not user_id:
-                raise ValueError("Spotify profile has no user ID")
             body = _params(args, "name", "description", "public", "collaborative")
-            return service.request("POST", f"/users/{user_id}/playlists", json_body=body)
+            return service.request("POST", "/me/playlists", json_body=body)
 
         return _result(create)
     if action in {"add_items", "remove_items"}:
@@ -300,6 +342,15 @@ def spotify_playlists(args: dict, **kwargs) -> str:
 
 
 def spotify_albums(args: dict, **kwargs) -> str:
+    if args.get('action') == 'artist_albums':
+        artist_id = str(args.get('artist_id') or '')
+        if not artist_id.isascii() or not artist_id.isalnum():
+            return _invalid('artist_id')
+        # Artist-album pagination currently accepts at most ten items. Album
+        # track pagination retains its separate limit below.
+        limit = max(1, min(10, int(args.get('limit') or 10)))
+        return _result(lambda: _service(kwargs).request('GET', f'/artists/{artist_id}/albums',
+            params={**_params(args, 'include_groups', 'market', 'offset'), 'limit':limit}))
     missing = _missing(args, "album_id")
     if missing:
         return _invalid(*missing)
@@ -322,13 +373,38 @@ def spotify_albums(args: dict, **kwargs) -> str:
     return _invalid("action")
 
 
+def spotify_podcasts(args: dict, **kwargs) -> str:
+    """Read show/episode metadata through the same authenticated Spotify client."""
+    service = _service(kwargs)
+    action = args.get("action")
+    key = "episode_id" if action == "episode" else "show_id"
+    missing = _missing(args, key)
+    if action not in {"show", "episodes", "episode"} or missing:
+        return _invalid(*(missing or ["action"]))
+    item_id = str(args[key])
+    if not item_id.isascii() or not item_id.isalnum():
+        return _invalid(key)
+    path = f"/episodes/{item_id}" if action == "episode" else f"/shows/{item_id}" + ("/episodes" if action == "episodes" else "")
+    return _result(lambda: service.request("GET", path, params=_params(args, "market", "limit", "offset") or None))
+
+
 def spotify_library(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     kind = args.get("kind")
     action = args.get("action")
-    if kind not in {"tracks", "albums"}:
+    if kind not in {"tracks", "albums", "playlists"}:
         return _invalid("kind")
+    if kind == 'playlists' and action in {'save_current','remove_current'}:
+        return _invalid('action')
+    expected_uri = {'tracks':'spotify:track:', 'albums':'spotify:album:', 'playlists':'spotify:playlist:'}[kind]
+    if args.get('uris') and any(not isinstance(uri,str) or not uri.startswith(expected_uri) for uri in args['uris']):
+        return _invalid('uris')
     path = f"/me/{kind}"
+    if action == 'contains':
+        uris = args.get('uris') or []
+        if not uris:
+            return _invalid('uris')
+        return _result(lambda:service.request('GET', '/me/library/contains', params={'uris':','.join(uris)}))
     if action == "list":
         return _result(
             lambda: service.request(
@@ -346,7 +422,7 @@ def spotify_library(args: dict, **kwargs) -> str:
                     raise SpotifyNoActiveDevice("No Spotify track is currently playing")
                 uris = [str(uri)]
             if not uris:
-                singular = "track" if kind == "tracks" else "album"
+                singular = {"tracks":"track", "albums":"album", "playlists":"playlist"}[kind]
                 uris = [f"spotify:{singular}:{item_id}" for item_id in (args.get("ids") or [])]
             if not uris:
                 raise ValueError("ids or uris")
@@ -367,4 +443,5 @@ HANDLERS = {
     "spotify_playlists": spotify_playlists,
     "spotify_albums": spotify_albums,
     "spotify_library": spotify_library,
+    "spotify_podcasts": spotify_podcasts,
 }

@@ -1,7 +1,7 @@
 id: spotify
 name: Spotify
 type: connector
-category: Connectors
+category: Media & Entertainment
 version: 1.0.0
 description: Full Spotify Web API control through a Hermes-compatible Vellum plugin.
 provides_tools:
@@ -12,6 +12,7 @@ provides_tools:
   - spotify_playlists
   - spotify_albums
   - spotify_library
+  - spotify_podcasts
 capabilities:
   - spotify.playback
   - spotify.devices
@@ -20,3 +21,6 @@ capabilities:
   - spotify.playlists
   - spotify.albums
   - spotify.library
+  - spotify.podcasts
+  - spotify.connection.start
+  - spotify.connection.disconnect

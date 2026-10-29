@@ -1,0 +1,22 @@
+id: clickup
+name: ClickUp
+type: connector
+category: CRM & Communication
+version: 1.0.0
+description: Search and manage tasks, Docs, comments, Chat, time tracking and workspace structure through the official ClickUp MCP server.
+mcp_connectors:
+  - name: clickup
+    type: http
+    url: https://mcp.clickup.com/mcp
+    credential_provider: clickup
+capabilities:
+  - clickup.connection.oauth.start
+  - clickup.connection.oauth.cancel
+  - clickup.connection.verify
+  - clickup.connection.disconnect
+  - clickup.mcp.execute
+provides_tools:
+  - clickup_mcp_catalog
+  - clickup_mcp_describe
+  - clickup_mcp_read
+  - clickup_mcp_execute

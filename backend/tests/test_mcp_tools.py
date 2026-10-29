@@ -55,6 +55,38 @@ class FakeSession:
         return SimpleNamespace(content=[SimpleNamespace(text=self.text)])
 
 
+def test_worker_shutdown_resets_dedicated_transport_before_restart(monkeypatch):
+    class ClosedDedicatedBrowser:
+        async def tool(self, _params):
+            return "Dedicated browser is closed."
+
+        async def close(self):
+            return None
+
+    client = playwright_tools._PlaywrightMcpClient()
+    client._dedicated = ClosedDedicatedBrowser()
+    worker = playwright_tools._PlaywrightWorker()
+    monkeypatch.setattr(playwright_tools, "_client", client)
+    monkeypatch.setattr(playwright_tools, "_worker", worker)
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: True)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda _params: AsyncPairContext())
+    fake_session = FakeSession(tools=["browser_navigate"], text="Fresh legacy session")
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda _read, _write: fake_session)
+
+    async def exercise():
+        try:
+            # Closing a session keeps dedicated ownership until worker shutdown.
+            assert await playwright_tools.run_tool_async({"action": "navigate", "url": "https://example.com"}) == "Dedicated browser is closed."
+            assert fake_session.calls == []
+            await playwright_tools.shutdown_async()
+            assert await playwright_tools.run_tool_async({"action": "navigate", "url": "https://example.com"}) == "Fresh legacy session"
+            assert len(fake_session.calls) == 1
+        finally:
+            await playwright_tools.shutdown_async()
+
+    asyncio.run(exercise())
+
+
 def test_apify_sanitizes_urls_asins_and_pii():
     raw = "Product ASIN B0ABCDEF12 link https://amazon.com/dp/B0ABCDEF12 contact me@example.com"
 
@@ -69,6 +101,7 @@ def test_apify_sanitizes_urls_asins_and_pii():
 
 
 def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path):
+    monkeypatch.setattr(apify_tools, "_managed_connection", lambda: False)
     fake_session = FakeSession(
         text="ASIN B0ABCDEF12 https://amazon.com/dp/B0ABCDEF12 seller@example.com"
     )
@@ -102,6 +135,7 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
 
 
 def test_apify_youtube_search_calls_configured_actor_and_parses_items(monkeypatch):
+    monkeypatch.setattr(apify_tools, "_managed_connection", lambda: False)
     fake_session = FakeSession(
         text='[{"videoId":"yt1234567","title":"Arsenal analysis","url":"https://www.youtube.com/watch?v=yt1234567"}]'
     )
@@ -702,6 +736,46 @@ def test_github_create_issue_when_writes_allowed(monkeypatch):
     )
 
 
+def test_github_create_pull_request_when_writes_allowed(monkeypatch):
+    fake_session = FakeSession(
+        tools=["create_pull_request"],
+        text="https://github.com/me/vellum/pull/7",
+    )
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(github_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(github_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(
+        github_tools.run_tool_async(
+            {
+                "action": "create_pull_request",
+                "owner": "me",
+                "repo": "vellum",
+                "title": "App Actions",
+                "body": "Details",
+                "head": "feature/actions",
+                "base": "main",
+                "draft": True,
+            }
+        )
+    )
+
+    assert result.endswith("/pull/7")
+    assert fake_session.calls[0] == (
+        "create_pull_request",
+        {
+            "owner": "me",
+            "repo": "vellum",
+            "title": "App Actions",
+            "body": "Details",
+            "head": "feature/actions",
+            "base": "main",
+            "draft": True,
+        },
+    )
+
+
 def test_github_delete_repository_requires_destructive_flag(monkeypatch):
     monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
     monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
@@ -763,6 +837,7 @@ def test_github_token_reads_pat_from_settings(monkeypatch):
 
 
 def test_tavily_search_calls_remote_mcp_with_api_key(monkeypatch):
+    monkeypatch.setattr("agent.plugins.search_connections.managed", lambda provider: False)
     fake_session = FakeSession(tools=["tavily_search"], text="search result")
     seen = {}
 
@@ -786,10 +861,12 @@ def test_tavily_search_calls_remote_mcp_with_api_key(monkeypatch):
 
     assert result == "search result"
     assert fake_session.calls[0] == ("tavily_search", {"query": "latest sports", "max_results": 3})
-    assert seen["url"] == "https://mcp.tavily.com/mcp/?tavilyApiKey=tvly_test"
+    assert seen["url"] == "https://mcp.tavily.com/mcp/"
+    assert seen["headers"] == {"Authorization": "Bearer tvly_test"}
 
 
 def test_tavily_answer_maps_to_search_with_answer(monkeypatch):
+    monkeypatch.setattr("agent.plugins.search_connections.managed", lambda provider: False)
     fake_session = FakeSession(tools=["tavily_search"], text="answer result")
     monkeypatch.setattr(
         tavily_tools,
@@ -810,6 +887,7 @@ def test_tavily_answer_maps_to_search_with_answer(monkeypatch):
 
 
 def test_firecrawl_fetch_calls_stdio_mcp_with_api_key(monkeypatch):
+    monkeypatch.setattr(firecrawl_tools, "_managed_connection", lambda: False)
     fake_session = FakeSession(tools=["firecrawl_scrape"], text="page markdown")
     seen = {}
 

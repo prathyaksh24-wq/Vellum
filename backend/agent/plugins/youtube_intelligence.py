@@ -45,6 +45,7 @@ class YouTubeIntelligenceService:
     ) -> None:
         self.store = store
         self.identities = identities or YouTubeChannelIdentityService(store)
+        self._creator_blocks = []
 
     def rebuild(self, *, now: datetime | None = None, mode: str = "backfill") -> dict[str, Any]:
         """Rebuild the projection, or run the explicit incremental mode."""
@@ -97,6 +98,9 @@ class YouTubeIntelligenceService:
         start_rowid: int,
         full_reconcile: bool,
     ) -> dict[str, Any]:
+        from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+        config = YouTubeCreatorTracking(store=self.store)._config()
+        self._creator_blocks = [rule for rule in config.rules if rule.relationship in {"excluded", "former"}] if config else []
         reference = _utc(now)
         scanned = 0
         created = 0
@@ -411,6 +415,9 @@ class YouTubeIntelligenceService:
         payload = dict(row.get("payload") or {})
         channel_id = str(payload.get("channel_id") or "").strip()
         channel_title = str(payload.get("channel_title") or "").strip()
+        if any(rule.channel_id == channel_id and channel_id or _normalized(channel_title) in
+               {_normalized(name) for name in [rule.name, *rule.aliases]} for rule in self._creator_blocks):
+            return None
         if not channel_id and not channel_title:
             return None
         identity = channel_id or f"title-{_digest(_normalized(channel_title))}"
@@ -505,12 +512,16 @@ def _query_terms(value: str) -> set[str]:
         "gaining", "have", "interest", "interests", "losing", "more",
         "repeat", "repeated", "repeatedly", "search", "searched", "theme",
         "themes", "what", "which",
-        "youtube",
+        "youtube", "discover", "something", "based", "recommend", "suggest",
+        "suggestions", "please", "ideas", "recommendations", "show", "find",
+        "data", "activity", "profile", "tell", "know", "learned", "learnt",
+        "vellum", "could", "your", "our", "taste", "habits", "patterns",
+        "explain", "summarize", "summarise", "summary", "understand", "read",
     }
     return {
         term
         for term in re.findall(r"[a-z0-9]+", value.casefold())
-        if len(term) > 3 and term not in ignored
+        if (len(term) > 3 or term in {"ai", "ml", "f1"}) and term not in ignored
     }
 
 

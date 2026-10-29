@@ -23,12 +23,25 @@ def test_shared_registry_combines_specialist_and_mcp_capabilities(tmp_path):
         "x.publish_post",
         "youtube.search_videos",
         "youtube.fetch_transcript",
+        "discord.messages",
+        "discord.send_message",
+        "calendar.events",
+        "calendar.create_event",
         "memory.build_context_pack",
         "memory.review_proposals",
         "context7.resolve_library",
         "github.write_issue",
         "obsidian.search_notes",
     } <= set(registry.names())
+
+
+def test_default_shared_registry_does_not_give_x_agent_generic_web_fallback(tmp_path):
+    registry = build_shared_tool_registry(
+        vault_root=tmp_path / "Vault",
+        sessions_db=tmp_path / "sessions.db",
+    )
+
+    service = registry.get("x.search_posts").adapter.__self__
 
 
 def test_shared_registry_enforces_agent_permissions_and_confirmation(tmp_path):

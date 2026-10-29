@@ -1,0 +1,23 @@
+id: asana
+name: Asana
+type: connector
+category: CRM & Communication
+version: 1.0.0
+description: Search and manage tasks, projects and other published operations through the official Asana V2 MCP server.
+mcp_connectors:
+  - name: asana
+    type: http
+    url: https://mcp.asana.com/v2/mcp
+    credential_provider: asana
+capabilities:
+  - asana.connection.configure
+  - asana.connection.oauth.start
+  - asana.connection.oauth.cancel
+  - asana.connection.verify
+  - asana.connection.disconnect
+  - asana.mcp.execute
+provides_tools:
+  - asana_mcp_catalog
+  - asana_mcp_describe
+  - asana_mcp_read
+  - asana_mcp_execute

@@ -1,0 +1,52 @@
+{
+  "display_information": {
+    "name": "Vellum",
+    "description": "Connect Vellum to your workspace through the official Slack MCP server"
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "http://localhost:8000/api/plugins/slack/oauth/callback"
+    ],
+    "scopes": {
+      "user": [
+        "canvases:read",
+        "canvases:write",
+        "channels:history",
+        "channels:read",
+        "channels:write",
+        "chat:write",
+        "emoji:read",
+        "files:read",
+        "files:write",
+        "groups:history",
+        "groups:read",
+        "groups:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "lists:read",
+        "lists:write",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "reactions:read",
+        "reactions:write",
+        "search:read.files",
+        "search:read.im",
+        "search:read.mpim",
+        "search:read.private",
+        "search:read.public",
+        "search:read.users",
+        "users:read",
+        "users:read.email"
+      ]
+    },
+    "pkce_enabled": true
+  },
+  "settings": {
+    "is_mcp_enabled": true,
+    "token_rotation_enabled": true,
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false
+  }
+}

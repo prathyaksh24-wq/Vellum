@@ -1,22 +1,96 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 import yaml
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
 
-from agent.profiles import AgentProfile, ProfileRegistry, profile_policy
+from agent.profiles import AgentCatalog, AgentProfile, profile_policy
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
 
 
-def test_builtin_profiles_preserve_deterministic_specialists(tmp_path: Path) -> None:
-    registry = ProfileRegistry(profile_dir=tmp_path)
+class FakeBooksExecutor:
+    name = "BooksAgent"
+
+    def can_handle(self, query: str) -> bool:
+        _ = query
+        return False
+
+    def answer(self, query: str):
+        raise AssertionError("catalog resolution must not execute the agent")
+
+
+def test_agent_catalog_resolves_complete_profile_and_executor(tmp_path: Path) -> None:
+    executor = FakeBooksExecutor()
+    profile = AgentProfile(
+        id="BooksAgent",
+        instructions={"files": ["books/SOUL.md"]},
+        tools={"allow": ["knowledge.books.search"]},
+        skills={"allow": ["book-to-skill", "naval-almanack"]},
+        memory={
+            "read_scopes": ["user_profile", "shared", "agent:BooksAgent"],
+            "write_scope": "agent:BooksAgent",
+            "shared_writes": "propose_only",
+        },
+        response_schema="books-agent-result-v1",
+    )
+    catalog = AgentCatalog(
+        profile_dir=tmp_path,
+        builtins={"BooksAgent": profile},
+        executors={"BooksAgent": executor},
+    )
+
+    binding = catalog.resolve("BooksAgent")
+
+    assert binding.profile.id == "BooksAgent"
+    assert binding.profile.skills.allow == ["book-to-skill", "naval-almanack"]
+    assert binding.profile.memory.shared_writes == "propose_only"
+    assert binding.profile.response_schema == "books-agent-result-v1"
+    assert binding.executor is executor
+
+
+def test_builtin_profiles_preserve_action_handlers_with_hybrid_reasoning(tmp_path: Path) -> None:
+    registry = AgentCatalog(profile_dir=tmp_path)
 
     sports = registry.get("SportsAgent")
+    x_agent = registry.get("XAgent")
 
-    assert sports.executor == "deterministic"
+    assert sports.executor == "hybrid"
     assert sports.memory.write_scope == "agent:SportsAgent"
     assert sports.memory.read_scopes == ["user_profile", "shared", "agent:SportsAgent"]
     assert sports.memory.cache_first is True
+    assert x_agent.memory.cache_first is False
     assert sports.delegation.can_delegate is False
+
+
+def test_delegation_manifest_exposes_summaries_without_profile_policies(tmp_path: Path) -> None:
+    catalog = AgentCatalog(profile_dir=tmp_path)
+
+    manifest = catalog.delegation_manifest()
+    entry = next(item for item in manifest if item["id"] == "BooksAgent")
+
+    assert set(entry) == {"id", "description"}
+    assert "book-to-skill" not in str(manifest)
+    assert "books.knowledge_query" not in str(manifest)
+    assert "book-to-skill" in catalog.specialist_skill_ids()
+
+
+def test_specialist_directory_describes_domains_in_user_language(tmp_path: Path) -> None:
+    manifest = {
+        item["id"]: item["description"]
+        for item in AgentCatalog(profile_dir=tmp_path).delegation_manifest()
+    }
+
+    assert "scores" in manifest["SportsAgent"]
+    assert "upcoming games" in manifest["SportsAgent"]
+    assert "what a person or account posted about a topic" in manifest["XAgent"]
+    assert "what an author says" in manifest["BooksAgent"]
+    assert "read a transcript" in manifest["YoutubeAgent"]
+    assert "what someone said" in manifest["DiscordAgent"]
+    assert "scheduled today or tomorrow" in manifest["CalendarAgent"]
+    assert "personal memory" in manifest["MemoryAgent"]
+    assert "previously shared" in manifest["MemoryAgent"]
 
 
 def test_yaml_profile_overrides_builtin_without_losing_defaults(tmp_path: Path) -> None:
@@ -35,7 +109,7 @@ def test_yaml_profile_overrides_builtin_without_losing_defaults(tmp_path: Path) 
         encoding="utf-8",
     )
 
-    profile = ProfileRegistry(profile_dir=tmp_path).get("SportsAgent")
+    profile = AgentCatalog(profile_dir=tmp_path).get("SportsAgent")
 
     assert profile.version == 2
     assert profile.executor == "llm"
@@ -49,26 +123,31 @@ def test_invalid_yaml_falls_back_to_builtin_and_records_diagnostic(tmp_path: Pat
         "version: 1\nid: SportsAgent\nexecutor: shell\n",
         encoding="utf-8",
     )
-    registry = ProfileRegistry(profile_dir=tmp_path)
+    registry = AgentCatalog(profile_dir=tmp_path)
 
     profile = registry.get("SportsAgent")
 
-    assert profile.executor == "deterministic"
+    assert profile.executor == "hybrid"
     assert registry.diagnostics()[0]["profile_id"] == "SportsAgent"
     assert registry.diagnostics()[0]["status"] == "fallback"
 
 
 def test_profile_instruction_path_must_stay_inside_profile_directory(tmp_path: Path) -> None:
-    profile = AgentProfile(id="ResearchAgent", executor="llm", instructions="../secret.txt")
-    registry = ProfileRegistry(profile_dir=tmp_path, builtins={"ResearchAgent": profile})
+    profile = AgentProfile(id="ResearchAgent", executor="llm", instructions={"files": ["../secret.txt"]})
+    registry = AgentCatalog(profile_dir=tmp_path, builtins={"ResearchAgent": profile})
 
     assert registry.instructions_for(profile) == ""
     assert registry.diagnostics()[0]["status"] == "blocked_instruction_path"
 
 
-def test_llm_profile_rejects_declared_tools() -> None:
-    with pytest.raises(ValueError, match="reasoning-only"):
-        AgentProfile(id="ResearchAgent", executor="llm", tools={"allow": ["web.search"]})
+def test_llm_profile_accepts_tools_for_allowlisted_tool_loop() -> None:
+    profile = AgentProfile(id="ResearchAgent", executor="llm", tools={"allow": ["web.search"]})
+    assert profile.tools.allow == ["web.search"]
+
+
+def test_memory_agent_cannot_widen_its_private_write_scope() -> None:
+    with pytest.raises(ValidationError, match="write_scope must be agent:MemoryAgent"):
+        AgentProfile(id="MemoryAgent", memory={"write_scope": "shared"})
 
 
 def test_active_profile_can_narrow_shared_tool_registry() -> None:
@@ -89,6 +168,28 @@ def test_active_profile_can_narrow_shared_tool_registry() -> None:
             registry.invoke("sports.search", {"query": "NBA"}, agent_name="SportsAgent")
 
 
+def test_active_profile_can_require_confirmation_for_read_tool() -> None:
+    registry = ToolRegistry()
+    registry.register(
+        CapabilityRecord(
+            name="sports.search",
+            namespace="sports",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"SportsAgent"}),
+            stream_label="Searching sports",
+            adapter=lambda payload: {"query": payload["query"]},
+        )
+    )
+
+    with profile_policy(
+        profile_id="SportsAgent",
+        allowed_tools=frozenset({"sports.search"}),
+        require_confirmation=frozenset({"sports.search"}),
+    ):
+        with pytest.raises(ToolPermissionError, match="explicit confirmation"):
+            registry.invoke("sports.search", {"query": "NBA"}, agent_name="SportsAgent")
+
+
 def test_no_active_profile_preserves_legacy_tool_permissions() -> None:
     registry = ToolRegistry()
     registry.register(
@@ -105,23 +206,57 @@ def test_no_active_profile_preserves_legacy_tool_permissions() -> None:
     assert registry.invoke("sports.search", {}, agent_name="SportsAgent") == {"ok": True}
 
 
+def test_langchain_tool_wrapper_forwards_runnable_config() -> None:
+    @tool
+    def thread_id_tool(query: str, config: RunnableConfig) -> str:
+        """Return the configured thread ID."""
+        _ = query
+        configurable = config.get("configurable", {}) if config else {}
+        return str(configurable.get("thread_id") or "")
+
+    registry = ToolRegistry()
+    registry.register_langchain(
+        thread_id_tool,
+        access=CapabilityAccess.READ,
+        allowed_agents=frozenset({"VellumAgent"}),
+    )
+
+    wrapped = registry.langchain_tools(agent_name="VellumAgent")[0]
+
+    assert wrapped.invoke(
+        {"query": "thread"},
+        config={"configurable": {"thread_id": "thread-123"}},
+    ) == "thread-123"
+
+
 def test_memory_profile_bypasses_mutating_memory_instructions(tmp_path: Path) -> None:
-    profile = ProfileRegistry(profile_dir=tmp_path).get("MemoryAgent")
+    profile = AgentCatalog(profile_dir=tmp_path).get("MemoryAgent")
 
     assert {"remember", "memorize", "note", "forget", "delete"} <= set(profile.cache.bypass_terms)
 
 
 def test_youtube_profile_bypasses_generic_response_cache(tmp_path: Path) -> None:
-    profile = ProfileRegistry(profile_dir=tmp_path).get("YoutubeAgent")
+    profile = AgentCatalog(profile_dir=tmp_path).get("YoutubeAgent")
 
     assert profile.memory.cache_first is False
+
+
+def test_calendar_profile_requires_confirmation_for_every_event_change(tmp_path: Path) -> None:
+    profile = AgentCatalog(profile_dir=tmp_path).get("CalendarAgent")
+
+    assert "calendar.events" in profile.tools.allow
+    assert set(profile.tools.require_confirmation) == {
+        "calendar.create_event",
+        "calendar.update_event",
+        "calendar.delete_event",
+    }
 
 
 def test_registry_discovers_new_llm_profile_from_yaml(tmp_path: Path) -> None:
     (tmp_path / "ResearchAgent.yaml").write_text(
         yaml.safe_dump(
             {
-                "version": 1,
+                "version": 2,
                 "id": "ResearchAgent",
                 "description": "Independent research specialist",
                 "executor": "llm",
@@ -136,7 +271,107 @@ def test_registry_discovers_new_llm_profile_from_yaml(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    registry = ProfileRegistry(profile_dir=tmp_path)
+    registry = AgentCatalog(profile_dir=tmp_path)
 
     assert registry.try_get("ResearchAgent").executor == "llm"
     assert "ResearchAgent" in [profile.id for profile in registry.list()]
+
+
+def test_profile_v2_declares_instructions_skills_and_delegation_policy() -> None:
+    profile = AgentProfile(
+        id="ResearchAgent",
+        executor="llm",
+        instructions={"inline": "Investigate claims and preserve provenance."},
+        tools={"allow": []},
+        skills={"allow": ["research"]},
+        memory={
+            "read_scopes": ["user_profile", "shared", "agent:ResearchAgent"],
+            "write_scope": "agent:ResearchAgent",
+            "shared_writes": "propose_only",
+        },
+        delegation={"can_receive": True, "can_delegate": False, "max_depth": 1},
+        response_schema="research-result-v1",
+    )
+
+    assert profile.version == 2
+    assert profile.instructions.inline.startswith("Investigate claims")
+    assert profile.tools.allow == []
+    assert profile.skills.allow == ["research"]
+    assert profile.memory.write_scope == "agent:ResearchAgent"
+    assert profile.delegation.can_receive is True
+    assert profile.delegation.can_delegate is False
+    assert profile.delegation.max_depth == 1
+
+
+def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: Path) -> None:
+    catalog = AgentCatalog.default(vault_root=tmp_path)
+
+    x_binding = catalog.resolve("XAgent")
+    youtube_binding = catalog.resolve("YoutubeAgent")
+    discord_binding = catalog.resolve("DiscordAgent")
+    calendar_binding = catalog.resolve("CalendarAgent")
+    memory_binding = catalog.resolve("MemoryAgent")
+    sports_binding = catalog.resolve("SportsAgent")
+    books_binding = catalog.resolve("BooksAgent")
+
+    assert x_binding.profile.version == 3
+    assert x_binding.profile.instructions.inline
+    assert {
+        x_binding.profile.id,
+        youtube_binding.profile.id,
+        discord_binding.profile.id,
+        calendar_binding.profile.id,
+        memory_binding.profile.id,
+        sports_binding.profile.id,
+        books_binding.profile.id,
+    } == {
+        "XAgent",
+        "YoutubeAgent",
+        "DiscordAgent",
+        "CalendarAgent",
+        "MemoryAgent",
+        "SportsAgent",
+        "BooksAgent",
+    }
+    assert x_binding.executor.tool_registry is youtube_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is memory_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is discord_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is calendar_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is sports_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is books_binding.executor.tool_registry
+    assert "youtube.search_videos" in x_binding.executor.tool_registry.names()
+    assert "discord.messages" in x_binding.executor.tool_registry.names()
+    assert "calendar.events" in x_binding.executor.tool_registry.names()
+    assert "sports.web_search" in x_binding.executor.tool_registry.names()
+    assert "books.knowledge_query" in x_binding.executor.tool_registry.names()
+
+
+def test_builtin_books_profile_uses_knowledge_core_and_explicit_delegation(tmp_path: Path) -> None:
+    profile = AgentCatalog(profile_dir=tmp_path).get("BooksAgent")
+
+    assert profile.response_schema == "books-agent-response-v1"
+    assert profile.tools.allow == [
+        "books.knowledge_query", "books.skill_lookup", "books.discover", "books.verify_candidate",
+    ]
+    assert profile.tools.require_confirmation == ["books.discover", "books.verify_candidate"]
+    assert profile.book_discovery_network is False
+    assert profile.skills.allow == ["book-to-skill"]
+    assert profile.memory.write_scope == "agent:BooksAgent"
+    assert profile.memory.shared_writes == "propose_only"
+
+
+def test_agent_catalog_does_not_auto_route_explicit_only_books_profile(tmp_path: Path) -> None:
+    executor = FakeBooksExecutor()
+    profile = AgentCatalog(profile_dir=tmp_path).get("BooksAgent")
+    catalog = AgentCatalog(
+        profile_dir=tmp_path,
+        builtins={"BooksAgent": profile},
+        executors={"BooksAgent": executor},
+    )
+
+    assert catalog.match("Tell me about this book") is None
+
+
+def test_x_profile_allows_inverse_actions_and_supported_writes(tmp_path):
+    profile = AgentCatalog(profile_dir=tmp_path).get("XAgent")
+    assert {"x.publish_post", "x.reply", "x.repost", "x.unrepost", "x.delete", "x.like", "x.unlike", "x.bookmark", "x.unbookmark", "x.quote", "x.follow", "x.unfollow"} <= set(profile.tools.allow)

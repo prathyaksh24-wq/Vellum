@@ -19,6 +19,7 @@ from agent.llm.routing.models import (
     RoutingAttempt,
     RoutingTerminalError,
     merge_policy,
+    provider_for_model,
 )
 from agent.llm.routing.pool import CredentialPool, CredentialPoolExhausted
 from agent.llm.routing.store import RoutingStore
@@ -69,21 +70,29 @@ class RoutingEngine:
             pass
 
     def _primary_provider(self, model: str) -> str:
-        """Keep catalog model IDs on the OpenRouter route by default.
+        """Route explicit local IDs locally and keep cloud catalog IDs on OpenRouter.
 
         A vendor namespace such as ``openai/`` identifies the model inside
         OpenRouter; it does not authorize a native vendor API call. Native
         adapters must be selected explicitly with ``primary_provider``.
         """
-        return "openrouter"
+        return provider_for_model(model)
 
     def build_plan(self, primary_model: str, primary_provider: str | None = None) -> AttemptPlan:
+        from agent.profiles.execution import get_profile_execution
+        from agent.profiles.policy import get_active_profile_policy
+        from agent.privacy.disclosure import DisclosureBlocked
+        policy = get_active_profile_policy()
+        if get_profile_execution() is not None and policy is not None and policy.source_egress == "local" and (primary_provider or self._primary_provider(primary_model)) != "ollama":
+            raise DisclosureBlocked("This specialist profile permits local inference only")
         primary = FallbackTarget(
             provider=primary_provider or self._primary_provider(primary_model),
             model=primary_model,
         )
         targets = [primary]
         for fallback in self.store.list_fallbacks():
+            if primary.provider == "ollama" and fallback.provider != "ollama":
+                continue
             if fallback.identity != primary.identity:
                 targets.append(fallback)
         return AttemptPlan(
@@ -104,6 +113,20 @@ class RoutingEngine:
     async def ainvoke(
         self,
         *,
+        request_timeout: float | None = None,
+        **kwargs: Any,
+    ):
+        if request_timeout is None:
+            return await self._ainvoke(**kwargs)
+        timeout = float(request_timeout)
+        if not 0 < timeout <= 300:
+            raise ValueError("Request timeout must be between zero and 300 seconds")
+        # One deadline covers credential waits, all retries and fallbacks.
+        return await asyncio.wait_for(self._ainvoke(**kwargs), timeout=timeout)
+
+    async def _ainvoke(
+        self,
+        *,
         messages: Sequence[Any],
         primary_model: str,
         primary_provider: str | None = None,
@@ -112,6 +135,7 @@ class RoutingEngine:
         max_tokens: int = 2048,
         thread_id: str = "background",
         reasoning_mode: Any = None,
+        context_role: str = "specialist",
         **kwargs: Any,
     ):
         plan = self.build_plan(primary_model, primary_provider)
@@ -128,6 +152,12 @@ class RoutingEngine:
                     )
                 )
                 continue
+
+            from agent.llm.context import context_budget, project_context
+            effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
+            budget = context_budget(target.model, role=context_role, output_tokens=effective_max_tokens,
+                                    transport_limit=getattr(adapter, "context_length", None))
+            projection = project_context(messages, tools, budget)
 
             preferred_id: str | None = None
             transient_retries = 0
@@ -176,7 +206,6 @@ class RoutingEngine:
                                 self.store.get_model_policy(target.model),
                             )
                         )
-                    effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
                     model = adapter.build_model(
                         target=target,
                         thread_id=thread_id,
@@ -185,11 +214,13 @@ class RoutingEngine:
                         policy=policy,
                         max_tokens=effective_max_tokens,
                         reasoning_mode=reasoning_mode,
+                        **({"context_length": budget.window} if target.provider == "ollama" else {}),
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
                         model = model.bind_tools(list(tools))
-                    result = await model.ainvoke(list(messages), **kwargs)
+                    options = adapter.invocation_kwargs(kwargs) if callable(getattr(adapter, "invocation_kwargs", None)) else kwargs
+                    result = await model.ainvoke(projection.messages, **options)
                     has_content = bool(getattr(result, "content", None))
                     has_tool_calls = bool(getattr(result, "tool_calls", None))
                     if not has_content and not has_tool_calls:
@@ -198,6 +229,8 @@ class RoutingEngine:
                             summary="provider returned an invalid response",
                         )
                     else:
+                        result.response_metadata = {**getattr(result, "response_metadata", {}),
+                                                    "vellum_context": projection.report}
                         await self.pool.mark_success(lease)
                         self._record_attempt(
                             RoutingAttempt(
@@ -214,6 +247,9 @@ class RoutingEngine:
                             )
                         )
                         return result
+                except asyncio.CancelledError:
+                    await self.pool.release(lease)
+                    raise
                 except Exception as exc:
                     failure = classify_provider_exception(exc)
 
@@ -327,6 +363,7 @@ class RoutingEngine:
         max_tokens: int = 2048,
         thread_id: str = "background",
         reasoning_mode: Any = None,
+        context_role: str = "specialist",
         **kwargs: Any,
     ):
         plan = self.build_plan(primary_model, primary_provider)
@@ -343,6 +380,12 @@ class RoutingEngine:
                     )
                 )
                 continue
+
+            from agent.llm.context import context_budget, project_context
+            effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
+            budget = context_budget(target.model, role=context_role, output_tokens=effective_max_tokens,
+                                    transport_limit=getattr(adapter, "context_length", None))
+            projection = project_context(messages, tools, budget)
 
             preferred_id: str | None = None
             transient_retries = 0
@@ -392,13 +435,15 @@ class RoutingEngine:
                         secret=secret,
                         temperature=temperature,
                         policy=policy,
-                        max_tokens=self._effective_max_tokens(max_tokens, reasoning_mode),
+                        max_tokens=effective_max_tokens,
                         reasoning_mode=reasoning_mode,
+                        **({"context_length": budget.window} if target.provider == "ollama" else {}),
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
                         model = model.bind_tools(list(tools))
-                    async for chunk in model.astream(list(messages), **kwargs):
+                    options = adapter.invocation_kwargs(kwargs) if callable(getattr(adapter, "invocation_kwargs", None)) else kwargs
+                    async for chunk in model.astream(projection.messages, **options):
                         last_chunk = chunk
                         if not visible and not self._visible_chunk(chunk):
                             buffered.append(chunk)

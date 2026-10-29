@@ -9,6 +9,7 @@ from langchain_core.tools import tool
 from agent.skills import HubLockFile, SkillCatalog, SkillConfigStore, SkillPackageError, SkillUsageStore, get_skill_registry
 from agent.skills.runtime import SKILLS_PATH
 from agent.skills.usage_intelligence import record_current_activation
+from agent.profiles.policy import get_active_profile_policy
 
 
 _CONFIG: SkillConfigStore | None = None
@@ -33,12 +34,32 @@ def _json(value) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
+def _visible_skill_names(registry=None) -> set[str]:
+    policy = get_active_profile_policy()
+    if policy is not None:
+        return set(policy.allowed_skills)
+
+    registry = registry or get_skill_registry()
+    available = {entry.name for entry in registry.list_skills(include_unavailable=True)}
+    try:
+        from agent.master.live_runtime import get_agent_catalog
+
+        specialist_owned = get_agent_catalog().specialist_skill_ids()
+    except Exception:
+        specialist_owned = frozenset()
+    return available - set(specialist_owned)
+
+
 @tool
 def skills_list(category: str = "", include_unavailable: bool = False) -> str:
     """List installed skills using compact metadata only."""
-    entries = get_skill_registry().list_skills(include_unavailable=include_unavailable)
+    registry = get_skill_registry()
+    entries = registry.list_skills(include_unavailable=include_unavailable)
+    visible = _visible_skill_names(registry)
     skills = []
     for entry in entries:
+        if entry.name not in visible:
+            continue
         if category and entry.category.casefold() != category.casefold():
             continue
         item = {
@@ -58,13 +79,18 @@ def skills_history(since: str = "", until: str = "", action: str = "", limit: in
     """List immutable skill lifecycle events, including removed skills."""
     catalog = SkillCatalog(SKILLS_PATH)
     catalog.backfill_events()
-    return _json({"events": catalog.events(since=since, until=until, event=action, limit=limit)})
+    visible = _visible_skill_names()
+    events = catalog.events(since=since, until=until, event=action, limit=limit)
+    events = [item for item in events if not item.get("skill_name") or item.get("skill_name") in visible]
+    return _json({"events": events})
 
 
 @tool
 def skill_view(name: str, path: str = "") -> str:
     """Load a skill's full instructions or one relative support file."""
     registry = get_skill_registry()
+    if name not in _visible_skill_names(registry):
+        return _json({"ok": False, "error": "Skill not found or unavailable to this agent."})
     try:
         if path:
             content = registry.view_file(name, path)

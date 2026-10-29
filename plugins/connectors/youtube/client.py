@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import re
 from typing import Any, Callable
 
 import httpx
@@ -16,6 +17,76 @@ RequestBackend = Callable[..., Any]
 
 
 class YouTubeClient:
+    def channel_profiles(self, channel_ids: list[str]) -> dict[str, dict[str, Any]]:
+        channels=list(dict.fromkeys(channel_ids))
+        if not channels or len(channels)>50 or any(not re.fullmatch(r"UC[A-Za-z0-9_-]{22}",channel) for channel in channels):
+            raise ValueError("Expected 1 to 50 verified YouTube channel IDs.")
+        result=self._api_get('/channels',params={'part':'snippet,topicDetails','id':','.join(channels),
+            'fields':'items(id,snippet(title,description),topicDetails(topicCategories))'})
+        return {item['id']:{'name':str(item.get('snippet',{}).get('title',''))[:200],
+            'description':str(item.get('snippet',{}).get('description',''))[:1500],
+            'categories':[str(value)[:200] for value in item.get('topicDetails',{}).get('topicCategories',[])[:10]]}
+            for item in result.get('items',[])[:50] if item.get('id') in channels}
+
+    def video_durations(self, video_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """One public metadata call for up to 50 IDs; never fetch video media."""
+        videos = list(dict.fromkeys(video_ids))
+        if not videos or len(videos) > 50 or any(not re.fullmatch(r"[A-Za-z0-9_-]{11}", video) for video in videos):
+            raise ValueError("Expected 1 to 50 YouTube video IDs.")
+        result = self._api_get("/videos", params={"part": "snippet,contentDetails", "id": ",".join(videos),
+            "fields": "items(id,snippet(channelId,liveBroadcastContent),contentDetails(duration))"})
+        metadata = {}
+        for item in result.get("items", [])[:50]:
+            video, snippet = item.get("id"), item.get("snippet", {})
+            if video not in videos or not re.fullmatch(r"UC[A-Za-z0-9_-]{22}", str(snippet.get("channelId", ""))):
+                continue
+            raw = str(item.get("contentDetails", {}).get("duration", ""))
+            match = re.fullmatch(r"P(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?", raw)
+            seconds = None
+            if match and any(match.groups()):
+                days, hours, minutes, remainder = (float(value or 0) for value in match.groups())
+                value = days * 86400 + hours * 3600 + minutes * 60 + remainder
+                if 0 < value <= 2678400 and snippet.get("liveBroadcastContent", "none") == "none":
+                    seconds = value
+            metadata[video] = {"channel_id": snippet["channelId"], "duration_seconds": seconds}
+        return metadata
+
+    def channel_uploads(self, channel_id: str, *, playlist_id: str = "") -> dict[str, Any]:
+        """Bounded public uploads fallback; one cached or two initial API calls."""
+        if not re.fullmatch(r"UC[A-Za-z0-9_-]{22}", channel_id):
+            raise ValueError("Expected a verified YouTube channel ID.")
+        if not playlist_id:
+            result = self._api_get("/channels", params={"part": "contentDetails", "id": channel_id,
+                "fields": "items(id,contentDetails(relatedPlaylists(uploads)))", "maxResults": 1})
+            channels = result.get("items", [])
+            if not channels or channels[0].get("id") != channel_id:
+                raise YouTubeAPIError("The channel uploads playlist is unavailable.")
+            playlist_id = str(channels[0].get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads", ""))
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", playlist_id):
+            raise ValueError("Invalid uploads playlist ID.")
+        result = self._api_get("/playlistItems", params={"part": "snippet,contentDetails", "playlistId": playlist_id,
+            "maxResults": 15, "fields": "items(snippet(title,videoOwnerChannelId,videoOwnerChannelTitle),contentDetails(videoId,videoPublishedAt))"})
+        entries = []
+        for item in result.get("items", [])[:15]:
+            snippet, content = item.get("snippet", {}), item.get("contentDetails", {})
+            if snippet.get("videoOwnerChannelId") != channel_id or not content.get("videoPublishedAt"):
+                continue
+            video = str(content.get("videoId", ""))
+            if re.fullmatch(r"[A-Za-z0-9_-]{11}", video):
+                entries.append({"video_id": video, "title": str(snippet.get("title", ""))[:500],
+                    "creator": str(snippet.get("videoOwnerChannelTitle", ""))[:200], "published_at": content["videoPublishedAt"]})
+        return {"entries": entries, "uploads_playlist": playlist_id, "transport": "youtube_data_api"}
+
+    def video_channels(self, video_ids: list[str]) -> dict[str, dict[str, str]]:
+        """Resolve only public ownership metadata, up to 50 IDs per call."""
+        videos = list(dict.fromkeys(video_ids))
+        if not videos or len(videos) > 50 or any(not re.fullmatch(r"[A-Za-z0-9_-]{11}", video) for video in videos):
+            raise ValueError("Expected 1 to 50 YouTube video IDs.")
+        result = self._api_get("/videos", params={"part": "snippet", "id": ",".join(videos),
+            "fields": "items(id,snippet(channelId,channelTitle))"})
+        return {item["id"]: {"channel_id": item["snippet"]["channelId"], "name": item["snippet"].get("channelTitle", "")}
+                for item in result.get("items", []) if item.get("id") in videos and item.get("snippet", {}).get("channelId")}
+
     def __init__(
         self,
         *,
@@ -64,7 +135,12 @@ class YouTubeClient:
         }
         if self.client_secret:
             payload["client_secret"] = self.client_secret
-        refreshed = self._request_json("POST", TOKEN_URL, data=payload, auth_error=True)
+        try:
+            refreshed = self._request_json("POST", TOKEN_URL, data=payload, auth_error=True)
+        except YouTubeAuthError as error:
+            if str(error) == "YouTube authorization must be renewed":
+                self.store.require_reauthorization()
+            raise
         refreshed.setdefault("refresh_token", refresh_token)
         refreshed["expires_at"] = self.clock() + max(0, int(refreshed.get("expires_in") or 0))
         return self.store.save_tokens(refreshed)
@@ -223,6 +299,8 @@ class YouTubeClient:
         return self._decode_response(response, auth_error=False)
 
     def _valid_tokens(self) -> dict[str, Any]:
+        if self.store.load_metadata().get("authorization_status") == "authorization_required":
+            raise YouTubeAuthError("YouTube authorization must be renewed")
         tokens = self.store.load_tokens()
         if float(tokens.get("expires_at") or 0) <= self.clock() + 60:
             return self.refresh()
@@ -241,6 +319,13 @@ class YouTubeClient:
         status = int(getattr(response, "status_code", 0))
         if status < 200 or status >= 300:
             error = YouTubeAuthError if auth_error else YouTubeAPIError
+            if auth_error and status == 400:
+                try:
+                    code = response.json().get("error")
+                except Exception:
+                    code = None
+                if code == "invalid_grant":
+                    raise YouTubeAuthError("YouTube authorization must be renewed")
             if status in {401, 403}:
                 raise error("YouTube authorization is invalid or insufficient")
             if status == 429:

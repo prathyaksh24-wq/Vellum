@@ -1,0 +1,22 @@
+id: airtable
+name: Airtable
+type: connector
+category: CRM & Communication
+version: 1.0.0
+description: Read and manage bases, tables, fields, records, comments, interfaces and automations through Airtable's official MCP server. Choose authorized resources during OAuth.
+mcp_connectors:
+  - name: airtable
+    type: http
+    url: https://mcp.airtable.com/mcp
+    credential_provider: airtable
+capabilities:
+  - airtable.connection.oauth.start
+  - airtable.connection.oauth.cancel
+  - airtable.connection.verify
+  - airtable.connection.disconnect
+  - airtable.mcp.execute
+provides_tools:
+  - airtable_mcp_catalog
+  - airtable_mcp_describe
+  - airtable_mcp_read
+  - airtable_mcp_execute

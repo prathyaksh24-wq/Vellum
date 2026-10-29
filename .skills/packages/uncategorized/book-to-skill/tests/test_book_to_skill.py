@@ -170,6 +170,35 @@ def _make_oebps_epub(path: Path) -> Path:
     return path
 
 
+def _make_word_numbered_epub(path: Path) -> Path:
+    """Create an EPUB whose chapter numbers are English words, as publishers commonly emit."""
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("mimetype", "application/epub+zip")
+        zf.writestr(
+            "content.opf",
+            textwrap.dedent("""\
+                <?xml version="1.0"?>
+                <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+                  <metadata/>
+                  <manifest>
+                    <item id="one" href="one.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="two" href="two.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine><itemref idref="one"/><itemref idref="two"/></spine>
+                </package>
+            """),
+        )
+        zf.writestr(
+            "one.xhtml",
+            "<html><body><h1>Chapter One: Foundations</h1><p>First body.</p></body></html>",
+        )
+        zf.writestr(
+            "two.xhtml",
+            "<html><body><h1>Chapter Two: Practice</h1><p>Second body.</p></body></html>",
+        )
+    return path
+
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  FIX #1 — EPUB extraction no longer does tuple-unpack
@@ -273,6 +302,18 @@ class TestEpubOpfRelativePaths:
 
         assert text is not None
         assert "EPUB chapter one content" in text
+
+    def test_word_numbered_epub_reports_detected_chapters(self, tmp_path):
+        epub_path = _make_word_numbered_epub(tmp_path / "word-numbered.epub")
+
+        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+            result = extract_single_file(epub_path, "text", "no")
+
+        assert result["chapters_detected"] == 2
+        assert result["chapter_headings_sample"] == [
+            "Chapter One: Foundations",
+            "Chapter Two: Practice",
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

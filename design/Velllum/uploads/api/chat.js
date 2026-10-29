@@ -111,8 +111,14 @@
   async function stream(payload, handlers) {
     var controller = new AbortController();
     if (handlers && handlers.controller) handlers.controller(controller);
+    if (handlers && handlers.playbackRequest) await handlers.playbackRequest.ready;
+    if (controller.signal.aborted) throw new DOMException('Stopped.', 'AbortError');
     var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
-    if (!response.ok || !response.body) throw new Error("Backend stream failed: HTTP " + response.status);
+    if (!response.ok || !response.body) {
+      var failure = new Error("Backend stream failed: HTTP " + response.status);
+      failure.vellumHttpStatus = response.status;
+      throw failure;
+    }
     var reader = response.body.getReader();
     var decoder = new TextDecoder();
     var buffer = "";
@@ -189,6 +195,14 @@
         if (!parsed) continue;
         var ev = parsed.event;
         var data = parsed.data;
+        if (ev === "app.action.requested") {
+          if (handlers.actionRequested) handlers.actionRequested(data.request || data, { turn_kind: data.turn_kind || "action" });
+          continue;
+        }
+        if (ev === "app.action.receipt") {
+          if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data, { turn_kind: data.turn_kind || "action" });
+          continue;
+        }
         if (ev === "agent.activity") {
           semanticSeen = true;
           var agentAct = normalizeAgentActivity(data.activity || data);
@@ -266,7 +280,7 @@
           } else if (ev === "response.completed") {
             var finalResponse = data.response || {};
             if (finalResponse.thread_id && handlers.meta) handlers.meta({ thread_id: finalResponse.thread_id });
-            text = text || finalResponse.output_text || "";
+            text = finalResponse.output_text || text || "";
             sources = finalResponse.sources || sources;
             tools = finalResponse.tools || tools;
             trace.sources = sources.slice();
@@ -276,7 +290,8 @@
             upsertStep({ id: "answering", status: "completed" });
             completed = true;
             emitTrace("done");
-            if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, thread_id: finalResponse.thread_id });
+            if (handlers.playbackRequest) handlers.playbackRequest.complete(finalResponse).catch(() => {});
+            if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: finalResponse.thread_id });
           } else if (ev === "response.output_item.done") {
             var doneItem = data.item || {};
             activity = activity.map(function (item) {
@@ -323,7 +338,7 @@
           if (handlers.delta) handlers.delta(text, data.text);
         } else if (ev === "final" && !semanticSeen) {
           if (data.thread_id && handlers.meta) handlers.meta({ thread_id: data.thread_id });
-          text = text || data.answer || "";
+          text = data.answer || text || "";
           sources = data.sources || sources;
           tools = data.tools || tools;
           trace.sources = sources.slice();
@@ -333,7 +348,7 @@
           upsertStep({ id: "answering", status: "completed" });
           completed = true;
           emitTrace("done");
-          if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, thread_id: data.thread_id });
+          if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: data.thread_id });
         }
       }
     }
@@ -345,5 +360,13 @@
     return { abort: function () { controller.abort(); } };
   }
 
-  window.VellumApi.chat = { stream: stream };
+  function failureMessage(error) {
+    if (error && error.vellumPlaybackError) return error.message;
+    if (error && error.vellumHttpStatus) return 'Vellum API returned HTTP ' + error.vellumHttpStatus + '. Try again shortly.';
+    if (error && error.name === 'TypeError' && /fetch|network|load failed|terminated/i.test(error.message || '')) {
+      return 'Backend unreachable. Check the Vellum API connection and try again.';
+    }
+    return 'Vellum could not finish this response. Try again.';
+  }
+  window.VellumApi.chat = { stream: stream, failureMessage: failureMessage };
 })();

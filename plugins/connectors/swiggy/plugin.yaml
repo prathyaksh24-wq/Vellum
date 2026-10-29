@@ -1,0 +1,31 @@
+id: swiggy
+name: Swiggy & Instamart
+type: connector
+category: Food & Experiences
+version: 1.0.0
+description: Discover food and groceries, manage carts and track orders using the official Swiggy Food and Instamart MCP servers.
+mcp_connectors:
+  - name: food
+    display_name: Swiggy
+    description: Restaurant discovery, menus, carts and food delivery.
+    type: http
+    url: https://mcp.swiggy.com/food
+    credential_provider: swiggy
+  - name: instamart
+    display_name: Instamart
+    description: Grocery discovery, carts, essentials and delivery.
+    type: http
+    url: https://mcp.swiggy.com/im
+    credential_provider: swiggy
+capabilities:
+  - swiggy.connection.configure
+  - swiggy.connection.oauth.start
+  - swiggy.connection.oauth.cancel
+  - swiggy.connection.verify
+  - swiggy.connection.disconnect
+  - swiggy.mcp.execute
+provides_tools:
+  - swiggy_mcp_catalog
+  - swiggy_mcp_describe
+  - swiggy_mcp_read
+  - swiggy_mcp_execute

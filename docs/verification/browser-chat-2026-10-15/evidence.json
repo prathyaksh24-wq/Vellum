@@ -1,0 +1,8 @@
+{
+  "selected_model": "ollama/gemma4:12b",
+  "request": "open wikipedia and search for the streetfighter moview",
+  "answer": "Searched for \u201cstreetfighter movie\u201d. The search results are open in the browser.",
+  "panel_opened_without_sidebar_click": true,
+  "rendered_cursor_positions": 13,
+  "seconds": 45.3
+}

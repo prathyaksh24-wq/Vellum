@@ -10,6 +10,8 @@ _VAULT.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("OPENROUTER_API_KEY", "test-key")
 os.environ.setdefault("OBSIDIAN_VAULT_PATH", str(_VAULT.resolve()))
 os.environ.setdefault("FILESYSTEM_MCP_PATH", str(_VAULT.resolve()))
+os.environ["KNOWLEDGE_CORE_DB_PATH"] = str((_ROOT / "knowledge" / "core.db").resolve())
+os.environ["KNOWLEDGE_BLOB_PATH"] = str((_ROOT / "knowledge" / "blobs").resolve())
 os.environ.setdefault("COMPUTER_USE_SCREENSHOT_DIR", str((_ROOT / "computer-use" / "screenshots").resolve()))
 os.environ.setdefault("COMPUTER_USE_EXCLUSIVE_CONTROL", "false")
 

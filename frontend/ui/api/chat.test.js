@@ -28,9 +28,55 @@ async function loadChatApi(fetchImpl) {
   return window.VellumApi.chat;
 }
 
+test('HTTP and rendering failures are not mislabeled as an unreachable API',async()=>{
+  const api=await loadChatApi(async()=>({ok:false,status:503}));
+  let failure;
+  try {await api.stream({},{});} catch(error) {failure=error;}
+  expect(api.failureMessage(failure)).toContain('HTTP 503');
+  expect(api.failureMessage(new Error('render callback failed'))).not.toContain('unreachable');
+  expect(api.failureMessage(new TypeError('Failed to fetch'))).toContain('unreachable');
+});
+
 describe("Vellum default chat stream trace", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test("keeps context compaction activity and budget metadata while streaming the answer", async () => {
+    const api = await loadChatApi(async () => ({ok:true, body:sseStream([
+      'event: response.created\ndata: {"thread_id":"context-qa"}\n\n',
+      'event: agent.activity\ndata: {"activity":{"id":"compact-1","type":"context_compacted","label":"Keeping earlier conversation context","status":"completed","metadata":{"context_window":32768,"estimated_input_tokens":14000,"compacted":true}}}\n\n',
+      'event: response.output_text.delta\ndata: {"delta":"ORBIT launches on 23 November."}\n\n',
+      'event: response.completed\ndata: {"response":{"thread_id":"context-qa","output_text":"ORBIT launches on 23 November.","tools":[],"sources":[]}}\n\n',
+    ])}));
+    const activities = [], traces = [];
+    let answer = "";
+    await api.stream({message:"What date did we choose?",thread_id:"context-qa"}, {
+      activity:items => activities.push(items), trace:value => traces.push(value), delta:value => {answer=value;},
+    });
+    expect(activities.flat()).toContainEqual(expect.objectContaining({type:"context_compacted",status:"completed",
+      metadata:expect.objectContaining({context_window:32768,compacted:true})}));
+    expect(traces.at(-1).status).toBe("done");
+    expect(answer).toBe("ORBIT launches on 23 November.");
+  });
+
+  test('does not submit music until its existing player device is ready', async () => {
+    const fetchImpl = vi.fn(async () => ({ok:true,body:sseStream([
+      'event: response.completed\ndata: {"response":{"output_text":"Playing","tools":["music_agent"]}}\n\n',
+    ])}));
+    const api = await loadChatApi(fetchImpl);
+    let release;
+    const playbackRequest = {ready:new Promise(resolve => {release=resolve;}),complete:vi.fn(async () => {})};
+    const pending = api.stream({message:'play a song'}, {playbackRequest});
+    expect(fetchImpl).not.toHaveBeenCalled(); release(); await pending;
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(playbackRequest.complete).toHaveBeenCalledWith(expect.objectContaining({tools:['music_agent']}));
+  });
+
+  test('failed player readiness cannot send a request that silently uses another device', async () => {
+    const fetchImpl=vi.fn(); const api=await loadChatApi(fetchImpl);
+    await expect(api.stream({message:'play a song'}, {playbackRequest:{ready:Promise.reject(new Error('player unavailable'))}})).rejects.toThrow('player unavailable');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   test("emits visible activity trace updates from semantic SSE events", async () => {
@@ -196,5 +242,66 @@ describe("Vellum default chat stream trace", () => {
     expect(controllers).toHaveLength(1);
     expect(controllers[0]).toBeInstanceOf(AbortController);
     expect(fetchImpl.mock.calls[0][1].signal).toBe(controllers[0].signal);
+  });
+
+  test("delivers App Action receipts without changing response text handling", async () => {
+    const receipt = {
+      receipt_id: "receipt-1",
+      request_id: "request-1",
+      action_id: "ui.sidebar.set",
+      action_version: "1",
+      source: "nlp",
+      status: "applied",
+      result: { workspace_layout_patch: { version: 1, base_revision: 0, revision: 1, surfaces: { sidebar: { visible: false } } } },
+    };
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: app.action.requested\ndata: {"request":{"action_id":"ui.sidebar.set"}}\n\n',
+        'event: app.action.receipt\ndata: {"receipt":' + JSON.stringify(receipt) + '}\n\n',
+        'event: response.output_text.delta\ndata: {"delta":"Sidebar hidden."}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Sidebar hidden.","tools":[],"sources":[]}}\n\n',
+      ]),
+    }));
+    const requested = [];
+    const receipts = [];
+    const deltas = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "hide the sidebar", thread_id: "t1" },
+      {
+        actionRequested: (request) => requested.push(request),
+        actionReceipt: (value, turn) => receipts.push({value, turn}),
+        delta: (text) => deltas.push(text),
+      },
+    );
+
+    expect(requested).toEqual([{ action_id: "ui.sidebar.set" }]);
+    expect(receipts).toEqual([{value: receipt, turn: {turn_kind: "action"}}]);
+    expect(deltas).toEqual(["Sidebar hidden."]);
+  });
+
+  test("reports whether an App Action belongs to a mixed conversation turn", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: app.action.requested\ndata: {"request":{"action_id":"ui.sidebar.set"},"turn_kind":"mixed"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Answer","tools":[],"sources":[]}}\n\n',
+      ]),
+    }));
+    const requested = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "hide the sidebar and answer this", thread_id: "t1" },
+      { actionRequested: (request, turn) => requested.push({ request, turn }) },
+    );
+
+    expect(requested).toEqual([{
+      request: { action_id: "ui.sidebar.set" },
+      turn: { turn_kind: "mixed" },
+    }]);
   });
 });

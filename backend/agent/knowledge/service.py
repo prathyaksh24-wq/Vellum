@@ -6,15 +6,44 @@ import json
 from pathlib import Path
 from typing import Any
 
+from agent.knowledge.book_catalog import BookCatalog
+from agent.knowledge.book_discovery import BookDiscoveryRuntime
+from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
+from agent.knowledge.book_documents import BookDocument, BookDocumentPipeline
+from agent.knowledge.book_quality import (
+    EpubParseQualityPolicy,
+    BookQualityAssessment,
+    BookQualityPipeline,
+)
+from agent.knowledge.book_materialization import (
+    BOOK_MATERIALIZATION_COMPILER_VERSION,
+    BookEmbeddingProvider,
+    BookMaterialization,
+    BookMaterializationPipeline,
+    BookRetrievalIndex,
+)
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
+    BookDiscoveryPolicy,
+    BookDiscoveryRequest,
+    BookDiscoveryVerificationRequest,
+    BookDocumentRequest,
+    BookImportRequest,
+    BookImportStatus,
+    BookMaterializationRequest,
+    BookMaterializationStatus,
+    BookRetrievalRequest,
+    BookQualityRequest,
+    BookUserLearningRequest,
+    BookWisdomRecordInput,
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
     MaterializationCanaryRequest,
     ObservationActor,
     ObservationInput,
+    PromotionStatus,
     Sensitivity,
     SourceItemInput,
 )
@@ -36,6 +65,13 @@ class KnowledgeCore:
         shadow_write: bool = True,
         read_enabled: bool = False,
         tool_learning_enabled: bool = False,
+        book_ocr_provider=None,
+        book_malware_scanner: MalwareScanner | None = None,
+        book_embedding_provider: BookEmbeddingProvider | None = None,
+        book_materialization_compiler_version: str = BOOK_MATERIALIZATION_COMPILER_VERSION,
+        book_embedding_model_revision: str = "default",
+        book_retrieval_index: BookRetrievalIndex | None = None,
+        book_catalog: BookCatalog | None = None,
     ) -> None:
         self.store = store
         self.conversations_path = Path(conversations_path)
@@ -51,6 +87,26 @@ class KnowledgeCore:
         self.shadow_write = bool(shadow_write)
         self.read_enabled = bool(read_enabled)
         self.tool_learning_enabled = bool(tool_learning_enabled)
+        self.book_ingestion = BookIngestionPipeline(
+            store,
+            scanner=book_malware_scanner,
+        )
+        self.book_documents = BookDocumentPipeline(store, ocr_provider=book_ocr_provider)
+        self.book_discovery = BookDiscoveryRuntime(store, self.book_documents, catalog=book_catalog)
+        self.book_quality = BookQualityPipeline(store, self.book_documents, policy=EpubParseQualityPolicy(
+            approved_alternate_parser_versions=(self.book_documents.parser_version,) if book_ocr_provider else ()))
+        if book_embedding_provider is None:
+            from agent.rag.embedder import get_embedder
+
+            book_embedding_provider = get_embedder()
+        self.book_materializations = BookMaterializationPipeline(
+            store,
+            self.book_quality,
+            embedding_provider=book_embedding_provider,
+            compiler_version=book_materialization_compiler_version,
+            embedding_model_revision=book_embedding_model_revision,
+            retrieval_index=book_retrieval_index,
+        )
 
     def status(self) -> dict[str, Any]:
         return {
@@ -78,6 +134,21 @@ class KnowledgeCore:
                 "migration": "preserve",
             },
             "user_model": {"current": "Honcho", "future": "Honcho", "migration": "preserve"},
+            "user_learning_candidates": {
+                "current": "Knowledge Core",
+                "future": "Knowledge Core",
+                "migration": "canonical",
+            },
+            "book_wisdom": {
+                "current": "Knowledge Core derived insights",
+                "future": "Knowledge Core derived insights",
+                "migration": "canonical",
+            },
+            "book_discovery": {
+                "current": "Knowledge Core shadow candidates",
+                "future": "Knowledge Core candidates separate from Library",
+                "migration": "shadow_only",
+            },
             "knowledge_wiki": {
                 "current": "Vault/Knowledge",
                 "future": "Obsidian projection of Knowledge Core insights",
@@ -99,6 +170,33 @@ class KnowledgeCore:
                 "migration": "rebuildable",
             },
         }
+
+    def discover_books(self, request: BookDiscoveryRequest, *, policy: BookDiscoveryPolicy) -> dict[str, Any]:
+        if not self.shadow_write:
+            return {"status": "blocked", "mode": "shadow", "candidates": [], "error_code": "DISCOVERY_DISABLED"}
+        return self.book_discovery.discover(request, policy=policy)
+
+    def verify_book_discovery_candidate(
+        self,
+        request: BookDiscoveryVerificationRequest,
+        *,
+        policy: BookDiscoveryPolicy,
+    ) -> dict[str, Any]:
+        if not self.shadow_write:
+            return {
+                "status": "blocked",
+                "mode": "shadow",
+                "candidates": [],
+                "metadata": {"reason_code": "DISCOVERY_DISABLED"},
+                "error_code": "DISCOVERY_DISABLED",
+            }
+        return self.book_discovery.verify(request, policy=policy)
+
+    def list_book_discovery_candidates(self, *, user_id: str, objective: str, limit: int = 20) -> list[dict[str, Any]]:
+        return self.book_discovery.list_candidates(user_id=user_id, objective=objective, limit=limit)
+
+    def dismiss_book_discovery_candidate(self, *, user_id: str, candidate_id: str) -> bool:
+        return self.store.dismiss_book_discovery_candidate(user_id=user_id, candidate_id=candidate_id)
 
     def record_turn(
         self,
@@ -151,6 +249,83 @@ class KnowledgeCore:
             )
         )
         return {"stored": True, **result, **observation}
+
+    def record_book_user_learning(self, request: BookUserLearningRequest) -> dict[str, Any]:
+        request = BookUserLearningRequest.model_validate(request.model_dump(mode="python"))
+        relationship = request.relationship
+        self._validate_book_user_learning(request)
+        tenant_scope = self.store.book_tenant_scope(relationship.user_id)
+        observation = self.store.record_observation(
+            ObservationInput(
+                origin="books.user_learning",
+                actor=relationship.actor,
+                trigger=relationship.trigger,
+                action=relationship.action,
+                event_key=(
+                    f"books:relationship:{tenant_scope}:"
+                    f"{self._digest({'event_key': relationship.event_key})}"
+                ),
+                payload={
+                    "tenant_scope": tenant_scope,
+                    "evidence_basis": relationship.evidence_basis,
+                    "book_ids": relationship.book_ids,
+                    "source_anchor_ids": relationship.source_anchor_ids,
+                    "conversation_ids": relationship.conversation_ids,
+                },
+                sensitivity=relationship.sensitivity,
+                confidence=relationship.confidence,
+                observed_at=relationship.observed_at,
+                promotion_status=PromotionStatus.DURABLE,
+            )
+        )
+        candidates = [
+            self.store.propose_user_learning_candidate(
+                candidate,
+                observation_id=observation["observation_id"],
+            )
+            for candidate in request.candidates
+        ]
+        return {"relationship": observation, "candidates": candidates}
+
+    def propose_book_wisdom(self, request: BookWisdomRecordInput) -> dict[str, Any]:
+        return self.store.propose_book_wisdom(request)
+
+    @staticmethod
+    def _validate_book_user_learning(request: BookUserLearningRequest) -> None:
+        relationship = request.relationship
+        if any(candidate.user_id != relationship.user_id for candidate in request.candidates):
+            raise ValueError("Book relationship and candidate user identities must match")
+        if request.candidates and (
+            relationship.actor in {ObservationActor.AGENT, ObservationActor.SCHEDULED}
+            or relationship.evidence_basis == "agent_activity"
+        ):
+            raise ValueError("Agent Book activity cannot create user-learning candidates")
+
+        for candidate in request.candidates:
+            if candidate.actor != relationship.actor:
+                raise ValueError("Book relationship and candidate actors must match")
+            if candidate.proposition_type == "reading_status":
+                allowed_reading_evidence = (
+                    candidate.basis == "explicit"
+                    and (
+                        (
+                            relationship.action == "reading_status.stated"
+                            and relationship.actor == ObservationActor.USER
+                        )
+                        or (
+                            relationship.action == "reading_status.connector_observed"
+                            and relationship.actor == ObservationActor.CONNECTOR
+                        )
+                    )
+                )
+                if not allowed_reading_evidence:
+                    raise ValueError("Reading status requires explicit user or connector evidence")
+            if (
+                relationship.action == "book.imported"
+                and candidate.basis == "inferred"
+                and candidate.confidence > 0.25
+            ):
+                raise ValueError("Book import is only weak evidence of possible interest")
 
     def record_tool_result(
         self,
@@ -237,6 +412,113 @@ class KnowledgeCore:
 
     def create_context_pack(self, request: ContextPackRequest) -> dict[str, Any]:
         return self.store.create_context_pack(request)
+
+    def import_book_epub(self, request: BookImportRequest, content: bytes) -> BookImportStatus:
+        return self.book_ingestion.import_epub(request, content)
+
+    def construct_book_document(self, request: BookDocumentRequest) -> BookImportStatus:
+        return self.book_documents.construct(request)
+
+    def get_book_document(self, *, user_id: str, document_id: str) -> BookDocument:
+        return self.book_documents.load(user_id=user_id, document_id=document_id)
+
+    def evaluate_book_document_quality(self, request: BookQualityRequest) -> BookImportStatus:
+        return self.book_quality.evaluate(request)
+
+    def get_book_document_for_materialization(
+        self,
+        *,
+        user_id: str,
+        document_id: str,
+    ) -> BookDocument:
+        return self.book_quality.load_for_materialization(
+            user_id=user_id,
+            document_id=document_id,
+        )
+
+    def get_book_quality_assessment(
+        self,
+        *,
+        user_id: str,
+        document_id: str,
+    ) -> BookQualityAssessment:
+        return self.book_quality.load_assessment(
+            user_id=user_id,
+            document_id=document_id,
+        )
+
+    def materialize_book_document(
+        self,
+        request: BookMaterializationRequest,
+    ) -> BookMaterializationStatus:
+        return self.book_materializations.materialize(request)
+
+    def get_book_materialization(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+    ) -> BookMaterialization:
+        return self.book_materializations.load(
+            user_id=user_id,
+            materialization_id=materialization_id,
+        )
+
+    def get_active_book_materialization(
+        self,
+        *,
+        user_id: str,
+        edition_id: str,
+    ) -> BookMaterializationStatus:
+        return BookMaterializationStatus.model_validate(
+            self.store.get_active_book_materialization_status(
+                user_id=user_id,
+                edition_id=edition_id,
+            )
+        )
+
+    def get_active_book_materialization_bundle(
+        self,
+        *,
+        user_id: str,
+        edition_id: str,
+    ) -> BookMaterialization:
+        return self.book_materializations.load_active(
+            user_id=user_id,
+            edition_id=edition_id,
+        )
+
+    def list_active_book_skills(
+        self,
+        *,
+        user_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        return self.book_materializations.list_active_skills(
+            user_id=user_id,
+            limit=limit,
+        )
+
+    def search_active_book_materializations(
+        self,
+        request: BookRetrievalRequest,
+    ) -> dict[str, Any]:
+        return self.book_materializations.search_active(request)
+
+    def get_book_ingestion_status(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str = "",
+    ) -> BookImportStatus:
+        return BookImportStatus.model_validate(
+            self.store.get_book_import_status(
+                user_id=user_id,
+                import_id=import_id,
+                run_id=run_id,
+            )
+        )
 
     @staticmethod
     def _digest(payload: dict[str, Any]) -> str:

@@ -15,6 +15,7 @@ from plugins.connectors.spotify.tools import (
     spotify_library,
     spotify_playback,
     spotify_playlists,
+    spotify_podcasts,
     spotify_queue,
     spotify_search,
 )
@@ -56,6 +57,9 @@ class FakeService:
         (spotify_playlists, {"action": "list"}, "GET", "/me/playlists"),
         (spotify_albums, {"action": "get", "album_id": "a1"}, "GET", "/albums/a1"),
         (spotify_library, {"kind": "tracks", "action": "list"}, "GET", "/me/tracks"),
+        (spotify_podcasts, {"action":"episodes", "show_id":"show1"}, "GET", "/shows/show1/episodes"),
+        (spotify_podcasts, {"action":"show", "show_id":"show1"}, "GET", "/shows/show1"),
+        (spotify_podcasts, {"action":"episode", "episode_id":"ep1"}, "GET", "/episodes/ep1"),
     ],
 )
 def test_handler_routes(handler, args, method, path):
@@ -101,8 +105,7 @@ def test_playlist_create_uses_current_user():
 
     assert result["ok"] is True
     assert service.calls == [
-        ("GET", "/me", {}),
-        ("POST", "/users/user-1/playlists", {"json_body": {"name": "Focus", "public": False}}),
+        ("POST", "/me/playlists", {"json_body": {"name": "Focus", "public": False}}),
     ]
 
 
@@ -246,6 +249,16 @@ def test_pause_without_active_device_is_idempotent():
     assert result == {"ok": True, "data": {"status": "already_paused"}}
 
 
+def test_saved_playlist_removal_uses_exact_playlist_uri_and_rejects_mismatched_kind():
+    service = FakeService()
+    result = json.loads(spotify_library({'kind':'playlists','action':'remove','uris':['spotify:playlist:Saved']}, service=service))
+    assert result['ok']
+    assert service.calls == [('DELETE','/me/library',{'params':{'uris':'spotify:playlist:Saved'}})]
+    service.calls.clear()
+    result = json.loads(spotify_library({'kind':'tracks','action':'remove','uris':['spotify:playlist:Saved']}, service=service))
+    assert not result['ok'] and service.calls == []
+
+
 def test_spotify_search_allows_public_artist_names():
     service = FakeService()
 
@@ -265,7 +278,7 @@ def test_spotify_search_blocks_secret_material_before_network_call():
     assert service.calls == []
 
 
-def test_plugin_registers_all_seven_tools():
+def test_plugin_registers_all_music_tools():
     ctx = PortablePluginContext()
 
     load_portable_plugin(Path("plugins/connectors/spotify")).register(ctx)
@@ -278,5 +291,31 @@ def test_plugin_registers_all_seven_tools():
         "spotify_playlists",
         "spotify_albums",
         "spotify_library",
+        "spotify_podcasts",
     }
     assert "spotify" in ctx.connectors
+
+
+def test_linked_collection_merges_every_saved_page_without_duplicates():
+    class LinkedService(FakeService):
+        def get_linked_playlists(self):
+            return [{'id':'shared','uri':'spotify:playlist:shared','name':'Linked duplicate','linked':True},
+                    {'id':'mix','uri':'spotify:playlist:mix','name':'Daily Mix 1','linked':True}]
+        def request(self, method, path, **kwargs):
+            offset=kwargs['params']['offset']
+            return {'items':[{'id':'shared','name':'Saved'}] if offset==0 else [{'id':'last','name':'Last saved'}],
+                    'next':'provider-next' if offset==0 else None,'total':2}
+    service=LinkedService()
+    first=json.loads(spotify_playlists({'action':'list','limit':2,'offset':0},service=service))['data']
+    second=json.loads(spotify_playlists({'action':'list','limit':2,'offset':2},service=service))['data']
+    assert first['total']==3 and first['next']
+    assert [p['id'] for p in first['items']+second['items']]==['shared','last','mix']
+    assert second['next'] is None and second['items'][0]['linked']
+
+
+def test_remember_playlist_links_requires_explicit_confirmation_before_write():
+    from unittest.mock import Mock
+    service=Mock()
+    result=json.loads(spotify_playlists({'action':'remember_links','uris':['spotify:playlist:Mix']},service=service))
+    assert not result['ok']
+    service.remember_playlist_links.assert_not_called()

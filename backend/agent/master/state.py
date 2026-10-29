@@ -13,6 +13,10 @@ from agent.memory.sessions import SESSIONS_DB
 class MasterThreadState:
     thread_id: str
     active_agent: str = "VellumAgent"
+    agent_selected: bool = False
+    selected_model: str = ""
+    reasoning_mode: str = ""
+    store_to_memory: bool = True
     pending_reroute_target: str = ""
     pending_reroute_reason: str = ""
 
@@ -41,6 +45,20 @@ class MasterThreadStateStore:
                 )
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in conn.execute("PRAGMA table_info(master_thread_state)").fetchall()
+            }
+            if "specialist_context_json" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN specialist_context_json TEXT NOT NULL DEFAULT '{}'")
+            if "selected_model" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN selected_model TEXT NOT NULL DEFAULT ''")
+            if "reasoning_mode" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN reasoning_mode TEXT NOT NULL DEFAULT ''")
+            if "store_to_memory" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN store_to_memory INTEGER NOT NULL DEFAULT 1")
+            if "agent_selected" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN agent_selected INTEGER NOT NULL DEFAULT 0")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS master_pending_actions (
@@ -62,21 +80,65 @@ class MasterThreadStateStore:
         return MasterThreadState(
             thread_id=thread_id,
             active_agent=row["active_agent"],
+            agent_selected=bool(row["agent_selected"]),
+            selected_model=row["selected_model"],
+            reasoning_mode=row["reasoning_mode"],
+            store_to_memory=bool(row["store_to_memory"]),
             pending_reroute_target=row["pending_reroute_target"],
             pending_reroute_reason=row["pending_reroute_reason"],
         )
 
-    def set_active_agent(self, thread_id: str, agent_name: str) -> None:
+    def set_active_agent(self, thread_id: str, agent_name: str, *, selected: bool = False) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO master_thread_state (thread_id, active_agent, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO master_thread_state (thread_id, active_agent, agent_selected, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(thread_id) DO UPDATE SET
                     active_agent = excluded.active_agent,
+                    agent_selected = excluded.agent_selected,
                     updated_at = excluded.updated_at
                 """,
-                (thread_id, agent_name),
+                (thread_id, agent_name, int(selected)),
+            )
+
+    def set_selected_model(self, thread_id: str, model_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO master_thread_state (thread_id, selected_model, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    selected_model = excluded.selected_model,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, model_id),
+            )
+
+    def set_reasoning_mode(self, thread_id: str, reasoning_mode: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO master_thread_state (thread_id, reasoning_mode, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    reasoning_mode = excluded.reasoning_mode,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, reasoning_mode),
+            )
+
+    def set_store_to_memory(self, thread_id: str, enabled: bool) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO master_thread_state (thread_id, store_to_memory, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    store_to_memory = excluded.store_to_memory,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, int(enabled)),
             )
 
     def set_pending_reroute(self, thread_id: str, target: str, reason: str) -> None:
@@ -101,18 +163,39 @@ class MasterThreadStateStore:
     def clear_pending_reroute(self, thread_id: str) -> None:
         self.set_pending_reroute(thread_id, "", "")
 
-    def set_pending_action(self, thread_id: str, action: dict[str, Any]) -> None:
+    def set_pending_action(self, thread_id: str, action: dict[str, Any], *, replace: bool = True) -> bool:
+        conflict = (
+            "DO UPDATE SET action_json = excluded.action_json, updated_at = excluded.updated_at"
+            if replace else "DO NOTHING"
+        )
         with self._connect() as conn:
-            conn.execute(
-                """
+            result = conn.execute(
+                f"""
                 INSERT INTO master_pending_actions (thread_id, action_json, updated_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(thread_id) DO UPDATE SET
-                    action_json = excluded.action_json,
-                    updated_at = excluded.updated_at
+                ON CONFLICT(thread_id) {conflict}
                 """,
                 (thread_id, json.dumps(action, ensure_ascii=False)),
             )
+        return result.rowcount == 1
+
+    def queue_pending_action(self, thread_id: str, action: dict[str, Any], *, batch_id: str) -> bool:
+        """Append only to this batch's confirmation queue, under one local transaction."""
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT action_json FROM master_pending_actions WHERE thread_id = ?", (thread_id,)).fetchone()
+            pending = json.loads(row["action_json"]) if row else None
+            if pending is not None and pending.get("batch_id") != batch_id:
+                return False
+            if pending is None:
+                pending = {**action, "batch_id":batch_id, "queued_actions":[]}
+            else:
+                pending.setdefault("queued_actions", []).append(action)
+            conn.execute("""INSERT INTO master_pending_actions(thread_id, action_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(thread_id) DO UPDATE
+                SET action_json = excluded.action_json, updated_at = excluded.updated_at""",
+                (thread_id, json.dumps(pending, ensure_ascii=False)))
+            return True
 
     def get_pending_action(self, thread_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
@@ -129,6 +212,63 @@ class MasterThreadStateStore:
             return None
         return loaded if isinstance(loaded, dict) else None
 
+    def claim_pending_action(
+        self, thread_id: str, *, agent_id: str, user_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT action_json FROM master_pending_actions WHERE thread_id = ?",
+                (thread_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                loaded = json.loads(row["action_json"])
+            except json.JSONDecodeError:
+                conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))
+                return None
+            if not isinstance(loaded, dict):
+                return None
+            if str(loaded.get("agent") or "") != agent_id:
+                return None
+            if user_id is not None and loaded.get("user_id") != user_id:
+                return None
+            deleted = conn.execute(
+                "DELETE FROM master_pending_actions WHERE thread_id = ?",
+                (thread_id,),
+            )
+            if deleted.rowcount != 1:
+                return None
+        return loaded
+
     def clear_pending_action(self, thread_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))
+
+    def get_specialist_context(self, thread_id: str, agent_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT specialist_context_json FROM master_thread_state WHERE thread_id = ?", (thread_id,)).fetchone()
+        try:
+            value = json.loads(row[0] if row else "{}").get(agent_id, {})
+            return value if isinstance(value, dict) else {}
+        except (ValueError, AttributeError):
+            return {}
+
+    def set_specialist_context(self, thread_id: str, agent_id: str, context: dict[str, Any]) -> None:
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT specialist_context_json FROM master_thread_state WHERE thread_id = ?", (thread_id,)).fetchone()
+            try:
+                scopes = json.loads(row[0] if row else "{}")
+            except ValueError:
+                scopes = {}
+            if not isinstance(scopes, dict): scopes = {}
+            scopes[agent_id] = context
+            conn.execute("INSERT INTO master_thread_state(thread_id, specialist_context_json) VALUES (?, ?) ON CONFLICT(thread_id) DO UPDATE SET specialist_context_json=excluded.specialist_context_json", (thread_id,json.dumps(scopes,ensure_ascii=False)))
+
+    def delete(self, thread_id: str) -> None:
+        """Remove local specialist references and pending authority with a chat."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))
+            conn.execute("DELETE FROM master_thread_state WHERE thread_id = ?", (thread_id,))

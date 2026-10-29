@@ -103,3 +103,16 @@ and bulk-inserts private observations transactionally. Archive media stays in
 place; only entry name, byte size, and CRC metadata are inventoried. Repeating
 an idempotency key does not execute the import again, and stable event keys
 deduplicate activity repeated across Takeout files.
+
+## Local Takeout libraries (2026-10)
+
+Split ZIP parts are independently replayable through the existing import script.
+Knowledge Core owns history, subscriptions, Music songs, Watch Later, playlists and
+channel metadata. CSV entries are bounded to 32 MB; media is inventoried, not extracted.
+`youtube.takeout_library` is scoped to YoutubeAgent. Personal requests use local
+imports rather than public how-to search. Archive responses identify snapshot freshness;
+OAuth is still required for live Google account operations and automatic freshness.
+
+Broad interest-based discovery removes conversational request words before filtering
+local evidence. It returns bounded directions from the imported watch/search snapshot;
+specific named queries still return no match rather than unrelated interests.

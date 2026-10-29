@@ -410,6 +410,33 @@ class MemoryOrchestrator:
         if self.provider_extensions is None:
             self.provider_extensions = build_default_memory_provider_extensions()
 
+    def save_explicit_memory(
+        self,
+        *,
+        kind: str,
+        text: str,
+        source_thread_id: str,
+        confidence: float,
+        scope: str = "global",
+    ) -> dict[str, Any]:
+        """Persist a user-authored memory and update its canonical search projection."""
+
+        if self.store is None:
+            raise RuntimeError("memory store unavailable")
+        memory_id = self.store.save_memory(
+            kind=kind,
+            text=text,
+            source_thread_id=source_thread_id,
+            confidence=confidence,
+            scope=scope,
+        )
+        self.fts5.add_document(
+            content=f"Saved memory: {text}",
+            thread_id=source_thread_id,
+            source_paths=[f"memory:{memory_id}"],
+        )
+        return self.store.get_memory(memory_id)
+
     def lookup_specialist_response(self, *, profile: AgentProfile, query: str) -> CacheDecision:
         if self.store is not None:
             settings = self.store.get_settings()
@@ -536,6 +563,8 @@ class MemoryOrchestrator:
         active_project: str | None = None,
         cloud_safe: bool = False,
         read_scopes: list[str] | None = None,
+        live_honcho: bool = True,
+        include_history: bool = True,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
@@ -557,24 +586,28 @@ class MemoryOrchestrator:
         saved: list[dict[str, Any]] = []
         if self.store is not None:
             baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
+            if agent_name == 'MusicAgent' and 'agent:MusicAgent' in scopes:
+                # Vague suggestions still need this agent's approved preferences.
+                # Keep the existing scope policy; do not read global history.
+                baseline_scopes.append('agent:MusicAgent')
             baseline = _durable_memories(self.store.list_saved(scopes=baseline_scopes))[:4] if baseline_scopes else []
             matched = _durable_memories(self.store.search_saved(clean_query, limit=12, scopes=scopes))
             saved = _dedupe_memories([*baseline, *matched])[:8]
         strict_profile_scope = read_scopes is not None
         docs = (
             self.fts5.search(_memory_search_query(clean_query), limit=5)
-            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            if include_history and settings.get("reference_history_enabled", True) and not strict_profile_scope
             else []
         )
         honcho_context = ""
-        if self.honcho is not None and (not strict_profile_scope or "user_profile" in scopes):
+        if live_honcho and self.honcho is not None and (not strict_profile_scope or "user_profile" in scopes):
             try:
                 honcho_context = str(self.honcho.chat(session_id=thread_id, query=clean_query) or "")
             except Exception:
                 honcho_context = ""
         docs = docs or (
             self.fts5.recent_documents(limit=5)
-            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            if include_history and settings.get("reference_history_enabled", True) and not strict_profile_scope
             else []
         )
         external_context = (
@@ -623,6 +656,53 @@ class MemoryOrchestrator:
         if cloud_safe:
             packet = _scrub_packet(packet)
         return packet
+
+    def build_agent_handoff(self, *, source, recipient, query: str, thread_id: str,
+                           user_id: str, recent: dict | None = None) -> dict[str, Any]:
+        """Resolve relevant evidence under both profiles' policies; never copy history."""
+        from datetime import UTC, datetime, timedelta
+        from agent.memory.packets import AgentMemoryPacket, PacketEvidence
+        from agent.privacy.scrubber import PrivacyScrubber
+        def contains_secret(text):
+            return any(pattern.search(text) for label, pattern, _ in PrivacyScrubber.regex_patterns
+                       if label in {"SECRET", "CRYPTO_KEY", "CREDIT_CARD", "GOVERNMENT_ID"}) or bool(
+                       re.search(r"auth_token|\bct0\b|\bbearer\s+\S+|-----BEGIN", text, re.I))
+        if source.id != recipient.id and (
+            recipient.id not in source.memory.share_with or source.id not in recipient.memory.receive_from
+            or recipient.source_egress != "local"
+        ):
+            raise PermissionError("This memory handoff is not allowed by both profiles")
+        now = datetime.now(UTC)
+        items = []
+        if self.store is not None and self.store.get_settings().get("memory_enabled", True):
+            authorized_scopes = source.memory.read_scopes if source.id == recipient.id else source.memory.share_scopes
+            scopes = [scope for scope in source.memory.read_scopes
+                      if scope in {"shared", f"agent:{source.id}"} and scope in authorized_scopes]
+            matches = self.store.search_saved(query, limit=4, scopes=scopes) if scopes else []
+            for item in matches:
+                if contains_secret(str(item["text"])):
+                    continue
+                items.append(PacketEvidence(reference=f"memory:{item['id']}", scope=item["scope"],
+                    text=str(item["text"])[:1600], confidence=float(item.get("confidence") or 0),
+                    updated_at=str(item.get("updated_at") or "")))
+            recent = recent or {}
+            captured = recent.get("captured_at", "")
+            try:
+                age = (now - datetime.fromisoformat(captured)).total_seconds()
+            except (ValueError, TypeError):
+                age = -1
+            tokens = lambda text: set(re.findall(r"[a-z0-9]{3,}", str(text).casefold())) - {"what","about","this","that","have","with","from","please","tell","know","does","your","their"}
+            if (recent.get("user_id") == user_id and 0 <= age <= 600
+                    and source.result_visibility == "full"
+                    and f"agent:{source.id}" in scopes
+                    and not contains_secret(json.dumps(recent, default=str))
+                    and tokens(query) & tokens(recent.get("purpose", ""))):
+                items.append(PacketEvidence(reference=str(recent["reference"]), scope=f"agent:{source.id}",
+                    text=str(recent.get("summary") or "")[:1600], confidence=float(recent.get("confidence") or 0),
+                    updated_at=captured, sources=[str(s)[:500] for s in recent.get("sources", [])[:6]]))
+        return AgentMemoryPacket(source_agent=source.id, recipient_agent=recipient.id, purpose=query[:1000],
+            thread_id=thread_id, user_id=user_id, captured_at=now, expires_at=now+timedelta(minutes=5),
+            items=items).model_dump(mode="json")
 
     def summary_view(self) -> dict[str, Any]:
         """Return one stable, UI-ready memory contract for every frontend surface."""
@@ -906,7 +986,7 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
         return []
     candidates: list[dict[str, Any]] = []
     explicit = re.search(
-        r"\b(?:remember|memorize|note|keep in mind)\b(?:\s+that)?\s+(?P<fact>.+)",
+        r"(?:^|[.!?]\s+)(?:please\s+)?(?:remember|memorize|note|keep in mind)\b(?:\s+that)?\s+(?P<fact>.+)",
         text,
         flags=re.IGNORECASE | re.DOTALL,
     )
@@ -925,6 +1005,9 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
 
 _MEMORY_NOISE_RE = re.compile(
     r"(?:\[vellum ui context:|recency_hunger|stochastic_kick|curiosity[_ -]score|"
+    r"\bplease use\b.{0,60}\bagent\b|\banswer (?:this|the)\b.{0,30}\bquestion\b|"
+    r"\bdo not include any personal context\b|"
+    r"\b(?:for this chat only|demonstration project|reply with (?:its|the) label)\b|"
     r"\b(?:install|download|archive|delete|remove|uninstall|list|show)\b.{0,40}\bskills?\b|"
     r"\bskills?\b.{0,40}\b(?:install|download|archive|delete|remove|uninstall)\b|"
     r"\b(?:tool_call|system prompt|developer message|use the following instructions)\b)",
@@ -932,7 +1015,7 @@ _MEMORY_NOISE_RE = re.compile(
 )
 _GREETING_RE = re.compile(r"^(?:hi|hey|hello|sup|yo|thanks|thank you|good job|great job)[.!\s]*$", re.IGNORECASE)
 _QUESTION_START_RE = re.compile(
-    r"^(?:what|when|where|why|who|which|how|can|could|would|should|do|does|did|is|are|was|were|have|has)\b",
+    r"^(?:(?:so\s+)?(?:tell me|explain|give|summari[sz]e)|what|when|where|why|who|which|how|can|could|would|should|do|does|did|is|are|was|were|have|has)\b",
     re.IGNORECASE,
 )
 
@@ -947,6 +1030,8 @@ def _is_durable_memory_text(text: str, *, explicit: bool = False) -> bool:
     if len(clean) < 12 or _GREETING_RE.fullmatch(clean) or _MEMORY_NOISE_RE.search(clean):
         return False
     if not explicit and (clean.endswith("?") or _QUESTION_START_RE.match(clean)):
+        return False
+    if not explicit and re.match(r"^(?:please\s+)?(?:post|publish|tweet|reply|repost|retweet|unrepost|unretweet|like|unlike|bookmark|unbookmark)\b", clean, re.I):
         return False
     if len(re.findall(r"[A-Za-z0-9]+", clean)) < 3:
         return False
@@ -1032,7 +1117,7 @@ def _memory_text_from_markdown(path: Path) -> str:
 
 
 def _explicit_remember(text: str) -> bool:
-    return bool(re.search(r"\b(?:remember|memorize|note|keep in mind)\b", text, re.I))
+    return bool(re.search(r"(?:^|[.!?]\s+)(?:please\s+)?(?:remember|memorize|note|keep in mind)\b", text, re.I))
 
 
 def _sentence(text: str) -> str:

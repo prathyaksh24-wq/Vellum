@@ -1,7 +1,7 @@
 id: agent-reach
 name: Agent-Reach
 type: connector
-category: Connectors
+category: Web & Research
 version: 0.1.0
 description: Portable Vellum connector wrapper for Agent-Reach X capabilities.
 capabilities:

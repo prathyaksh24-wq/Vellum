@@ -31,8 +31,16 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Vellum identity only; separate registrations from Calendar/YouTube connectors.
+    account_google_client_id: str = Field(default="", alias="VELLUM_ACCOUNT_GOOGLE_CLIENT_ID")
+    account_google_client_secret: str = Field(default="", alias="VELLUM_ACCOUNT_GOOGLE_CLIENT_SECRET", repr=False)
+    account_github_client_id: str = Field(default="", alias="VELLUM_ACCOUNT_GITHUB_CLIENT_ID")
+    account_github_client_secret: str = Field(default="", alias="VELLUM_ACCOUNT_GITHUB_CLIENT_SECRET", repr=False)
+    account_supabase_url: str = Field(default="", alias="VELLUM_ACCOUNT_SUPABASE_URL")
+    account_supabase_publishable_key: str = Field(default="", alias="VELLUM_ACCOUNT_SUPABASE_PUBLISHABLE_KEY", repr=False)
+
     # OpenRouter
-    openrouter_api_key: str = Field(alias="OPENROUTER_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         alias="OPENROUTER_BASE_URL",
@@ -46,7 +54,27 @@ class Settings(BaseSettings):
         default="https://api.openai.com/v1",
         alias="OPENAI_BASE_URL",
     )
-    primary_model: str = Field(default="google/gemma-4-31b-it", alias="PRIMARY_MODEL")
+    # Local Ollama is the default brain. Cloud routes remain optional.
+    ollama_base_url: str = Field(
+        default="http://127.0.0.1:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+    ollama_request_timeout_seconds: float = Field(
+        default=300.0,
+        alias="OLLAMA_REQUEST_TIMEOUT_SECONDS",
+    )
+    # Transport ceiling; role budgets below choose the actual request window.
+    ollama_context_length: int = Field(default=32768, ge=4096, le=262144, alias="OLLAMA_CONTEXT_LENGTH")
+    main_context_length: int = Field(default=32768, ge=4096, le=262144, alias="MAIN_CONTEXT_LENGTH")
+    specialist_context_length: int = Field(default=16384, ge=4096, le=262144, alias="SPECIALIST_CONTEXT_LENGTH")
+    context_summary_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARY_ENABLED")
+    context_summary_timeout_seconds: float = Field(default=20.0, ge=1, le=120, alias="CONTEXT_SUMMARY_TIMEOUT_SECONDS")
+    context_compaction_enabled: bool = Field(default=True, alias="CONTEXT_COMPACTION_ENABLED")
+    context_compaction_trigger_ratio: float = Field(default=.80, ge=.5, le=.95, alias="CONTEXT_COMPACTION_TRIGGER_RATIO")
+    context_compaction_target_ratio: float = Field(default=.55, ge=.2, le=.8, alias="CONTEXT_COMPACTION_TARGET_RATIO")
+    context_recent_turns: int = Field(default=4, ge=1, le=20, alias="CONTEXT_RECENT_TURNS")
+    ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
+    primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
     fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")
     llm_routing_db_path: Path = Field(
@@ -84,8 +112,15 @@ class Settings(BaseSettings):
         alias="KNOWLEDGE_BLOB_PATH",
     )
 
-    # Vector store (embedded ChromaDB)
-    chroma_path: Path | None = Field(default=Path("data/embeddings/chroma"), alias="CHROMA_PATH")
+    # One local embedding runtime; each model generation gets a fresh index.
+    embedding_backend: Literal["ollama", "sentence_transformers"] = Field(default="ollama", alias="EMBEDDING_BACKEND")
+    embedding_model: str = Field(default="embeddinggemma-2:270m-q8_0-text", alias="EMBEDDING_MODEL")
+    embedding_model_revision: str = Field(default="c21dd30c1e38444d3b4faa091407b6fa97221447b4965d74931d43d7f09bbbfd", alias="EMBEDDING_MODEL_REVISION")
+    embedding_dimensions: int = Field(default=768, ge=1, le=4096, alias="EMBEDDING_DIMENSIONS")
+    embedding_batch_size: int = Field(default=16, ge=1, le=128, alias="EMBEDDING_BATCH_SIZE")
+    embedding_timeout_seconds: float = Field(default=90, ge=1, le=300, alias="EMBEDDING_TIMEOUT_SECONDS")
+    # Preserve data/embeddings/chroma for legacy rollback.
+    chroma_path: Path | None = Field(default=Path("data/embeddings/chroma-embeddinggemma2-v1"), alias="CHROMA_PATH")
 
     # Privacy
     enable_pii_scrubbing: bool = Field(default=True, alias="ENABLE_PII_SCRUBBING")
@@ -153,6 +188,7 @@ class Settings(BaseSettings):
     browser_headed: bool = Field(default=False, alias="BROWSER_HEADED")
     browser_snapshot_budget: int = Field(default=15000, alias="BROWSER_SNAPSHOT_BUDGET")
     browser_cache_dir: Path = Field(default=Path("data/browser-cache"), alias="BROWSER_CACHE_DIR")
+    browser_executable_path: str = Field(default="", alias="BROWSER_EXECUTABLE_PATH")
     browser_cdp_url: str = Field(default="", alias="BROWSER_CDP_URL")
     browser_dialog_policy: Literal["must_respond", "auto_dismiss", "auto_accept"] = Field(
         default="must_respond",
@@ -177,6 +213,23 @@ class Settings(BaseSettings):
         alias="YOUTUBE_OAUTH_KEYRING_SERVICE",
     )
     youtube_oauth_account_label: str = Field(default="primary", alias="YOUTUBE_OAUTH_ACCOUNT_LABEL")
+    google_workspace_oauth_client_id: str = Field(default="", alias="GOOGLE_WORKSPACE_OAUTH_CLIENT_ID")
+    google_workspace_oauth_client_secret: str = Field(default="", alias="GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET", repr=False)
+    google_calendar_oauth_client_id: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_ID")
+    google_calendar_oauth_client_secret: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET")
+    google_calendar_oauth_keyring_service: str = Field(
+        default="vellum.google-calendar",
+        alias="GOOGLE_CALENDAR_OAUTH_KEYRING_SERVICE",
+    )
+    google_calendar_oauth_account_label: str = Field(
+        default="primary",
+        alias="GOOGLE_CALENDAR_OAUTH_ACCOUNT_LABEL",
+    )
+    discord_application_id: str = Field(default="", alias="DISCORD_APPLICATION_ID")
+    discord_bot_token: str = Field(default="", alias="DISCORD_BOT_TOKEN")
+    discord_allowed_guild_ids: str = Field(default="", alias="DISCORD_ALLOWED_GUILD_IDS")
+    discord_allowed_channel_ids: str = Field(default="", alias="DISCORD_ALLOWED_CHANNEL_IDS")
+    discord_intelligence_sync_enabled: bool = Field(default=True, alias="DISCORD_INTELLIGENCE_SYNC_ENABLED")
     obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
     obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
     obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")
@@ -203,8 +256,8 @@ class Settings(BaseSettings):
 
     # Tool search (progressive tool disclosure)
     tool_search_enabled: str = Field(default="auto", alias="TOOL_SEARCH_ENABLED")
-    tool_search_threshold_ratio: float = Field(default=0.05, alias="TOOL_SEARCH_THRESHOLD_RATIO")
-    tool_search_listing_max_tokens: int = Field(default=4000, alias="TOOL_SEARCH_LISTING_MAX_TOKENS")
+    tool_search_threshold_ratio: float = Field(default=0.005, alias="TOOL_SEARCH_THRESHOLD_RATIO")
+    tool_search_listing_max_tokens: int = Field(default=512, alias="TOOL_SEARCH_LISTING_MAX_TOKENS")
     tool_search_context_length: int = Field(default=0, alias="TOOL_SEARCH_CONTEXT_LENGTH")
 
     # Agent
@@ -234,6 +287,16 @@ class Settings(BaseSettings):
     voice_tts_speed: float = Field(default=1.0, alias="VOICE_TTS_SPEED")
     voice_model_dir: Path = Field(default=Path("data/models/voice"), alias="VOICE_MODEL_DIR")
 
+    voice_startup_timeout_seconds: float = Field(default=300.0, alias="VOICE_STARTUP_TIMEOUT_SECONDS")
+    voice_turn_timeout_seconds: float = Field(default=180.0, alias="VOICE_TURN_TIMEOUT_SECONDS")
+    voice_max_input_seconds: float = Field(default=90.0, alias="VOICE_MAX_INPUT_SECONDS")
+    voice_max_upload_bytes: int = Field(default=10 * 1024 * 1024, alias="VOICE_MAX_UPLOAD_BYTES")
+    voice_max_output_tokens: int = Field(default=512, alias="VOICE_MAX_OUTPUT_TOKENS")
+    voice_max_sessions: int = Field(default=4, alias="VOICE_MAX_SESSIONS")
+    dictation_enabled: bool = Field(default=True, alias="DICTATION_ENABLED")
+    dictation_model_dir: Path = Field(default=Path("data/models/whisper-large-v3-turbo"), alias="DICTATION_MODEL_DIR")
+    dictation_device: Literal["auto", "cpu", "cuda"] = Field(default="auto", alias="DICTATION_DEVICE")
+
     # Computer use
     computer_use_allow_desktop: bool = Field(default=False, alias="COMPUTER_USE_ALLOW_DESKTOP")
     computer_use_screenshot_dir: Path = Field(
@@ -250,6 +313,7 @@ class Settings(BaseSettings):
         "knowledge_core_db_path",
         "knowledge_blob_path",
         "voice_model_dir",
+        "dictation_model_dir",
         "computer_use_screenshot_dir",
         "llm_routing_db_path",
         "privacy_receipt_path",
@@ -264,6 +328,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_paths_and_privacy(self) -> "Settings":
+        if self.context_compaction_target_ratio >= self.context_compaction_trigger_ratio:
+            raise ValueError("CONTEXT_COMPACTION_TARGET_RATIO must be below CONTEXT_COMPACTION_TRIGGER_RATIO.")
         # Resolve relative paths against the REPO ROOT, not CWD. Embedded Chroma
         # uses the path as its storage location, so a CWD-dependent path would
         # produce split-brain databases (one when started from Vellum/, another
@@ -274,6 +340,7 @@ class Settings(BaseSettings):
         self.knowledge_core_db_path = _resolve_against_repo(self.knowledge_core_db_path)
         self.knowledge_blob_path = _resolve_against_repo(self.knowledge_blob_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
+        self.dictation_model_dir = _resolve_against_repo(self.dictation_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
         self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)
         self.privacy_receipt_path = _resolve_against_repo(self.privacy_receipt_path)
@@ -307,6 +374,10 @@ class Settings(BaseSettings):
             raise ValueError("LLM_REQUEST_TIMEOUT_SECONDS must be greater than 0.")
         if self.llm_stream_timeout_seconds <= 0:
             raise ValueError("LLM_STREAM_TIMEOUT_SECONDS must be greater than 0.")
+        if self.ollama_request_timeout_seconds <= 0:
+            raise ValueError("OLLAMA_REQUEST_TIMEOUT_SECONDS must be greater than 0.")
+        if not self.ollama_base_url.startswith(("https://", "http://")):
+            raise ValueError("OLLAMA_BASE_URL must be an HTTP(S) URL.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
         if self.retention_archive_days < 1:
@@ -319,6 +390,18 @@ class Settings(BaseSettings):
             raise ValueError("VOICE_TTS_ENGINE must be kokoro.")
         if self.voice_tts_speed <= 0:
             raise ValueError("VOICE_TTS_SPEED must be greater than 0.")
+        if self.voice_startup_timeout_seconds <= 0:
+            raise ValueError("VOICE_STARTUP_TIMEOUT_SECONDS must be greater than 0.")
+        if self.voice_turn_timeout_seconds <= 0:
+            raise ValueError("VOICE_TURN_TIMEOUT_SECONDS must be greater than 0.")
+        if self.voice_max_input_seconds <= 0:
+            raise ValueError("VOICE_MAX_INPUT_SECONDS must be greater than 0.")
+        if self.voice_max_upload_bytes < 44:
+            raise ValueError("VOICE_MAX_UPLOAD_BYTES must fit a WAV header.")
+        if self.voice_max_output_tokens < 1:
+            raise ValueError("VOICE_MAX_OUTPUT_TOKENS must be at least 1.")
+        if self.voice_max_sessions < 1:
+            raise ValueError("VOICE_MAX_SESSIONS must be at least 1.")
         if not self.apify_mcp_url.startswith(("https://", "http://")):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
         if not self.serpapi_base_url.startswith(("https://", "http://")):

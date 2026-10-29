@@ -155,12 +155,22 @@ class CredentialPool:
     def reap_expired_leases(self) -> int:
         return self.store.reap_expired_leases(self.clock())
 
-    def reset_provider(self, provider: str) -> None:
+    def reset_provider(self, provider: str) -> int:
+        reset_count = 0
         for credential in self.store.list_credentials(provider):
-            if credential.status is not CredentialStatus.invalid:
-                self.store.set_credential_state(
-                    credential.id,
-                    status=CredentialStatus.healthy,
-                    cooldown_until=None,
-                    consecutive_429=0,
-                )
+            if credential.status is CredentialStatus.invalid:
+                continue
+            if (
+                credential.status is CredentialStatus.healthy
+                and credential.cooldown_until is None
+                and credential.consecutive_429 == 0
+            ):
+                continue
+            self.store.set_credential_state(
+                credential.id,
+                status=CredentialStatus.healthy,
+                cooldown_until=None,
+                consecutive_429=0,
+            )
+            reset_count += 1
+        return reset_count

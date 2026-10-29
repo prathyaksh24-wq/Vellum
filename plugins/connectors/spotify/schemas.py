@@ -92,9 +92,11 @@ SPOTIFY_SEARCH = _tool(
 
 SPOTIFY_PLAYLISTS = _tool(
     "spotify_playlists",
-    "List, read, create, or update the user's Spotify playlists and their items.",
+    "List, read, create, or update the user's Spotify playlists and their items. List includes exact playlist links explicitly remembered in Vellum; remember_links stores connection-scoped references without changing Spotify's library.",
     {
-        "action": {"type": "string", "enum": ["list", "get", "create", "add_items", "remove_items", "update_details"]},
+        "action": {"type": "string", "enum": ["list", "get", "tracks", "get_tracks", "create", "add_items", "remove_items", "update_details", "remember_links"]},
+        "confirm": {"type": "boolean"},
+        "labels": {"type": "object", "maxProperties": 20, "additionalProperties": {"type": "string", "maxLength": 300}, "description": "Optional exact-URI labels supplied by the user or verified from Spotify's page when metadata is unavailable."},
         "playlist_id": {"type": "string"},
         "name": {"type": "string"},
         "description": {"type": "string"},
@@ -111,23 +113,25 @@ SPOTIFY_PLAYLISTS = _tool(
 
 SPOTIFY_ALBUMS = _tool(
     "spotify_albums",
-    "Get Spotify album metadata or list an album's tracks.",
+    "Get album metadata, tracks, or artist albums with release dates. artist_albums requires artist_id; get/tracks require album_id.",
     {
-        "action": {"type": "string", "enum": ["get", "tracks"]},
+        "action": {"type": "string", "enum": ["get", "tracks", "artist_albums"]},
         "album_id": {"type": "string"},
+        "artist_id": {"type": "string"},
+        "include_groups": {"type": "string", "enum": ["album", "single", "appears_on", "compilation"]},
         "market": {"type": "string"},
         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
         "offset": {"type": "integer", "minimum": 0},
     },
-    ["action", "album_id"],
+    ["action"],
 )
 
 SPOTIFY_LIBRARY = _tool(
     "spotify_library",
-    "List, save, or remove tracks or albums in the user's Spotify library. Liked Songs is the track library, not a playlist. For 'like/save this song', use save_current so no separate playback lookup is needed.",
+    "List, save, or remove tracks, albums or saved playlists in the user's Spotify library. Use kind playlists with exact playlist URIs to unfollow/remove saved playlists. Liked Songs is the track library, not a playlist. For 'like/save this song', use save_current so no separate playback lookup is needed.",
     {
-        "kind": {"type": "string", "enum": ["tracks", "albums"]},
-        "action": {"type": "string", "enum": ["list", "save", "remove", "save_current", "remove_current"]},
+        "kind": {"type": "string", "enum": ["tracks", "albums", "playlists"]},
+        "action": {"type": "string", "enum": ["list", "contains", "save", "remove", "save_current", "remove_current"]},
         "ids": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "uris": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "market": {"type": "string"},
@@ -135,6 +139,20 @@ SPOTIFY_LIBRARY = _tool(
         "offset": {"type": "integer", "minimum": 0},
     },
     ["kind", "action"],
+)
+
+SPOTIFY_PODCASTS = _tool(
+    "spotify_podcasts",
+    "Read a podcast show, its episodes, or an episode. Search shows/episodes with spotify_search; play an episode URI with spotify_playback.",
+    {
+        "action": {"type":"string", "enum":["show", "episodes", "episode"]},
+        "show_id": {"type":"string", "pattern":"^[A-Za-z0-9]+$"},
+        "episode_id": {"type":"string", "pattern":"^[A-Za-z0-9]+$"},
+        "market": {"type":"string"},
+        "limit": {"type":"integer", "minimum":1, "maximum":50},
+        "offset": {"type":"integer", "minimum":0},
+    },
+    ["action"],
 )
 
 ALL_SCHEMAS = [
@@ -145,4 +163,5 @@ ALL_SCHEMAS = [
     SPOTIFY_PLAYLISTS,
     SPOTIFY_ALBUMS,
     SPOTIFY_LIBRARY,
+    SPOTIFY_PODCASTS,
 ]

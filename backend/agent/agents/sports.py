@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+import os
+from zoneinfo import ZoneInfo
 import re
 from pathlib import Path
 from typing import Any
 
-from agent.agents.base import MemoryProposal, SpecialistResponse, SpecialistSource
+from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.config import get_settings
 from agent.tools.serpapi import SerpApiClient
+from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 from agent.tools.web import extract_web_sources, web_search
 
 
@@ -68,6 +71,18 @@ class SportsAgent:
         "mbappé",
         "haaland",
     )
+    _NFL_TEAM_TERMS = (
+        "chiefs", "cheifs", "kansas city chiefs", "kc chiefs", "bills", "ravens",
+        "bengals", "browns", "steelers", "texans", "colts", "jaguars", "titans",
+        "broncos", "raiders", "chargers", "cowboys", "eagles", "giants", "commanders",
+        "bears", "lions", "packers", "vikings", "falcons", "panthers", "saints",
+        "buccaneers", "cardinals", "rams", "49ers", "niners", "seahawks", "patriots",
+        "jets", "dolphins",
+    )
+    _TEAM_EVENT_TERMS = (
+        "game", "games", "match", "matches", "schedule", "score", "scores",
+        "fixture", "fixtures", "next", "upcoming", "when is", "when do",
+    )
     _ATHLETE_CONTEXT_TERMS = (
         "performance",
         "played",
@@ -98,17 +113,40 @@ class SportsAgent:
         ("Boxing", ("boxing", "title fight", "fight card")),
         ("Cricket", ("cricket", "ipl", "test match", "odi", "t20")),
         ("Tennis", ("tennis", "atp", "wta", "grand slam", "sinner", "alcaraz")),
-        ("NFL", ("nfl", "super bowl", "american football")),
+        ("NFL", ("nfl", "super bowl", "american football") + _NFL_TEAM_TERMS),
     )
 
-    def __init__(self, vault_root: Path, web_searcher: WebSearcher | None = None) -> None:
+    def __init__(
+        self,
+        vault_root: Path,
+        web_searcher: WebSearcher | None = None,
+        tool_registry: ToolRegistry | None = None,
+    ) -> None:
         self.vault_root = Path(vault_root)
         self.web_searcher = web_searcher or self._default_web_searcher
+        self.tool_registry = tool_registry or ToolRegistry()
+        if "sports.web_search" not in self.tool_registry.names():
+            self.tool_registry.register(
+                CapabilityRecord(
+                    name="sports.web_search",
+                    namespace="sports",
+                    access=CapabilityAccess.READ,
+                    allowed_agents=frozenset({self.name}),
+                    stream_label="Searching sports",
+                    adapter=lambda payload: self.web_searcher(str(payload.get("query") or "")),
+                    input_schema={"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":False},
+                )
+            )
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
         if any(guard in lowered for guard in self._NON_SPORT_GUARDS):
             return False
+        team_schedule = any(self._has_phrase(lowered, term) for term in self._NFL_TEAM_TERMS) and any(
+            self._has_phrase(lowered, marker) for marker in self._TEAM_EVENT_TERMS
+        )
+        if team_schedule:
+            return True
         athlete_terms = ("ronaldo", "cristiano ronaldo", "messi", "lionel messi", "mbappe", "mbappé", "haaland")
         if any(self._has_phrase(lowered, term) for term in athlete_terms):
             return any(self._has_phrase(lowered, term) for term in self._ATHLETE_CONTEXT_TERMS)
@@ -125,7 +163,11 @@ class SportsAgent:
 
         league = self.resolve_league(query)
         source_budget = self._source_budget(query)
-        search_result = self.web_searcher(self._search_query(query, league, source_budget))
+        search_result = self.tool_registry.invoke(
+            "sports.web_search",
+            {"query": self._search_query(query, league, source_budget)},
+            agent_name=self.name,
+        )
         provider = str(search_result.get("provider") or "") if isinstance(search_result, dict) else ""
         search_output, sources = self._normalize_search_result(search_result)
         if not sources:
@@ -140,8 +182,6 @@ class SportsAgent:
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         selected = self._rank_sources(query, sources)[:source_budget]
         summary = self._compose_answer(query, selected, search_output)
-        saved_path = self._save_response(query=query, answer=summary, league=league, sources=selected, created_at=now)
-        relative_path = saved_path.relative_to(self.vault_root).as_posix()
 
         return SpecialistResponse(
             agent=self.name,
@@ -150,7 +190,7 @@ class SportsAgent:
             analysis=(
                 "Used on-demand public web research"
                 + (" via SerpAPI" if provider.casefold() == "serpapi" else "")
-                + f" and saved the sports response to {relative_path}."
+                + "."
             ),
             sources=[
                 SpecialistSource(
@@ -163,14 +203,6 @@ class SportsAgent:
                 for source in selected
             ],
             confidence=0.78,
-            memory_proposals=[
-                MemoryProposal(
-                    scope="sports",
-                    claim=f"User asked SportsAgent for {league} coverage.",
-                    evidence=relative_path,
-                    confidence=0.6,
-                )
-            ],
         )
 
     def resolve_league(self, query: str) -> str:
@@ -182,10 +214,11 @@ class SportsAgent:
 
     def _default_web_searcher(self, query: str) -> WebSearchResult:
         settings = get_settings()
-        if settings.serpapi_api_key:
+        from agent.tools.providers.registry import get_active_search_provider
+        selected = get_active_search_provider()
+        if selected is not None and selected.name == 'serpapi':
             try:
                 client = SerpApiClient(
-                    api_key=settings.serpapi_api_key,
                     log_path=settings.serpapi_log_path,
                 )
                 min_sources = 5 if "official schedule standings news reports" in query else 3
@@ -317,7 +350,26 @@ class SportsAgent:
             "sportbusy.com",
         }
 
-        def score(source: dict[str, Any]) -> int:
+        recency_intent = any(term in lowered_query for term in ("yesterday", "today", "latest", "performance"))
+
+        def source_date(text: str) -> int:
+            dates = []
+            for pattern, formats in (
+                (r"\b\d{4}-\d{2}-\d{2}\b", ("%Y-%m-%d",)),
+                (r"\b[a-z]+\s+\d{1,2},\s+\d{4}\b", ("%b %d, %Y", "%B %d, %Y")),
+            ):
+                for match in re.findall(pattern, text):
+                    for date_format in formats:
+                        try:
+                            parsed = datetime.strptime(match, date_format).date()
+                        except ValueError:
+                            continue
+                        if parsed <= now:
+                            dates.append(parsed.toordinal())
+                        break
+            return max(dates, default=0)
+
+        def score(source: dict[str, Any]) -> tuple[float, int]:
             text = " ".join(
                 str(source.get(key) or "")
                 for key in ("title", "snippet", "domain", "provider_label", "url")
@@ -335,15 +387,18 @@ class SportsAgent:
             if any(marker and marker in text for marker in yesterday_markers):
                 value += 12
             if "yesterday" in lowered_query or "today" in lowered_query or "latest" in lowered_query:
-                if "2026" in text and (current_month in text or current_month_full in text):
+                if str(now.year) in text and (current_month in text or current_month_full in text):
                     value += 6
-                if "2026" in text and "apr" in text:
-                    value -= 8
             if domain in low_value_domains:
                 value -= 50
             if any(noise in text for noise in ("buy tickets", "ticket prices", "tickets for sale", "coupon", "promo code")):
                 value -= 30
-            return value
+            published = source_date(text) if recency_intent else 0
+            if published:
+                # Let actual dated freshness outweigh minor wording differences
+                # such as "Cristiano Ronaldo" versus "Portugal's Ronaldo".
+                value -= (now.toordinal() - published) / 30
+            return value, published
 
         return sorted(sources, key=score, reverse=True)
 
@@ -364,6 +419,8 @@ class SportsAgent:
             or self._snapshot_from_search_output(search_output)
             or self._snapshot_from_sources(query, sources)
         )
+        if self._schedule_intent(query) and re.search(r"\bnext\b", query, re.I) and not re.search(r"\b(?:full|all|season|fixtures|schedule|calendar)\b", query, re.I):
+            snapshot = self._next_event_snapshot(snapshot)
         lines: list[str] = []
         if snapshot:
             lines.append(snapshot)
@@ -374,6 +431,33 @@ class SportsAgent:
         if table:
             lines.append(table)
         return "\n\n".join(line for line in lines if line.strip())
+
+    @staticmethod
+    def _next_event_snapshot(snapshot: str) -> str:
+        if snapshot.startswith("Official Formula 1 calendar excerpt:"):
+            return snapshot[:600]
+        # Keep a singular next-game request singular. Convert the actual dated
+        # source time with DST rules, rather than guessing a US/India offset.
+        sentence = re.split(r"(?<=[.!?])\s+", snapshot.split("\n", 1)[0], maxsplit=1)[0]
+        match = re.search(
+            r"(?P<date>(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+)?"
+            r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}),?\s+(?:at\s+)?"
+            r"(?P<clock>\d{1,2}:\d{2}\s*[AP]M)\s+(?P<zone>EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|PDT|PST|PT)\b",
+            sentence, re.I,
+        )
+        if not match:
+            return sentence
+        zones={label:zone for labels,zone in [(('EDT','EST','ET'),'America/New_York'),(('CDT','CST','CT'),'America/Chicago'),(('MDT','MST','MT'),'America/Denver'),(('PDT','PST','PT'),'America/Los_Angeles')] for label in labels}
+        try:
+            date_text=re.sub(r"^[A-Za-z]+,?\s+(?=[A-Za-z]+\s+\d)","",match.group('date'))
+            source=datetime.strptime(date_text+' '+match.group('clock').upper(),'%B %d, %Y %I:%M %p').replace(tzinfo=ZoneInfo(zones[match.group('zone').upper()]))
+            local=source.astimezone(ZoneInfo(os.getenv('VELLUM_USER_TIMEZONE','Asia/Kolkata')))
+            label='IST' if local.tzinfo.key in {'Asia/Kolkata','Asia/Calcutta'} else local.tzname()
+            clock=local.strftime('%I:%M %p').lstrip('0')
+            replacement=f"{local.strftime('%A, %B %d, %Y')} at {clock} {label} ({match.group('clock')} {match.group('zone').upper()})"
+            return sentence[:match.start()]+replacement+sentence[match.end():]
+        except (KeyError, ValueError):
+            return sentence
 
     def _should_prioritize_ranked_source_snapshot(self, query: str) -> bool:
         lowered = query.lower()
@@ -386,32 +470,20 @@ class SportsAgent:
         if re.search(r"\bthe next formula 1 race is\b", search_output, re.I):
             return self._snapshot_from_search_output(search_output)
 
-        combined = " ".join(
-            [
-                search_output,
-                *(
-                    " ".join(str(source.get(key) or "") for key in ("title", "snippet", "domain", "url"))
-                    for source in sources
-                ),
-            ]
-        )
-        if not re.search(r"\b(austria|austrian)\b", combined, re.I):
-            return ""
-
-        date_match = re.search(
-            r"(\d{1,2}\s*[-–]\s*\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?)",
-            combined,
-            re.I,
-        )
-        date_text = date_match.group(1).replace("–", "-").strip().rstrip(".") if date_match else ""
-        venue = " at the Red Bull Ring in Spielberg, Austria" if re.search(r"\b(red bull ring|spielberg)\b", combined, re.I) else " in Austria"
-        if date_text:
-            return f"The next Formula 1 race is the Austrian Grand Prix{venue}, scheduled for {date_text} 2026."
-        return f"The next Formula 1 race is the Austrian Grand Prix{venue}."
+        # A country mentioned in an annual calendar does not establish the next
+        # race. Preserve the official excerpt rather than inventing a fixed GP,
+        # venue or year from unrelated search fragments.
+        for source in sources:
+            domain = str(source.get("domain") or "").lower().removeprefix("www.")
+            snippet = str(source.get("snippet") or "").strip()
+            if domain == "formula1.com" and snippet and re.search(r"\bnext\b", snippet, re.I):
+                return f"Official Formula 1 calendar excerpt: {snippet}"
+        return ""
 
     def _snapshot_from_search_output(self, search_output: str) -> str:
         if not search_output:
             return ""
+        search_output = self._clean_search_output(search_output)
         if self._looks_like_rich_markdown(search_output):
             return search_output
         first_block = search_output.split("\n\n---\n\n", 1)[0]
@@ -424,6 +496,19 @@ class SportsAgent:
         if self._is_low_value_snapshot(snapshot):
             return ""
         return snapshot[:1200]
+
+    def _clean_search_output(self, search_output: str) -> str:
+        visible = re.split(
+            r"(?im)^\s{0,3}#{1,6}\s+(?:references|sources|sources checked|evidence)\s*$",
+            search_output,
+            maxsplit=1,
+        )[0]
+        visible = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", visible)
+        visible = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", visible)
+        visible = re.sub(r"(?<!\w)\[(?:\d+)\](?!\w)", "", visible)
+        visible = visible.replace(r"\(", "").replace(r"\)", "")
+        visible = visible.replace(r"\-", "-").replace(r"\|", "|")
+        return re.sub(r"\n{3,}", "\n\n", visible).strip()
 
     def _looks_like_rich_markdown(self, text: str) -> bool:
         return bool(
@@ -507,43 +592,5 @@ class SportsAgent:
             table_lines.append(f"| {rank_text} | {player} | {country} | {goals} |")
         return "\n".join(table_lines)
 
-    def _save_response(self, *, query: str, answer: str, league: str, sources: list[dict], created_at: str) -> Path:
-        folder = self.vault_root / "Library" / "Sports" / league
-        folder.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        path = folder / f"{timestamp}-sports-response.md"
-        source_lines = "\n".join(
-            f"  - title: {self._yaml_quote(str(source.get('title') or 'Sports source'))}\n"
-            f"    url: {self._yaml_quote(str(source.get('url') or ''))}\n"
-            f"    domain: {self._yaml_quote(str(source.get('domain') or ''))}"
-            for source in sources
-        )
-        body_sources = "\n".join(
-            f"{index}. [{source.get('title') or source.get('domain')}]({source.get('url')})"
-            for index, source in enumerate(sources, start=1)
-        )
-        content = (
-            "---\n"
-            "type: sports-response\n"
-            f"created: {self._yaml_quote(created_at)}\n"
-            f"league: {self._yaml_quote(league)}\n"
-            "agent_version: sports-agent-web-v1\n"
-            "private: false\n"
-            "sources:\n"
-            f"{source_lines}\n"
-            "---\n\n"
-            "## Question\n"
-            f"{query}\n\n"
-            "## Answer\n"
-            f"{answer}\n\n"
-            "## Sources\n"
-            f"{body_sources}\n"
-        )
-        path.write_text(content, encoding="utf-8", newline="\n")
-        return path
-
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
-
-    def _yaml_quote(self, value: str) -> str:
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'

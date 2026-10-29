@@ -11,7 +11,7 @@ pytestmark = pytest.mark.usefixtures("repo_root_cwd")
 def test_discovers_hermes_style_agent_reach_and_memory_plugins():
     plugins = {plugin.id: plugin for plugin in discover_portable_plugins(Path("plugins"))}
 
-    assert plugins["agent-reach"].category == "Connectors"
+    assert plugins["agent-reach"].category == "Web & Research"
     assert plugins["agent-reach"].type == "connector"
     assert "x.search" in plugins["agent-reach"].capabilities
     assert plugins["memory-orchestrator"].category == "Memory"
@@ -91,7 +91,7 @@ def test_spotify_manifest_declares_full_hermes_toolset():
     spotify = manifests["spotify"]
 
     assert spotify.type == "connector"
-    assert spotify.category == "Connectors"
+    assert spotify.category == "Media & Entertainment"
     assert spotify.capabilities == [
         "spotify.playback",
         "spotify.devices",
@@ -100,6 +100,9 @@ def test_spotify_manifest_declares_full_hermes_toolset():
         "spotify.playlists",
         "spotify.albums",
         "spotify.library",
+        "spotify.podcasts",
+        "spotify.connection.start",
+        "spotify.connection.disconnect",
     ]
 
 
@@ -115,6 +118,7 @@ def test_spotify_schemas_cover_expected_tools_and_playback_actions():
         "spotify_playlists",
         "spotify_albums",
         "spotify_library",
+        "spotify_podcasts",
     ]
     assert namespace["SPOTIFY_PLAYBACK"]["parameters"]["properties"]["action"]["enum"] == [
         "get_state",

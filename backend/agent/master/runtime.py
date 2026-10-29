@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 from pathlib import Path
@@ -12,15 +15,63 @@ from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agent.agents.base import SpecialistAgent, SpecialistResponse
+from agent.agents.base import SpecialistResponse
+from agent.contracts.books import BooksDiscoveryTask
+from agent.knowledge.models import (
+    BookRelationshipEventInput,
+    BookUserLearningCandidateInput,
+    BookUserLearningEvidenceReference,
+    BookUserLearningRequest,
+    BookWisdomEvidenceReference,
+    BookWisdomRecordInput,
+    ObservationActor,
+)
 from agent.llm.routing.runtime import get_routed_chat_model
+from agent.master.state import MasterThreadStateStore
 from agent.memory.orchestrator import MemoryOrchestrator
 from agent.memory.specialist_cache import CacheDecision
-from agent.profiles import AgentProfile, ProfileRegistry, profile_policy
+from agent.profiles import AgentCatalog, AgentProfile, profile_policy
 
 
 logger = logging.getLogger(__name__)
 _AUDIT_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True)
+class DelegationRequest:
+    agent_id: str
+    task: str
+    parent_thread_id: str
+    user_id: str = "default"
+    context: str = ""
+    task_id: str | None = None
+    depth: int = 0
+    confirm_pending_action: bool = False
+    book_discovery: BooksDiscoveryTask | None = None
+    memory_from: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.agent_id.strip():
+            raise ValueError("agent_id is required")
+        if not self.task.strip():
+            raise ValueError("task is required")
+        if not self.parent_thread_id.strip():
+            raise ValueError("parent_thread_id is required")
+        if not self.user_id.strip():
+            raise ValueError("user_id is required")
+        if self.depth < 0:
+            raise ValueError("depth must be non-negative")
+        if len(self.memory_from) > 4 or any(not isinstance(peer, str) or not peer.strip() for peer in self.memory_from):
+            raise ValueError("Request at most four named memory sources")
+        if len(self.task) > 4000 or len(self.context) > 8000:
+            raise ValueError("Delegation task or context exceeds its budget")
+        if self.book_discovery is not None:
+            if self.agent_id != "BooksAgent" or self.confirm_pending_action:
+                raise ValueError("Book Discovery intent cannot override an agent or pending confirmation")
+            task = self.book_discovery
+            object.__setattr__(self, "book_discovery", BooksDiscoveryTask.model_validate(
+                task.model_dump() if isinstance(task, BooksDiscoveryTask) else task,
+            ))
 
 
 @dataclass(frozen=True)
@@ -42,38 +93,142 @@ class DelegationRuntime:
     def __init__(
         self,
         *,
-        profile_registry: ProfileRegistry,
-        memory_orchestrator: MemoryOrchestrator,
+        agent_catalog: AgentCatalog,
+        memory_orchestrator: MemoryOrchestrator | None,
         llm_factory: Callable[[str | None], Any] = get_routed_chat_model,
         now: Callable[[], datetime] | None = None,
         audit_path: str | Path = Path("data/memory/delegation-runs.jsonl"),
         reasoning_mode: Any = None,
+        pending_action_store: MasterThreadStateStore | None = None,
+        user_learning_sink: Callable[[BookUserLearningRequest], dict[str, Any]] | None = None,
+        wisdom_sink: Callable[[BookWisdomRecordInput], dict[str, Any]] | None = None,
     ) -> None:
-        self.profile_registry = profile_registry
+        self.agent_catalog = agent_catalog
         self.memory_orchestrator = memory_orchestrator
         self.llm_factory = llm_factory
         self.reasoning_mode = reasoning_mode
+        self.pending_action_store = pending_action_store
+        self.user_learning_sink = user_learning_sink
+        self.wisdom_sink = wisdom_sink
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
 
+    def delegate_many(self, requests: list[DelegationRequest], *, on_complete=None) -> list[DelegationRunResult]:
+        """Run independent agent tasks concurrently; serialize each owner's context."""
+        if not 1 <= len(requests) <= 8:
+            raise ValueError("Delegate between one and eight independent tasks")
+        if sum(r.confirm_pending_action for r in requests) > 1:
+            raise ValueError("Confirm only one pending action per turn")
+        if len({(r.parent_thread_id, r.user_id) for r in requests}) != 1:
+            raise ValueError("A delegation batch must have one conversation and user")
+        groups: dict[str, list[tuple[int, DelegationRequest]]] = {}
+        for index, request in enumerate(requests):
+            self.agent_catalog.resolve(request.agent_id)
+            groups.setdefault(request.agent_id, []).append((index, request))
+        results = {}
+        batch_id = str(uuid4())
+        def run_group(group):
+            completed = []
+            for index, request in group:
+                try:
+                    completed.append((index, self.delegate(request)))
+                except Exception:
+                    logger.exception("Independent delegation failed for %s", request.agent_id)
+                    profile = self.agent_catalog.resolve(request.agent_id).profile
+                    completed.append((index, self._complete(profile=profile,
+                        response=_runtime_response(profile=profile, status="error", summary=f"{request.agent_id} could not complete this task.", analysis="independent_delegation_failed"),
+                        parent_thread_id=request.parent_thread_id, user_id=request.user_id, task_id=request.task_id or str(uuid4()),
+                        started=self._utc_now(), cache_status="bypass", cache_reason="execution_error", goal=request.task, context=request.context)))
+                run = completed[-1][1]
+                if run.response.action_request and self.pending_action_store is not None:
+                    stored = self.pending_action_store.queue_pending_action(request.parent_thread_id,
+                        {"agent":run.response.agent, **run.response.action_request}, batch_id=batch_id)
+                    if not stored:
+                        run = replace(run, response=run.response.model_copy(update={"status":"blocked",
+                            "summary":"Resolve the existing pending change before preparing this action.", "action_request":{}}))
+                        completed[-1] = (index, run)
+                if on_complete is not None:
+                    on_complete(run)
+            return completed
+        with ThreadPoolExecutor(max_workers=min(4, len(groups))) as pool:
+            futures = [pool.submit(copy_context().run, run_group, group) for group in groups.values()]
+            for future in futures:
+                results.update(future.result())
+        ordered = [results[index] for index in range(len(requests))]
+        return ordered
+
     def delegate(
         self,
-        *,
-        profile_id: str,
-        pupil: SpecialistAgent | None,
-        goal: str,
-        parent_thread_id: str,
-        context: str = "",
-        task_id: str | None = None,
+        request: DelegationRequest,
     ) -> DelegationRunResult:
         started = self._utc_now()
-        profile = self.profile_registry.get(profile_id)
-        decision = self._lookup(profile, goal)
+        binding = self.agent_catalog.resolve(request.agent_id)
+        profile = binding.profile
+        executor = binding.executor
+        goal = request.task
+        parent_thread_id = request.parent_thread_id
+        context = request.context
+        task_id = request.task_id or str(uuid4())
+        action_request = None
+        if request.confirm_pending_action:
+            action_request = self._resolve_pending_action(
+                agent_id=profile.id,
+                parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
+            )
+            if action_request is None:
+                response = _runtime_response(
+                    profile=profile,
+                    status="blocked",
+                    summary="No matching pending action is available for confirmation.",
+                    analysis="confirmation_authority",
+                )
+                return self._complete(
+                    profile=profile,
+                    response=response,
+                    parent_thread_id=parent_thread_id,
+                    user_id=request.user_id,
+                    task_id=task_id,
+                    started=started,
+                    cache_status="bypass",
+                    cache_reason="confirmation_authority",
+                    goal=goal,
+                    context=context,
+                )
+        if not profile.delegation.can_receive or request.depth > profile.delegation.max_depth:
+            response = _runtime_response(
+                profile=profile,
+                status="blocked",
+                summary=f"{profile.id} cannot receive this delegated task.",
+                analysis="delegation_policy",
+            )
+            return self._complete(
+                profile=profile,
+                response=response,
+                parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
+                task_id=task_id,
+                started=started,
+                cache_status="bypass",
+                cache_reason="delegation_policy",
+                goal=goal,
+                context=context,
+            )
+        decision = (
+            CacheDecision(status="bypass", reason="book_discovery")
+            if request.book_discovery is not None
+            else CacheDecision(status="bypass", reason="confirmed_action")
+            if action_request is not None
+            else CacheDecision(status="bypass", reason="explicit_context")
+            if context.strip() or request.memory_from
+            else self._lookup(profile, goal)
+        )
         if decision.status == "hit" and decision.response is not None:
             return self._complete(
                 profile=profile,
                 response=decision.response,
                 parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
                 task_id=task_id,
                 started=started,
                 cache_status="hit",
@@ -83,7 +238,42 @@ class DelegationRuntime:
             )
 
         try:
-            response = self._execute(profile=profile, pupil=pupil, goal=goal, context=context, parent_thread_id=parent_thread_id)
+            response = self._execute(
+                profile=profile,
+                executor=executor,
+                goal=goal,
+                context=context,
+                parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
+                action_request=action_request,
+                book_discovery=request.book_discovery,
+                memory_from=request.memory_from,
+            )
+            _validate_response_schema(profile, response)
+            if response.agent != profile.id:
+                raise ValueError("delegated response agent does not match the selected profile")
+            if request.book_discovery is not None and response.action_request:
+                if self.pending_action_store is None or not self.pending_action_store.set_pending_action(
+                    parent_thread_id, response.action_request, replace=False,
+                ):
+                    response = _runtime_response(
+                        profile=profile, status="blocked", summary="Resolve the existing pending action first.",
+                        analysis="confirmation_authority",
+                    )
+            response, learning_candidate_ids = self._submit_user_learning(
+                profile=profile,
+                response=response,
+                user_id=request.user_id,
+                parent_thread_id=parent_thread_id,
+                task_id=task_id,
+            )
+            response = self._submit_book_wisdom(
+                profile=profile,
+                response=response,
+                user_id=request.user_id,
+                parent_thread_id=parent_thread_id,
+                learning_candidate_ids=learning_candidate_ids,
+            )
         except Exception as exc:
             logger.exception("Delegated profile %s failed.", profile.id)
             if decision.status == "stale" and decision.response is not None:
@@ -98,6 +288,7 @@ class DelegationRuntime:
                     profile=profile,
                     response=stale,
                     parent_thread_id=parent_thread_id,
+                    user_id=request.user_id,
                     task_id=task_id,
                     started=started,
                     cache_status="stale_fallback",
@@ -105,12 +296,11 @@ class DelegationRuntime:
                     goal=goal,
                     context=context,
                 )
-            response = SpecialistResponse(
-                agent=profile.id,
+            response = _runtime_response(
+                profile=profile,
                 status="error",
                 summary=f"{profile.id} could not complete this delegated task.",
                 analysis=exc.__class__.__name__,
-                confidence=0.0,
             )
 
         if response.status == "error" and decision.status == "stale" and decision.response is not None:
@@ -125,7 +315,16 @@ class DelegationRuntime:
         else:
             cache_status = decision.status
             try:
-                self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
+                if (
+                    self.memory_orchestrator is not None
+                    and action_request is None
+                    and request.book_discovery is None
+                    and not context.strip()
+                    and not request.memory_from
+                    and not any(event.get("tool") == "specialist_memory" for event in response.activity_events)
+                    and not _has_private_books_state(response)
+                ):
+                    self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
             except Exception:
                 logger.exception("Could not store specialist response for %s.", profile.id)
 
@@ -133,6 +332,7 @@ class DelegationRuntime:
             profile=profile,
             response=response,
             parent_thread_id=parent_thread_id,
+            user_id=request.user_id,
             task_id=task_id,
             started=started,
             cache_status=cache_status,
@@ -141,11 +341,251 @@ class DelegationRuntime:
             context=context,
         )
 
+    def _submit_user_learning(
+        self,
+        *,
+        profile: AgentProfile,
+        response: SpecialistResponse,
+        user_id: str,
+        parent_thread_id: str,
+        task_id: str,
+    ) -> tuple[SpecialistResponse, dict[str, str]]:
+        if self.user_learning_sink is None or profile.response_schema != "books-agent-response-v1":
+            return response, {}
+
+        from agent.contracts.books import BooksAgentEnvelope
+
+        envelope = BooksAgentEnvelope.model_validate(response.structured_payload.get("books_agent"))
+        if not envelope.user_learning_events:
+            return response, {}
+        anchors = {anchor.id: anchor for anchor in envelope.evidence}
+        submitted = 0
+        failed = 0
+        candidate_ids: dict[str, str] = {}
+        for event in envelope.user_learning_events:
+            try:
+                event_anchors = [anchors[evidence_id] for evidence_id in event.evidence_ids]
+                evidence = [
+                    BookUserLearningEvidenceReference(
+                        kind="book_anchor",
+                        reference_id=anchor.id,
+                        stance="supports",
+                    )
+                    for anchor in event_anchors
+                ]
+                evidence.append(
+                    BookUserLearningEvidenceReference(
+                        kind="conversation",
+                        reference_id=parent_thread_id,
+                        stance="supports",
+                    )
+                )
+                actor = ObservationActor(event.actor)
+                request = BookUserLearningRequest(
+                    relationship=BookRelationshipEventInput(
+                        user_id=user_id,
+                        event_key=f"{task_id}:{event.id}",
+                        action="user.statement_recorded" if event.basis == "explicit" else "idea.discussed",
+                        actor=actor,
+                        evidence_basis=(
+                            "connector"
+                            if actor == ObservationActor.CONNECTOR
+                            else "explicit"
+                            if event.basis == "explicit"
+                            else "interaction"
+                        ),
+                        trigger="delegated_books_agent",
+                        book_ids=list(dict.fromkeys(anchor.work_id for anchor in event_anchors)),
+                        source_anchor_ids=list(dict.fromkeys(event.evidence_ids)),
+                        conversation_ids=[parent_thread_id],
+                        confidence=event.confidence,
+                    ),
+                    candidates=[
+                        BookUserLearningCandidateInput(
+                            user_id=user_id,
+                            proposition_type=event.kind,
+                            proposition=event.statement,
+                            basis=event.basis,
+                            actor=actor,
+                            evidence=evidence,
+                            confidence=event.confidence,
+                            sensitivity=event.sensitivity,
+                            scope=event.scope,
+                            permitted_uses=event.permitted_uses,
+                            valid_from=event.valid_from or None,
+                            valid_to=event.valid_to or None,
+                            expires_at=event.expires_at or None,
+                            derivation="books_agent.user_learning_event",
+                            model_version=profile.model or "",
+                            prompt_version="books-user-learning-envelope-v1",
+                            policy_version="books-user-learning-policy-v1",
+                            source_agent=profile.id,
+                        )
+                    ],
+                )
+                receipt = self.user_learning_sink(request)
+                candidates = list(receipt.get("candidates") or [])
+                if candidates:
+                    candidate_id = str(candidates[0].get("candidate_id") or "").strip()
+                    if candidate_id:
+                        candidate_ids[event.id] = candidate_id
+                submitted += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning(
+                    "Could not submit BooksAgent learning event %s (%s).",
+                    event.id,
+                    exc.__class__.__name__,
+                )
+
+        status = "completed" if failed == 0 else "error" if submitted == 0 else "partial"
+        activity = [
+            *response.activity_events,
+            {
+                "name": "user_learning.submit",
+                "status": status,
+                "count": submitted,
+            },
+        ]
+        return response.model_copy(update={"activity_events": activity}), candidate_ids
+
+    def _submit_book_wisdom(
+        self,
+        *,
+        profile: AgentProfile,
+        response: SpecialistResponse,
+        user_id: str,
+        parent_thread_id: str,
+        learning_candidate_ids: dict[str, str],
+    ) -> SpecialistResponse:
+        if profile.response_schema != "books-agent-response-v1":
+            return response
+
+        from agent.contracts.books import BooksAgentEnvelope
+
+        envelope = BooksAgentEnvelope.model_validate(response.structured_payload.get("books_agent"))
+        if not envelope.wisdom_proposals:
+            return response
+        if self.wisdom_sink is None:
+            return response.model_copy(
+                update={
+                    "activity_events": [
+                        *response.activity_events,
+                        {"name": "book_wisdom.submit", "status": "error", "count": 0},
+                    ]
+                }
+            )
+
+        submitted = 0
+        failed = 0
+        for proposal in envelope.wisdom_proposals:
+            try:
+                candidate_id = learning_candidate_ids.get(proposal.user_learning_event_id, "")
+                if not candidate_id:
+                    raise ValueError("Wisdom requires a stored user-learning candidate")
+                evidence = [
+                    BookWisdomEvidenceReference(
+                        kind="book_anchor",
+                        reference_id=evidence_id,
+                        stance="supports",
+                    )
+                    for evidence_id in proposal.evidence_ids
+                ]
+                evidence.extend(
+                    BookWisdomEvidenceReference(
+                        kind="book_anchor",
+                        reference_id=evidence_id,
+                        stance="conflicts",
+                    )
+                    for evidence_id in proposal.conflicting_evidence_ids
+                )
+                evidence.extend(
+                    [
+                        BookWisdomEvidenceReference(
+                            kind="user_learning_candidate",
+                            reference_id=candidate_id,
+                            stance="supports",
+                        ),
+                        BookWisdomEvidenceReference(
+                            kind="conversation",
+                            reference_id=parent_thread_id,
+                            stance="supports",
+                        ),
+                    ]
+                )
+                self.wisdom_sink(
+                    BookWisdomRecordInput(
+                        user_id=user_id,
+                        wisdom_type=proposal.wisdom_type,
+                        title=proposal.title,
+                        content=proposal.content,
+                        author_perspective=proposal.author_perspective,
+                        user_perspective=proposal.user_perspective,
+                        vellum_perspective=proposal.vellum_perspective,
+                        explanation=proposal.explanation,
+                        evidence=evidence,
+                        confidence=proposal.confidence,
+                        uncertainty=proposal.uncertainty,
+                        sensitivity=proposal.sensitivity,
+                        permitted_uses=proposal.permitted_uses,
+                        valid_from=proposal.valid_from or None,
+                        valid_to=proposal.valid_to or None,
+                        expires_at=proposal.expires_at or None,
+                        derivation="books_agent.wisdom_proposal",
+                        source_agent=profile.id,
+                        model_version=profile.model or "",
+                        prompt_version="books-wisdom-envelope-v1",
+                        policy_version="books-wisdom-policy-v1",
+                    )
+                )
+                submitted += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning(
+                    "Could not submit BooksAgent Wisdom proposal %s (%s).",
+                    proposal.id,
+                    exc.__class__.__name__,
+                )
+
+        status = "completed" if failed == 0 else "error" if submitted == 0 else "partial"
+        return response.model_copy(
+            update={
+                "activity_events": [
+                    *response.activity_events,
+                    {"name": "book_wisdom.submit", "status": status, "count": submitted},
+                ]
+            }
+        )
+
+    def _resolve_pending_action(
+        self, *, agent_id: str, parent_thread_id: str, user_id: str,
+    ) -> dict[str, Any] | None:
+        if self.pending_action_store is None:
+            return None
+        pending = self.pending_action_store.claim_pending_action(
+            parent_thread_id,
+            agent_id=agent_id,
+            **({"user_id": user_id} if agent_id == "BooksAgent" else {}),
+        )
+        if pending is None or str(pending.get("agent") or "") != agent_id:
+            return None
+        return pending
+
     def _lookup(self, profile: AgentProfile, goal: str) -> CacheDecision:
+        if self.memory_orchestrator is None:
+            return CacheDecision(status="bypass", reason="memory_orchestrator_unavailable")
         if not profile.memory.cache_first:
             return CacheDecision(status="bypass", reason="profile_cache_disabled")
         try:
-            return self.memory_orchestrator.lookup_specialist_response(profile=profile, query=goal)
+            decision = self.memory_orchestrator.lookup_specialist_response(profile=profile, query=goal)
+            if decision.response is not None and decision.response.agent != profile.id:
+                logger.warning(
+                    "Ignored cached response for %s with agent identity %s.",
+                    profile.id,
+                    decision.response.agent,
+                )
+                return CacheDecision(status="miss", reason="cached_agent_mismatch")
+            return decision
         except Exception as exc:
             logger.exception("Specialist cache lookup failed for %s.", profile.id)
             return CacheDecision(status="miss", reason=f"cache_error:{exc.__class__.__name__}")
@@ -154,26 +594,235 @@ class DelegationRuntime:
         self,
         *,
         profile: AgentProfile,
-        pupil: SpecialistAgent | None,
+        executor: Any | None,
         goal: str,
         context: str,
         parent_thread_id: str,
+        user_id: str,
+        action_request: dict[str, Any] | None,
+        book_discovery: BooksDiscoveryTask | None = None,
+        memory_from: tuple[str, ...] = (),
     ) -> SpecialistResponse:
-        with profile_policy(profile_id=profile.id, allowed_tools=frozenset(profile.tools.allow)):
-            if profile.executor == "deterministic":
-                if pupil is None:
-                    raise ValueError(f"{profile.id} requires a deterministic pupil")
-                return pupil.answer(goal)
+        approval = ""
+        approval_key = ""
+        if action_request is not None and profile.id == "BooksAgent":
+            try:
+                approved = BooksDiscoveryTask.model_validate(action_request.get("payload"))
+                expiry = datetime.fromisoformat(str(action_request.get("expires_at") or ""))
+            except (TypeError, ValueError):
+                return _runtime_response(
+                    profile=profile, status="blocked", summary="This Book Discovery approval is no longer valid.",
+                    analysis="confirmation_authority",
+                )
+            if (
+                action_request.get("user_id") != user_id
+                or action_request.get("thread_id") != parent_thread_id
+                or action_request.get("action") != approved.capability
+                or action_request.get("profile_fingerprint") != self._profile_fingerprint(profile)
+                or expiry.tzinfo is None or expiry <= self._utc_now()
+                or not str(action_request.get("approval_id") or "").strip()
+            ):
+                return _runtime_response(
+                    profile=profile, status="blocked", summary="This Book Discovery approval is no longer valid.",
+                    analysis="confirmation_authority",
+                )
+            approval = approved.fingerprint()
+            approval_key = str(action_request["approval_id"])
+        source_egress = profile.source_egress
+        if profile.id == "BooksAgent" and book_discovery is None and action_request is None:
+            from agent.llm.providers import get_provider_registry
+            from agent.llm.routing.models import provider_for_model
+            model_id = profile.model or get_provider_registry().current_model().id
+            if provider_for_model(model_id) == "ollama":
+                source_egress = "local"
+            elif source_egress != "external":
+                return _runtime_response(
+                    profile=profile, status="blocked",
+                    summary="Book processing is local only. Select a local model before asking about Book content.",
+                    analysis="book_external_processing_not_approved",
+                )
+        with profile_policy(
+            profile_id=profile.id,
+            user_id=user_id,
+            source_egress=source_egress,
+            allowed_tools=frozenset(profile.tools.allow),
+            allowed_skills=frozenset(profile.skills.allow),
+            require_confirmation=frozenset(profile.tools.require_confirmation),
+            book_discovery_network=profile.book_discovery_network,
+            book_discovery_approval=approval,
+            book_discovery_request_key=approval_key,
+        ), self._execution_scope(profile=profile, goal=goal, context=context,
+                                 thread_id=parent_thread_id, user_id=user_id, memory_from=memory_from,
+                                 read_memory=book_discovery is None and action_request is None):
+            if book_discovery is not None:
+                return self._prepare_book_discovery(
+                    profile=profile, task=book_discovery, user_id=user_id, thread_id=parent_thread_id,
+                )
+            scoped = self.pending_action_store.get_specialist_context(parent_thread_id, profile.id) if self.pending_action_store is not None else {}
+            use_handler = profile.executor == "deterministic" or (
+                profile.executor == "hybrid" and executor is not None and (
+                    action_request is not None or profile.id in {"BooksAgent", "BrowserAgent"}
+                    or self.memory_orchestrator is None or any(k != "memory_handoff" for k in scoped)
+                    or bool(executor.can_handle(goal))
+                )
+            )
+            if use_handler:
+                if executor is None:
+                    raise ValueError(f"{profile.id} requires a deterministic executor")
+                if action_request is not None:
+                    execute = getattr(executor, "execute_action_request")
+                    response = execute(action_request)
+                elif callable(getattr(executor, "answer_with_memory", None)):
+                    preference = executor.stated_music_preference(goal)
+                    if preference:
+                        if profile.memory.write_scope != f'agent:{profile.id}':
+                            return SpecialistResponse(agent=profile.id, status='blocked', summary='This profile does not allow private music memory writes.')
+                        if self.memory_orchestrator is None or not self.memory_orchestrator.store.get_settings().get('memory_enabled', True):
+                            return SpecialistResponse(agent=profile.id, status='blocked', summary='Memory is off. I have not saved this preference.')
+                        saved = self.memory_orchestrator.save_explicit_memory(
+                            kind='preference', text=preference, source_thread_id=parent_thread_id,
+                            confidence=1.0, scope=profile.memory.write_scope,
+                        )
+                        return SpecialistResponse(agent=profile.id, status='answered', summary='Remembered your music preference: ' + preference,
+                            structured_payload={'memory_id':saved['id'], 'scope':profile.memory.write_scope}, confidence=1.0)
+                    packet = {}
+                    if self.memory_orchestrator is not None and executor.needs_memory(goal):
+                        packet = self.memory_orchestrator.build_memory_packet(
+                            thread_id=parent_thread_id, query=goal, agent_name=profile.id,
+                            read_scopes=profile.memory.read_scopes, live_honcho=False,
+                        )
+                    response = executor.answer_with_memory(goal, scoped, conversation_context=context, memory_packet=packet)
+                elif callable(getattr(executor, "answer_with_context", None)):
+                    response = executor.answer_with_context(goal, scoped)
+                elif callable(getattr(executor, "answer_delegated", None)):
+                    response = executor.answer_delegated(goal, context)
+                else:
+                    response = executor.answer(goal)
+                self._retain_context(profile, executor, response, scoped, parent_thread_id, user_id, goal)
+                return response
+            if action_request is not None:
+                raise ValueError("LLM profiles cannot execute confirmed actions")
             return self._execute_llm(
                 profile=profile,
                 goal=goal,
                 context=context,
                 parent_thread_id=parent_thread_id,
+                executor=executor,
+                user_id=user_id,
             )
 
+    def _execution_scope(self, *, profile, goal, context, thread_id, user_id, memory_from, read_memory=True):
+        from agent.profiles.execution import ProfileExecution, profile_execution
+        from agent.llm.providers import get_provider_registry
+        packet = self.memory_orchestrator.build_memory_packet(thread_id=thread_id, query=goal,
+            agent_name=profile.id, read_scopes=profile.memory.read_scopes, live_honcho=False) if self.memory_orchestrator and read_memory else {}
+        if profile.id == "MusicAgent":
+            # The owning music path saves user-stated preferences in this scope.
+            # Global portraits, listening history and provider activity never
+            # become automatic model context for a playback/planning request.
+            packet = {"scopes":[f"agent:{profile.id}"], "saved_memories":[
+                row for row in packet.get("saved_memories", [])
+                if row.get("scope") == f"agent:{profile.id}" and row.get("kind") == "preference"
+            ]}
+        # Explicit references are resolved by the owner, not accepted as caller-authored evidence.
+        packet["handoffs"] = [self._memory_handoff(profile, peer, goal[:1000], thread_id, user_id) for peer in memory_from]
+        if read_memory and self.pending_action_store is not None and profile.id != "MusicAgent":
+            scoped = self.pending_action_store.get_specialist_context(thread_id, profile.id)
+            if scoped.get("memory_handoff", {}).get("user_id", user_id) != user_id:
+                scoped = {}
+            # Only this specialist's current thread state, never parent chat history.
+            if len(json.dumps(scoped, ensure_ascii=False, default=str)) <= 6000:
+                packet["specialist_context"] = scoped
+        # Preserve valid JSON and complete records within the per-run memory budget.
+        while len(json.dumps(packet, ensure_ascii=False, default=str)) > 12000 and packet.get("saved_memories"):
+            packet["saved_memories"].pop()
+        if len(json.dumps(packet, ensure_ascii=False, default=str)) > 20000:
+            raise ValueError("Profile memory packet exceeds its budget")
+        skill_text = []
+        for name in profile.skills.allow[:3]:
+            try:
+                skill_text.append(f"Allowed skill {name}:\n" + self._skill_for(profile, name)[:2000])
+            except (KeyError, ValueError, OSError):
+                skill_text.append(f"Allowed skill {name} is unavailable; do not claim it ran.")
+        model_id = profile.model or get_provider_registry().current_model().id
+        return profile_execution(ProfileExecution(profile.id, model_id, profile.reasoning_mode or self.reasoning_mode,
+            self.agent_catalog.instructions_for(profile), "\n".join(skill_text), packet, context, thread_id,
+            context_length=profile.context_length))
+
+    def _skill_for(self, profile, name):
+        from agent.skills import get_skill_registry
+        if name not in profile.skills.allow:
+            raise PermissionError("Skill is outside this profile")
+        return get_skill_registry().view(name).body[:6000]
+
+    def _memory_handoff(self, profile, source_agent, query, thread_id, user_id):
+        if self.memory_orchestrator is None:
+            raise ValueError("Memory owner unavailable")
+        source = self.agent_catalog.get(source_agent)
+        recent = self.pending_action_store.get_specialist_context(thread_id, source_agent).get("memory_handoff", {}) if self.pending_action_store else {}
+        return self.memory_orchestrator.build_agent_handoff(source=source, recipient=profile, query=query,
+            thread_id=thread_id, user_id=user_id, recent=recent)
+
+    def record_music_control(self, thread_id: str, operation: str) -> None:
+        """Retain a successful external UI control without executing it again."""
+        if operation not in {'next','previous','pause','resume'} or self.pending_action_store is None:
+            return
+        from agent.agents.base import SpecialistResponse
+        from agent.contracts.music import MusicPlan
+        binding=self.agent_catalog.try_resolve('MusicAgent')
+        if binding is None or binding.executor is None:
+            return
+        scoped=self.pending_action_store.get_specialist_context(thread_id,'MusicAgent')
+        response=SpecialistResponse(agent='MusicAgent',status='answered',summary='Playback control applied.',
+            structured_payload={'music_plan':MusicPlan(operation=operation).model_dump()})
+        self._retain_context(binding.profile,binding.executor,response,scoped,thread_id,'','')
+
+    def _retain_context(self, profile, executor, response, scoped, thread_id, user_id, goal):
+        if self.pending_action_store is None:
+            return
+        if callable(getattr(executor, "thread_context", None)):
+            scoped = executor.thread_context(response, scoped)
+        if response.status in {"error", "blocked"}:
+            scoped = {k:v for k,v in scoped.items() if k != "memory_handoff"}
+        self.pending_action_store.set_specialist_context(thread_id, profile.id, scoped)
+
+    @staticmethod
+    def _profile_fingerprint(profile: AgentProfile) -> str:
+        return _text_hash(json.dumps(profile.model_dump(), sort_keys=True))
+
+    def _prepare_book_discovery(
+        self, *, profile: AgentProfile, task: BooksDiscoveryTask, user_id: str, thread_id: str,
+    ) -> SpecialistResponse:
+        if (
+            profile.executor not in {"deterministic", "hybrid"} or not profile.book_discovery_network
+            or profile.source_egress != "external" or task.capability not in profile.tools.allow
+            or self.pending_action_store is None
+        ):
+            return _runtime_response(
+                profile=profile, status="blocked", summary="Book Discovery network access is disabled by this profile.",
+                analysis="discovery_profile_policy",
+            )
+        target = f'public topic "{task.query}"' if task.operation == "discover" else f"candidate {task.candidate_id}"
+        response = _runtime_response(
+            profile=profile, status="blocked",
+            summary=f"Confirm a shadow Open Library {task.operation} operation for {target}. No Book will be downloaded.",
+            analysis="confirmation_required",
+        )
+        response.action_request = {
+            "agent": profile.id, "action": task.capability, "payload": task.model_dump(),
+            "user_id": user_id, "thread_id": thread_id, "approval_id": str(uuid4()),
+            "profile_fingerprint": self._profile_fingerprint(profile),
+            "expires_at": (self._utc_now() + timedelta(minutes=5)).isoformat(),
+        }
+        return response
+
     def _llm_for(self, model_id: str | None) -> Any:
-        if self.reasoning_mode is not None and self.llm_factory is get_routed_chat_model:
-            return get_routed_chat_model(model_id, reasoning_mode=self.reasoning_mode)
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        model_id = execution.model_id if execution is not None else model_id
+        reasoning = execution.reasoning_mode if execution is not None else self.reasoning_mode
+        if reasoning is not None and self.llm_factory is get_routed_chat_model:
+            return get_routed_chat_model(model_id, reasoning_mode=reasoning)
         return self.llm_factory(model_id)
 
     def _execute_llm(
@@ -183,20 +832,44 @@ class DelegationRuntime:
         goal: str,
         context: str,
         parent_thread_id: str,
+        executor=None,
+        user_id="default",
     ) -> SpecialistResponse:
-        packet = self.memory_orchestrator.build_memory_packet(
+        if self.memory_orchestrator is None:
+            raise RuntimeError("LLM profiles require a memory orchestrator")
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        packet = execution.memory if execution is not None else self.memory_orchestrator.build_memory_packet(
             thread_id=parent_thread_id,
             query=goal,
             agent_name=profile.id,
             read_scopes=profile.memory.read_scopes,
         )
-        instructions = self.profile_registry.instructions_for(profile)
+        instructions = self.agent_catalog.instructions_for(profile)
         messages = [
             SystemMessage(content=instructions or f"You are {profile.id}. Return a focused specialist result."),
             HumanMessage(content=_llm_task_packet(goal=goal, context=context, memory_packet=packet)),
         ]
         model = self._llm_for(profile.model)
-        output = model.invoke(messages)
+        if profile.tools.allow or profile.executor == "hybrid":
+            from agent.profiles.runner import run_profile
+            from agent.llm.providers import get_provider_registry
+            registry = get_provider_registry()
+            chosen = execution.model_id if execution is not None else profile.model
+            model_entry = next((m for m in registry.list_models() if m.id == chosen), None)
+            response = run_profile(profile=profile, executor=executor, registry=self.agent_catalog.tool_registry,
+                model=model, goal=goal, context=context,
+                thread_id=parent_thread_id,
+                memory_reader=lambda source_agent, query: self._memory_handoff(profile, source_agent, query, parent_thread_id, user_id),
+                skill_reader=lambda name: self._skill_for(profile, name),
+                action_handler=(lambda: self._handle_exact(executor, goal, context, parent_thread_id, profile.id)) if executor is not None else None,
+                native_tools=model_entry is None or model_entry.tool_calling_compatibility != "unsupported")
+            self._retain_context(profile, executor, response, {}, parent_thread_id, user_id, goal)
+            return response
+        output = model.invoke(
+            messages,
+            config={"configurable": {"thread_id": parent_thread_id}},
+        )
         content = getattr(output, "content", output)
         if isinstance(content, list):
             content = "\n".join(str(item.get("text") or "") if isinstance(item, dict) else str(item) for item in content)
@@ -204,6 +877,19 @@ class DelegationRuntime:
         if not summary:
             raise RuntimeError("LLM profile returned an empty response")
         return SpecialistResponse(agent=profile.id, status="answered", summary=summary, confidence=0.65)
+
+    def _handle_exact(self, executor, goal, context, thread_id, profile_id):
+        scoped = self.pending_action_store.get_specialist_context(thread_id, profile_id) if self.pending_action_store else {}
+        if callable(getattr(executor, "answer_with_memory", None)):
+            from agent.profiles.execution import get_profile_execution
+            execution = get_profile_execution()
+            return executor.answer_with_memory(goal, scoped, conversation_context=context,
+                memory_packet=execution.memory if execution else {})
+        if callable(getattr(executor, "answer_with_context", None)):
+            return executor.answer_with_context(goal, scoped)
+        if callable(getattr(executor, "answer_delegated", None)):
+            return executor.answer_delegated(goal, context)
+        return executor.answer(goal)
 
     def _complete(
         self,
@@ -217,6 +903,7 @@ class DelegationRuntime:
         cache_reason: str,
         goal: str,
         context: str,
+        user_id: str = "default",
     ) -> DelegationRunResult:
         result = DelegationRunResult(
             run_id=str(uuid4()),
@@ -231,6 +918,14 @@ class DelegationRuntime:
             finished_at=self._utc_now().isoformat(),
             response=response,
         )
+        # Export only responses that passed the runtime's schema validation.
+        if (self.pending_action_store is not None and response.status == "answered" and response.sources
+                and not response.action_request and profile.result_visibility == "full" and profile.id != "MusicAgent"):
+            scoped = self.pending_action_store.get_specialist_context(parent_thread_id, profile.id)
+            scoped["memory_handoff"] = {"reference":f"run:{result.run_id}", "user_id":user_id,
+                "purpose":goal[:1000], "summary":response.summary[:1600], "confidence":response.confidence,
+                "sources":[s.path_or_url for s in response.sources[:6]], "captured_at":self._utc_now().isoformat()}
+            self.pending_action_store.set_specialist_context(parent_thread_id, profile.id, scoped)
         self._write_audit(result=result, goal=goal, context=context)
         return result
 
@@ -280,6 +975,54 @@ def _llm_task_packet(*, goal: str, context: str, memory_packet: dict[str, Any]) 
 
 def _append_analysis(existing: str, note: str) -> str:
     return f"{existing}\n{note}".strip()
+
+
+def _runtime_response(
+    *,
+    profile: AgentProfile,
+    status: str,
+    summary: str,
+    analysis: str,
+) -> SpecialistResponse:
+    structured_payload: dict[str, Any] = {}
+    if profile.response_schema == "books-agent-response-v1":
+        from agent.contracts.books import books_envelope_payload
+
+        structured_payload = books_envelope_payload(
+            answer=summary,
+            status="failed",
+            uncertainty=["The BooksAgent runtime did not return a valid answer."],
+        )
+    return SpecialistResponse(
+        agent=profile.id,
+        status=status,
+        summary=summary,
+        analysis=analysis,
+        confidence=0.0,
+        structured_payload=structured_payload,
+    )
+
+
+def _validate_response_schema(profile: AgentProfile, response: SpecialistResponse) -> None:
+    if profile.response_schema != "books-agent-response-v1":
+        return
+    from agent.contracts.books import BooksAgentEnvelope
+
+    payload = response.structured_payload.get("books_agent")
+    envelope = BooksAgentEnvelope.model_validate(payload)
+    if envelope.answer != response.summary:
+        raise ValueError("BooksAgent envelope answer must match the specialist summary")
+
+
+def _has_private_books_state(response: SpecialistResponse) -> bool:
+    payload = response.structured_payload.get("books_agent")
+    if not isinstance(payload, dict):
+        return False
+    events = payload.get("user_learning_events")
+    proposals = payload.get("wisdom_proposals")
+    return (isinstance(events, list) and bool(events)) or (
+        isinstance(proposals, list) and bool(proposals)
+    )
 
 
 def _text_hash(text: str) -> str:

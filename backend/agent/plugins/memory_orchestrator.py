@@ -42,24 +42,34 @@ def memory_orchestrator_plugin_status(orchestrator: Any) -> PluginStatus:
         )
 
     degraded: list[str] = []
-    if getattr(orchestrator, "honcho", None) is None:
-        degraded.append("Honcho context is not attached; SQLite/FTS5 memory remains available.")
+    honcho = getattr(orchestrator, "honcho", None)
+    honcho_ready = bool(honcho is not None and getattr(honcho, "available", False))
+    if not honcho_ready:
+        degraded.append("Honcho is unreachable; SQLite/FTS5 memory remains available.")
 
     if degraded:
         return _status(
             configured=True,
             status="degraded",
             notes=" ".join(degraded) + f" Saved={saved_count}, pending={pending_count}, archived={archived_count}.",
+            honcho_ready=honcho_ready,
         )
 
     return _status(
         configured=True,
         status="ready",
         notes=f"Memory Orchestrator is ready. Saved={saved_count}, pending={pending_count}, archived={archived_count}.",
+        honcho_ready=honcho_ready,
     )
 
 
-def _status(*, configured: bool, status: str, notes: str) -> PluginStatus:
+def _status(
+    *,
+    configured: bool,
+    status: str,
+    notes: str,
+    honcho_ready: bool = False,
+) -> PluginStatus:
     return PluginStatus(
         id="memory-orchestrator",
         name="Memory Orchestrator",
@@ -71,13 +81,13 @@ def _status(*, configured: bool, status: str, notes: str) -> PluginStatus:
         capabilities=list(MEMORY_ORCHESTRATOR_CAPABILITIES),
         required=True,
         metadata={
-            "providers": _provider_statuses(),
+            "providers": _provider_statuses(honcho_ready=honcho_ready),
             "external_extensions": build_default_memory_provider_extensions().statuses(),
         },
     )
 
 
-def _provider_statuses() -> list[dict[str, Any]]:
+def _provider_statuses(*, honcho_ready: bool) -> list[dict[str, Any]]:
     return [
         {
             "id": "sqlite",
@@ -104,9 +114,13 @@ def _provider_statuses() -> list[dict[str, Any]]:
             "id": "honcho",
             "name": "Honcho User Model",
             "type": "user_model",
-            "status": "degraded",
+            "status": "ready" if honcho_ready else "degraded",
             "capabilities": ["user_profile", "conversation_modeling"],
-            "notes": "Ready when Honcho is attached to the runtime process.",
+            "notes": (
+                "Local Honcho API is reachable."
+                if honcho_ready
+                else "Start the local Honcho stack to enable user-model context."
+            ),
         },
         {
             "id": "obsidian",

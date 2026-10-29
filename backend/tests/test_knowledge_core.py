@@ -377,6 +377,46 @@ def test_tool_observer_records_evidence_but_not_preferences(tmp_path: Path) -> N
     assert annotations[0]["requires_review"] is True
 
 
+def test_tool_observer_stores_x_bookmark_categories_in_knowledge_core(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    KnowledgeToolObserver(core)(
+        ToolInvocation(
+            name="x.bookmarks",
+            namespace="x",
+            access=CapabilityAccess.READ,
+            agent_name="XAgent",
+            payload={"max_results": 5},
+            result={
+                "items": [
+                    {
+                        "id": "789",
+                        "text": "A useful local AI agent workflow",
+                        "url": "https://x.com/example/status/789",
+                        "handle": "example",
+                        "bookmark_intelligence": {
+                            "taxonomy_version": "siftly-inspired-v1",
+                            "assignments": [
+                                {"category": "ai-resources", "name": "AI & Machine Learning", "confidence": 0.85}
+                            ],
+                            "entities": {"hashtags": [], "urls": [], "mentions": [], "tools": []},
+                        },
+                    }
+                ],
+                "provider": "agent-reach",
+            },
+        )
+    )
+
+    source = core.store.list_sources(kind="x_post")[0]
+    annotations = core.store.list_content_annotations(target_id=source["id"])
+    bookmark_annotation = next(
+        item for item in annotations if item["taxonomy_version"] == "siftly-inspired-v1"
+    )
+    assert bookmark_annotation["labels"] == ["x_bookmark:ai-resources"]
+    assert bookmark_annotation["context"] == "x_bookmark_category"
+    assert bookmark_annotation["eligible_for_preference"] is False
+
+
 def test_tool_observer_withholds_transcript_raw_content_from_external_context(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     core.tool_learning_enabled = True
@@ -506,11 +546,47 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
 
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
-    assert migrated.status()["schema_version"] == 5
+    status = migrated.status()
+    assert status["schema_version"] == 15
+    assert status["counts"]["book_assets"] == 0
+    assert status["counts"]["book_ingestion_runs"] == 0
+    assert status["counts"]["book_stage_receipts"] == 0
+    assert status["counts"]["book_documents"] == 0
+    assert status["counts"]["book_document_resources"] == 0
+    assert status["counts"]["book_quality_assessments"] == 0
     assert migrated.list_sources()[0]["id"] == "src_v1"
     with sqlite3.connect(db_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}
+        book_document_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(book_documents)")
+        }
+        book_import_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(user_book_imports)")
+        }
+        retrieval_receipt_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'book_retrieval_receipts'"
+        ).fetchone()
+        user_learning_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'user_learning_candidates'"
+        ).fetchone()
+        wisdom_evidence_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'derived_insight_evidence'"
+        ).fetchone()
     assert {"subject_key", "category", "evidence_class", "eligible", "event_key", "sensitivity"} <= columns
+    assert {
+        "quality_assessment_id",
+        "quality_policy_version",
+        "quality_policy_snapshot_hash",
+    } <= book_document_columns
+    assert "local_only" in book_import_columns
+    assert retrieval_receipt_table is not None
+    assert user_learning_table is not None
+    assert wisdom_evidence_table is not None
 
 
 def test_sensitive_annotation_requires_trusted_review_for_learning(tmp_path: Path) -> None:
@@ -597,7 +673,10 @@ def test_ingestion_coordinator_is_resumable_and_idempotent_per_account(tmp_path:
     assert cursor["state"] == {"etag": "abc"}
 
 
-def test_failed_ingestion_records_health_without_advancing_cursor(tmp_path: Path) -> None:
+def test_failed_ingestion_records_health_without_advancing_cursor(tmp_path: Path, monkeypatch) -> None:
+    # Windows can assign both jobs the same clock tick. The newest insertion
+    # must still report its failure, regardless of timestamp equality.
+    monkeypatch.setattr('agent.knowledge.store._now', lambda:'2026-10-04T00:00:00+00:00')
     core = build_core(tmp_path)
     coordinator = IngestionCoordinator(core.store)
     initial = IngestionJobInput(

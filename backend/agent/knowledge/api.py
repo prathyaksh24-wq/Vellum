@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, StrictBool
 
+from agent.config import get_settings
+from agent.knowledge.book_library import BookLibrary, RIGHTS_ATTESTATION_VERSION
+from agent.knowledge.book_documents import BookDocumentError
 from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
+    BookDocumentRequest,
+    BookImportRequest,
+    BookImportStatus,
+    BookMaterializationRequest,
+    BookMaterializationStatus,
+    BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
     MaterializationCanaryRequest,
@@ -22,6 +34,86 @@ from agent.knowledge.runtime import get_knowledge_core
 
 
 router = APIRouter(prefix="/core", tags=["personal-intelligence"])
+
+
+def _book_library() -> BookLibrary:
+    return BookLibrary(get_knowledge_core(), get_settings().honcho_user_id)
+
+
+class BookLibraryAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: StrictBool
+
+
+@router.get("/books/library")
+async def book_library_list(
+    limit: int = Query(default=40, ge=1, le=40), offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    return await asyncio.to_thread(_book_library().list, limit=limit, offset=offset)
+
+
+@router.post("/books/library/import")
+async def book_library_import(
+    file: Annotated[UploadFile, File(...)],
+    rights_attestation_version: Annotated[str, Form(max_length=120)],
+    scan_approved: Annotated[bool, Form()],
+    local_only: Annotated[bool, Form()] = True,
+) -> dict[str, Any]:
+    library = _book_library()
+    maximum = library.core.book_ingestion.policy.max_asset_bytes
+    try:
+        if file.size is not None and file.size > maximum:
+            raise HTTPException(status_code=413, detail={"code": "BOOK_EPUB_TOO_LARGE"})
+        content = await file.read(maximum + 1)
+    finally:
+        await file.close()
+    try:
+        return await asyncio.to_thread(
+            library.import_epub,
+            filename=str(file.filename or ""),
+            content=content,
+            rights_attestation_version=rights_attestation_version,
+            scan_approved=scan_approved,
+            local_only=local_only,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        status_code = 413 if code == "BOOK_EPUB_TOO_LARGE" else 422 if code in {"BOOK_EPUB_REQUIRED", "BOOK_EPUB_EMPTY"} else 409
+        raise HTTPException(status_code=status_code, detail={"code": code}) from exc
+
+
+@router.get("/books/library/{import_id}")
+async def book_library_detail(import_id: str) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(_book_library().detail, import_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+
+
+@router.get("/books/library/{import_id}/cover")
+async def book_library_cover(import_id: str) -> Response:
+    try:
+        content, media_type = await asyncio.to_thread(_book_library().cover, import_id)
+        return Response(content, media_type=media_type, headers={
+            "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        })
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_COVER_UNAVAILABLE"}) from exc
+
+
+@router.post("/books/library/{import_id}/{action}")
+async def book_library_action(import_id: str, action: str, request: BookLibraryAction) -> dict[str, Any]:
+    if action not in {"process", "compile"}:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_ACTION_NOT_FOUND"})
+    if request.confirm is not True:
+        raise HTTPException(status_code=409, detail={"code": "BOOK_CONFIRMATION_REQUIRED"})
+    try:
+        return await asyncio.to_thread(_book_library().action, import_id, action)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
 
 
 @router.get("/status")
@@ -147,6 +239,172 @@ async def core_register_projection(request: ProjectionInput) -> dict[str, Any]:
 @router.post("/context-packs")
 async def core_context_pack(request: ContextPackRequest) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().create_context_pack, request)
+
+
+@router.post("/books/epub", response_model=BookImportStatus)
+async def core_import_book_epub(
+    http_request: Request,
+    file: Annotated[UploadFile, File(...)],
+    user_id: Annotated[str, Form(min_length=1, max_length=160)],
+    rights_attestation_version: Annotated[str, Form(min_length=1, max_length=120)],
+    scan_approved: Annotated[bool, Form()],
+    pipeline_version: Annotated[
+        str,
+        Form(min_length=1, max_length=120),
+    ] = "book-epub-intake-v1",
+    requested_by: Annotated[str, Form(min_length=1, max_length=120)] = "user",
+    local_only: Annotated[bool, Form()] = False,
+) -> BookImportStatus:
+    # FastAPI treats absent boolean form fields as unchecked HTML checkboxes.
+    # Consent must still be explicitly supplied, as required by this API.
+    if "scan_approved" not in await http_request.form():
+        raise RequestValidationError([
+            {"type": "missing", "loc": ("body", "scan_approved"),
+             "msg": "Field required", "input": None},
+        ])
+    if scan_approved is not True:
+        raise HTTPException(status_code=409, detail="Local malware scan approval is required.")
+    core = get_knowledge_core()
+    max_bytes = core.book_ingestion.policy.max_asset_bytes
+    try:
+        if file.size == 0:
+            raise HTTPException(status_code=422, detail="EPUB upload is empty.")
+        if file.size is not None and file.size > max_bytes:
+            raise HTTPException(status_code=413, detail="EPUB upload exceeds the configured limit.")
+        content = await file.read(max_bytes + 1)
+    finally:
+        await file.close()
+    if not content:
+        raise HTTPException(status_code=422, detail="EPUB upload is empty.")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail="EPUB upload exceeds the configured limit.")
+    request = BookImportRequest(
+        user_id=user_id,
+        rights_attestation_version=rights_attestation_version,
+        scan_approved=scan_approved,
+        pipeline_version=pipeline_version,
+        requested_by=requested_by,
+        local_only=local_only,
+    )
+    return await asyncio.to_thread(core.import_book_epub, request, content)
+
+
+@router.get("/books/imports/{import_id}", response_model=BookImportStatus)
+async def core_book_import_status(
+    import_id: str,
+    user_id: str = Query(min_length=1, max_length=160),
+    run_id: str = Query(default="", max_length=160),
+) -> BookImportStatus:
+    try:
+        return await asyncio.to_thread(
+            get_knowledge_core().get_book_ingestion_status,
+            user_id=user_id,
+            import_id=import_id,
+            run_id=run_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Book import not found.") from exc
+
+
+@router.post("/books/documents", response_model=BookImportStatus)
+async def core_construct_book_document(request: BookDocumentRequest) -> BookImportStatus:
+    try:
+        return await asyncio.to_thread(get_knowledge_core().construct_book_document, request)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "BOOK_IMPORT_NOT_FOUND"},
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {
+            "BOOK_NOT_VALIDATED",
+            "BOOK_DOCUMENT_NOT_ELIGIBLE",
+            "BOOK_DOCUMENT_NONDETERMINISTIC",
+            "BOOK_DOCUMENT_RUN_VERSION_MISMATCH",
+        }:
+            code = "BOOK_DOCUMENT_PUBLICATION_FAILED"
+        raise HTTPException(status_code=409, detail={"code": code}) from exc
+
+
+@router.post(
+    "/books/documents/{document_id}/quality",
+    response_model=BookImportStatus,
+)
+async def core_evaluate_book_document_quality(
+    document_id: Annotated[str, Path(min_length=1, max_length=160)],
+    request: BookDocumentRequest,
+) -> BookImportStatus:
+    try:
+        return await asyncio.to_thread(
+            get_knowledge_core().evaluate_book_document_quality,
+            BookQualityRequest(
+                user_id=request.user_id,
+                import_id=request.import_id,
+                run_id=request.run_id,
+                document_id=document_id,
+            ),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "BOOK_DOCUMENT_NOT_FOUND"},
+        ) from exc
+    except BookDocumentError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.reason_code},
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {
+            "BOOK_DOCUMENT_DIGEST_MISMATCH",
+            "BOOK_QUALITY_ASSESSMENT_INVALID",
+            "BOOK_QUALITY_ASSESSMENT_NONDETERMINISTIC",
+        }:
+            code = "BOOK_QUALITY_EVALUATION_FAILED"
+        raise HTTPException(status_code=409, detail={"code": code}) from exc
+
+
+@router.post(
+    "/books/documents/{document_id}/materializations",
+    response_model=BookMaterializationStatus,
+)
+async def core_materialize_book_document(
+    document_id: Annotated[str, Path(min_length=1, max_length=160)],
+    request: BookDocumentRequest,
+) -> BookMaterializationStatus:
+    try:
+        return await asyncio.to_thread(
+            get_knowledge_core().materialize_book_document,
+            BookMaterializationRequest(
+                user_id=request.user_id,
+                import_id=request.import_id,
+                run_id=request.run_id,
+                document_id=document_id,
+            ),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "BOOK_MATERIALIZATION_NOT_FOUND"},
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {
+            "BOOK_MATERIALIZATION_NOT_ELIGIBLE",
+            "BOOK_MATERIALIZATION_COVERAGE_INVALID",
+            "BOOK_MATERIALIZATION_CITATIONS_INVALID",
+            "BOOK_MATERIALIZATION_EMBEDDINGS_INVALID",
+            "BOOK_MATERIALIZATION_ID_MISMATCH",
+            "BOOK_MATERIALIZATION_NONDETERMINISTIC",
+            "BOOK_MATERIALIZATION_QUALITY_RECEIPT_INVALID",
+            "BOOK_MATERIALIZATION_UNSUPPORTED_CLAIMS",
+            "BOOK_SKILL_PACKAGE_INVALID",
+            "BOOK_SKILL_SOURCE_ISOLATION_INVALID",
+        }:
+            code = "BOOK_MATERIALIZATION_FAILED"
+        raise HTTPException(status_code=409, detail={"code": code}) from exc
 
 
 @router.post("/bootstrap")

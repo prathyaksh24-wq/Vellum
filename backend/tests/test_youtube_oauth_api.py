@@ -94,6 +94,16 @@ def test_youtube_oauth_callback_saves_channel_profile(monkeypatch) -> None:
     assert store.profile["channel_id"] == "UC-primary"
 
 
+def test_youtube_status_preserves_reconnect_requirement(monkeypatch) -> None:
+    monkeypatch.setattr(youtube_api,'youtube_status',lambda:{
+        'configured':True,'connected':True,'status':'authorization_required',
+        'authorization_required':True,'account_label':'primary','channel_title':'Saved identity'})
+    response=build_client().get('/api/plugins/youtube/status')
+    assert response.status_code==200
+    assert response.json()['authorization_required'] is True
+    assert response.json()['channel_title']=='Saved identity'
+
+
 def test_youtube_sync_requires_connection(monkeypatch) -> None:
     monkeypatch.setattr(
         youtube_api,

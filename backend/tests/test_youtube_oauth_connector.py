@@ -41,18 +41,101 @@ def youtube_module():
     return load_portable_plugin(Path("plugins/connectors/youtube")).module
 
 
+def test_public_uploads_fallback_validates_owner_and_reuses_playlist(tmp_path):
+    module = youtube_module()
+    store = module.auth.YouTubeAuthStore(tmp_path, keyring_backend=FakeKeyring())
+    store.save_tokens({"access_token": "fixture", "expires_at": time.time()+3600})
+    channel = "UC"+"a"*22
+    calls = []
+    def request(method, url, **kwargs):
+        calls.append(url)
+        if url.endswith("/channels"):
+            return FakeResponse({"items": [{"id": channel, "contentDetails": {"relatedPlaylists": {"uploads": "UU"+"a"*22}}}]})
+        return FakeResponse({"items": [
+            {"snippet": {"title": "Title", "videoOwnerChannelId": channel, "videoOwnerChannelTitle": "Creator"},
+             "contentDetails": {"videoId": "00000000001", "videoPublishedAt": "2026-10-10T12:00:00Z"}},
+            {"snippet": {"title": "Other", "videoOwnerChannelId": "UC"+"b"*22}, "contentDetails": {"videoId": "00000000002", "videoPublishedAt": "2026-10-10T12:00:00Z"}}
+        ]})
+    client = module.client.YouTubeClient(client_id="fixture", client_secret="", store=store, request_backend=request)
+    first = client.channel_uploads(channel)
+    second = client.channel_uploads(channel, playlist_id=first["uploads_playlist"])
+    assert len(calls) == 3
+    assert [item["video_id"] for item in second["entries"]] == ["00000000001"]
+    assert second["transport"] == "youtube_data_api"
+
+
+def test_public_channel_profiles_accept_only_requested_ids_and_bound_text(tmp_path):
+    module = youtube_module()
+    store = module.auth.YouTubeAuthStore(tmp_path, keyring_backend=FakeKeyring())
+    store.save_tokens({'access_token':'fixture','expires_at':time.time()+3600})
+    channel = 'UC'+'a'*22
+    calls = []
+    def request(method, url, **kwargs):
+        calls.append((url, kwargs['params']))
+        return FakeResponse({'items':[
+            {'id':channel,'snippet':{'title':'Creator','description':'x'*5000},
+             'topicDetails':{'topicCategories':['https://example.test/Basketball']*20}},
+            {'id':'UC'+'b'*22,'snippet':{'title':'Unrequested'}}]})
+    client = module.client.YouTubeClient(client_id='client',client_secret='fixture',store=store,request_backend=request)
+    result = client.channel_profiles([channel,channel])
+    assert list(result) == [channel]
+    assert len(result[channel]['description']) == 1500
+    assert len(result[channel]['categories']) == 10
+    assert calls[0][0].endswith('/channels')
+    assert calls[0][1]['id'] == channel
+    assert calls[0][1]['part'] == 'snippet,topicDetails'
+    with pytest.raises(ValueError):
+        client.channel_profiles(['invalid'])
+    with pytest.raises(ValueError):
+        client.channel_profiles(['UC'+f'{i:022d}' for i in range(51)])
+    assert len(calls) == 1
+
+
+def test_duration_metadata_is_batched_bounded_and_does_not_request_video_media(tmp_path):
+    module=youtube_module()
+    store=module.auth.YouTubeAuthStore(tmp_path,keyring_backend=FakeKeyring())
+    store.save_tokens({'access_token':'fixture','expires_at':time.time()+3600})
+    calls=[]
+    def request(method,url,**kwargs):
+        calls.append((method,url,kwargs['params']))
+        return FakeResponse({'items':[
+            {'id':'00000000001','snippet':{'channelId':'UC'+'a'*22},'contentDetails':{'duration':'PT3M0.1S'}},
+            {'id':'00000000002','snippet':{'channelId':'UC'+'a'*22,'liveBroadcastContent':'upcoming'},'contentDetails':{'duration':'PT0S'}},
+            {'id':'00000000003','snippet':{'channelId':'UC'+'a'*22},'contentDetails':{'duration':'invalid'}}]})
+    client=module.client.YouTubeClient(client_id='fixture',client_secret='',store=store,request_backend=request)
+    result=client.video_durations(['00000000001','00000000002','00000000003'])
+    assert result['00000000001']['duration_seconds']==180.1
+    assert result['00000000002']['duration_seconds'] is None
+    assert result['00000000003']['duration_seconds'] is None
+    assert len(calls)==1 and calls[0][1].endswith('/videos')
+    assert calls[0][2]['part']=='snippet,contentDetails'
+    with pytest.raises(ValueError):
+        client.video_durations(['not-a-video!'])
+
+
 def test_youtube_manifest_registers_read_only_connector() -> None:
     plugin = load_portable_plugin(Path("plugins/connectors/youtube"))
     context = PortablePluginContext()
 
     plugin.register(context)
 
-    assert plugin.manifest.capabilities == ["youtube.account", "youtube.subscriptions", "youtube.liked_videos"]
-    assert context.connectors["youtube"]["capabilities"] == [
+    expected_capabilities = [
+        "youtube.creators.configure",
+        "youtube.creators.refresh",
+        "youtube.subscription_feed",
+        "youtube.history.refresh",
+        "youtube.history.configure",
         "youtube.account",
         "youtube.subscriptions",
         "youtube.liked_videos",
+        "youtube.watch_history",
+        "youtube.connection.start",
+        "youtube.sync",
+        "youtube.connection.disconnect",
+        "youtube.intelligence.rebuild",
     ]
+    assert plugin.manifest.capabilities == expected_capabilities
+    assert context.connectors["youtube"]["capabilities"] == expected_capabilities
 
 
 def test_youtube_auth_url_uses_readonly_scope_and_pkce() -> None:
@@ -91,6 +174,35 @@ def test_youtube_auth_store_keeps_tokens_out_of_runtime_files(tmp_path: Path) ->
     assert "refresh-secret" not in persisted
     assert store.load_tokens()["refresh_token"] == "refresh-secret"
     assert store.load_metadata()["channel_id"] == "UC-primary"
+
+
+def test_revoked_google_grant_reports_reconnect_across_restart_and_keeps_saved_identity(tmp_path, monkeypatch):
+    module = youtube_module()
+    store = module.auth.YouTubeAuthStore(tmp_path, keyring_backend=FakeKeyring())
+    store.save_tokens({'access_token':'expired','refresh_token':'fixture-secret','expires_at':1})
+    store.save_profile({'channel_id':'UC-primary','title':'Saved channel'})
+    calls=[]
+    def request(method, url, **kwargs):
+        calls.append(url)
+        return FakeResponse({'error':'invalid_grant','error_description':'private provider details'},status_code=400)
+    client = module.client.YouTubeClient(client_id='client',client_secret='fixture',store=store,request_backend=request)
+    with pytest.raises(module.errors.YouTubeAuthError, match='must be renewed'):
+        client.get_my_channel()
+    restarted = module.client.YouTubeClient(client_id='client',client_secret='fixture',store=store,request_backend=request)
+    with pytest.raises(module.errors.YouTubeAuthError, match='must be renewed'):
+        restarted.get_my_channel()
+    assert len(calls)==1
+    assert store.load_tokens()['refresh_token']=='fixture-secret'
+    metadata=store.load_metadata()
+    assert metadata['channel_title']=='Saved channel' and metadata['authorization_status']=='authorization_required'
+    assert 'private provider details' not in store.metadata_path.read_text()
+    from agent.plugins import youtube_runtime
+    monkeypatch.setattr(youtube_runtime,'youtube_store',lambda:store)
+    monkeypatch.setattr(youtube_runtime,'get_settings',lambda:SimpleNamespace(youtube_oauth_client_id='client',youtube_oauth_account_label='primary'))
+    assert youtube_runtime.youtube_status()['authorization_required']
+    store.save_tokens({'access_token':'new','expires_at':time.time()+3600})
+    assert not youtube_runtime.youtube_status()['authorization_required']
+    assert store.load_metadata()['channel_title']=='Saved channel'
 
 
 def test_youtube_auth_flow_is_single_use_and_state_checked(tmp_path: Path) -> None:

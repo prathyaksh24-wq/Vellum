@@ -17,6 +17,20 @@ def set_created(root: Path, name: str, value: str) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
+def test_backup_ids_remain_unique_and_ordered_when_windows_clock_ticks_tie(tmp_path, monkeypatch):
+    import agent.skills.curator as curator_module
+    class FrozenDatetime:
+        @staticmethod
+        def now(_):
+            return datetime(2026, 10, 4, tzinfo=timezone.utc)
+    monkeypatch.setattr(curator_module, 'datetime', FrozenDatetime)
+    store = CuratorBackupStore(tmp_path / '.skills', keep=2)
+    snapshots = [store.create(reason) for reason in ('first', 'second', 'third')]
+    identifiers = [snapshot['id'] for snapshot in snapshots]
+    assert len(set(identifiers)) == 3 and identifiers == sorted(identifiers)
+    assert [snapshot['reason'] for snapshot in store.list()] == ['second', 'third']
+
+
 def test_backup_and_rollback_restore_skill_tree_and_keep_bounded_history(tmp_path: Path) -> None:
     root = tmp_path / ".skills"
     manager = SkillManager(root)

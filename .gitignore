@@ -24,15 +24,21 @@ data/computer-use/events.jsonl
 data/computer-use/mode.json
 data/computer-use/permissions.json
 data/computer-use/screenshots/
+data/browser-session/
+data/browser-downloads/
+data/browser-cache/
 data/x-api-oauth.json
 data/xai-oauth.json
 data/plugins/spotify/auth.json
 data/plugins/spotify/oauth-flow.json
 data/plugins/youtube/
+data/plugins/google-calendar/
 data/plugins/state.json
 data/logs/
+data/voice/
 data/cache/
 data/embeddings/
+data/exports/
 data/models/
 data/ui/
 data/knowledge/
@@ -57,14 +63,21 @@ ui-dist/
 .skills/.hub/lock.json
 .skills/pending/receipts/
 node_modules/
+frontend/.vite/
 desktop/dist/
+desktop/out/
+desktop/resources/ui/
 desktop/src-tauri/.cargo/config.toml
 desktop/src-tauri/target/
 .playwright-mcp/
 .codex-activity-qa-profile/
 .test-data/
+.impeccable/review/
 .DS_Store
 
 # Personal data — never commit
 Vault/
 .obsidian/
+
+# Local diagnostic artifacts and isolated worktrees
+.scratch/

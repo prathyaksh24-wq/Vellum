@@ -19,22 +19,27 @@ def test_seed_builtins_creates_records(tmp_path):
 
     seeded = builtins.seed_builtins(store)
 
-    assert len(seeded) == 5
     records = {r["builtin_key"]: r for r in store.list()}
-    assert set(records) == {
+    expected_keys = {
+        "youtube_creator_tracking",
         "memory_dreaming",
+        "youtube_browser_history",
         "nightly_digest",
         "vault_retention",
         "youtube_intelligence_projection",
+        "discord_intelligence_sync",
         "skill_curator_tick",
     }
+    assert len(seeded) == len(expected_keys)
+    assert set(records) == expected_keys
     for record in records.values():
         assert record["builtin"] is True
-        assert record["state"] == "active"
+        assert record["state"] == ("paused" if record["builtin_key"] in {"youtube_browser_history", "youtube_creator_tracking"} else "active")
         assert record["permission"]["full_access"] is True
-        assert record["destination"]["kind"] == "new_chat"
+        assert record["destination"]["kind"] == ("notification" if record["builtin_key"] == "youtube_creator_tracking" else "new_chat")
     assert records["nightly_digest"]["schedule"]["expression"] == "15 2 * * *"
     assert records["skill_curator_tick"]["schedule"]["seconds"] == 3600
+    assert records["discord_intelligence_sync"]["schedule"]["seconds"] == 60
 
 
 def test_seed_builtins_is_idempotent_and_preserves_user_edits(tmp_path):

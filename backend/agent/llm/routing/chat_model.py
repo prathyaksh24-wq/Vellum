@@ -18,6 +18,7 @@ class RoutedChatModel(BaseChatModel):
     temperature: float = 0.3
     max_tokens: int = 2048
     reasoning_mode: Any = None
+    context_role: str = "specialist"
     bound_tools: tuple[Any, ...] = ()
     tool_binding_kwargs: dict[str, Any] = Field(default_factory=dict)
 
@@ -42,6 +43,21 @@ class RoutedChatModel(BaseChatModel):
             },
             deep=False,
         )
+
+    def invoke(
+        self,
+        input: Any,
+        config: Mapping[str, Any] | None = None,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> AIMessage:
+        invoke_kwargs = dict(kwargs)
+        configurable = config.get("configurable", {}) if config is not None else {}
+        thread_id = configurable.get("thread_id") if isinstance(configurable, Mapping) else None
+        if thread_id and "thread_id" not in invoke_kwargs:
+            invoke_kwargs["thread_id"] = str(thread_id)
+        return super().invoke(input, config=config, stop=stop, **invoke_kwargs)
 
     async def ainvoke(
         self,
@@ -68,17 +84,24 @@ class RoutedChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         del run_manager
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        if execution is not None:
+            messages = execution.messages(messages)
+            kwargs.setdefault("thread_id", execution.thread_id)
         invoke_kwargs = dict(self.tool_binding_kwargs)
         invoke_kwargs.update(kwargs)
         if stop is not None:
             invoke_kwargs["stop"] = stop
+        max_tokens = invoke_kwargs.pop("max_tokens", self.max_tokens)
         message = await self.engine.ainvoke(
             messages=messages,
             primary_model=self.primary_model_resolver(),
             tools=self.bound_tools,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens,
             reasoning_mode=self.reasoning_mode,
+            context_role=self.context_role,
             **invoke_kwargs,
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
@@ -129,17 +152,24 @@ class RoutedChatModel(BaseChatModel):
         **kwargs: Any,
     ):
         del run_manager
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        if execution is not None:
+            messages = execution.messages(messages)
+            kwargs.setdefault("thread_id", execution.thread_id)
         stream_kwargs = dict(self.tool_binding_kwargs)
         stream_kwargs.update(kwargs)
         if stop is not None:
             stream_kwargs["stop"] = stop
+        max_tokens = stream_kwargs.pop("max_tokens", self.max_tokens)
         async for chunk in self.engine.astream(
             messages=messages,
             primary_model=self.primary_model_resolver(),
             tools=self.bound_tools,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens,
             reasoning_mode=self.reasoning_mode,
+            context_role=self.context_role,
             **stream_kwargs,
         ):
             yield ChatGenerationChunk(message=chunk)

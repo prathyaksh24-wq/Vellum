@@ -4,22 +4,21 @@ from agent.agents.base import (
     SpecialistResponse,
     SpecialistSource,
 )
+from agent.agents.books import BooksAgent
+from agent.agents.discord import DiscordAgent
 from agent.agents.memory_agent import MemoryAgent
-from agent.agents.orchestrator import SpecialistOrchestrator
-from agent.agents.router import RouteDecision, SpecialistRouter
 from agent.agents.sports import SportsAgent
 from agent.agents.x_agent import XAgent
 from agent.agents.youtube import YoutubeAgent
 
 __all__ = [
+    "BooksAgent",
+    "DiscordAgent",
     "MemoryAgent",
     "MemoryProposal",
-    "RouteDecision",
     "SportsAgent",
     "SpecialistAgent",
-    "SpecialistOrchestrator",
     "SpecialistResponse",
-    "SpecialistRouter",
     "SpecialistSource",
     "XAgent",
     "YoutubeAgent",

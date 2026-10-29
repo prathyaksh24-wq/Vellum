@@ -22,6 +22,31 @@ class FakeHoncho:
         return "- User follows Vellum memory architecture closely."
 
 
+def test_explicit_memory_uses_store_and_search_projection(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    fts = FTS5Memory(tmp_path / "fts5.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=fts,
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(
+            vault_root=tmp_path / "Vault",
+            sessions_db=tmp_path / "sessions.db",
+        ),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+
+    memory = orchestrator.save_explicit_memory(
+        kind="preference",
+        text="Prefer concise implementation updates.",
+        source_thread_id="chat-174",
+        confidence=1.0,
+    )
+
+    assert store.get_memory(memory["id"])["text"] == "Prefer concise implementation updates."
+    assert fts.search("concise implementation", limit=5)[0]["thread_id"] == "chat-174"
+
+
 def test_memory_packet_uses_saved_honcho_project_and_recent_context(tmp_path: Path) -> None:
     vault = tmp_path / "Vault"
     store = SQLiteMemoryStore(tmp_path / "memory.db")
@@ -290,9 +315,19 @@ def test_memory_intake_keeps_operational_queries_out_of_durable_memory(tmp_path:
         "[Vellum UI context: settings open] what skills did I install yesterday?",
         "Can you show me the current backend skills?",
         "Archive the ontology skill now.",
+        "For this chat only, the demonstration project is ORCHID-42, a local note organizer. Reply with its label.",
+        "So tell me Vellum where do you see yourself in ten years.",
+        "Please use SportsAgent to answer this general sports question in one sentence. Do not include any personal context.",
     ):
         assert orchestrator.extract_memory_candidates(thread_id="t1", user_message=message) == []
     assert store.list_pending() == []
+
+
+def test_note_as_a_noun_is_not_an_explicit_memory_instruction():
+    from agent.memory.orchestrator import _explicit_remember, _extract_candidates
+    message = 'A local note organizer can keep the project structured.'
+    assert not _explicit_remember(message)
+    assert all(item['confidence'] < 0.9 for item in _extract_candidates(message, ''))
 
 
 def test_summary_view_is_structured_and_dreaming_archives_legacy_noise(tmp_path: Path) -> None:

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
 from agent.profiles.policy import get_active_profile_policy
 
 
@@ -37,6 +39,15 @@ class CapabilityRecord:
     requires_confirmation: bool = False
     required_env_flags: frozenset[str] = frozenset()
     runtime_tool: Any | None = None
+    # Mixed read/write adapters must declare each read operation explicitly.
+    read_actions: frozenset[str] | None = None
+    input_schema: dict[str, Any] | None = None
+
+    def schema(self) -> dict[str, Any]:
+        if self.runtime_tool is not None:
+            schema = self.runtime_tool.args_schema
+            return schema if isinstance(schema, dict) else schema.model_json_schema()
+        return self.input_schema or {"type":"object", "additionalProperties":True}
 
 
 @dataclass(frozen=True)
@@ -68,10 +79,20 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._records)
 
-    def invoke(self, name: str, payload: dict[str, Any], *, agent_name: str) -> Any:
+    def invoke(
+        self,
+        name: str,
+        payload: dict[str, Any],
+        *,
+        agent_name: str,
+        runtime_config: RunnableConfig | None = None,
+    ) -> Any:
         record = self.get(name)
         self._check_permission(record, payload, agent_name=agent_name)
-        result = record.adapter(payload)
+        if record.runtime_tool is not None:
+            result = record.runtime_tool.invoke(payload, config=runtime_config)
+        else:
+            result = record.adapter(payload)
         if self._observer is not None:
             try:
                 self._observer(
@@ -123,8 +144,16 @@ class ToolRegistry:
             if tool is None:
                 continue
 
-            def invoke(_capability_name=record.name, **payload):
-                return self.invoke(_capability_name, payload, agent_name=agent_name)
+            def make_invoker(capability_name: str):
+                def invoke(config: RunnableConfig = None, **payload):
+                    return self.invoke(
+                        capability_name,
+                        payload,
+                        agent_name=agent_name,
+                        runtime_config=config,
+                    )
+
+                return invoke
 
             wrapped.append(
                 StructuredTool(
@@ -137,12 +166,16 @@ class ToolRegistry:
                     handle_tool_error=tool.handle_tool_error,
                     handle_validation_error=tool.handle_validation_error,
                     response_format=tool.response_format,
-                    func=invoke,
+                    func=make_invoker(record.name),
                 )
             )
         return wrapped
 
     def _check_permission(self, record: CapabilityRecord, payload: dict[str, Any], *, agent_name: str) -> None:
+        from agent.personalization import tool_preference_error
+        preference_error = tool_preference_error(record.name, record.namespace)
+        if preference_error:
+            raise ToolPermissionError(preference_error)
         if agent_name not in record.allowed_agents:
             raise ToolPermissionError(f"{agent_name} cannot use {record.name}")
         policy = get_active_profile_policy()
@@ -150,6 +183,9 @@ class ToolRegistry:
             raise ToolPermissionError(
                 f"{record.name} is not allowed by active profile policy {policy.profile_id}"
             )
-        requires_confirmation = record.requires_confirmation or record.access == CapabilityAccess.EXTERNAL_WRITE
+        profile_requires_confirmation = policy is not None and record.name in policy.require_confirmation
+        requires_confirmation = (
+            record.requires_confirmation or record.access == CapabilityAccess.EXTERNAL_WRITE or profile_requires_confirmation
+        )
         if requires_confirmation and payload.get("confirm") is not True:
             raise ToolPermissionError(f"{record.name} requires explicit confirmation")

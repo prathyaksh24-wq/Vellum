@@ -84,3 +84,14 @@ def test_logout_removes_tokens_and_flow(tmp_path):
 
     assert not store.auth_path.exists()
     assert not store.flow_path.exists()
+
+
+def test_linked_playlists_are_account_scoped_and_reject_connection_races(tmp_path):
+    store=SpotifyAuthStore(tmp_path)
+    store.save_tokens({'refresh_token':'connection-a'})
+    store.remember_playlists('account-a',[{'id':'mix-a'}],connection_token='connection-a')
+    store.remember_playlists('account-b',[{'id':'mix-b'}],connection_token='connection-a')
+    assert store.linked_playlists()==[{'id':'mix-b'}]
+    with pytest.raises(SpotifyAuthError,match='connection changed'):
+        store.remember_playlists('account-a',[{'id':'unsafe'}],connection_token='old-connection')
+    assert store.linked_playlists()==[{'id':'mix-b'}]

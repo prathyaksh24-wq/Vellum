@@ -1,0 +1,26 @@
+{
+  "live_options": 8,
+  "static_options": 3,
+  "selection_receipts": [
+    {
+      "patch": {
+        "background": "particles"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "pattern-waves"
+      },
+      "status": "applied"
+    },
+    {
+      "patch": {
+        "background": "particles"
+      },
+      "status": "applied"
+    }
+  ],
+  "reload_persisted": true,
+  "page_errors": []
+}
