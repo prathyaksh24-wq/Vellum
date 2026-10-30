@@ -92,4 +92,19 @@ describe("served visual-control parity gate", () => {
     expect(inventory.exemptions.some(item => /\bclick\b|\bsubmit\b/i.test(item.scope))).toBe(false);
     expect(inventory.deferred.every(item => item.surface && item.reason)).toBe(true);
   });
+
+  test('upload module handlers cannot bypass the served-control review', () => {
+    const sources = servedSources();
+    const path = 'design/Velllum/uploads/components/attachment-upload.tsx';
+    expect(sources[path]).toContain('onDrop={(event) => {');
+    sources[path] = sources[path].replace('onDrop={(event) => {', 'onDrop={(event) => { unreviewedMutation();');
+    expect(validateParityInventory(inventory, sources).join('\n')).toContain(`${path}: visual handlers changed`);
+  });
+
+  test('removing the upload module from the served entry fails the integration lock', () => {
+    const sources = servedSources();
+    const path = 'design/Velllum/uploads/books-entry.js';
+    sources[path] = sources[path].replace("import './components/book-upload-entry.jsx';", '');
+    expect(validateParityInventory(inventory, sources).join('\n')).toContain(`${path}: reviewed upload module is no longer served`);
+  });
 });

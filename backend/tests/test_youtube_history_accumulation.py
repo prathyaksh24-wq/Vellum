@@ -7,7 +7,6 @@ from threading import Event
 
 import pytest
 
-from agent.contracts.browser import BrowserPreferences
 from agent.knowledge.store import KnowledgeStore
 from agent.plugins.youtube_browser_history import ACTION, ORIGIN, HistoryReadError, YouTubeBrowserHistory, YouTubeBrowserHistoryService
 
@@ -110,6 +109,14 @@ def test_unknown_dates_stay_snapshot_only(tmp_path):
     assert owner.history()["total"] == 1 and owner.history()["items"][0]["video_id"] == item(2)["video_id"]
 
 
+def test_day_first_month_rows_survive_disappearing_from_the_latest_page(tmp_path):
+    service, store = reader(tmp_path, [packet([item(1, day='2 Oct')]), packet([item(2)])])
+    service.refresh()
+    service.refresh()
+    saved = YouTubeBrowserHistory(store=store).history(day='2026-10-02')
+    assert saved['total'] == 1 and saved['items'][0]['video_id'] == item(1)['video_id']
+
+
 def test_saved_creator_filter_reads_beyond_500_observations(tmp_path):
     packets = [packet([item(i, channel="Other") for i in range(start, start + 100)]) for start in range(0, 600, 100)]
     packets.append(packet([item(601, channel="Wanted Creator")]))
@@ -202,10 +209,11 @@ def test_cloud_profile_cannot_read_private_history(tmp_path):
 
 def test_browser_worker_uses_quiet_reader_for_automatic_and_manual_calls(monkeypatch):
     from agent.mcp import dedicated_browser, playwright_tools
+    from agent.contracts.browser import BrowserPreferences
     calls = []
     class Browser:
         def _browser_preferences(self):
-            return BrowserPreferences(agent_history='allow')
+            return BrowserPreferences()
         async def youtube_history(self, *, url):
             calls.append(url)
             return packet()
@@ -250,10 +258,13 @@ def test_real_quiet_history_tab(monkeypatch, tmp_path):
             assert browser.active_page.url == "about:blank"
             assert len(browser.context.pages) == state["pages"]
             assert browser.presentation_requested is False
-            browser.control = "paused"
-            with pytest.raises(dedicated_browser.BrowserSessionError, match="paused"):
-                await browser.youtube_history()
-            assert len(browser.context.pages) == state["pages"]
+            for control in ('user', 'paused'):
+                browser.control = control
+                frame_id = browser._frame_id()
+                assert (await browser.youtube_history())['status'] == 'ready'
+                assert browser.control == control and browser.active_page is state['visible']
+                assert browser._frame_id() == frame_id
+                assert len(browser.context.pages) == state["pages"]
         finally:
             await browser.close()
             assert browser.context is None

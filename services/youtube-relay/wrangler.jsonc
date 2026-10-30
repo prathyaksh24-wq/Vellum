@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vellum-youtube-relay",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-17",
+  "workers_dev": true,
+  "observability": {"enabled": false},
+  "triggers": {"crons": ["* * * * *"]},
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "vellum-youtube-relay",
+    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+    "migrations_dir": "migrations"
+  }],
+  "vars": {"PUBLIC_ORIGIN": ""}
+}

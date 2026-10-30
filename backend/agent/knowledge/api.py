@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool
 from agent.config import get_settings
 from agent.knowledge.book_library import BookLibrary, RIGHTS_ATTESTATION_VERSION
 from agent.knowledge.book_documents import BookDocumentError
+from agent.knowledge.book_reader import BookReaderManifest, BookReaderSection, BookReaderText
 from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
     BookDocumentRequest,
@@ -55,8 +56,8 @@ async def book_library_list(
 @router.post("/books/library/import")
 async def book_library_import(
     file: Annotated[UploadFile, File(...)],
-    rights_attestation_version: Annotated[str, Form(max_length=120)],
-    scan_approved: Annotated[bool, Form()],
+    rights_attestation_version: Annotated[str, Form(max_length=120)] = RIGHTS_ATTESTATION_VERSION,
+    scan_approved: Annotated[bool, Form()] = True,
     local_only: Annotated[bool, Form()] = True,
 ) -> dict[str, Any]:
     library = _book_library()
@@ -114,6 +115,41 @@ async def book_library_action(import_id: str, action: str, request: BookLibraryA
         return await asyncio.to_thread(_book_library().action, import_id, action)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+
+
+@router.get("/books/library/{import_id}/reader", response_model=BookReaderManifest)
+async def book_library_reader(import_id: str, response: Response) -> BookReaderManifest:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    try:
+        return await asyncio.to_thread(_book_library().reader, import_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+    except (ValueError, OSError, BookDocumentError) as exc:
+        raise HTTPException(status_code=409, detail={"code": "BOOK_READER_UNAVAILABLE"}) from exc
+
+
+@router.get("/books/library/{import_id}/reader/full", response_model=BookReaderText)
+async def book_library_reader_text(import_id: str, response: Response) -> BookReaderText:
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return await asyncio.to_thread(_book_library().reader_text, import_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+    except (ValueError, OSError, BookDocumentError) as exc:
+        raise HTTPException(status_code=409, detail={"code": "BOOK_READER_UNAVAILABLE"}) from exc
+
+
+@router.get("/books/library/{import_id}/reader/{section_id}", response_model=BookReaderSection)
+async def book_library_reader_section(import_id: str, section_id: str, response: Response) -> BookReaderSection:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    try:
+        return await asyncio.to_thread(_book_library().reader_section, import_id, section_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_READER_SECTION_NOT_FOUND"}) from exc
+    except (ValueError, OSError, BookDocumentError) as exc:
+        raise HTTPException(status_code=409, detail={"code": "BOOK_READER_UNAVAILABLE"}) from exc
 
 
 @router.get("/status")

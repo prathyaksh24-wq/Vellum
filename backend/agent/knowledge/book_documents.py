@@ -28,7 +28,7 @@ from agent.knowledge.store import (
 
 
 BOOK_DOCUMENT_SCHEMA_VERSION = "book-document-v1"
-EPUB_PARSER_VERSION = "epub-native-v1"
+EPUB_PARSER_VERSION = "epub-native-v2"
 BOOK_NORMALIZER_VERSION = "book-normalizer-v1"
 
 
@@ -206,7 +206,7 @@ class BookDocumentPipeline:
     def __init__(self, store: KnowledgeStore, *, ocr_provider=None) -> None:
         self.store = store
         self.ocr_provider = ocr_provider
-        self.parser_version = "epub-native-windows-ocr-v2" if ocr_provider is not None else EPUB_PARSER_VERSION
+        self.parser_version = "epub-native-windows-ocr-v3" if ocr_provider is not None else EPUB_PARSER_VERSION
 
     def construct(self, request: BookDocumentRequest) -> BookImportStatus:
         document_id = self.store.book_document_id(
@@ -420,8 +420,8 @@ def parse_epub_document(
             reason_code="EPUB_PACKAGE_MALFORMED",
             stage="identified",
         )
-        metadata = _metadata(package)
         manifest = _manifest(package, package_path)
+        metadata = _metadata(package, archive=archive, manifest=manifest)
         reading_order = _reading_order(package, manifest)
         if not reading_order:
             raise BookDocumentError("EPUB_SPINE_MISSING", stage="identified")
@@ -547,6 +547,25 @@ def _canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def epub_content_fingerprint(raw: bytes) -> str:
+    """Identify the same edition across ZIP repacks and edited package titles."""
+    digest = sha256(b"epub-reading-content-v1\0")
+    with ZipFile(BytesIO(raw)) as archive:
+        package_path = _container_package_path(_parse_xml(archive.read("META-INF/container.xml"), reason_code="EPUB_CONTAINER_MALFORMED", stage="identified"))
+        package = _parse_xml(archive.read(package_path), reason_code="EPUB_PACKAGE_MALFORMED", stage="identified")
+        order = _reading_order(package, _manifest(package, package_path))
+        if not order:
+            raise BookDocumentError("EPUB_SPINE_MISSING", stage="identified")
+        for item in order:
+            info = archive.getinfo(item.resource_path)
+            if info.file_size > 8 * 1024 * 1024:
+                raise BookDocumentError("BOOK_READER_RESOURCE_TOO_LARGE")
+            content = archive.read(info)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+    return digest.hexdigest()
+
+
 def read_epub_presentation(path: Path, *, include_cover: bool = False) -> tuple[BookDocumentMetadata, bytes, str]:
     """Read bounded display metadata from an already validated local EPUB."""
     def read(archive: ZipFile, name: str, limit: int) -> bytes:
@@ -559,15 +578,13 @@ def read_epub_presentation(path: Path, *, include_cover: bool = False) -> tuple[
         return content
 
     def xml(content: bytes) -> ET.Element:
-        if b"<!DOCTYPE" in content.upper() or b"<!ENTITY" in content.upper():
-            raise BookDocumentError("UNSAFE_XML_DECLARATION")
         return _parse_xml(content, reason_code="BOOK_DISPLAY_METADATA_INVALID", stage="identified")
 
     with ZipFile(path) as archive:
         package_path = _container_package_path(xml(read(archive, "META-INF/container.xml", 65536)))
         package = xml(read(archive, package_path, 2 * 1024 * 1024))
-        metadata = _metadata(package)
         manifest = _manifest(package, package_path)
+        metadata = _metadata(package, archive=archive, manifest=manifest)
         legacy_cover = next((element.attrib.get("content", "") for element in package.iter()
                              if _local_name(element.tag) == "meta" and element.attrib.get("name") == "cover"), "")
         cover = next((item for item in manifest.values()
@@ -581,12 +598,25 @@ def read_epub_presentation(path: Path, *, include_cover: bool = False) -> tuple[
 
 def _parse_xml(raw: bytes, *, reason_code: str, stage: str) -> ET.Element:
     upper = raw[:65536].upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+    if b"<!ENTITY" in upper:
         raise BookDocumentError("UNSAFE_XML_DECLARATION", stage=stage)
     try:
+        # EPUB 2 XHTML normally declares a public DTD. ElementTree does not
+        # fetch it. Resolve ordinary HTML named characters without a DTD fetch.
+        raw = re.sub(br"&([A-Za-z][A-Za-z0-9]+);", _html_entity_reference, raw)
         return ET.fromstring(raw)
     except ET.ParseError as exc:
         raise BookDocumentError(reason_code, stage=stage) from exc
+
+
+def _html_entity_reference(match: re.Match[bytes]) -> bytes:
+    value = match.group(0).decode("ascii")
+    if value in {"&amp;", "&lt;", "&gt;", "&quot;", "&apos;"}:
+        return match.group(0)
+    decoded = unescape(value)
+    if decoded == value:
+        return match.group(0)
+    return "".join(f"&#{ord(character)};" for character in decoded).encode("ascii")
 
 
 def _local_name(tag: str) -> str:
@@ -636,7 +666,34 @@ def _container_package_path(container: ET.Element) -> str:
     raise BookDocumentError("EPUB_PACKAGE_ROOTFILE_MISSING", stage="extracted")
 
 
-def _metadata(package: ET.Element) -> BookDocumentMetadata:
+class _PageTitle(HTMLParser):
+    """Read only the inert head/title text, including imperfect EPUB HTML."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.in_head = False
+        self.in_title = False
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "head":
+            self.in_head = True
+        elif tag == "title" and self.in_head:
+            self.in_title = True
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self.in_title = False
+        elif tag == "head":
+            self.in_head = self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            self.parts.append(data)
+
+
+def _metadata(package: ET.Element, *, archive: ZipFile | None = None,
+              manifest: dict[str, dict[str, str]] | None = None) -> BookDocumentMetadata:
     values: dict[str, list[str]] = {}
     for element in package.iter():
         name = _local_name(element.tag)
@@ -644,14 +701,37 @@ def _metadata(package: ET.Element) -> BookDocumentMetadata:
             text = _clean_text(element)
             if text:
                 values.setdefault(name, []).append(text)
+    title = (values.get("title") or [""])[0]
+    # Some converted EPUBs put the ISBN in dc:title. Recover the book's actual
+    # title from its first readable page headers without modifying the asset.
+    if archive is not None and manifest is not None and (not title or _isbn_title(title)):
+        for item in _reading_order(package, manifest)[:8]:
+            try:
+                info = archive.getinfo(item.resource_path)
+                if info.file_size > 1024 * 1024 or info.flag_bits & 1:
+                    continue
+                parser = _PageTitle()
+                parser.feed(archive.read(info).decode("utf-8", "replace"))
+                candidate = " ".join("".join(parser.parts).split())
+                if (candidate and len(candidate) <= 1000 and not _isbn_title(candidate)
+                        and candidate.casefold() not in {"cover", "title page", "titlepage", "contents", "table of contents", "copyright"}):
+                    title = candidate
+                    break
+            except (KeyError, ValueError, OSError, BadZipFile):
+                continue
     return BookDocumentMetadata(
-        title=(values.get("title") or [""])[0],
+        title=title,
         creators=values.get("creator", []),
         languages=values.get("language", []),
         identifiers=values.get("identifier", []),
         publisher=(values.get("publisher") or [""])[0],
         published_at=(values.get("date") or [""])[0],
     )
+
+
+def _isbn_title(title: str) -> bool:
+    compact = re.sub(r"[\s-]", "", re.sub(r"^isbn(?:-1[03])?\s*:?\s*", "", title, flags=re.I))
+    return bool(re.fullmatch(r"(?:\d{13}|\d{9}[\dXx])", compact))
 
 
 def _manifest(package: ET.Element, package_path: str) -> dict[str, dict[str, str]]:
@@ -753,9 +833,8 @@ class _LexicalBlockParser(HTMLParser):
         if self.unsafe_depth:
             return
         for capture in self.active:
-            if capture["tag"] == "figure":
-                continue
-            capture["characters"].extend(
+            target = capture["figure_text"] if capture["tag"] == "figure" else capture["characters"]
+            target.extend(
                 (character, source_start + index, source_start + index + 1)
                 for index, character in enumerate(text)
             )
@@ -770,7 +849,7 @@ class _LexicalBlockParser(HTMLParser):
             return
         if tag in self._block_tags:
             self.active.append(
-                {"tag": tag, "source_start": absolute, "characters": []}
+                {"tag": tag, "source_start": absolute, "characters": [], "figure_text": []}
             )
         if tag == "img":
             alt = next((value or "" for name, value in attrs if name.casefold() == "alt"), "")
@@ -809,17 +888,17 @@ class _LexicalBlockParser(HTMLParser):
             if capture["tag"] != tag:
                 continue
             del self.active[index]
-            text, offset_map = _normalize_lexical_characters(capture["characters"])
-            if text:
-                self.spans.setdefault(tag, []).append(
-                    LexicalBlockSpan(
-                        tag=tag,
-                        text=text,
-                        source_start=int(capture["source_start"]),
-                        source_end=source_end,
-                        offset_map=offset_map,
-                    )
+            characters = capture["characters"] or capture["figure_text"]
+            text, offset_map = _normalize_lexical_characters(characters)
+            self.spans.setdefault(tag, []).append(
+                LexicalBlockSpan(
+                    tag=tag,
+                    text=text,
+                    source_start=int(capture["source_start"]),
+                    source_end=source_end,
+                    offset_map=offset_map,
                 )
+            )
             return
 
     def handle_data(self, data: str) -> None:
@@ -893,7 +972,7 @@ def _lexical_block_spans(source: str) -> dict[str, list[LexicalBlockSpan]]:
     parser = _LexicalBlockParser(source)
     parser.feed(source)
     parser.close()
-    return parser.spans
+    return {tag: sorted(spans, key=lambda span: span.source_start) for tag, spans in parser.spans.items()}
 
 
 def _section_from_resource(
@@ -909,16 +988,29 @@ def _section_from_resource(
     cursor = 0
     lexical_spans = _lexical_block_spans(source_text)
     lexical_occurrences: dict[str, int] = {}
+    element_spans: dict[int, LexicalBlockSpan] = {}
+
+    def map_elements(element: ET.Element) -> None:
+        tag = _local_name(element.tag)
+        if tag in _LexicalBlockParser._unsafe_tags:
+            return
+        if tag in _LexicalBlockParser._block_tags:
+            index = lexical_occurrences.get(tag, 0)
+            lexical_occurrences[tag] = index + 1
+            candidates = lexical_spans.get(tag, [])
+            if index < len(candidates):
+                element_spans[id(element)] = candidates[index]
+        for child in element:
+            map_elements(child)
+
+    map_elements(root)
 
     def emit(element: ET.Element, block_type: str, text: str, level: int | None = None) -> None:
         nonlocal cursor
         if not text:
             return
         tag = _local_name(element.tag)
-        lexical_index = lexical_occurrences.get(tag, 0)
-        candidates = lexical_spans.get(tag, [])
-        lexical = candidates[lexical_index] if lexical_index < len(candidates) else None
-        lexical_occurrences[tag] = lexical_index + 1
+        lexical = element_spans.get(id(element))
         if lexical is None or lexical.text != text:
             raise BookDocumentError("EPUB_SOURCE_ANCHOR_INVALID", stage="structured")
         if extracted_parts:

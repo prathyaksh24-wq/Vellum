@@ -437,3 +437,31 @@ def test_youtube_client_errors_do_not_include_provider_payload(tmp_path: Path) -
         client.exchange_code(code="code", redirect_uri="http://localhost", code_verifier="verifier")
 
     assert "provider-secret" not in str(error.value)
+
+
+def test_google_refresh_grant_deadline_survives_access_refresh_without_extending(tmp_path,monkeypatch):
+    module=youtube_module();monkeypatch.setattr(module.auth.time,'time',lambda:1000.0)
+    store=module.auth.YouTubeAuthStore(tmp_path,keyring_backend=FakeKeyring())
+    store.save_tokens({'access_token':'access','refresh_token':'refresh','expires_in':3600,'refresh_token_expires_in':604800})
+    assert store.load_metadata()['refresh_token_expires_at']==605800.0
+    monkeypatch.setattr(module.auth.time,'time',lambda:2000.0)
+    store.save_tokens({'access_token':'new-access','expires_in':3600})
+    assert store.load_metadata()['refresh_token_expires_at']==605800.0
+    store.save_tokens({'access_token':'replacement','refresh_token':'new-grant','expires_in':3600})
+    assert store.load_metadata()['refresh_token_expires_at'] is None
+
+
+def test_youtube_status_reports_known_grant_deadline_and_expiry(tmp_path,monkeypatch):
+    from datetime import datetime,UTC,timedelta
+    from agent.plugins import youtube_runtime
+    module=youtube_module();store=module.auth.YouTubeAuthStore(tmp_path,keyring_backend=FakeKeyring())
+    store.save_tokens({'access_token':'access','refresh_token':'refresh','expires_in':3600,'refresh_token_expires_in':3600})
+    monkeypatch.setattr(youtube_runtime,'youtube_store',lambda:store)
+    monkeypatch.setattr(youtube_runtime,'get_settings',lambda:SimpleNamespace(youtube_oauth_client_id='client',youtube_oauth_account_label='primary'))
+    status=youtube_runtime.youtube_status()
+    assert status['authorization_expires_at'] and status['authorization_expiring']
+    assert status['status']=='ready' and not status['authorization_required']
+    metadata=store.load_metadata();metadata['refresh_token_expires_at']=(datetime.now(UTC)-timedelta(seconds=1)).timestamp()
+    store._atomic_write(store.metadata_path,metadata)
+    status=youtube_runtime.youtube_status()
+    assert status['authorization_required'] and status['status']=='authorization_required'

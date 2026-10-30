@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -213,6 +213,9 @@ class Settings(BaseSettings):
         alias="YOUTUBE_OAUTH_KEYRING_SERVICE",
     )
     youtube_oauth_account_label: str = Field(default="primary", alias="YOUTUBE_OAUTH_ACCOUNT_LABEL")
+    youtube_push_callback_base: str = Field(default="", alias="YOUTUBE_PUSH_CALLBACK_BASE")
+    youtube_push_relay_base: str = Field(default="", alias="YOUTUBE_PUSH_RELAY_BASE")
+    youtube_push_relay_token: SecretStr = Field(default=SecretStr(""), alias="YOUTUBE_PUSH_RELAY_TOKEN")
     google_workspace_oauth_client_id: str = Field(default="", alias="GOOGLE_WORKSPACE_OAUTH_CLIENT_ID")
     google_workspace_oauth_client_secret: str = Field(default="", alias="GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET", repr=False)
     google_calendar_oauth_client_id: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_ID")

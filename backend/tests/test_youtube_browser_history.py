@@ -5,8 +5,8 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from agent.contracts.browser import BrowserPreferences
+
 from agent.knowledge.store import KnowledgeStore
 from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService, HistoryReadError
 
@@ -143,11 +143,12 @@ def test_yesterday_filter_and_channel_projection_apply_before_display_limit(tmp_
         browser_history_backend=lambda:{'available':True,'provider':'browser','total':4,'items':items})
     result = YoutubeAgent(vault_root=tmp_path, youtube_service=service).answer('name 2 channels from videos I watched yesterday')
     assert result.summary.count('Creator') == 2 and 'Video 0' not in result.summary
-    assert 'Video 1' not in result.summary and 'recent channels' in result.summary
+    assert 'Video 1' not in result.summary and 'recorded channels for' in result.summary
 
 
 @pytest.mark.parametrize('fail', [False, True])
-def test_background_read_preserves_visible_tab_and_closes_temporary_tab(monkeypatch, fail):
+@pytest.mark.parametrize('control', ['agent', 'user', 'paused'])
+def test_background_read_preserves_visible_tab_and_closes_temporary_tab(monkeypatch, fail, control):
     from agent.mcp.dedicated_browser import DedicatedBrowser
     from agent.mcp import youtube_history
     browser = DedicatedBrowser()
@@ -165,7 +166,7 @@ def test_background_read_preserves_visible_tab_and_closes_temporary_tab(monkeypa
             return page
     async def open_browser():
         browser.context = Context()
-        browser.control = 'agent'
+        browser.control = control
         browser.active_page = visible
         browser._pages['visible'] = visible
     async def navigate(page, url):
@@ -184,6 +185,7 @@ def test_background_read_preserves_visible_tab_and_closes_temporary_tab(monkeypa
     else:
         assert asyncio.run(browser.youtube_history())['status'] == 'ready'
     assert browser.active_page is visible and closed == [True]
+    assert browser.control == control
     assert list(browser._pages) == ['visible']
     assert browser.presentation_requested is False
 
@@ -221,8 +223,7 @@ def test_worker_routes_fresh_history_to_background_reader(monkeypatch):
         pytest.fail('Fresh account history must use the temporary-tab reader')
 
     worker = _PlaywrightMcpClient()
-    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot,
-        _browser_preferences=lambda:BrowserPreferences(agent_history='allow'))
+    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot, _browser_preferences=lambda:BrowserPreferences())
     monkeypatch.setattr(youtube_history_page, 'read_history', unexpected_configured_read)
     assert asyncio.run(worker.session('youtube_history'))['status'] == 'ready'
 
@@ -243,6 +244,5 @@ def test_worker_configured_refresh_skips_busy_and_forwards_history_url(monkeypat
     async def fresh_snapshot(*, url=None):
         assert url == arguments['url']
         return snapshot()
-    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot,
-        _browser_preferences=lambda:BrowserPreferences(agent_history='allow'))
+    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot, _browser_preferences=lambda:BrowserPreferences())
     assert asyncio.run(worker.session('youtube_history', arguments))['status'] == 'ready'

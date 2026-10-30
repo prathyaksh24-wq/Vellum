@@ -337,6 +337,6 @@ def test_discovery_response_uses_bounded_local_interest_evidence(tmp_path):
     class Service:
         def personal_context(self, payload):
             return {"local_only": True, "channels": [{"label":"Learning", "evidence_count":5}], "search_themes": []}
-    result = YoutubeAgent(vault_root=tmp_path, youtube_service=Service()).answer("Discover something based on my interests")
+    result = YoutubeAgent(vault_root=tmp_path, youtube_service=Service()).answer("Discover something based on my interests in the imported YouTube snapshot")
     assert "Learning" in result.summary and "snapshot" in result.summary
     assert result.status == "answered"

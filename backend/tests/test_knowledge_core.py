@@ -27,7 +27,7 @@ from agent.knowledge.models import (
     UserSignalInput,
 )
 from agent.knowledge.service import KnowledgeCore
-from agent.knowledge.store import KnowledgeStore
+from agent.knowledge.store import KnowledgeStore, SCHEMA_VERSION
 from agent.knowledge.runtime import set_knowledge_core
 from agent.knowledge.tool_observer import KnowledgeToolObserver
 from agent.memory.fts5 import FTS5Memory
@@ -547,7 +547,7 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
     status = migrated.status()
-    assert status["schema_version"] == 15
+    assert status["schema_version"] == SCHEMA_VERSION
     assert status["counts"]["book_assets"] == 0
     assert status["counts"]["book_ingestion_runs"] == 0
     assert status["counts"]["book_stage_receipts"] == 0

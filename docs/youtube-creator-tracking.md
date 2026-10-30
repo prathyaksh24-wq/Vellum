@@ -1,7 +1,7 @@
 # Adaptive YouTube creator tracking
 
 Creator tracking extends the YouTube plugin, Knowledge Core, Automations, and
-ConversationLifecycle. It uses public channel Atom feeds and saved local watch
+ConversationLifecycle. It uses public channel Atom feeds, optional WebSub push, and saved local watch
 evidence. It does not reproduce YouTube's personalized homepage.
 
 `youtube.creators.configure` is an authorized App Action with a typed
@@ -18,6 +18,21 @@ The YouTube connection dialog shows monitored creators and exclusion count.
 The YoutubeAgent's `youtube.subscription_feed` tool reads this same projection
 and saved uploads, restricted to the local specialist. Ask "Which YouTube
 creators are you tracking?" or "Show my YouTube creator uploads."
+
+Explicit YouTube/YT feed questions use this local creator feed, including
+"what is youtube feed looking like?" Generic X feed matching cannot override
+the named YouTube domain. The specialist directory describes creator feeds
+and notification reads so model-based delegation has the same domain boundary.
+
+`youtube.notifications` is a typed local-only read of the existing AutomationStore,
+restricted to YouTubeAgent and creator-upload built-ins. Filtering occurs before
+pagination and counts, so other tasks' notifications cannot enter the answer.
+"YouTube notifications" reads unread items received within 24 hours; "my YouTube
+notification history" reads retained older/read items. Chat reads preserve read
+state, return verified video links, and do not import YouTube's native bell inbox.
+Unsupported date constraints and mutation requests are not silently treated as
+unfiltered reads. Returning to a visible tab refreshes the notification projection
+immediately, and an open History view participates in the existing polling loop.
 
 ## Relationships and evidence
 
@@ -93,7 +108,7 @@ ignored. No conversation text or search query is sent for public metadata reads.
 `min_duration_seconds=180` means strictly longer than three minutes, including
 excluding regular videos of three minutes or less. Atom feeds have no duration;
 the existing read-only YouTube connector fetches `videos.list` metadata for up
-to 50 public IDs in one call. At most one duration batch per rolling 15 minutes
+to 50 public IDs in one call. RSS-only processing permits one duration batch per rolling 15 minutes
 and 96 API units per UTC day are reserved before I/O by default. Verified duration
 is bound to video and channel identity and expires after six hours for feed
 eligibility. The local cache retains at most 1,000 entries and 90 days. Provider
@@ -120,6 +135,12 @@ inbox is not imported; the official Data API exposes subscriptions and public
 channel push events, not the personal notification inbox.
 
 ## Polling and delivery
+
+Optional WebSub delivery now bypasses the RSS collection rotation for new events.
+See [push delivery and HTTPS setup](youtube-push-delivery.md) for the callback-only
+receiver, full saved-subscription coverage, lease renewal, shared duration quota,
+and local notification change stream. It requires an explicitly configured
+public HTTPS origin; the default remains RSS until that setup is complete.
 
 The paused-by-default **YouTube creator uploads** built-in runs every 15 minutes
 when enabled, through the normal Automation scheduler and run receipts. Its
@@ -168,7 +189,7 @@ lease prevents overlapping workers and expires after a crashed worker. Delivery
 uses a stable account/channel/video receipt. The default notification destination
 persists a ping in AutomationStore before acknowledgment, without creating a
 conversation. The notification bell retains video links and read state, and an
-open UI checks for new pings every 15 seconds. Chat destinations remain available
+open UI receives notification change events, with a 15-second polling fallback. Chat destinations remain available
 through ConversationLifecycle. Retrying delivery does not duplicate either
 destination. Missing destinations fail visibly and leave the outbox
 pending. Exclusions and relevance are checked again before delivery.
@@ -209,8 +230,38 @@ being renotified after pruning.
 
 ## Storage and verification
 
+Notification attention is separate from remembered affinity. Recent watches,
+weak search hints, seasonal evidence, and eligible direct user declarations still
+drive current relevance. Lifetime creator video/day counts and last-seen dates
+remain local after recent interest fades; the 367-day detail bound does not erase
+the lifetime aggregate. This is retained observed evidence, not a claim of
+complete lifetime YouTube history.
+
+Channel rules now accept `notification_frequency`: `adaptive` (existing relevance
+policy), `reduced` (at most one qualifying ping per rolling 24 hours), or `muted`
+(no pings). Fewer-notification requests do not exclude a creator or a topic.
+When conversational preferences are enabled, direct, unambiguous statements from
+eligible saved user messages update bounded local channel preferences. Explicit
+feedback persists across restarts and conversational recency windows; later
+feedback can restore volume. Assistant, quoted, hypothetical, temporary, and
+memory-ineligible messages do not establish preferences. This bounded language
+recognizer supports direct phrases; it is not unrestricted semantic learning.
+Extra qualifying uploads remain quiet baseline records, available for recall.
+
+Optional `rediscovery_notifications` uses established saved viewing, not merely a
+subscription: at least ten video/day records and no saved watch for 90 days, with
+a quiet or seasonally quiet relationship. It permits at most one rediscovery ping
+per rolling seven days overall and does not resurface the same creator within 90
+days. Excluded, former, topic-blocked and muted creators stay out. Ordinary long-form,
+freshness, account, and deduplication gates still apply. Rediscovery does not
+promote a creator to current interest or claim that the user feels nostalgic.
+All pacing and feedback use existing Knowledge Core sync cursors; no new store or
+model-training process is created. Canonical notification history and upload
+detail retain their existing bounds even while creator affinity persists.
+
 Knowledge Core schema 15 adds derived creator activity, bounded day aggregates
-(367 days per channel), upload outbox, and worker leases. Raw observations are
+(367 days per channel), upload outbox, and worker leases. Schema 16 adds durable
+push subscriptions and reuses that outbox for accepted events. Raw observations are
 retained. Source filtering occurs before pagination. Projection checkpoints and
 aggregates commit atomically, so replay is idempotent and steady polls process
 only newly inserted watch observations. Changing linked account scope, history

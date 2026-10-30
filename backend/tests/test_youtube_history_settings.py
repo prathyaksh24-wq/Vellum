@@ -73,7 +73,7 @@ def test_timezone_and_day_heading_normalization():
     assert history_day("Today", now=reference, timezone="Asia/Kolkata") == "2026-10-05"
     assert history_day("Yesterday", now=reference, timezone="Asia/Kolkata") == "2026-10-04"
     assert history_day("October 2, 2026", now=NOW, timezone="UTC") == "2026-10-02"
-    assert history_day("Friday", now=NOW, timezone="UTC") == ""
+    assert history_day("Friday", now=NOW, timezone="UTC") == "2026-10-02"
 
 
 @pytest.mark.parametrize("url", ["https://youtube.com.evil/feed/history", "http://youtube.com/feed/history",

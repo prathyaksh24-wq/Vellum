@@ -2,6 +2,12 @@
   var client = window.VellumApi.client;
   function withId(id) { return "/api/automations/" + encodeURIComponent(id); }
   window.VellumApi.automations = {
+    notificationEvents: function (onChange) {
+      if (typeof window.EventSource !== 'function') return function () {};
+      var source = new window.EventSource(client.backendBase() + '/api/automations/notifications/events');
+      source.addEventListener('notifications.changed', onChange);
+      return function () { source.close(); };
+    },
     notifications: function (params) { var query = new URLSearchParams(params || {}).toString(); return client.request("/api/automations/notifications" + (query ? "?" + query : ""), {cache:"no-store"}); },
     list: function () { return client.request("/api/automations"); },
     create: function (payload) { return client.request("/api/automations", client.jsonOptions("POST", payload)); },

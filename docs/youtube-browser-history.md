@@ -9,19 +9,24 @@ reader. They do not substitute an old import or a public video search on failure
 Refresh creates a temporary background tab, reads the configured History URL,
 then closes the tab and restores the user's existing page and activity. It can
 start the owned browser quietly from its saved profile. It does not present the
-Browser panel. Paused or user-controlled sessions skip the read. **Open History**
+Browser panel. History reads work while the user has control or agent actions
+are paused, without transferring ownership. **Open History**
 remains an explicit foreground action for signing in or inspecting the page.
 
 Enable **YouTube history refresh** in Automations for continuous accumulation.
 It defaults to paused and runs every 15 minutes when enabled while Vellum's
 backend is running. Schedule, pause/resume, and run-now use the existing
 Automation owner. Existing user-edited schedules and states are preserved.
+Run now and scheduled execution call the same local reader and record their
+outcome in the existing run history, without a chat model or new conversation.
+Run receipts include counts and status rather than video titles or account IDs.
 Sign-in or parser failures appear in history status and fail the automation run;
-manual pause/takeover skips it. There is no second scheduler or database.
+an overlapping browser operation or refresh skips it. There is no second scheduler or database.
 
 The connection dialog's **Save URL and timezone** sets a validated HTTPS YouTube
-`/feed/` URL and an IANA timezone. On the first read without explicit settings,
-the browser timezone resolves Today/Yesterday headings. Renderer recognition
+`/feed/` URL and an IANA timezone. The current reader records the browser's
+reported timezone on each refresh and uses it for relative headings and day
+queries; the configured timezone remains a fallback for older adapters. Renderer recognition
 still requires YouTube's History layout; changing a URL does not repair a changed
 DOM. The extraction script is fixed, with no agent-supplied JavaScript, cookies,
 credentials, or network interception.
@@ -30,7 +35,9 @@ credentials, or network interception.
 
 - Each successful read captures at most 100 recent entries, including supported
   standard-video and Shorts cards. This is a page limit, not a cap on the saved
-  history. Six scrolls and a bounded reader deadline limit each read.
+  history. Six scrolls and a bounded reader deadline limit ordinary recent reads.
+  A question about a day can scroll up to 24 times within that same deadline;
+  newer entries do not consume its 100 matching-entry limit.
 - One current snapshot per browser account and durable dated observations use
   the existing Knowledge Core ingestion jobs, cursors, source versions and
   observation store. Raw history is `private_local_only` with `deny_raw` egress.
@@ -40,6 +47,14 @@ credentials, or network interception.
   duplicate it. Videos disappearing from the newest page remain in saved dated
   history. A new day can create another presence record, without implying an
   exact watch timestamp, duration, or number of repeat plays.
+- English weekday headings resolve to their most recent occurrence in the
+  browser's timezone; English month/day and day/month headings (including `2 Oct`)
+  resolve to the latest past date.
+  Questions accept Today, Yesterday, weekday names, Last Monday and other last
+  weekdays, and YYYY-MM-DD dates. Day queries verify the current account with a
+  fresh read before adding its saved matches. Empty results describe the available
+  coverage, and a day older than the loaded window with no saved matches is
+  explicitly unavailable rather than claimed to have no watches.
 - Unknown/localized dates stay in the latest snapshot only. They do not become
   fabricated dated events or grow the durable count on every refresh.
 - Account changes between reads select that account's separate source and saved
@@ -49,7 +64,7 @@ credentials, or network interception.
 - Saved retrieval filters by the current account's source before counting and
   pagination. Creator filtering sees all saved pages before the display limit.
   Saved coverage is `accumulated_recent_pages`, not complete lifetime history.
-- Sign-out, missing identity, unknown layout, storage failures, pause/takeover,
+- Sign-out, missing identity, unknown layout, storage failures, overlapping reads,
   and malformed responses never return old data as a successful fresh read.
   Failures preserve the last successful timestamp and account cursor; ingestion
   errors retain diagnostics. An explicit saved-history read reports freshness.
@@ -64,11 +79,36 @@ bounded, attributed specialist handoff, subject to their memory policies.
 
 ## Validation
 
+Larger history lists (over 20 requested entries) and activity/trend questions
+refresh the signed-in browser identity before adding saved observations for
+that account. Analysis uses at most 100 recent video/day
+entries and reports its date window, recurring channel counts and title-based
+topic groups. Topics can overlap and do not establish beliefs or motivations.
+The sample does not prove changes in watch time or long-term interest. These
+questions never implicitly include another browser account or an old Takeout
+import. Clear date/latest reads, explicit retries, analysis follow-ups and
+previously selected video links bypass the intent model. An ambiguous link
+asks which item instead of silently selecting the first video. Capability
+questions describe browser, OAuth and imported data coverage without a read.
+
 Tests cover repeated refreshes, changing page windows, timezone/day rollover,
 account switching and isolation, more than 500 accumulated records, failures,
 empty pages, cursor preservation, concurrent refresh prevention, cloud-model
 blocking, and scheduled execution. DOM fixtures cover modern plain-text creators,
 classic channel links, Shorts and exclusion of unrelated recommendations.
 Disposable Chromium checks validate temporary-tab cleanup and foreground-page
-preservation. A signed-in live account and enabled scheduler still require runtime
-acceptance after this draft is integrated; fixtures do not establish that gate.
+preservation. A local signed-in runtime check on 2026-10-09 verified Run now,
+timer-triggered execution while the user retained control, unchanged visible
+tabs/input frames, saved accumulation, and stable counts on repeated refreshes.
+The temporary one-minute test interval was restored to the active fifteen-minute
+schedule. These checks establish local runtime behavior rather than complete
+watch-event coverage or deployment to other installations.
+
+A separate signed-in streaming-chat replay on 2026-10-09 checked latest-video
+reads, explicit retries, Monday history, a larger accumulated list, its 64th item
+link, a repeated link request, activity analysis, an analysis follow-up and
+capability explanations. All nine checks passed while manual control, visible
+tab identities, the active tab, input frame and panel visibility stayed unchanged.
+After the day/month heading repair, two additional live checks verified an
+October 2 question and analysis including captured October 1–9 observations,
+again preserving manual control, visible tabs, input frames and panel visibility.

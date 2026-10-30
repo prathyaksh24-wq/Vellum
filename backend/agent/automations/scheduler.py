@@ -101,7 +101,8 @@ class AutomationScheduler:
             logger.info("[AUTOMATIONS] Skip fire for %s: a run is already in flight", automation_id)
             return
         if automation.get("builtin"):
-            if automation.get("builtin_key") == "youtube_creator_tracking":
+            if automation.get('builtin_key') in {'youtube_browser_history', 'youtube_creator_tracking'}:
+                # Use the same quiet reader and visible run receipts as Run now.
                 await self.executor(automation, self.store)
                 return
             from agent.automations.builtins import run_builtin
