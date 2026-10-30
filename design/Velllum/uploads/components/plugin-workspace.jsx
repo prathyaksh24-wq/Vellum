@@ -482,7 +482,7 @@
           minHeight: 64
         }}><span className="gr">{p.name}</span><button className="cb" disabled={p.enabled === false || c.busy || !!c.pending || c.flow?.status === 'pending' || c.unsupported || !c.connect && !c.choose} onClick={connect}>{c.busy ? 'Connecting…' : c.status?.reconnect_required ? 'Sign in with '+p.name : c.status?.configured && c.run ? 'Verify connection' : 'Connect'}</button></div></div>}{p.id === 'swiggy' && c.status?.services && <div className="ds">{c.status.services.map(s => <div className="ln" key={s.id}><span className="gr">{s.name}</span><Sw label={s.name} value={s.enabled} disabled={c.busy} onChange={v => c.run('swiggy.connection.configure', {
             services: c.status.services.filter(x => x.id === s.id ? v : x.enabled).map(x => x.id)
-          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source installation.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
+          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
   }
   function Detail({
     p,
