@@ -105,12 +105,12 @@ def test_album_track_detail_uses_album_tracks_read(service):
 def test_denied_playlist_reads_exact_public_song_list(service,monkeypatch):
     identity='A'*22
     service.request.side_effect=api._spotify_module.errors.SpotifyAccessDenied('Restricted')
-    monkeypatch.setattr(api,'cached_public_playlist',lambda _identity:None)
+    monkeypatch.setattr(api.spotify_public_playlist,'cached_public_playlist',lambda _identity:None)
     seen=[]
     def read(playlist_id):
         seen.append(playlist_id)
         return [{'id':'Song','uri':'spotify:track:Song','kind':'track','name':'Public song','position':0,'playable':True}]
-    monkeypatch.setattr(api,'read_public_playlist',read)
+    monkeypatch.setattr(api.spotify_public_playlist,'read_public_playlist',read)
     result=asyncio.run(api.spotify_browse(kind='playlist_tracks',source_id=identity,offset=0,limit=50))
     assert seen==[identity] and result.items[0].name=='Public song'
     assert result.source=='public_embed' and result.completeness=='unknown'
@@ -118,8 +118,8 @@ def test_denied_playlist_reads_exact_public_song_list(service,monkeypatch):
 
 def test_expired_auth_does_not_trigger_public_fallback(service,monkeypatch):
     service.request.side_effect=api.SpotifyAuthError('Reconnect')
-    read=Mock();monkeypatch.setattr(api,'read_public_playlist',read)
-    monkeypatch.setattr(api,'cached_public_playlist',lambda _:None)
+    read=Mock();monkeypatch.setattr(api.spotify_public_playlist,'read_public_playlist',read)
+    monkeypatch.setattr(api.spotify_public_playlist,'cached_public_playlist',lambda _:None)
     with pytest.raises(HTTPException) as error:
         asyncio.run(api.spotify_browse(kind='playlist_tracks',source_id='A'*22,offset=0,limit=50))
     assert error.value.status_code==401
@@ -130,7 +130,7 @@ def test_artwork_route_validates_and_projects_exact_track_metadata(service,monke
     identity='A'*22
     monkeypatch.setattr(api,'_plugin_registry',lambda:Mock(is_enabled=lambda plugin:plugin=='spotify'))
     read=Mock(return_value=[{'id':identity,'artwork_url':'https://i.scdn.co/image/example'}])
-    monkeypatch.setattr(api,'read_track_artworks',read)
+    monkeypatch.setattr(api.spotify_public_playlist,'read_track_artworks',read)
     page=asyncio.run(api.spotify_track_artwork(identity))
     assert page.items[0].id==identity and page.items[0].artwork_url.startswith('https://i.scdn.co/')
     read.assert_called_once_with([identity],wait_seconds=.35)
@@ -143,7 +143,7 @@ def test_artwork_requires_connected_enabled_plugin(monkeypatch,connected,enabled
     monkeypatch.setattr(api,'_spotify_has_credentials',lambda:connected)
     monkeypatch.setattr(api,'_plugin_registry',lambda:Mock(is_enabled=lambda plugin:enabled))
     read=Mock()
-    monkeypatch.setattr(api,'read_track_artworks',read)
+    monkeypatch.setattr(api.spotify_public_playlist,'read_track_artworks',read)
     with pytest.raises(HTTPException) as error:asyncio.run(api.spotify_track_artwork('A'*22))
     assert error.value.status_code==status
     read.assert_not_called()

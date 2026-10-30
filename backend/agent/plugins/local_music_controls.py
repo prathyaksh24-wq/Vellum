@@ -45,14 +45,30 @@ def local_music_contribution(library_provider=get_music_library):
 
 def match_local_music_command(text):
     """Explicit local commands; bare transport follows an active local owner."""
-    command = re.sub(r'^(?:please\s+)?(?:(?:can|could|would) you\s+)?','',text.strip(),flags=re.I).rstrip('.!?')
-    explicit = re.search(r'\s+(?:on|in|from)\s+(?:my\s+)?local\s+(?:music|library|player)$',command,re.I)
-    if explicit: command = command[:explicit.start()]
-    play = re.fullmatch(r'play\s+(.+)',command,re.I)
-    if explicit and play:
-        return AppActionRequest(action_id='local_music.playback',arguments={'action':'play','query':play[1].strip()})
+    command = text.strip().rstrip('.!?')
+    # Scan whitespace once. Searching a whitespace-led suffix at every offset
+    # can backtrack quadratically on a long run of spaces followed by a near miss.
+    spans = list(re.finditer(r'\S+', command))
+    words = [span[0].casefold() for span in spans]
+    start, end = 0, len(words)
+    if words[:1] == ['please']:
+        start = 1
+    if words[start:start+1] in (['can'], ['could'], ['would']) and words[start+1:start+2] == ['you']:
+        start += 2
+    explicit = False
+    if end-start >= 3 and words[-2] == 'local' and words[-1] in {'music', 'library', 'player'}:
+        suffix = end-2
+        if words[suffix-1] == 'my':
+            suffix -= 1
+        if suffix > start and words[suffix-1] in {'on', 'in', 'from'}:
+            explicit, end = True, suffix-1
+    if start >= end:
+        return None
+    if explicit and words[start] == 'play' and start+1 < end:
+        query = command[spans[start+1].start():spans[end-1].end()]
+        return AppActionRequest(action_id='local_music.playback',arguments={'action':'play','query':query})
     from agent.contracts.music import match_music_control
-    control = match_music_control(command)
+    control = match_music_control(' '.join(words[start:end]))
     if control:
         if not explicit:
             state = get_music_library().snapshot().player

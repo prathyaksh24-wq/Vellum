@@ -2,7 +2,7 @@
 import json
 import httpx
 import pytest
-from plugins.connectors.spotify import public_playlist as public
+from agent.plugins.spotify_runtime import spotify_public_playlist as public
 from agent.contracts.music_surface import public_playlist_page
 
 IDENTITY='A'*22

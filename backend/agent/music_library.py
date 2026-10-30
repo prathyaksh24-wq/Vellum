@@ -10,6 +10,7 @@ from collections import OrderedDict
 import base64
 from functools import lru_cache
 import hashlib
+from html.parser import HTMLParser
 from importlib.util import find_spec
 import json
 from pathlib import Path
@@ -38,6 +39,27 @@ YOUTUBE_HOSTS = {'youtube.com', 'www.youtube.com', 'music.youtube.com', 'youtu.b
 
 class MusicLibraryError(ValueError):
     pass
+
+
+class _ApplePageData(HTMLParser):
+    """Read one data script as HTML; this extracts JSON, never sanitizes markup."""
+    def __init__(self):
+        super().__init__()
+        self.capture = False
+        self.found = False
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'script' and not self.found and dict(attrs).get('id') == 'serialized-server-data':
+            self.capture = self.found = True
+
+    def handle_endtag(self, tag):
+        if tag == 'script':
+            self.capture = False
+
+    def handle_data(self, data):
+        if self.capture:
+            self.parts.append(data)
 
 
 class DownloadCancellation(Event):
@@ -198,9 +220,9 @@ class MusicSources:
                 source_url=str((row.get('external_urls') or {}).get('spotify') or '')[:2048]) for row in raw[:5000]]
         except Exception as exc:
             if kind!='playlist' or getattr(exc,'code','') not in {'access_denied','resource_unavailable'}:raise
-            from plugins.connectors.spotify.public_playlist import read_public_playlist, PublicPlaylistUnavailable
-            try: rows=read_public_playlist(identity)
-            except PublicPlaylistUnavailable as unavailable:raise MusicLibraryError('Spotify did not expose this playlist. Import a playlist manifest or add your audio files.') from unavailable
+            from agent.plugins.spotify_runtime import spotify_public_playlist
+            try: rows=spotify_public_playlist.read_public_playlist(identity)
+            except spotify_public_playlist.PublicPlaylistUnavailable as unavailable:raise MusicLibraryError('Spotify did not expose this playlist. Import a playlist manifest or add your audio files.') from unavailable
             entries=[MusicSourceEntry(title=row['name'],artist=', '.join(row.get('artists') or []),
                 album=row.get('album') or '',duration_ms=row.get('duration_ms') or 0,provider='spotify',
                 source_id=row.get('id') or '',source_url=row.get('external_url') or '') for row in rows]
@@ -219,9 +241,10 @@ class MusicSources:
                     if size > 8 * 1024 * 1024: raise MusicLibraryError('This Apple Music page is too large to import.')
                     chunks.append(chunk)
         page = b''.join(chunks).decode('utf-8')
-        match = re.search(r'<script\b(?=[^>]*\bid="serialized-server-data")[^>]*>([\s\S]*?)</script>', page)
-        if not match: raise MusicLibraryError('Apple Music did not expose this public playlist. Import a playlist manifest instead.')
-        payload = json.loads(match[1])
+        parser = _ApplePageData()
+        parser.feed(page)
+        if not parser.found: raise MusicLibraryError('Apple Music did not expose this public playlist. Import a playlist manifest instead.')
+        payload = json.loads(''.join(parser.parts))
         songs, title = [], 'Apple Music playlist'
         def walk(node, depth=0):
             nonlocal title

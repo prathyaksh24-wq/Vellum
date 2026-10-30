@@ -10,6 +10,12 @@ No tests, builds, provider integration checks or audible playback checks were ru
 
 The screenshots below were captured earlier with synthetic music data in headless fixtures. They illustrate the prior implementation and do not represent a fresh render of this PR branch or attended native/long-session playback.
 
+## Hosted CI repair — 2026-10-30
+
+The first hosted run at 2e9165d failed two backend checks (3,793 passed, 28 skipped) and one frontend assertion (715 passed); its production build, dependency audits/review and secret scan passed. The subprocess intentionally supplies only backend on PYTHONPATH, exposing a repository-root import in the new public metadata path. Spotify metadata now loads through the existing portable-plugin runtime, shared by API and local imports. The action-set assertion now includes spotify.playlists.link, and the bridge assertion permits the intentional script cache version.
+
+CodeQL reported an HTML-extraction regex and a whitespace-led unanchored local-command suffix regex. Apple data scripts now use HTMLParser, supporting HTML tag/attribute case and quote variants. Local commands scan non-whitespace tokens once and inspect the suffix, preserving the original song-title slice. Regression cases cover actual Apple import reads, title spacing, explicit local transport and long whitespace inputs. No CodeQL rules, severities or workflow checks were disabled. No local tests or builds were run for the repair; hosted validation results are recorded separately after publication.
+
 ## Design and limitations
 
 Music retains the existing Spotify SDK owner and uses one persistent local audio singleton; neither sidebar navigation nor the Island creates a second player. Typed App Actions retain mutation ownership. Local audio and derived artwork stay in the canonical local library; no auth stores, music files, recordings, model weights or databases are committed. The action catalog uses PluginRegistry.read_snapshot per response and keeps next-request enablement refresh.

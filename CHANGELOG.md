@@ -8,6 +8,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Music workspace and dictation
 
+- Load Spotify public metadata through the canonical portable-plugin runtime, parse Apple metadata with HTMLParser, and tokenize local commands without whitespace backtracking.
 - Replace the Music workspace with the supplied layout, Vellum background contrast, provider dropdown, independent sidebar, live search suggestions and individual recent songs.
 - Add a local audio library and persistent playback, embedded artwork, playlist metadata imports, and local transport in the Dynamic Island. Keep Apple Music streaming deferred.
 - Preserve exact Spotify playlist references and source positions, with bounded public metadata/artwork fallback when the API denies playlist items.

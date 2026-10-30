@@ -137,8 +137,7 @@ from agent.plugins.spotify_controls import (
 )
 from agent.contracts.music_surface import MusicCardPage, music_card, music_card_page, music_track_page
 from agent.contracts.music_surface import public_playlist_page, MusicTrackArtworkPage
-from plugins.connectors.spotify.public_playlist import cached_public_playlist, read_public_playlist, read_track_artworks, PublicPlaylistUnavailable
-from agent.plugins.spotify_runtime import _spotify_module, spotify_catalog_query_gate
+from agent.plugins.spotify_runtime import _spotify_module, spotify_catalog_query_gate, spotify_public_playlist
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
 from agent.plugins.google_calendar_api import (
@@ -2316,7 +2315,7 @@ async def spotify_track_artwork(ids: str = Query(min_length=22,max_length=459)) 
     identities=ids.split(',')
     if not 1<=len(identities)<=20 or any(not re.fullmatch(r'[A-Za-z0-9]{22}',identity) for identity in identities):
         raise HTTPException(status_code=422,detail='Choose one to twenty exact Spotify track IDs')
-    return MusicTrackArtworkPage(items=await asyncio.to_thread(read_track_artworks,identities,wait_seconds=.35))
+    return MusicTrackArtworkPage(items=await asyncio.to_thread(spotify_public_playlist.read_track_artworks,identities,wait_seconds=.35))
 
 
 @router.get('/plugins/spotify/browse', response_model=MusicCardPage)
@@ -2342,7 +2341,7 @@ async def spotify_browse(kind: Literal['playlists', 'liked', 'albums', 'artist_t
         if not isinstance(source_id, str) or not source_id:
             raise HTTPException(status_code=422, detail='Choose a playlist or album')
         if kind=='playlist_tracks':
-            public=cached_public_playlist(source_id)
+            public=spotify_public_playlist.cached_public_playlist(source_id)
             if public is not None:return public_playlist_page(public,offset,limit)
         handler = _spotify_module.tools.spotify_playlists if kind == 'playlist_tracks' else _spotify_module.tools.spotify_albums
         identity = 'playlist_id' if kind == 'playlist_tracks' else 'album_id'
@@ -2354,8 +2353,8 @@ async def spotify_browse(kind: Literal['playlists', 'liked', 'albums', 'artist_t
             code=(json.loads(result).get('error') or {}).get('code')
             if kind!='playlist_tracks' or code not in {'access_denied','resource_unavailable'}:raise
             try:
-                public=await asyncio.to_thread(read_public_playlist,source_id)
-            except PublicPlaylistUnavailable:raise original
+                public=await asyncio.to_thread(spotify_public_playlist.read_public_playlist,source_id)
+            except spotify_public_playlist.PublicPlaylistUnavailable:raise original
             return public_playlist_page(public,offset,limit)
         return music_track_page(data, offset, playlist=kind == 'playlist_tracks')
     if kind == 'artist_tracks':

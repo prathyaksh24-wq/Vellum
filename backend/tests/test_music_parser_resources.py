@@ -17,10 +17,13 @@ def test_repeated_whitespace_and_prefixes_finish_without_regex_backtracking():
 from time import perf_counter
 from agent.agents.music import MusicAgent, music_provider_request
 from agent.api import _requests_fresh_public_data
+from agent.plugins.local_music_controls import match_local_music_command
 from pydantic import ValidationError
 
 padding = " " * 24000
 cases = [
+    (match_local_music_command, 'nope' + padding + '!'),
+    (match_local_music_command, 'play Tune' + padding + '! local player'),
     (music_provider_request, padding + "!"),
     (music_provider_request, "play Song" + "\t" * 24000 + "!"),
     (MusicAgent._history_plan, "what " + padding + "played!"),

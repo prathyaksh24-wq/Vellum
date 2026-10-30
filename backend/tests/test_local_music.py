@@ -20,6 +20,47 @@ from agent.plugins.local_music_controls import local_music_contribution
 from agent.plugins.registry import PluginRegistry
 
 
+@pytest.mark.parametrize('tag', [
+    '<script id="serialized-server-data">',
+    "<SCRIPT ID = 'serialized-server-data'>",
+    "<ScRiPt nonce='fixture' id='serialized-server-data' type='application/json'>",
+])
+def test_apple_metadata_uses_html_script_parsing(monkeypatch, tag):
+    import httpx
+    payload = [{'contentDescriptor': {'kind': 'song', 'identifiers': {'storeAdamID': '123'}},
+                'title': 'A song', 'artistName': 'An artist'}]
+    page = '<script id="other">not JSON</script>' + tag + json.dumps(payload) + '</SCRIPT>'
+    client_type = httpx.Client
+    monkeypatch.setattr('agent.music_library.httpx.Client', lambda **kwargs: client_type(
+        **kwargs, transport=httpx.MockTransport(lambda request: httpx.Response(200, text=page))))
+    _, entries, completeness, _ = MusicSources().apple('https://music.apple.com/us/song/example/123')
+    assert len(entries) == 1 and entries[0].title == 'A song'
+    assert entries[0].source_id == '123' and completeness == 'complete'
+
+
+def test_apple_metadata_requires_the_exact_data_script(monkeypatch):
+    import httpx
+    client_type = httpx.Client
+    monkeypatch.setattr('agent.music_library.httpx.Client', lambda **kwargs: client_type(
+        **kwargs, transport=httpx.MockTransport(lambda request: httpx.Response(
+            200, text='<SCRIPT id="unrelated">[]</SCRIPT>'))))
+    with pytest.raises(MusicLibraryError, match='did not expose'):
+        MusicSources().apple('https://music.apple.com/us/song/example/123')
+
+
+@pytest.mark.parametrize(('text', 'action', 'query'), [
+    ('please can you play A  B on my local music!', 'play', 'A  B'),
+    ('Play "A  B"\tfrom\u2003my local library', 'play', '"A  B"'),
+    ('pause in local player', 'pause', ''),
+    ('could you go to the next track on local music', 'next', ''),
+])
+def test_local_command_suffix_preserves_title_spacing(text, action, query):
+    from agent.plugins.local_music_controls import match_local_music_command
+    request = match_local_music_command(text)
+    assert request.action_id == 'local_music.playback'
+    assert request.arguments == {'action': action, **({'query': query} if query else {})}
+
+
 def wav_bytes():
     data=BytesIO()
     with wave.open(data,'wb') as audio:
@@ -228,7 +269,7 @@ def test_spotify_import_uses_same_public_fallback_without_hiding_auth_failure(mo
     from unittest.mock import Mock
     from plugins.connectors.spotify.errors import SpotifyAccessDenied,SpotifyResourceUnavailable,SpotifyAuthError
     from agent.plugins import spotify_runtime
-    from plugins.connectors.spotify import public_playlist
+    from agent.plugins.spotify_runtime import spotify_public_playlist as public_playlist
     client=Mock();client.request.side_effect=[{'name':'My playlist'}, {'access':SpotifyAccessDenied,'unavailable':SpotifyResourceUnavailable,'auth':SpotifyAuthError}[failure]('Denied')]
     monkeypatch.setattr('agent.plugins.registry.get_plugin_registry',lambda:Mock(is_enabled=lambda name:True))
     monkeypatch.setattr(spotify_runtime,'spotify_client',lambda:client)

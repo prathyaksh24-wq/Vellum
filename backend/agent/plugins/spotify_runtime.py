@@ -28,6 +28,7 @@ def spotify_plugin():
 
 
 _spotify_module = spotify_plugin().module
+spotify_public_playlist = _spotify_module.public_playlist
 SpotifyAuthError = _spotify_module.auth.SpotifyAuthError
 SpotifyError = _spotify_module.tools.SpotifyError
 SpotifyRateLimited = _spotify_module.tools.SpotifyRateLimited
