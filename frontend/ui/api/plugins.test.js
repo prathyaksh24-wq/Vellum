@@ -13,6 +13,40 @@ async function loadPluginsApi(fetchImpl) {
 }
 
 describe("Vellum plugins API adapter", () => {
+  test('artwork requests batch exact IDs and reuse pending and completed metadata',async()=>{
+    vi.useFakeTimers();
+    try{
+      const fetchImpl=vi.fn(async path=>({items:new URL('http://local'+path).searchParams.get('ids').split(',').map(id=>({id,artwork_url:'https://i.scdn.co/image/'+id}))}));
+      const api=await loadPluginsApi(fetchImpl),one='A'.repeat(22),two='B'.repeat(22);
+      const first=api.spotifyTrackArtwork(one),second=api.spotifyTrackArtwork(two);
+      expect(api.spotifyTrackArtwork(one)).toBe(first);expect(fetchImpl).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(25);
+      expect((await first).artwork_url).toContain(one);await second;
+      expect(fetchImpl).toHaveBeenCalledOnce();expect(api.spotifyTrackArtwork(one)).toBe(first);
+      expect(new URL('http://local'+fetchImpl.mock.calls[0][0]).searchParams.get('ids')).toBe(one+','+two);
+      await api.spotifyTrackArtwork('../private');expect(fetchImpl).toHaveBeenCalledOnce();
+    }finally{vi.useRealTimers();}
+  });
+  test('artwork failure resolves as unavailable without breaking playback controls',async()=>{
+    vi.useFakeTimers();
+    try{
+      const api=await loadPluginsApi(vi.fn(async()=>{throw new Error('offline');})),id='C'.repeat(22);
+      const pending=api.spotifyTrackArtwork(id);await vi.advanceTimersByTimeAsync(25);
+      await expect(pending).resolves.toEqual({id,artwork_url:''});
+    }finally{vi.useRealTimers();}
+  });
+  test('ready artwork resolves while only pending images are retried',async()=>{
+    vi.useFakeTimers();
+    try{
+      const one='D'.repeat(22),two='E'.repeat(22);
+      const request=vi.fn().mockResolvedValueOnce({items:[{id:one,artwork_url:'https://i.scdn.co/ready'},{id:two,pending:true,artwork_url:''}]}).mockResolvedValue({items:[{id:two,artwork_url:'https://i.scdn.co/later'}]});
+      const api=await loadPluginsApi(request),ready=api.spotifyTrackArtwork(one),later=api.spotifyTrackArtwork(two);
+      await vi.advanceTimersByTimeAsync(25);await expect(ready).resolves.toMatchObject({artwork_url:'https://i.scdn.co/ready'});
+      expect(request).toHaveBeenCalledOnce();await vi.advanceTimersByTimeAsync(250);
+      await expect(later).resolves.toMatchObject({artwork_url:'https://i.scdn.co/later'});
+      expect(new URL('http://local'+request.mock.calls[1][0]).searchParams.get('ids')).toBe(two);
+    }finally{vi.useRealTimers();}
+  });
   test('Google install navigates directly and validates the OAuth destination',async()=>{
     const api=await loadPluginsApi(vi.fn());
     const assign=vi.fn();

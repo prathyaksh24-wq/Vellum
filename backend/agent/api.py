@@ -136,6 +136,8 @@ from agent.plugins.spotify_controls import (
     SpotifyPlayerActionRequest,
 )
 from agent.contracts.music_surface import MusicCardPage, music_card, music_card_page, music_track_page
+from agent.contracts.music_surface import public_playlist_page, MusicTrackArtworkPage
+from plugins.connectors.spotify.public_playlist import cached_public_playlist, read_public_playlist, read_track_artworks, PublicPlaylistUnavailable
 from agent.plugins.spotify_runtime import _spotify_module, spotify_catalog_query_gate
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
@@ -147,6 +149,8 @@ from agent.plugins.google_calendar_api import (
 from agent.plugins.google_calendar_runtime import portable_google_calendar_status
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
 from agent.plugins.youtube_controls import youtube_plugin_contribution
+from agent.plugins.local_music_api import router as local_music_router
+from agent.plugins.local_music_controls import local_music_contribution
 from agent.plugins.google_calendar_controls import google_calendar_plugin_contribution
 from agent.plugins.product_hunt import product_hunt_plugin_status
 from agent.plugins.product_hunt_controls import product_hunt_contribution
@@ -283,6 +287,7 @@ _app_action_runtime.register_plugin_contribution(tavily_contribution())
 _app_action_runtime.register_plugin_contribution(firecrawl_contribution())
 _app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
+_app_action_runtime.register_plugin_contribution(local_music_contribution())
 
 
 class _ThreadTurnCoordinator:
@@ -2299,6 +2304,16 @@ async def spotify_player(details: bool = False) -> dict:
         raise HTTPException(status_code=503, detail="Unreachable.") from exc
 
 
+@router.get('/plugins/spotify/artwork',response_model=MusicTrackArtworkPage)
+async def spotify_track_artwork(ids: str = Query(min_length=22,max_length=459)) -> MusicTrackArtworkPage:
+    if not _spotify_has_credentials():raise HTTPException(status_code=401,detail='Spotify is not connected')
+    if not _plugin_registry().is_enabled('spotify'):raise HTTPException(status_code=409,detail='Enable Spotify to load artwork')
+    identities=ids.split(',')
+    if not 1<=len(identities)<=20 or any(not re.fullmatch(r'[A-Za-z0-9]{22}',identity) for identity in identities):
+        raise HTTPException(status_code=422,detail='Choose one to twenty exact Spotify track IDs')
+    return MusicTrackArtworkPage(items=await asyncio.to_thread(read_track_artworks,identities,wait_seconds=.35))
+
+
 @router.get('/plugins/spotify/browse', response_model=MusicCardPage)
 async def spotify_browse(kind: Literal['playlists', 'liked', 'albums', 'artist_tracks', 'playlist_tracks', 'album_tracks', 'playlist_details'] = 'playlists',
                          offset: int = Query(0, ge=0, le=100000), limit: int = Query(20, ge=1, le=50),
@@ -2321,11 +2336,23 @@ async def spotify_browse(kind: Literal['playlists', 'liked', 'albums', 'artist_t
     if kind in {'playlist_tracks', 'album_tracks'}:
         if not isinstance(source_id, str) or not source_id:
             raise HTTPException(status_code=422, detail='Choose a playlist or album')
+        if kind=='playlist_tracks':
+            public=cached_public_playlist(source_id)
+            if public is not None:return public_playlist_page(public,offset,limit)
         handler = _spotify_module.tools.spotify_playlists if kind == 'playlist_tracks' else _spotify_module.tools.spotify_albums
         identity = 'playlist_id' if kind == 'playlist_tracks' else 'album_id'
         result = await asyncio.to_thread(handler,
             {'action':'tracks', identity:source_id, 'offset':offset, 'limit':limit}, service=service)
-        return music_track_page(_spotify_result_or_http(result), offset, playlist=kind == 'playlist_tracks')
+        try:
+            data=_spotify_result_or_http(result)
+        except HTTPException as original:
+            code=(json.loads(result).get('error') or {}).get('code')
+            if kind!='playlist_tracks' or code not in {'access_denied','resource_unavailable'}:raise
+            try:
+                public=await asyncio.to_thread(read_public_playlist,source_id)
+            except PublicPlaylistUnavailable:raise original
+            return public_playlist_page(public,offset,limit)
+        return music_track_page(data, offset, playlist=kind == 'playlist_tracks')
     if kind == 'artist_tracks':
         if not artist_id:
             raise HTTPException(status_code=422, detail='Choose an artist')
@@ -7230,6 +7257,7 @@ router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(automations_router)
 router.include_router(youtube_router)
+router.include_router(local_music_router)
 router.include_router(discord_router)
 router.include_router(google_calendar_router)
 router.include_router(google_workspace_router)

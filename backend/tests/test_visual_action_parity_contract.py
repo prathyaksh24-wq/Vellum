@@ -72,6 +72,8 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     runtime.register_plugin_contribution(zomato_contribution())
     from agent.plugins.district_controls import district_contribution
     runtime.register_plugin_contribution(district_contribution())
+    from agent.plugins.local_music_controls import local_music_contribution
+    runtime.register_plugin_contribution(local_music_contribution())
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

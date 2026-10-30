@@ -128,7 +128,17 @@ class SpotifyAuthStore:
                 handle.flush()
                 os.fsync(handle.fileno())
                 temp_path = Path(handle.name)
-            os.replace(temp_path, path)
+            # Windows scanners can briefly hold the destination between token
+            # rotations. Retry only recognized sharing/access errors, retaining
+            # the old complete credential file until replacement succeeds.
+            for attempt in range(4):
+                try:
+                    os.replace(temp_path, path)
+                    break
+                except PermissionError as exc:
+                    if getattr(exc,'winerror',None) not in {5,32,33} or attempt==3:
+                        raise
+                    time.sleep(.02*(attempt+1))
         finally:
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)

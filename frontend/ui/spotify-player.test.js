@@ -11,7 +11,7 @@ const html = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../.
 const musicCss=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../design/Velllum/uploads/components/music-page.css'),'utf8');
 const browserCss=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../design/Velllum/uploads/components/browser-panel.css'),'utf8');
 const source = html.slice(html.indexOf('let dockLastHiddenAt ='), html.indexOf('/* closes on a document-level')) +
-  html.slice(html.indexOf('const SpotifyPlayer ='), html.indexOf('const SettingsModal ='));
+  html.slice(html.indexOf('const DockMusicMarquee ='), html.indexOf('const SettingsModal ='));
 const require = createRequire(import.meta.url);
 // jsdom and Node use different typed-array realms; esbuild runs in Node's realm.
 const browserUint8Array = globalThis.Uint8Array;
@@ -36,7 +36,7 @@ async function renderPlayer(queue, sdk = false, options = {}) {
   const plugins = {capabilities:vi.fn(async () => ({features:{spotify:{enabled:true,endpoints:{playback_token:'token'}}}}))};
   const iconNames=['IcPencilSq','IcSearch','IcLibrary','IcTerminal','IcSettings','IcPin','IcCheck'];
   const {Player,GlobalDock} = new Function('React','useState','useRef','useEffect','SpotifyAPI','API','I','fmtSpotifyTime','ReactDOM','AGENTS',...iconNames,
-    compiled + '; return {Player:SpotifyPlayer,GlobalDock};')(React,useState,useRef,useEffect,api,{plugins},() => null,() => '0:00',ReactDOM,[],...iconNames.map(() => () => null));
+    compiled + '; return {Player:SpotifyPlayer,GlobalDock};')(React,useState,useRef,useEffect,api,{plugins,localMusic:options.localApi},() => null,() => '0:00',ReactDOM,[],...iconNames.map(() => () => null));
   const renderDock=(music,musicOpen,onDismissMusic) => React.createElement(GlobalDock, {
     side:options.dockSide || 'top',locked:false,view:'chat',agents:[],music,musicOpen,onDismissMusic,
     onLockedChange:vi.fn(),onNewChat:vi.fn(),onSearch:vi.fn(),onNav:vi.fn(),onCoding:vi.fn(),onOpenAgent:vi.fn(),onSettings:vi.fn(),
@@ -58,6 +58,90 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => root.unmount()); host.remove(); vi.useRealTimers();
+  vi.restoreAllMocks(); vi.unstubAllGlobals();
+});
+
+function marqueeMeasurements() {
+  let available=100;
+  const observers=[];
+  vi.spyOn(HTMLElement.prototype,'clientWidth','get').mockImplementation(function() {return this.classList.contains('spotify-marquee') ? available : 0;});
+  vi.spyOn(HTMLElement.prototype,'scrollWidth','get').mockImplementation(function() {return this.classList.contains('spotify-marquee-copy') ? this.textContent.length*7 : 0;});
+  vi.stubGlobal('ResizeObserver',class {constructor(callback){this.callback=callback;this.disconnect=vi.fn();observers.push(this);}observe(){}});
+  return {observers,resize:width=>{available=width;observers.forEach(observer=>observer.callback());}};
+}
+
+test('compact dock labels get an accessible marquee; expanded labels stay static', async () => {
+  marqueeMeasurements();
+  const api=await renderPlayer([],true);
+  const song=track('spotify:track:long','A Very Long Song Title That Does Not Fit');
+  await act(async () => api.emitState({track:song,artists:['An Artist Name That Does Not Fit'],is_playing:true}));
+  const labels=host.querySelectorAll('.spotify-player-pill .spotify-marquee');
+  expect([...labels].map(label=>label.classList.contains('has-marquee'))).toEqual([true,true]);
+  expect([...labels].map(label=>label.dataset.playing)).toEqual(['true','true']);
+  expect([...labels].every(label=>label.querySelector('[aria-hidden="true"]'))).toBe(true);
+  expect(host.querySelector('.spotify-panel-copy b').textContent).toBe(song.name);
+  expect(host.querySelector('.spotify-player-panel .spotify-marquee')).toBe(null);
+  expect(host.querySelector('.spotify-player-pill button button')).toBe(null);
+});
+
+test('playback pauses and resumes the same marquee track without moving or recreating controls', async () => {
+  marqueeMeasurements();
+  const api=await renderPlayer([],true,{open:false});
+  await act(async () => api.emitState({track:track('spotify:track:long','A Very Long Song Title That Does Not Fit'),is_playing:true}));
+  const trackNode=host.querySelector('b .spotify-marquee-track'),button=host.querySelector('[aria-label="Pause Spotify"]');
+  await act(async () => api.emitState({is_playing:false}));
+  expect(host.querySelector('b .spotify-marquee-track')).toBe(trackNode);
+  expect(host.querySelector('b.spotify-marquee').dataset.playing).toBe('false');
+  expect(host.querySelector('[aria-label="Play Spotify"]')).toBe(button);
+  await act(async () => api.emitState({is_playing:true}));
+  expect(host.querySelector('b .spotify-marquee-track')).toBe(trackNode);
+  expect(host.querySelector('b.spotify-marquee').dataset.playing).toBe('true');
+  expect(window.VellumSpotifyPlayback.create).toHaveBeenCalledTimes(1);
+});
+
+test('short labels scroll with a full viewport between copies and remeasure when dock space changes', async () => {
+  const sizes=marqueeMeasurements();
+  const api=await renderPlayer([],true,{open:false});
+  await act(async () => api.emitState({track:track('spotify:track:short','SOS'),artists:['SZA'],is_playing:true}));
+  const title=host.querySelector('b.spotify-marquee');
+  expect(title.classList.contains('has-marquee')).toBe(true);
+  expect(title.dataset.playing).toBe('true');
+  expect(title.style.getPropertyValue('--spotify-marquee-gap')).toBe('107px');
+  expect(title.closest('.spotify-now').style.getPropertyValue('--spotify-marquee-distance')).toBe('128px');
+  expect(title.querySelector('[aria-hidden="true"]').textContent).toBe('SOS');
+  await act(async () => sizes.resize(200));
+  expect(title.closest('.spotify-now').style.getPropertyValue('--spotify-marquee-distance')).toBe('228px');
+  await act(async () => sizes.resize(0));
+  expect(host.querySelector('.has-marquee')).toBe(null);
+  await act(async () => sizes.resize(100));
+  expect(title.classList.contains('has-marquee')).toBe(true);
+  await act(async () => api.emitState({track:track('spotify:track:long','A Very Long Song Title That Does Not Fit')}));
+  expect(host.querySelector('b.spotify-marquee').style.getPropertyValue('--spotify-marquee-gap')).toBe('28px');
+});
+
+test('different title and artist lengths share travel distance, timing and playback phase', async () => {
+  marqueeMeasurements();
+  const api=await renderPlayer([],true,{open:false});
+  for (const [name,artist] of [['SOS','An Artist Name That Is Much Longer'],['A Song Title That Is Much Longer','SZA'],['SOS','SZA']]) {
+    await act(async () => api.emitState({track:track('spotify:track:sync',name),artists:[artist],is_playing:true}));
+    const now=host.querySelector('.spotify-now');
+    const distance=Number.parseFloat(now.style.getPropertyValue('--spotify-marquee-distance'));
+    const duration=Number.parseFloat(now.style.getPropertyValue('--spotify-marquee-duration'));
+    expect(distance).toBe(Math.max(100,name.length*7,artist.length*7)+28);
+    expect(duration).toBe(Math.max(12,distance/20));
+    const labels=[...now.querySelectorAll('.spotify-marquee')];
+    for (const label of labels) {
+      const textWidth=label.querySelector('.spotify-marquee-copy').textContent.length*7;
+      expect(textWidth+Number.parseFloat(label.style.getPropertyValue('--spotify-marquee-gap'))).toBe(distance);
+      expect(label.style.getPropertyValue('--spotify-marquee-duration')).toBe('');
+      expect(label.dataset.playing).toBe('true');
+    }
+    const tracks=[...now.querySelectorAll('.spotify-marquee-track')];
+    await act(async () => api.emitState({is_playing:false}));
+    expect([...now.querySelectorAll('.spotify-marquee')].map(label=>label.dataset.playing)).toEqual(['false','false']);
+    await act(async () => api.emitState({is_playing:true}));
+    expect([...now.querySelectorAll('.spotify-marquee-track')]).toEqual(tracks);
+  }
 });
 
 test('music is inside the navigation dock and its pause button does not expand it', async () => {
@@ -205,4 +289,35 @@ test('switching between the Music page and chat retains one playback controller 
   expect(host.querySelector('.spotify-now').closest('[aria-label="Quick actions"]')).not.toBe(null);
   expect(window.VellumSpotifyPlayback.create).toHaveBeenCalledTimes(1);
   expect(api.dispose).not.toHaveBeenCalled();
+});
+
+
+test('local playback appears in the Dynamic Island without a connected Spotify account',async()=>{
+  let emit;const previous=window.VellumLocalMusicPlayback;
+  const pause=vi.fn(),wake=vi.fn();window.VellumLocalMusicPlayback={subscribe:vi.fn(listener=>{emit=listener;return ()=>{};}),start:vi.fn(()=>({wake})),pause};
+  const localApi={library:vi.fn(async()=>({collections:[{entries:[{id:'owned',title:'Owned recording',artist:'Local artist',available:true,artwork_url:'https://images.example/local.jpg'}]}]})),action:vi.fn(async()=>({status:'applied'}))};
+  try{
+    const api=await renderPlayer([],false,{open:false,spotify:{connected:false},localApi});
+    expect(emit).toBeTypeOf('function');
+    await act(async()=>emit({queue:['owned'],index:0,volume:.7,observed:{entry_id:'owned',playing:true,seconds:12,duration:120}}));
+    expect(host.querySelector('.spotify-now')?.textContent).toContain('Owned recording');expect(host.querySelector('svg[aria-label="Local music"]')).toBeTruthy();expect(host.querySelector('svg[aria-label="Spotify"]')).toBeNull();
+    await act(async()=>host.querySelector('[aria-label="Pause local music"]').click());
+    expect(localApi.action).toHaveBeenCalledWith('playback',{action:'pause'});expect(api.action).not.toHaveBeenCalled();
+    await act(async()=>host.querySelector('[aria-label="Open local music player"]').click());
+    expect(host.textContent).not.toContain('Allow playback in Vellum');
+    const seek=host.querySelector('[aria-label="Local music playback position"]');seek.value='36000';
+    await act(async()=>seek.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})));
+    expect(localApi.action).toHaveBeenLastCalledWith('playback',{action:'seek',seconds:36});
+    const volume=host.querySelector('[aria-label="Local music volume"]');volume.value='30';
+    await act(async()=>volume.dispatchEvent(new KeyboardEvent('keyup',{key:'ArrowRight',bubbles:true})));
+    expect(localApi.action).toHaveBeenLastCalledWith('playback',{action:'volume',volume:.3});
+    await act(async()=>host.querySelector('[aria-label="Change repeat mode"]').click());
+    expect(localApi.action).toHaveBeenLastCalledWith('playback',{action:'repeat',repeat:'all'});
+    await act(async()=>host.querySelector('[aria-label="Next track"]').click());
+    expect(localApi.action).toHaveBeenLastCalledWith('playback',{action:'next'});
+    expect(api.action).not.toHaveBeenCalled();expect(window.VellumSpotifyPlayback.create).not.toHaveBeenCalled();
+    expect(localApi.library).toHaveBeenCalledTimes(1);
+    await act(async()=>emit({queue:['owned'],index:0,volume:.7,observed:{entry_id:'owned',playing:false,seconds:37,duration:120}}));
+    expect(localApi.library).toHaveBeenCalledTimes(1);
+  }finally{window.VellumLocalMusicPlayback=previous;}
 });

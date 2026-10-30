@@ -211,3 +211,18 @@ def test_protected_plugin_surface_can_be_hidden_but_plugin_cannot_be_removed(tmp
     assert registry.describe("builtin-ui")["protected"] is True
     with pytest.raises(PluginRegistryError, match="protected"):
         registry.assert_removable("builtin-ui")
+
+
+def test_action_catalog_discovers_plugin_manifests_once_and_refreshes_next_request(tmp_path,monkeypatch):
+    from unittest.mock import Mock
+    from agent.plugins import registry as registry_module
+    root=tmp_path/'plugins';_write_plugin(root,'demo')
+    plugins=PluginRegistry(root,state_path=tmp_path/'state.json')
+    runtime=AppActionRuntime(plugin_registry=plugins)
+    runtime.register_plugin_contribution(PluginContribution(owner='demo',actions=(_action('demo'),),surfaces=(_surface('demo'),)))
+    discover=Mock(wraps=registry_module.discover_portable_plugins);monkeypatch.setattr(registry_module,'discover_portable_plugins',discover)
+    assert any(action.id=='demo.run' for action in runtime.catalog().actions)
+    assert discover.call_count==1
+    plugins.set_enabled('demo',False);discover.reset_mock()
+    assert not any(action.id=='demo.run' for action in runtime.catalog().actions)
+    assert discover.call_count==1

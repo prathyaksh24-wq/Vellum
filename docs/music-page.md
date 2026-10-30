@@ -1,46 +1,71 @@
-# Music page
+# Music workspace
 
-Open **Music** in the sidebar, or use the local preview URL with `?view=music`.
+Open **Music** from Vellum's sidebar, or the local preview with **?view=music**.
 
-The page uses the existing Spotify connection and Web Playback SDK owner. It does not create a second player or a separate library store. A React portal presents the existing `SpotifyPlayer` snapshot on the Music page; changing between chat and Music keeps that controller mounted. The browser workspace retains its session while its presentation is hidden on Music.
+## Layout and appearance
 
-## Available interactions
+The supplied **HANDOFF.md** and **vellum-handoff (1).zip** are the visual reference: 232 px sidebar, service selector, Manrope typography, five-column album grid, playlist/album tables and a 96 px bottom player. Vellum’s original sidebar/rail remains visible. The inner Music sidebar starts with the shared Personalization-style VSelect dropdown for Spotify, Apple Music and Local files; its duplicate Vellum heading is removed. Its own Hide/Show controls collapse and restore the 232 px panel independently of Vellum’s outer navigation. The selected provider and playback survive the toggle. This is session presentation. Mobile has the same provider dropdown in its header. The desktop menu anchors left inside the sidebar to avoid clipping behind Vellum’s outer navigation; the mobile menu stays within its control width. The outer Music icon is constrained to 18 px. Narrow layouts use a 64 px mini-player and bottom tabs. The design's sample artists, covers, counts and connection claims are not production data.
 
-- Search Spotify songs, artists, albums and playlists. Search is an explicit catalog read; stale requests are cancelled/ignored. Choosing an album or playlist opens its track list. Choosing a song starts playback from that result through the existing App Action.
-- Browse saved playlists and albums in grid or list view. Square artwork stays complete rather than filling a cropped landscape frame. Liked Songs appears as a collection item, without a separate tab, and reads saved tracks rather than searching for a playlist name.
-- Open a collection to inspect its cover, song count, artists, albums and durations. Its Play button starts the collection; selecting a song in a playlist or album starts at its exact source position and retains the collection context. Track lists have paginated loading, disabled unavailable rows and error/retry states. Back restores the collection scroll position. Opening a collection does not start playback.
-- **Sort** changes the displayed collection order by name, or a song list by title, artist, album or duration. It loads remaining pages before applying an order, preserves original source positions for playback, and can return to Spotify order. Refresh resets sorting before reading the first page. Sorting does not rewrite Spotify playlists; complete sorts are bounded to 5,000 loaded rows.
-- Open a playlist and choose **Edit playlist** to rename it, edit its description, search for songs to add, or remove songs using the row controls. The backend exposes editability only for verified owned playlists. **Remove from library** unsaves a followed or owned playlist without deleting its contents. Edits display the exact proposed change, then use the existing App Action confirmation path to save or cancel. Track removal removes every occurrence of the chosen URI.
-- Typed App Actions use the same playlist editor: `rename my Tamil playlist to Road Trip`, `change the name of this playlist to Evening`, `set the description of this playlist to Songs for the long way home`, and `remove this playlist from my library`. “This playlist” uses the playlist last opened on Music while navigating to chat; Back to your collection clears it. Named commands require one exact saved-library match. Confirmation binds the account, playlist ID, current name and snapshot, rechecks them before writing, and verifies the provider result. Complete editing commands keep their chat messages and avoid conversational model delays.
-- Select an upcoming track; playback starts at the selected position in the returned upcoming list. Three rows are shown initially, and **See queue** reveals the remaining returned rows. The queue uses the canonical player's existing distinct upcoming projection.
-- Play/pause, previous/next, seek, shuffle, repeat, mute and volume use `plugins.spotify.action`. Volume and playback labels display the measured snapshot rather than assuming a write succeeded.
-- The current cover remains a normal image beside the title. A display-only 40-by-40 canvas produces the pixelated vinyl label from that same cover. It never reads back or exports image pixels. The record rotates smoothly while the canonical snapshot is playing, pauses at its current angle and resumes from that angle. Reduced-motion preferences disable rotation.
-- Spotify is implemented. Apple Music and YouTube Music show explicit unconnected states until those integrations exist.
+The user's later background instruction takes precedence over the supplied standalone theme palettes. The selected Vellum backdrop remains underneath Music. A translucent readability surface and the host's light/dark background tone determine text, fields and panels; provider/theme selection changes accents rather than replacing the Vellum backdrop. The surface has enough opacity to maintain contrast even when an animated background has bright regions while its metadata reports a dark tone. The local Manrope variable font ships with its OFL notice.
 
-The compact chat player moves to the lower corner, becomes clearer on hover/focus, and is hidden while the browser panel is visible. It has an **Open Music** entry. On narrow layouts Music has a **Back to chat** control and keeps queue access available.
+Home, search, playlist/album/artist details, Sources, Settings, now-playing Queue/Lyrics, local first-run/library/matching and metadata-preservation views share this shell. Apple Music is visibly deferred: no Apple sign-in, subscription playback, fabricated library or transfer results are exposed. Crossfade, gapless and quality controls are displayed as unavailable where the existing owner has no implementation. Lyrics remain an explicit unavailable state; opening the tab retains the current cover.
 
-## Read contracts and ownership
+## Playback ownership and actions
 
-The existing browse contract also accepts `playlist_details` with `source_id`, returning the verified playlist description, owner ID and editability. The Music page discovers `spotify.playlist.edit` through the App Action catalog; UI and typed changes share the same external-write permission, confirmation and receipt owner.
+Spotify continues to use its existing connection and Web Playback SDK owner. A React portal presents its canonical snapshot; changing between chat and Music does not remount that player. Transport, seek, volume, mute, shuffle, repeat and selected-source playback keep **spotify.playback.control**. Volume and position labels display measured state. Covers prefer the canonical player's artwork when a track projection omits its own artwork.
 
-`GET /api/plugins/spotify/browse` accepts `playlists`, `albums`, `liked`, `artist_tracks`, `playlist_tracks` and `album_tracks`. The two collection-detail kinds require `source_id`. `GET /api/plugins/spotify/search` accepts a catalog query and `track`, `artist`, `album` or `playlist` kind. Both return the typed `MusicCardPage` projection containing only display/selection fields. Track pages include duration and exact source position, retain duplicate tracks and preserve unavailable slots so pagination cannot shift playback selection. Search preserves the Spotify catalog privacy gate. Authentication and upstream failures return errors; the UI does not present a failed read as zero saved playlists.
+The local presentation uses the existing **agent.music_library** owner and **VellumLocalMusicPlayback** singleton. Files, playlist information and transport use the existing **local_music.file**, **local_music.playlist** and **local_music.playback** App Actions. File selection grants only the chosen files/folder. Owned audio is copied; missing playlist songs remain explicit placeholders. Playlist metadata export contains no local paths or credentials. This layout does not expose the earlier experimental YouTube recording-download controls.
 
-These endpoints call the existing portable Spotify tools/client. The existing typed playback request additionally accepts one exact `context_uri` or a bounded list of track/episode `uris`; optional `offset_position` requires a context and maps to Spotify's position offset. Conflicting sources and source arguments on non-play actions are rejected. Capability discovery advertises the read endpoints. Frontend reads go through `VellumApi.plugins`; mutations retain App Action authorization, deduplication and receipts.
+Sources uses **spotify.playlists.link** to retain up to 20 exact playlist references in the canonical connection bundle, with account/connection checks in SpotifyClient. It does not follow, rename or otherwise change remote Spotify playlists. Disconnect/replacement retains the existing connection cleanup behavior.
 
-## Current limits
+Playlist rename/description/add/remove controls keep **spotify.playlist.edit**, its account/snapshot-bound confirmation and verified receipts. Removing a saved playlist means unsaving it, not deleting its contents. Song removal retains the connector's documented all-occurrences behavior.
 
-The collection shows what Spotify returns to the saved-library API. Personalized mixes that Spotify does not expose there cannot be inferred from their names. Direct search returns Spotify's catalog ranking and can include public playlists; saved collection selection always uses the exact saved identity. Liked Songs starts a bounded batch of up to 50 tracks. Queue selection uses up to 50 returned entries, rather than pretending to expose Spotify's entire future autoplay plan.
+Ask Vellum is removed from the Music sidebar. Mode/provider/screen navigation and accent previews are session presentation, not credential or account changes.
 
-This change does not install playback support in Codex's browser. Use Brave with protected-content support for the final audible check. Search/library reads do not require an active playback device. Controls that depend on measured volume remain disabled until a device snapshot is available.
+## Dynamic Island
+
+The existing persistent player host also subscribes to the canonical local audio
+owner’s measured snapshot. It does not start another audio element or claim a
+lease merely to display the Island. A metadata read runs when the observed local
+entry changes; progress ticks do not refetch the library. Local playback takes
+the Island while active, including when Spotify is disconnected; measured Spotify
+playback takes it back when Spotify becomes active. Paused local playback remains
+visible when Spotify is idle. The existing pause-before-start interlock is kept.
+
+Island transport dispatches the existing **local_music.playback** action for local
+music and **spotify.playback.control** for Spotify. Local seek/volume drafts remain
+presentation; labels use observed position/duration/volume. The local panel omits
+Spotify connection/device prompts, shows a Local Music service icon and opens
+Music with Local selected. Its audio owner survives Music-page navigation.
+
+## Playlist reads and public fallback
+
+The existing browse/search adapters and typed **MusicCardPage** remain the read boundary. Playlist tracks preserve original positions, duplicate occurrences and unavailable slots. Album/playlist playback uses exact context URIs; selecting a row uses its original offset even after display sorting. Liked Songs uses returned saved tracks. Artist details use the artist-track read and bounded track URI playback.
+
+When Spotify refuses a playlist's items with **access_denied** or **resource_unavailable**, the backend can read the exact public embed's song metadata. That bounded client sends no OAuth headers or cookies, rejects redirects, validates the returned playlist identity, and never returns preview/audio URLs. A ten-minute, 32-playlist memory cache avoids repeated public page downloads while paginating. Authentication and rate-limit errors are not converted into successful empty results.
+
+Public pages are labeled **source=public_embed**, **completeness=unknown**, with an explanatory **note** in the response and a **visible songs** count. The explanatory paragraph is not rendered in the playlist UI. Their available occurrences paginate normally and target the original playlist context. Public metadata can be incomplete, stale, region-dependent or unavailable. If it cannot be read, the existing sandboxed Spotify embed and exact-context playback remain available; there is no fabricated native list.
+
+API-backed pages retain **source=api**. These fields are additive to the v1 contract. New App Actions and the revised served Music handlers are included in the action-parity inventory. Shared files are projected onto current main without unrelated connector, notification or Responses settings changes.
+
+## Artwork and pending controls
+
+Missing Spotify track covers use the typed **GET /api/plugins/spotify/artwork** metadata read. The latest page of up to 50 missing track covers starts warming as soon as song rows arrive, with a 1,200 px lookahead for other rows. Exact track IDs pass through the existing plugins adapter; four IDs share a batch, with at most two browser batches and four upstream metadata reads concurrently. The backend accepts at most 20 IDs, rejects redirects, sends no Spotify credentials/cookies to the public oEmbed endpoint, limits responses to 64 KB and allows only HTTPS Spotify image hosts. Successful results are cached for an hour; unavailable artwork remains a bounded placeholder. This is a read-only presentation lookup, with no App Action or playback side effect. Song rows appear without waiting for artwork. The HTTP read waits at most 350 ms for ready metadata, then marks unfinished items **pending**. The adapter retries only unfinished IDs (bounded to 30 retries); one slow image lookup no longer delays the ready covers in its batch. Images warm in the browser cache before scrolling. Local libraries use numbered song rows and compact playlist selectors, so files without artwork have no blank cover boxes. Embedded covers appear when present; the view does not search online using local filenames or tags.
+
+Recently played snapshots keep canonical artwork, artists and duration as soon as the player observes a song. Their thumbnails stay 36 px wide; the fixed player retains its cover in Settings and Sources. Pending transport commands keep their colour and opacity while remaining locked against overlapping clicks. Unavailable playback stays disabled. Sources sync and link submission retain their appearance while pending.
+
+LocalMusicEntry adds a derived **artwork_url**. Embedded JPEG/PNG/WebP artwork is read with Mutagen, limited to 4 MB and served by the access-gated local artwork route. Derived artwork and negative-cache markers live under the canonical library’s artwork directory, separately from immutable audio assets. Existing files are inspected on their next library read; original audio bytes and exported playlist metadata are unchanged. Missing, unsupported or malformed artwork never prevents audio playback.
+
+Successful file/folder imports select **Imported files** and return to the local library. Loopback Origin validation accepts the verified Vellum UI even when a browser classifies localhost-to-127.0.0.1 as cross-site; foreign origins, opaque cross-site requests and missing mutation headers remain blocked. Audio/export URLs retain the workspace loopback hostname so native media requests stay same-site.
+
+## Responsiveness and limits
+
+Home shows individual recent songs first, then saved playlists and up to ten saved albums, with library browsing controls for more. Selecting a playlist from Settings/Sources explicitly opens its song view. Playlist shortcuts retain their own list when browsing albums.
+
+Connected mode does not poll the local library. The action catalog is shared by the Music/local presentation rather than fetched twice. Local reads run only while Local is active and visible, at 15-second intervals; imports refresh explicitly. Large local song lists initially render 100 entries with Show more songs. Search offers song and artist suggestions from both Home and Search after two characters and a 300 ms pause. Stale lookups are aborted; Arrow keys/Enter select a suggestion and Escape dismisses it. Selecting a suggestion searches or opens artist tracks without autoplay. Enter still submits a full search. One borderless input inside one search container avoids inherited double borders.
+
+The **Paste a link** card imports Spotify/Apple song or playlist metadata using **local_music.playlist**. It never treats subscription audio as a direct media file. Spotify playlist metadata imports reuse the same bounded public fallback on denied/unavailable lists, retaining unknown completeness. Direct audio URL, podcast-feed and cloud-file playback are visibly deferred. JSON playlist manifests and supported local file imports work through the existing owner; arbitrary playlist export formats, automatic fuzzy matching, provider transfer, lyrics services and new Apple capabilities are not claimed by this visual replacement.
 
 ## Verification
 
-The Music page, Spotify playback and playlist actions have automated coverage for detail navigation, sorting, pagination, exact source positions, cancelled reads, account and revision changes, duplicate removal, cancellation and unverified provider responses. The production build includes the components, CSS and artwork assets.
-
-Disposable browser fixtures were inspected at desktop and 390-pixel widths. Connected-account reads verified playlist metadata and editability; a rename review was prepared and cancelled without changing the playlist. Provider writes were tested with a disposable transport, rather than applying edits to the owner's library. These checks do not establish a multi-day audible playback soak test.
-
-## Playback and linked collections
-
-Transient backend heartbeat failures preserve healthy SDK audio and device identity. Real SDK disconnect or authorization events still reconnect, and ownership conflicts release this window's player. Transport commands release their guard after the mutation receipt; background queue reads do not hold the controls or fade them out. Resume sends no source URI or seek offset.
-
-Playlist permission failures expose exact-context Play and Open in Spotify without fabricating unavailable tracks. Explicit linked playlist references, when requested, use the existing connection bundle and atomic lock. Reads merge all provider pages and linked references, deduplicate identities and paginate one projection. Disconnecting or replacing authorization clears the linked references; account and connection checks prevent assignment to another connection. Exact-link search never substitutes a similarly named public playlist.
+See [Scoped publication notes](verification/music-dictation-pr-2026-10-29.md). Screenshots are earlier synthetic fixtures from the shared development checkout. No tests or builds were rerun for this isolated draft PR, at the user's request. Provider metadata reads do not prove audible playback, native desktop behavior or long-session acceptance.

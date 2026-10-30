@@ -7,7 +7,7 @@
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
       "count": 930,
-      "sha256": "7f35de6b9adeec908d713747bce330be324bdbf7b17421431604f3061abae152"
+      "sha256": "6ed2748e70a535fcbd26de8611c9846816156e768e21584d556de9fea97492e0"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -62,8 +62,8 @@
       "sha256": "43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"
     },
     "design/Velllum/uploads/components/music-page.jsx": {
-      "count": 55,
-      "sha256": "bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"
+      "count": 105,
+      "sha256": "d21257377cde4fa7c9da67c8bf606f81224b89eb047fd08f381d53d38ee76d90"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
       "count": 11,
@@ -152,6 +152,10 @@
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
       "count": 123,
       "sha256": "80151f31e28f978b7daa4e46aea86976bd380ff16cc384407f0355f1b1c0ae4b"
+    },
+    "design/Velllum/uploads/components/local-music.jsx": {
+      "count": 18,
+      "sha256": "62932c41f79c678981dac1d561ecb71900d049246f484147866462f7cea3135e"
     }
   },
   "covered": [
@@ -251,7 +255,7 @@
       "actionId": "spotify.playback.control",
       "probe": {
         "path": "design/Velllum/uploads/components/music-page.jsx",
-        "text": "run({action:'set_volume',volume_percent})"
+        "text": "control('set_volume',isLocal?{volume:volume_percent/100}:{volume_percent})"
       }
     },
     {
@@ -917,7 +921,7 @@
       "actionId": "spotify.playback.control",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"
+        "text": "onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) dockRun({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"
       }
     },
     {
@@ -1954,6 +1958,51 @@
         "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
         "text": "action = 'plugin.marketplace.add'"
       }
+    },
+    {
+      "surface": "Local music",
+      "name": "import and match selected audio files",
+      "actionId": "local_music.file",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "api.upload(file,entryId)"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "import playlist information and manifests",
+      "actionId": "local_music.playlist",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('playlist',"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "measured local transport and queue",
+      "actionId": "local_music.playback",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('playback',args)"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "retain exact linked Spotify playlists",
+      "actionId": "spotify.playlists.link",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "action_id:'spotify.playlists.link'"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "Dynamic Island local transport",
+      "actionId": "local_music.playback",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "API.localMusic.action('playback',args)"
+      }
     }
   ],
   "exemptions": [
@@ -2064,6 +2113,10 @@
     {
       "scope": "Discord bot authorization navigation and lazy workspace disclosure",
       "reason": "Install bot reads the backend-generated Discord authorization URL and opens provider consent. Expanding the existing workspace authorizes its reads; writes retain its existing operation reviews and backend policy."
+    },
+    {
+      "scope": "Music handoff routes, source selection, accent previews, queue and lyrics tabs, read refresh, explicit metadata export and chat drafts",
+      "reason": "Session presentation only. Provider/mode routes and accent selection do not change account grants or the Vellum background. File/folder pickers stage explicit user selections, whose imports dispatch local_music.file. Playlist information imports and saved links use their typed actions. Ask Vellum composes an existing chat draft and does not submit it. Export reads playlist metadata. Unimplemented audio settings, Apple streaming and transfer remain disabled."
     }
   ],
   "deferred": [

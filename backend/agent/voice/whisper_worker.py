@@ -12,7 +12,7 @@ import sys
 import threading
 import traceback
 
-from lfm_worker import _watch_parent
+from worker_lifecycle import watch_parent
 
 _OUTPUT = sys.stdout
 
@@ -27,10 +27,9 @@ def load_model():
     # missing. Exercise the encoder before reporting the chosen device ready.
     dll_handles = []
     if os.name == "nt":
-        # Reuse CUDA libraries already installed for local voice when present;
-        # CPU fallback remains self-contained on installations without them.
-        # session launches this file from the repository root.
-        dll_dir = Path.cwd() / "data/models/lfm2.5-audio/.venv/Lib/site-packages/torch/lib"
+        # Optional NVIDIA runtime belongs to this dictation environment, not
+        # another model's installation. CPU fallback needs no CUDA libraries.
+        dll_dir = Path(sys.executable).parent.parent / "cuda"
         if dll_dir.is_dir():
             dll_handles.append(os.add_dll_directory(str(dll_dir)))
             os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
@@ -57,7 +56,7 @@ def load_model():
 
 
 def main() -> int:
-    threading.Thread(target=_watch_parent, daemon=True).start()
+    threading.Thread(target=watch_parent, daemon=True).start()
     try:
         with redirect_stdout(sys.stderr):
             model, device, dll_handles = load_model()

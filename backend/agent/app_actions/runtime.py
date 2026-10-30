@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import re
 import secrets
@@ -316,6 +317,7 @@ class AppActionRuntime:
                 *browser_action_definitions(),
             )
         }
+        self._plugin_registry = plugin_registry
         self._plugin_contributions = (
             PluginContributionCatalog(
                 plugins=plugin_registry,
@@ -494,16 +496,18 @@ class AppActionRuntime:
         )
 
     def catalog(self, context: AppActionContext | None = None) -> AppActionCatalog:
-        contributed_actions = self._plugin_contributions.actions(context) if self._plugin_contributions else []
-        surfaces = self._surface_map(context)
-        return AppActionCatalog(
-            actions=[
-                definition
-                for definition in [*self._definitions.values(), *contributed_actions]
-                if self._is_available(definition, context)
-            ],
-            surfaces=list(surfaces.values()),
-        )
+        snapshot=self._plugin_registry.read_snapshot() if self._plugin_registry is not None else nullcontext()
+        with snapshot:
+            contributed_actions = self._plugin_contributions.actions(context) if self._plugin_contributions else []
+            surfaces = self._surface_map(context)
+            return AppActionCatalog(
+                actions=[
+                    definition
+                    for definition in [*self._definitions.values(), *contributed_actions]
+                    if self._is_available(definition, context)
+                ],
+                surfaces=list(surfaces.values()),
+            )
 
     def plan_submission(self, message: str) -> AppActionTurn:
         """Separate explicitly submitted App Actions from conversational work."""
@@ -681,6 +685,11 @@ class AppActionRuntime:
         if natural_theme:
             return self._surface_request('workspace', properties={'theme':next(value for value in natural_theme.groups() if value)}, persistence=persistence)
 
+        if self._plugin_contributions and self._plugin_contributions.action_available("local_music.playback"):
+            from agent.plugins.local_music_controls import match_local_music_command
+            local_action = match_local_music_command(submitted)
+            if local_action is not None:
+                return local_action
         if self._plugin_contributions and self._plugin_contributions.action_available("spotify.playback.control"):
             from agent.plugins.spotify_controls import match_spotify_command
             music_action = match_spotify_command(submitted)

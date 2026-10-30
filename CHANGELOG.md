@@ -6,6 +6,15 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+### Music workspace and dictation
+
+- Replace the Music workspace with the supplied layout, Vellum background contrast, provider dropdown, independent sidebar, live search suggestions and individual recent songs.
+- Add a local audio library and persistent playback, embedded artwork, playlist metadata imports, and local transport in the Dynamic Island. Keep Apple Music streaming deferred.
+- Preserve exact Spotify playlist references and source positions, with bounded public metadata/artwork fallback when the API denies playlist items.
+- Reuse one plugin manifest snapshot per action catalog response to avoid repeated discovery while Music loads.
+- Handle truncated WAV input as invalid audio, and decouple Whisper worker cleanup and optional CUDA lookup from the conversational voice installation.
+
+
 - Add 15 original DVK Lab motion backgrounds to Appearance, with locally bundled shaders/assets, device-local selection, source-faithful procedural and ASCII rendering, and canvas/GPU lifecycle cleanup.
 
 ### Added
