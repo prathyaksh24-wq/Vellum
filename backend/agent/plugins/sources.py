@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -27,8 +27,11 @@ class PluginSourceRecord:
 class CodexPluginSource:
     """Read-only adapter for installed OpenAI/Codex plugin bundles."""
 
-    def __init__(self, cache_roots: Iterable[str | Path]):
+    def __init__(self, cache_roots: Iterable[str | Path], *, skill_only_ids: Iterable[str] | None = None):
         self.cache_roots = [Path(root) for root in cache_roots]
+        # A Codex app/MCP declaration is not an executable Vellum connection.
+        # Vellum opts into reviewed instruction bundles independently of Codex.
+        self.skill_only_ids = None if skill_only_ids is None else frozenset(skill_only_ids)
 
     def discover(self) -> list[PluginSourceRecord]:
         records: dict[str, PluginSourceRecord] = {}
@@ -37,6 +40,10 @@ class CodexPluginSource:
                 continue
             for manifest_path in sorted(cache_root.rglob(".codex-plugin/plugin.json")):
                 record = self._read(manifest_path)
+                if self.skill_only_ids is not None:
+                    if record.id not in self.skill_only_ids or record.skills_root is None:
+                        continue
+                    record = replace(record, apps=[], mcp_connectors=[], capabilities=["Skills"])
                 records.setdefault(record.id, record)
         return sorted(records.values(), key=lambda item: item.id)
 

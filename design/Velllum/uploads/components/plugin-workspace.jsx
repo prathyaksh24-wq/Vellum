@@ -292,6 +292,42 @@
     serpapi: 'SerpApiConnection',
     'app-69b7bed23a9481919d2378ab225cddeb': 'ProductHuntWorkspace'
   };
+  function KeyedConnection({p,children}) {
+    const {refresh}=useX(),api=window.VellumApi;
+    const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+    const [key,setKey]=useState(''),[tools,setTools]=useState(null),[pending,setPending]=useState(null);
+    const active=useRef(true),review=useRef(null);
+    useEffect(()=>{active.current=true;api.plugins.keyedMcpStatus(p.id).then(v=>{if(active.current)setStatus(v);}).catch(()=>{if(active.current)setError('Connection status could not be read.');});return()=>{active.current=false;if(review.current)api.appActions.cancel(review.current.receipt.confirmation.token,{source:'ui'}).catch(()=>{});};},[p.id,p.enabled]);
+    const accept=(receipt,request)=>{
+      if(receipt.status==='confirmation_required'){const next={receipt,request,message:receipt.message};review.current=next;setPending(next);return;}
+      if(receipt.status!=='applied')throw Error(receipt.message||'The connection change did not complete.');
+      if(receipt.result?.connection)setStatus(receipt.result.connection);
+      refresh();
+    };
+    const run=async(action_id,args={})=>{
+      if(busy||p.enabled===false)return;
+      setBusy(true);setError('');
+      try{const request={request_id:p.id+'_'+crypto.randomUUID(),action_id,arguments:args};const receipt=await api.appActions.dispatch(request,{source:'ui'});if(active.current)accept(receipt,request);else if(receipt.status==='confirmation_required')await api.appActions.cancel(receipt.confirmation.token,{source:'ui'});}
+      catch(e){if(active.current)setError(e.message||'The connection request failed.');}
+      finally{if(active.current)setBusy(false);}
+    };
+    const stage=async event=>{
+      event?.preventDefault();if(busy||pending||p.enabled===false||!key.trim())return;
+      setBusy(true);setError('');let reference;
+      try{reference=await api.plugins.keyedMcpStage(p.id,key.trim());setKey('');const receipt=await api.appActions.dispatch({request_id:p.id+'_'+crypto.randomUUID(),action_id:p.id+'.connection.connect',arguments:{credential_id:reference.credential_id}},{source:'ui'});if(active.current)accept(receipt);}
+      catch(e){if(active.current)setError(e.message||'The key could not be verified.');}
+      finally{if(reference)await api.plugins.keyedMcpDiscard(p.id,reference.credential_id).catch(()=>{});if(active.current)setBusy(false);}
+    };
+    const decide=async confirmed=>{
+      if(busy||!review.current)return;setBusy(true);setError('');
+      const token=review.current.receipt.confirmation.token;
+      try{const receipt=confirmed?await api.appActions.confirm(token,review.current.request,{source:'ui'}):await api.appActions.cancel(token,{source:'ui'});review.current=null;setPending(null);if(confirmed)accept(receipt);}
+      catch(e){setError(e.message||'The review could not be completed.');}
+      finally{setBusy(false);}
+    };
+    const browse=async()=>{if(busy||p.enabled===false)return;setBusy(true);setError('');try{const value=await api.plugins.keyedMcpTools(p.id);if(active.current)setTools(value.tools);}catch(e){if(active.current)setError(e.message||'The catalog is unavailable.');}finally{if(active.current)setBusy(false);}};
+    return children({apiKey:true,status,busy,error,key,setKey,stage,run,tools,browse,pending,decide});
+  }
   function DiscordConnection({p,children}) {
     const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
     const readStatus=async()=>{
@@ -345,6 +381,7 @@
       previousStatus.current = key;
       if (old !== null && key !== old) refresh();
     };
+    if(['brave','context7'].includes(p.id))return <KeyedConnection p={p}>{children}</KeyedConnection>;
     if(p.id==='discord')return <DiscordConnection p={p}>{children}</DiscordConnection>;
     if(p.metadata?.connection?.anonymous)return <PublicMcpConnection p={p}>{children}</PublicMcpConnection>;
     return C ? <C enabled={p.enabled !== false} onStatus={syncStatus} onChanged={refresh} revision={p.enabled} render={children} /> : children({
@@ -358,7 +395,7 @@
     c,
     p
   }) {
-    return <>{c.status?.configured && !c.status.connected && !c.error && <p className="notice" role="status">{c.status.message}</p>}{c.error && <p className="error" role="alert">{c.error}</p>}{c.flow && <p className="notice" role="status">{c.flow.message || 'Waiting for authorization…'}{c.flow.status === 'pending' && c.run && <button className="bs" disabled={c.busy} onClick={() => c.run(p.id + '.connection.oauth.cancel', {
+    return <>{c.status?.configured && !c.status.connected && !c.error && <p className="notice" role="status">{c.status.message}</p>}{c.error && <p className="error" role="alert">{c.error}</p>}{c.flow && <p className="notice" role="status">{c.flow.message || 'Waiting for authorization…'}{c.flow.status === 'pending' && c.continueSignIn && <button className="bs" disabled={c.busy} onClick={c.continueSignIn}>Continue to {p.name}</button>}{c.flow.status === 'pending' && c.run && <button className="bs" disabled={c.busy} onClick={() => c.cancelSignIn ? c.cancelSignIn() : c.run(p.id + '.connection.oauth.cancel', {
           flow_id: c.flow.flow_id
         })}>Cancel sign-in</button>}</p>}{c.pending && <div className="ds" role="group" aria-label="Review connection change"><h3>Review connection change</h3><p>{c.pending.receipt?.message || 'Review this change before applying it.'}</p><div className="df"><button className="bs" disabled={c.busy} onClick={() => c.decide(false)}>Cancel</button><button className="bt" disabled={c.busy} onClick={() => c.decide(true)}>Confirm</button></div></div>}</>;
   }
@@ -371,7 +408,7 @@
         app_id: c.appId.trim(),
         client_id: c.clientId.trim()
       })}>Save app registration</button></div>;
-    if (c.stage || p.id === 'serpapi') return <form className="ds" onSubmit={c.stage || c.connect}><label className="fd">{p.id === 'serpapi' ? 'API key' : 'Developer token'}<input type="password" className="fi" autoComplete="off" value={c.token ?? c.key ?? ''} onChange={e => (c.setToken || c.setKey)(e.target.value)} /></label><button className="bt" disabled={c.busy || !(c.token || c.key)}>Review connection</button></form>;
+    if (c.stage || p.id === 'serpapi') return <form className="ds" onSubmit={c.stage || c.connect}><label className="fd">{c.apiKey || p.id === 'serpapi' ? 'API key' : 'Developer token'}<input type="password" className="fi" autoComplete="off" value={c.token ?? c.key ?? ''} onChange={e => (c.setToken || c.setKey)(e.target.value)} /></label><button className="bt" disabled={c.busy || !!c.pending || !(c.token || c.key)}>{c.apiKey?'Verify and connect':'Review connection'}</button></form>;
     return null;
   }
   function GoogleChooser({
@@ -390,7 +427,8 @@
       } = useX(),
       connected = c.status?.connected,
       account = c.status?.email || c.status?.account_name || c.status?.workspace_name || 'Authorized account',
-      connect = () => c.status?.configured && !c.status?.connected && c.run ? c.run((p.id.startsWith('app-') ? 'producthunt' : p.id) + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+      connect = () => c.status?.configured && !c.status?.connected && !c.status?.reconnect_required && c.run ? c.run((p.id.startsWith('app-') ? 'producthunt' : p.id) + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+    if(c.apiKey)return <div className="ds"><h2 className="h2s">{p.name} connection</h2><p className="notice">{c.status?.message||'Checking connection…'}</p><Setup p={p} c={c}/><div className="df">{c.status?.configured_key_available&&<button className="bs" disabled={c.busy||!!c.pending||p.enabled===false} onClick={()=>c.run(p.id+'.connection.use_configured')}>Use configured API key</button>}{c.status?.configured&&<><button className="bs" disabled={c.busy||!!c.pending||p.enabled===false} onClick={()=>c.run(p.id+'.connection.verify')}>Verify connection</button><button className="bs rd" disabled={c.busy||!!c.pending} onClick={()=>c.run(p.id+'.connection.disconnect')}>Disconnect</button></>}</div><Feedback p={p} c={c}/></div>;
     if(c.bot)return <div className="ds"><h2 className="h2s">Discord bot connection</h2><p className="notice">{c.status?.message||'Checking Discord connection…'}</p><div className="df"><button className="bt" disabled={c.busy||p.enabled===false} onClick={c.connect}>Install bot</button><button className="bs" disabled={c.busy||p.enabled===false} onClick={c.readStatus}>Verify connection</button></div><Feedback p={p} c={c}/></div>;
     if(c.anonymous)return <div className="ds"><h2 className="h2s">Public MCP connection</h2><p className="notice">{c.status.message}</p><button className="bs" disabled={c.busy||p.enabled===false} onClick={c.browse}>{c.busy?'Verifying…':'Verify connection'}</button>{c.tools&&<p className="notice" role="status">Connected · {c.tools.length} published tools available</p>}<Feedback p={p} c={c}/></div>;
     return <><Setup p={p} c={c} />{connected ? <><h2 className="h2s">Connected accounts</h2><div className="lc" style={{
@@ -416,9 +454,9 @@
         marginTop: 28
       }}><div className="li" style={{
           minHeight: 64
-        }}><span className="gr">{p.name}</span><button className="cb" disabled={p.enabled === false || c.busy || !!c.pending || c.flow?.status === 'pending' || c.unsupported || !c.connect && !c.choose} onClick={connect}>{c.busy ? 'Connecting…' : c.status?.configured && c.run ? 'Verify connection' : 'Connect'}</button></div></div>}{p.id === 'swiggy' && c.status?.services && <div className="ds">{c.status.services.map(s => <div className="ln" key={s.id}><span className="gr">{s.name}</span><Sw label={s.name} value={s.enabled} disabled={c.busy} onChange={v => c.run('swiggy.connection.configure', {
+        }}><span className="gr">{p.name}</span><button className="cb" disabled={p.enabled === false || c.busy || !!c.pending || c.flow?.status === 'pending' || c.unsupported || !c.connect && !c.choose} onClick={connect}>{c.busy ? 'Connecting…' : c.status?.reconnect_required ? 'Sign in with '+p.name : c.status?.configured && c.run ? 'Verify connection' : 'Connect'}</button></div></div>}{p.id === 'swiggy' && c.status?.services && <div className="ds">{c.status.services.map(s => <div className="ln" key={s.id}><span className="gr">{s.name}</span><Sw label={s.name} value={s.enabled} disabled={c.busy} onChange={v => c.run('swiggy.connection.configure', {
             services: c.status.services.filter(x => x.id === s.id ? v : x.enabled).map(x => x.id)
-          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source installation.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
+          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
   }
   function Detail({
     p,
@@ -851,13 +889,13 @@
           }}>Continue</button></div></> : <Connection p={p}>{c => {
           const connected = !!c.status?.connected,
             provider = p.id.startsWith('app-') ? 'producthunt' : p.id,
-            connect = () => c.status?.configured && !connected && c.run ? c.run(provider + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
-          if(c.anonymous||c.bot)return <><Accounts p={p} c={c}/>{c.anonymous&&<PublishedTools p={p} c={c}/>}<div className="df"><button className="bs" onClick={close}>Close</button>{!install&&<button className="bs rd" disabled={!canRemove} onClick={()=>setDlg({t:'uninstall',p})}>Uninstall</button>}{install&&<button className="bt" disabled={!connected} onClick={close}>Done</button>}</div></>;
+            connect = () => c.status?.configured && !connected && !c.status?.reconnect_required && c.run ? c.run(provider + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+          if(c.anonymous||c.bot||c.apiKey)return <><Accounts p={p} c={c}/>{(c.anonymous||c.apiKey)&&<PublishedTools p={p} c={c}/>}<div className="df"><button className="bs" onClick={close}>Close</button>{!install&&<button className="bs rd" disabled={!canRemove} onClick={()=>setDlg({t:'uninstall',p})}>Uninstall</button>}{install&&<button className="bt" disabled={!connected} onClick={close}>Done</button>}</div></>;
           return <><Setup c={c} p={p} />{install ? <p style={{
               color: 'var(--dim,#BDBDBD)',
               lineHeight: 1.8
             }}>Sign in so Vellum can act on your {p.name} workspace. You can disconnect anytime in settings.</p> : <>
-          <div className="ds"><h3>Connection</h3><div className="ln"><div className="gr"><b>{connected ? 'Workspace connected' : 'Not connected'}</b><span>{connected ? c.status.email || c.status.account_name || 'Vellum can use the authorized workspace.' : 'Connect your account to use its tools.'}</span></div><button className="bs" disabled={c.busy || p.enabled === false || !c.connect && !c.choose || !!c.pending} onClick={connect}>{c.status?.configured && !connected && c.run ? 'Verify connection' : 'Reconnect'}</button><button className="bs" disabled={!connected || c.busy || !!c.pending} onClick={() => c.disconnect ? c.disconnect() : c.run?.(provider + '.connection.disconnect')}>Disconnect</button></div></div>
+          <div className="ds"><h3>Connection</h3><div className="ln"><div className="gr"><b>{connected ? 'Workspace connected' : 'Not connected'}</b><span>{connected ? c.status.email || c.status.account_name || 'Vellum can use the authorized workspace.' : 'Connect your account to use its tools.'}</span></div><button className="bs" disabled={c.busy || p.enabled === false || !c.connect && !c.choose || !!c.pending} onClick={connect}>{c.status?.reconnect_required ? 'Sign in with '+p.name : c.status?.configured && !connected && c.run ? 'Verify connection' : 'Reconnect'}</button><button className="bs" disabled={!connected || c.busy || !!c.pending} onClick={() => c.disconnect ? c.disconnect() : c.run?.(provider + '.connection.disconnect')}>Disconnect</button></div></div>
           <div className="ds"><h3>Permissions</h3><div className="ln"><div className="gr">Read your {p.name} content</div><span className="tg">Read</span><Sw value={connected} label="Read" disabled onChange={() => {}} /></div><div className="ln"><div className="gr">Create and update items</div><span className="tg">Write</span><Sw value={connected && c.status?.auth_type === 'oauth'} label="Write" disabled onChange={() => {}} /></div><div className="ln"><div className="gr">Delete items</div><span className="pill mute">Provider permissions</span></div></div>
           {(p.skills || []).length > 0 && <div className="ds"><h3>Included</h3>{p.skills.map(s => <div className="ln" key={s.id || s.name}><Ic n="cubeo" /><div className="gr"><b>{name(s)}</b><span>Skill</span></div><Sw value={s.enabled !== false} label={name(s)} disabled={s.read_only || s.owner_plugin || busy} onChange={v => skillAction(v ? 'restore' : 'archive', s)} /></div>)}</div>}
         </>}

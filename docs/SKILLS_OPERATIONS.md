@@ -19,6 +19,24 @@ packages without recomputing semantic embeddings.
 
 ## Migration and rollback
 
+### Review legacy tool-guide cleanup
+
+The main agent's native tool descriptions and tool search supersede the old
+standalone tool-guide packages. Review the bounded list before applying:
+
+```powershell
+.\.venv\Scripts\python.exe backend\scripts\skills_ops.py cleanup
+.\.venv\Scripts\python.exe backend\scripts\skills_ops.py cleanup --apply
+```
+
+These two commands run from the repository root. The default is a read-only plan
+for nine named legacy guides. Applying it archives through the existing mutation
+coordinator, preserving receipts and restore paths. Every skill referenced by an
+active built-in or custom agent profile is protected, even when explicitly named.
+Matt Pocock, OpenAI, custom packages and compiled Book knowledge are not pruned.
+To review a separate local package, use `cleanup --archive <name>` and add `--apply`
+only after reviewing its plan. This operation never edits external source trees.
+
 Always dry-run first:
 
 ```powershell

@@ -19,7 +19,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     try {
       const target = new URL(value), api = new URL(backend);
       const flowId = target.searchParams.get('flow_id');
-      const provider = /^\/api\/plugins\/(github|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|vercel|clickup|hubspot|asana|swiggy|zomato|district)\/oauth\/open$/.exec(target.pathname)?.[1];
+      const provider = /^\/api\/plugins\/(github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|vercel|clickup|hubspot|asana|swiggy|zomato|district)\/oauth\/open$/.exec(target.pathname)?.[1];
       return target.origin === api.origin && ['127.0.0.1','localhost'].includes(target.hostname) &&
         !target.username && !target.password && !target.hash && provider && target.searchParams.getAll('flow_id').length===1 &&
         [...target.searchParams.keys()].every(key=>key==='flow_id') && /^[A-Za-z0-9_-]{20,100}$/.test(flowId || '') ? {provider,flowId} : null;
@@ -37,7 +37,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     const previous = providerAuthWindows.get(key);
     if (previous && !previous.isDestroyed()) {previous.show(); previous.focus(); return;}
     const auth = new BrowserWindow({parent:owner, width:680, height:780, minWidth:480, minHeight:500,
-      title:'Sign in to '+({github:'GitHub',slack:'Slack',airtable:'Airtable',notion:'Notion',firecrawl:'Firecrawl',apify:'Apify',exa:'Exa',tavily:'Tavily',supabase:'Supabase',vercel:'Vercel',clickup:'ClickUp',hubspot:'HubSpot',asana:'Asana',swiggy:'Swiggy',zomato:'Zomato',district:'District'})[provider], autoHideMenuBar:true, show:false,
+      title:'Sign in to '+({github:'GitHub',linear:'Linear',slack:'Slack',airtable:'Airtable',notion:'Notion',firecrawl:'Firecrawl',apify:'Apify',exa:'Exa',tavily:'Tavily',supabase:'Supabase',vercel:'Vercel',clickup:'ClickUp',hubspot:'HubSpot',asana:'Asana',swiggy:'Swiggy',zomato:'Zomato',district:'District'})[provider], autoHideMenuBar:true, show:false,
       webPreferences:{contextIsolation:true, sandbox:true, nodeIntegration:false, webSecurity:true, partition:'vellum-'+provider+'-oauth'}});
     providerAuthWindows.set(key,auth);
     // This window is deliberately outside `windows`/`known`: provider pages get
@@ -67,7 +67,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
         const page=new URL(auth.webContents.getURL());
         if(!providerLoopback(page)||page.pathname!==`/api/plugins/${provider}/oauth/return`||page.searchParams.get('flow_id')!==flowId)return;
         const statusUrl=new URL(`/api/plugins/${provider}/oauth/status`,backend);statusUrl.searchParams.set('flow_id',flowId);
-        const response=await fetch(statusUrl,{headers:{Origin:new URL(workspace).origin,'X-Vellum-Accounts':'1'},signal:AbortSignal.timeout(5000)});
+        const response=await fetch(statusUrl,{headers:{Origin:new URL(workspace).origin,'X-Vellum-Accounts':'1',...(provider==='linear'?{'X-Vellum-Linear':'1'}:{})},signal:AbortSignal.timeout(5000)});
         if(!response.ok)return;
         const result=await response.json();
         if(['connected','failed','cancelled'].includes(result.status)&&!auth.isDestroyed())auth.close();

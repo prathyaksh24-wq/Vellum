@@ -14,6 +14,11 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Reuse one plugin manifest snapshot per action catalog response to avoid repeated discovery while Music loads.
 - Handle truncated WAV input as invalid audio, and decouple Whisper worker cleanup and optional CUDA lookup from the conversational voice installation.
 
+### Fixed
+
+- Remove display-only Codex app references and unreviewed host-only plugin imports from Vellum's default catalog, retaining Matt Pocock and OpenAI instruction bundles. Add an explicit, recoverable legacy-skill cleanup command that protects every configured agent's skill dependencies.
+- Add working Brave Search and Context7 key setup through the existing OS credential store, App Actions and deferred MCP runtime. Native search/documentation tools share the managed credential and respect disable/disconnect state.
+- Fix Linear popup opening, continuation, exact-flow cancellation and return-to-app behavior; restore stored OAuth expiration, preserve rotated credentials during verification, and use bounded Windows credential records with a clear reconnect state.
 
 - Add 15 original DVK Lab motion backgrounds to Appearance, with locally bundled shaders/assets, device-local selection, source-faithful procedural and ASCII rendering, and canvas/GPU lifecycle cleanup.
 

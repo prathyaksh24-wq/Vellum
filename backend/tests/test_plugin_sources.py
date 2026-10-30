@@ -76,3 +76,20 @@ def test_loose_skill_bundle_exposes_only_named_installed_skills(tmp_path: Path):
 
     assert source.discover()[0].id == "matt"
     assert source.skill_roots() == {tmp_path / "tdd": "matt"}
+
+
+def test_reviewed_skill_import_does_not_advertise_codex_host_apps_or_tools(tmp_path):
+    root = tmp_path / 'developers'
+    (root / '.codex-plugin').mkdir(parents=True)
+    (root / 'skills' / 'agents').mkdir(parents=True)
+    (root / 'skills' / 'agents' / 'SKILL.md').write_text('---\nname: agents\ndescription: Build agents\n---\nUse the SDK.')
+    (root / '.apps.json').write_text(json.dumps({'apps': {'host-app': {'id': 'codex-only'}}}))
+    (root / '.mcp.json').write_text(json.dumps({'mcpServers': {'host': {'command': 'host-only-command'}}}))
+    (root / '.codex-plugin' / 'plugin.json').write_text(json.dumps({
+        'name': 'openai-developers', 'skills': './skills', 'apps': './.apps.json', 'mcpServers': './.mcp.json'}))
+    records = CodexPluginSource([tmp_path], skill_only_ids={'openai-developers'}).discover()
+    assert len(records) == 1
+    assert records[0].skills_root == root / 'skills'
+    assert records[0].apps == [] and records[0].mcp_connectors == []
+    assert records[0].capabilities == ['Skills']
+    assert CodexPluginSource([tmp_path], skill_only_ids={'other'}).discover() == []

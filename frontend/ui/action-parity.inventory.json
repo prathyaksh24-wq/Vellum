@@ -150,8 +150,8 @@
       "sha256": "42e0e4cbd918d5eb8538c70fa2ca8a3167766bf6635a7e2e751ea359d1bde0d2"
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
-      "count": 123,
-      "sha256": "80151f31e28f978b7daa4e46aea86976bd380ff16cc384407f0355f1b1c0ae4b"
+      "count": 127,
+      "sha256": "c578d962c0c86b3ba3cb7d1cb20b423b7ca9b1d5aafed117c40fac237aaca5f6"
     },
     "design/Velllum/uploads/components/local-music.jsx": {
       "count": 18,
@@ -1960,6 +1960,78 @@
       }
     },
     {
+      "surface": "brave.connection",
+      "name": "connect",
+      "actionId": "brave.connection.connect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "action_id:p.id+'.connection.connect'"
+      }
+    },
+    {
+      "surface": "brave.connection",
+      "name": "use_configured",
+      "actionId": "brave.connection.use_configured",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "p.id+'.connection.use_configured'"
+      }
+    },
+    {
+      "surface": "brave.connection",
+      "name": "verify",
+      "actionId": "brave.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "p.id+'.connection.verify'"
+      }
+    },
+    {
+      "surface": "brave.connection",
+      "name": "disconnect",
+      "actionId": "brave.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "p.id+'.connection.disconnect'"
+      }
+    },
+    {
+      "surface": "context7.connection",
+      "name": "connect",
+      "actionId": "context7.connection.connect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "action_id:p.id+'.connection.connect'"
+      }
+    },
+    {
+      "surface": "context7.connection",
+      "name": "use_configured",
+      "actionId": "context7.connection.use_configured",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "p.id+'.connection.use_configured'"
+      }
+    },
+    {
+      "surface": "context7.connection",
+      "name": "verify",
+      "actionId": "context7.connection.verify",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "p.id+'.connection.verify'"
+      }
+    },
+    {
+      "surface": "context7.connection",
+      "name": "disconnect",
+      "actionId": "context7.connection.disconnect",
+      "probe": {
+        "path": "design/Velllum/uploads/components/plugin-workspace.jsx",
+        "text": "p.id+'.connection.disconnect'"
+      }
+    },
+    {
       "surface": "Local music",
       "name": "import and match selected audio files",
       "actionId": "local_music.file",
@@ -2113,6 +2185,10 @@
     {
       "scope": "Discord bot authorization navigation and lazy workspace disclosure",
       "reason": "Install bot reads the backend-generated Discord authorization URL and opens provider consent. Expanding the existing workspace authorizes its reads; writes retain its existing operation reviews and backend policy."
+    },
+    {
+      "scope": "Selected connector authorization-window continuation",
+      "reason": "Open the selected provider consent destination or its exact local OAuth-window route. Navigation grants no account authorization; provider consent, state validation and typed flow cancellation remain enforced."
     },
     {
       "scope": "Music handoff routes, source selection, accent previews, queue and lyrics tabs, read refresh, explicit metadata export and chat drafts",

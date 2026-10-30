@@ -496,7 +496,8 @@ def _default_sources() -> list[Any]:
             cache / "openai-curated-remote",
             cache / "openai-curated",
             cache / "openai-bundled",
-        ]
+        ],
+        skill_only_ids={"openai-developers"},
     )
     matt_source = LooseSkillBundleSource(
         plugin_id="matt-pocock-engineering",

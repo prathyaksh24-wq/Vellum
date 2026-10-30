@@ -163,6 +163,9 @@ from agent.plugins.search_connections import search_settings
 from agent.plugins.serpapi_connection import serpapi_plugin_status, SERVER as SERPAPI_OFFICIAL_MCP_URL
 from agent.plugins.serpapi_controls import serpapi_contribution
 from agent.plugins.serpapi_api import router as serpapi_router
+from agent.plugins.keyed_mcp import keyed_mcp_status
+from agent.plugins.keyed_mcp_controls import keyed_mcp_contribution
+from agent.plugins.keyed_mcp_api import router as keyed_mcp_router
 from agent.plugins.asana_connection import asana_plugin_status
 from agent.plugins.asana_controls import asana_contribution
 from agent.plugins.asana_api import router as asana_router, oauth_router as asana_oauth_router
@@ -274,6 +277,8 @@ _app_action_runtime.register_plugin_contribution(airtable_contribution())
 _app_action_runtime.register_plugin_contribution(notion_contribution())
 _app_action_runtime.register_plugin_contribution(apify_contribution())
 _app_action_runtime.register_plugin_contribution(serpapi_contribution())
+_app_action_runtime.register_plugin_contribution(keyed_mcp_contribution('brave'))
+_app_action_runtime.register_plugin_contribution(keyed_mcp_contribution('context7'))
 _app_action_runtime.register_plugin_contribution(swiggy_contribution())
 _app_action_runtime.register_plugin_contribution(zomato_contribution())
 _app_action_runtime.register_plugin_contribution(district_contribution())
@@ -6809,9 +6814,9 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
     ))
     servers.append(_entry(
         "brave",
-        configured=bool(settings.brave_api_key) and settings.brave_base_url.startswith("http"),
-        url_or_cmd=settings.brave_base_url,
-        notes="Private index web search provider; third in web_search fallback chain; logs redacted search metadata.",
+        configured=keyed_mcp_status('brave')["configured"],
+        url_or_cmd="npx -y @brave/brave-search-mcp-server@2.1.4 --transport stdio",
+        notes="Official Brave Search MCP; add a key in Plugins. Native web_search shares the saved key and selected provider preference.",
     ))
     servers.append(_entry(
         "tavily", configured=tavily_plugin_status()["configured"], url_or_cmd=TAVILY_OFFICIAL_MCP_URL,
@@ -6866,9 +6871,9 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
     ))
     servers.append(_entry(
         "context7",
-        configured=settings.context7_mcp_url.startswith("http"),
+        configured=keyed_mcp_status('context7')["configured"],
         url_or_cmd=settings.context7_mcp_url,
-        notes="Library docs lookup; CONTEXT7_API_KEY optional (anonymous works).",
+        notes="Official Context7 MCP; resolve libraries and query current documentation. Verify the configured key or add one in Plugins.",
     ))
     servers.append(_entry(
         "gitmcp",
@@ -6943,6 +6948,8 @@ def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, An
         notion_plugin_status(),
         apify_plugin_status(),
         serpapi_plugin_status(),
+        keyed_mcp_status('brave'),
+        keyed_mcp_status('context7'),
         asana_plugin_status(),
         hubspot_plugin_status(),
         clickup_plugin_status(),
@@ -7275,6 +7282,7 @@ router.include_router(notion_oauth_router)
 router.include_router(apify_router)
 router.include_router(apify_oauth_router)
 router.include_router(serpapi_router)
+router.include_router(keyed_mcp_router)
 router.include_router(asana_router)
 router.include_router(hubspot_router)
 router.include_router(asana_oauth_router)

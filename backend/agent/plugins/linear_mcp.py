@@ -15,7 +15,7 @@ from langchain_core.tools import StructuredTool
 from agent.contracts.linear import LinearMcpOperation, LinearMcpTool, LinearActionPreview, LinearReviewField
 from agent.mcp.plugin_approvals import PluginMcpOperation
 from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError, _privacy_safe_arguments
-from agent.plugins.linear import LinearError, linear_service, scrub
+from agent.plugins.linear import LinearError, linear_service, scrub, connection_failure, same_authorization
 from agent.plugins.registry import get_plugin_registry
 from agent.plugins.credential_binding import credential_digest
 from agent.tools.plugin_mcp import _run_async
@@ -35,8 +35,8 @@ def _digest(value):
 
 def _run(operation):
     try:return _run_async(asyncio.wait_for(operation,timeout=45))
-    except Exception:
-        raise LinearError("Linear MCP could not complete this request. Verify the connection and check permissions. Check Linear before retrying a write.") from None
+    except Exception as exc:
+        raise connection_failure(exc) from None
 
 
 def _validate(tool, arguments):
@@ -92,9 +92,10 @@ class LinearMcpAdapter:
         return tool
 
     def catalog(self):
-        token=self.service._require()["token"]
+        connection=self.service._require()
         tools=_run(self.runtime.list_tools("linear","linear"))
-        if self.service._require()["token"] != token:
+        current=self.service._require()
+        if not same_authorization(connection,current):
             raise LinearError("The Linear connection changed. Refresh its tools again.")
         if len(tools)>500:
             raise LinearError("Linear returned too many MCP tools.")

@@ -74,6 +74,9 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
     runtime.register_plugin_contribution(district_contribution())
     from agent.plugins.local_music_controls import local_music_contribution
     runtime.register_plugin_contribution(local_music_contribution())
+    from agent.plugins.keyed_mcp_controls import keyed_mcp_contribution
+    runtime.register_plugin_contribution(keyed_mcp_contribution('brave'))
+    runtime.register_plugin_contribution(keyed_mcp_contribution('context7'))
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

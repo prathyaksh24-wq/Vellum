@@ -2,7 +2,7 @@
 
 ## Scope and checkpoint
 
-The scoped branch starts from main at db399f5c4f0b287a7aee9cc1d5bdfcd1b44273e6. Music PRs #216, #219 and #225 and the original local Whisper dictation PR #226 are already merged. Repository draft #235 covers unrelated connector cleanup and is excluded. Only Music, newer dictation worker/audio fixes and the catalog-loading dependency are projected from the shared checkout. Unrelated work remains in that checkout.
+The scoped branch starts from main at db399f5c4f0b287a7aee9cc1d5bdfcd1b44273e6. Music PRs #216, #219 and #225 and the original local Whisper dictation PR #226 are already merged. PR #235 covers unrelated connector cleanup; it merged while this draft was being published. Main at 618cfa2 is merged into this branch to resolve shared changelog and parity-registration conflicts. Those existing main changes are not part of this PR diff. Only Music, newer dictation worker/audio fixes and the catalog-loading dependency are projected from the shared checkout. Unrelated work remains in that checkout.
 
 ## Verification boundary
 
