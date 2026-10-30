@@ -8,6 +8,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Fixed
 
+- Include the typed notification change-event contract with its SSE endpoint so backend imports and test collection succeed. Pin the YouTube relay tooling's transitive Undici dependency to the patched 7.30.1 release without disabling dependency review.
+
 - Remove display-only Codex app references and unreviewed host-only plugin imports from Vellum's default catalog, retaining Matt Pocock and OpenAI instruction bundles. Add an explicit, recoverable legacy-skill cleanup command that protects every configured agent's skill dependencies.
 - Add working Brave Search and Context7 key setup through the existing OS credential store, App Actions and deferred MCP runtime. Native search/documentation tools share the managed credential and respect disable/disconnect state.
 - Fix Linear popup opening, continuation, exact-flow cancellation and return-to-app behavior; restore stored OAuth expiration, preserve rotated credentials during verification, and use bounded Windows credential records with a clear reconnect state.
