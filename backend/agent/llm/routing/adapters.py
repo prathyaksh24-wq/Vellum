@@ -70,8 +70,16 @@ def classify_provider_exception(exc: BaseException) -> ProviderFailure:
         kind = FailureKind.timeout
         status = None
     elif isinstance(exc, DisclosureBlocked):
-        kind = FailureKind.invalid_request
-        status = None
+        reasons = {
+            'external disclosure requires scoped approval':'Cloud processing needs your approval in Privacy settings.',
+            'sensitive content is blocked from external disclosure':'Cloud processing was blocked because the context contains protected identifiers. Use a local model or remove that sensitive context.',
+            'cloud disclosure is disabled for this task':'Cloud processing is disabled for this task. Use a local model or review its privacy settings.',
+            'This specialist profile permits local inference only':'This agent is configured for local inference. Select a local model for this task.',
+            'external model is not approved':'This model is outside the reviewed cloud model list.',
+            'attachment disclosure is not authorized':'This attachment is not approved for cloud processing.',
+        }
+        return ProviderFailure(kind=FailureKind.invalid_request,
+            summary=reasons.get(str(exc), "Cloud processing was blocked by Vellum's privacy settings."))
     elif isinstance(exc, httpx.NetworkError):
         kind = FailureKind.network
         status = None

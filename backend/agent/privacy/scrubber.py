@@ -110,7 +110,8 @@ class PrivacyScrubber:
         (
             "GOVERNMENT_ID",
             re.compile(
-                r"\b(?:passport|driver'?s license|aadhaar|pan|ssn|social security|tax id|employee id|account(?: number)?)\b\s*(?:[:#-]\s*|\b(?:number|id)\b\s*[:#-]?\s*|(?=[A-Z0-9-]*\d))[A-Z0-9-]{4,}\b",
+                r"\b(?:passport|driver'?s license|aadhaar|pan|ssn|social security|tax id|employee id)\b\s*(?:[:#-]\s*|\b(?:number|id)\b\s*[:#-]?\s*|(?=[A-Z0-9-]*\d))[A-Z0-9-]{4,}\b"
+                r"|\baccount(?:\s+(?:number|id))?\b\s*(?:[:#-]\s*)?(?=[A-Z0-9-]*\d)[A-Z0-9-]{4,}\b",
                 re.I,
             ),
             0.9,

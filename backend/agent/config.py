@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     # OpenRouter and hit api.openai.com directly. Privacy contract differs:
     # the vendor's own data-retention policy applies, not OpenRouter's ZDR.
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, alias='ANTHROPIC_API_KEY', repr=False)
+    google_api_key: str | None = Field(default=None, alias='GOOGLE_API_KEY', repr=False)
+    kimi_api_key: str | None = Field(default=None, alias='KIMI_API_KEY', repr=False)
+    groq_api_key: str | None = Field(default=None, alias='GROQ_API_KEY', repr=False)
+    xai_api_key: str | None = Field(default=None, alias='XAI_API_KEY', repr=False)
+    opencode_api_key: str | None = Field(default=None, alias='OPENCODE_API_KEY', repr=False)
+    meta_api_key: str | None = Field(default=None, alias='MODEL_API_KEY', repr=False)
     openai_base_url: str = Field(
         default="https://api.openai.com/v1",
         alias="OPENAI_BASE_URL",
@@ -75,6 +82,7 @@ class Settings(BaseSettings):
     context_recent_turns: int = Field(default=4, ge=1, le=20, alias="CONTEXT_RECENT_TURNS")
     ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
+    model_picker_provider: Literal['ollama', 'openrouter', 'openai'] | None = Field(default=None, alias='MODEL_PICKER_PROVIDER')
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
     fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")
     llm_routing_db_path: Path = Field(

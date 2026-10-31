@@ -56,3 +56,9 @@
 .bs-cursor-options button:hover:not(:disabled){background:var(--hover)}
 .bs-cursor-options button:disabled{opacity:.5;cursor:default}
 .bs-hotspot{width:60px!important}.bs-help a{color:var(--txt);text-underline-offset:3px}
+.browser-settings .bs-choice{max-width:220px;--composer-row-bg:var(--bg-hover)}
+.browser-settings .bs-choice .v-select-trigger{min-height:36px}
+.browser-settings .bs-choice .v-select-option{min-height:34px}
+.browser-settings .bs-choice.shared-layout .v-select-option:hover,.browser-settings .bs-choice.shared-layout .v-select-option.active,.browser-settings .bs-choice.shared-layout .v-select-option:focus-visible{background:transparent}
+.browser-settings .bs-group:has(.v-select.open){overflow:visible;position:relative;z-index:5}
+.browser-settings .bs-control:has(.v-select.open){position:relative;z-index:6}

@@ -161,6 +161,29 @@ class DelegationRuntime:
         self,
         request: DelegationRequest,
     ) -> DelegationRunResult:
+        from agent.observability.activity import activity_parent, emit_activity
+        request = replace(request, task_id=request.task_id or str(uuid4()))
+        item_id = 'delegation-' + request.task_id
+        emit_activity('sub_agent_started', request.agent_id, item_id=item_id,
+                      label=f'Calling {request.agent_id}', detail=request.task)
+        try:
+            with activity_parent(item_id):
+                result = self._delegate(request)
+        except Exception as exc:
+            emit_activity('sub_agent_completed', request.agent_id, item_id=item_id,
+                          label=f'{request.agent_id} failed', status='failed', output=exc.__class__.__name__)
+            raise
+        status = {'error':'failed', 'blocked':'blocked', 'needs_fetch':'waiting'}.get(result.response.status, 'completed')
+        emit_activity('sub_agent_completed', request.agent_id, item_id=item_id,
+                      label=f'{request.agent_id} finished', status=status,
+                      output=result.response.summary, cache_status=result.cache_status,
+                      result_status=result.response.status, run_id=result.run_id)
+        return result
+
+    def _delegate(
+        self,
+        request: DelegationRequest,
+    ) -> DelegationRunResult:
         started = self._utc_now()
         binding = self.agent_catalog.resolve(request.agent_id)
         profile = binding.profile
@@ -629,18 +652,6 @@ class DelegationRuntime:
             approval = approved.fingerprint()
             approval_key = str(action_request["approval_id"])
         source_egress = profile.source_egress
-        if profile.id == "BooksAgent" and book_discovery is None and action_request is None:
-            from agent.llm.providers import get_provider_registry
-            from agent.llm.routing.models import provider_for_model
-            model_id = profile.model or get_provider_registry().current_model().id
-            if provider_for_model(model_id) == "ollama":
-                source_egress = "local"
-            elif source_egress != "external":
-                return _runtime_response(
-                    profile=profile, status="blocked",
-                    summary="Book processing is local only. Select a local model before asking about Book content.",
-                    analysis="book_external_processing_not_approved",
-                )
         with profile_policy(
             profile_id=profile.id,
             user_id=user_id,

@@ -20,6 +20,7 @@ from typing import Any, Literal
 import httpx
 
 from agent.config import get_settings
+from agent.contracts.model_providers import ProviderConnection
 
 _REQUEST_MODEL: ContextVar[str | None] = ContextVar("vellum_request_model", default=None)
 
@@ -67,7 +68,6 @@ _CATALOG: tuple[ModelEntry, ...] = (
     ModelEntry("minimax/minimax-m2.7", "MiniMax M2.7", "minimax", 204_800, "flagship", True),
     # ---- Cloud (closed-weights, OpenRouter-routed) ----
     ModelEntry("anthropic/claude-opus-5", "Claude Opus 5", "anthropic", 1_000_000, "flagship", False),
-    ModelEntry("anthropic/claude-opus-5-fast", "Claude Opus 5 (Fast)", "anthropic", 1_000_000, "fast", False),
     ModelEntry("anthropic/claude-opus-4.7", "Claude Opus 4.7", "anthropic", 1_000_000, "flagship", False),
     ModelEntry("anthropic/claude-opus-4.6", "Claude Opus 4.6", "anthropic", 1_000_000, "flagship", False),
     ModelEntry("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5", "anthropic", 1_000_000, "flagship", False),
@@ -98,6 +98,7 @@ _GROUPS: tuple[ProviderGroup, ...] = (
 )
 
 _MODEL_ALIASES: dict[str, str] = {
+    "anthropic/claude-opus-5-fast": "anthropic/claude-opus-5",
     # Legacy picker IDs from older static uploads. Keep accepting them at the
     # backend boundary so stale clients do not break the active model switch.
     "deepseek/deepseek-chat": "deepseek/deepseek-v4-pro",
@@ -274,7 +275,46 @@ class ProviderRegistry:
                 open_weights=True,
             )
         self._active: ModelEntry = initial
+        self._picker_provider: str | None = getattr(settings, 'model_picker_provider', None)
         self._temperature: float = DEFAULT_TEMPERATURE
+
+    def picker_provider(self) -> str:
+        """The selected model source, distinct from a cloud model's vendor."""
+        if self._picker_provider is not None:
+            return self._picker_provider
+        if self._active.id.startswith('ollama/'):
+            return 'ollama'
+        keys = configured_provider_keys()
+        return 'openrouter' if keys.get('openrouter') else 'openai'
+
+    def list_picker_models(self, provider: str | None = None) -> list[ModelEntry]:
+        self.refresh_local_models()
+        source = provider or self.picker_provider()
+        return self._picker_entries(source)
+
+    def _picker_entries(self, source: str) -> list[ModelEntry]:
+        if source == 'ollama':
+            # Keep the user's chat model distinct from other installed workers.
+            return [entry for entry in self._local_models if entry.id.casefold() == 'ollama/gemma4:12b' and _is_chat_model(entry)]
+        keys = configured_provider_keys()
+        if not keys.get(source):
+            return []
+        if source == 'openai':
+            return [entry for entry in _CATALOG if entry.provider == 'openai']
+        if source == 'openrouter':
+            return [entry for entry in available_models(self._local_models) if entry.provider != 'ollama']
+        return []
+
+    def select_picker_provider(self, provider: str) -> ModelEntry:
+        if provider not in {'ollama', 'openrouter', 'openai'}:
+            raise ValueError('Choose Local, OpenRouter, or OpenAI.')
+        models = self.list_picker_models(provider)
+        if not models:
+            raise ValueError('Gemma 4 12B is not available locally.' if provider == 'ollama' else f'Connect {provider} before choosing its models.')
+        selected = next((entry for entry in models if entry.id == self._active.id), models[0])
+        self._picker_provider = provider
+        self._active = selected
+        return selected
 
     def _catalog(self) -> tuple[ModelEntry, ...]:
         return (*self._local_models, *_CATALOG)
@@ -291,6 +331,12 @@ class ProviderRegistry:
         with self._lock:
             entry = self._find_by_id(model_id)
             return entry.context if entry is not None else None
+
+    def model_capabilities(self, model_id: str) -> tuple[str, ...]:
+        """Read discovered capabilities without adding network work to a turn."""
+        with self._lock:
+            entry = self._find_by_id(model_id)
+            return entry.capabilities if entry is not None else ()
 
     def refresh_local_models(self, *, force: bool = False) -> LocalModelInventory:
         now = time.monotonic()
@@ -323,7 +369,7 @@ class ProviderRegistry:
         return self.refresh_local_models()
 
     def _reconcile_active_locked(self) -> None:
-        visible = available_models(self._local_models)
+        visible = self._picker_entries(self._picker_provider) if self._picker_provider else available_models(self._local_models)
         by_id = {entry.id: entry for entry in visible}
         current = by_id.get(self._active.id)
         if current is not None:
@@ -415,6 +461,10 @@ class ProviderRegistry:
         if entry.id not in available_ids:
             raise ValueError(f"Model is not available: {model_id}")
         self._active = entry
+        if entry.provider == 'ollama':
+            self._picker_provider = 'ollama'
+        elif self._picker_provider != 'openai' or entry.provider != 'openai':
+            self._picker_provider = 'openrouter' if configured_provider_keys().get('openrouter') else 'openai'
         return entry
 
     def set_temperature(self, value: float) -> None:
@@ -461,12 +511,40 @@ def canonical_model_id(model_id: str) -> str:
     return _MODEL_ALIASES.get(normalized.casefold(), normalized)
 
 
+PROVIDER_KEY_ENV = {
+    'openrouter':'OPENROUTER_API_KEY', 'openai':'OPENAI_API_KEY',
+    'anthropic':'ANTHROPIC_API_KEY', 'google':'GOOGLE_API_KEY',
+    'kimi':'KIMI_API_KEY', 'groq':'GROQ_API_KEY', 'xai':'XAI_API_KEY',
+    'opencode':'OPENCODE_API_KEY', 'meta':'MODEL_API_KEY',
+}
+
+
+def provider_connections() -> list[ProviderConnection]:
+    """Public connection capabilities, without exposing stored credentials."""
+    definitions = (
+        ('ollama','Ollama','Gemma and your local models.','ollama-color','https://ollama.com/'),
+        ('openrouter','OpenRouter','One connection, many model providers.','openrouter-color','https://openrouter.ai/settings/keys'),
+        ('openai','OpenAI','GPT models with your OpenAI API key.','openai','https://platform.openai.com/api-keys'),
+        ('anthropic','Claude','Claude models from Anthropic.','claude-color','https://platform.claude.com/settings/keys'),
+        ('kimi','Kimi','Kimi models from Moonshot AI.','kimi-color','https://platform.moonshot.ai/console/api-keys'),
+        ('groq','Groq','Fast inference for open models.','groq-color','https://console.groq.com/keys'),
+        ('xai','Grok','Grok models from xAI.','grok','https://console.x.ai/'),
+        ('opencode','OpenCode','A shared API for models on OpenCode.','opencode','https://opencode.ai/auth'),
+        ('meta','Meta','Muse models from Meta.','meta-color','https://dev.meta.ai/'),
+        ('google','Google Gemini','Gemini models from Google.','gemini-color','https://aistudio.google.com/api-keys'),
+    )
+    configured = configured_provider_keys()
+    return [ProviderConnection(**{
+        'id':key, 'name':name, 'description':description,
+        'icon':f'provider-icons/{icon}.svg', 'key_url':url,
+        'requires_key':key != 'ollama', 'configured':configured.get(key,False),
+        'model_selection_supported':key in {'ollama','openrouter','openai'},
+    }) for key,name,description,icon,url in definitions]
+
+
 def configured_provider_keys() -> dict[str, bool]:
     settings = get_settings()
-    return {
-        "openrouter": bool(settings.openrouter_api_key),
-        "openai": bool(settings.openai_api_key),
-    }
+    return {provider:bool(getattr(settings,provider+'_api_key',None)) for provider in PROVIDER_KEY_ENV}
 
 
 def available_models(local_models: tuple[ModelEntry, ...] = ()) -> list[ModelEntry]:

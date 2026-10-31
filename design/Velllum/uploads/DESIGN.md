@@ -285,6 +285,24 @@ opacity: 0.03;
 
 ## Motion System
 
+### Interface polish and intentional signatures
+
+The Vellum-wide polish uses Lexend through `--font-ui` for application controls, the existing `--font-d` face for display headings, and `--font-m` for code and technical data. Use the established foreground, secondary and muted roles. Navigation follows a 36px desktop rhythm with 40–44px touch rows; metadata should generally start at 12px. Uppercase tracking, decorative hover scaling and heavy heading weights do not establish hierarchy.
+
+The landing page is an intentional exception to quiet chrome: retain its animated wordmark and changing text, per-character placeholder, and 24px curved input with its focused glow. Ordinary chat composers use a static placeholder and restrained border. The landing glow stops while hidden and respects reduced motion. Preserve selected backgrounds, supplied thinking orbs, shared menu/tooltip geometry, the pet and user content. Real artwork and source content provide the other visual detail.
+
+Profile popovers opened from an unpinned hover sidebar belong to that same hover region. Crossing into the popover keeps navigation usable; leaving both dismisses the menu and sidebar together. Pinned navigation retains normal click/outside-click behavior.
+
+This polish was guided by **Unslop by Damir Sokolovsky (@heydamir), CC BY 4.0**. Its general rules yield to explicit user choices and preserved supplied components.
+
+### Supplied composer and selector motion
+
+Music uses the same Vellum background rather than adding a dark canvas. Its sidebar keeps the Music title and provider chooser above primary navigation, lets only the playlist collection scroll, and anchors Sources/Settings below it. Playlist artwork supplies recognition without a separate card surface. The provider menu fits the chooser width, uses the shared row background and remains inside Music's stacking context so main navigation can cover it. Mobile drawers use the opaque active surface palette for readable controls over the page.
+
+The user-supplied Agent composer defines the command and model menu geometry. One local background moves between rows over 240ms with `cubic-bezier(.2,.8,.2,1)`. Browser settings opts into the same motion through VSelect. Other selectors keep their existing behavior.
+
+One tooltip morphs between explicitly opted-in controls over 260ms. Use the active surface and text palette; do not use a fixed white fill. Avoid automatic tooltips on labeled controls or every icon. The memory control has no tooltip. Disable these transitions for reduced motion. Keep command menus taller, showing about eight rows with a viewport height limit, as requested after the original integration.
+
 ### Easing
 
 One curve, used everywhere. The slow exhale.

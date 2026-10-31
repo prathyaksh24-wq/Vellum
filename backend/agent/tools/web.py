@@ -37,6 +37,11 @@ def web_search(query: str, limit: int = 5) -> str:
     Returns result metadata only (titles, URLs, descriptions) as JSON.
     Use web_extract_pages to read full content from specific URLs.
     """
+    return search_web(query, limit)
+
+
+def search_web(query: str, limit: int = 5, *, skip_providers: frozenset[str] = frozenset()) -> str:
+    """The same privacy/provider policy, including an already-failed provider."""
 
     from agent.personalization import tool_preference_error
     preference_error = tool_preference_error('web_search', 'web')
@@ -55,7 +60,7 @@ def web_search(query: str, limit: int = 5) -> str:
     except (TypeError, ValueError):
         limit = 5
 
-    providers = provider_chain("search")
+    providers = [provider for provider in provider_chain("search") if provider.name not in skip_providers]
     if not providers:
         from agent.tools.providers.registry import configured_backend
         selected = configured_backend('search')
@@ -136,19 +141,25 @@ def _try_parse_web_json(tool_output: str) -> dict | None:
     data = payload.get("data")
     if isinstance(data, dict) and isinstance(data.get("web"), list):
         return payload
+    if isinstance(payload.get('results'), list) and payload.get('success') is not False:
+        return payload
     return None
 
 
 def _sources_from_web_json(payload: dict) -> list[dict]:
     sources: list[dict] = []
-    for item in payload.get("data", {}).get("web", []):
+    extracted = isinstance(payload.get('results'), list)
+    items = payload['results'] if extracted else payload.get("data", {}).get("web", [])
+    for item in items:
+        if not isinstance(item, dict) or item.get('error') or extracted and not item.get('content'):
+            continue
         if not isinstance(item, dict):
             continue
         url = item.get("url", "")
         if not url:
             continue
         title = str(item.get("title", "") or "").strip()
-        snippet = str(item.get("description", "") or "").strip()
+        snippet = str(item.get("content" if extracted else "description", "") or "").strip()
         domain = urlparse(url).netloc
         if domain.startswith("www."):
             domain = domain[4:]
