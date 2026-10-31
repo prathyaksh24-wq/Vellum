@@ -171,10 +171,19 @@ class SportsAgent:
         provider = str(search_result.get("provider") or "") if isinstance(search_result, dict) else ""
         search_output, sources = self._normalize_search_result(search_result)
         if not sources:
+            failure = search_output[:400] if isinstance(search_result, dict) and search_result.get('success') is False else ''
+            if not failure and isinstance(search_result, str):
+                import json
+                try:
+                    failed_result = json.loads(search_result)
+                    if failed_result.get('success') is False:
+                        failure = str(failed_result.get('error') or '')[:400]
+                except (ValueError, TypeError, AttributeError):
+                    pass
             return SpecialistResponse(
                 agent=self.name,
                 status="error",
-                summary="SportsAgent could not find fresh web sources for this sports query.",
+                summary=failure or "SportsAgent could not find fresh web sources for this sports query.",
                 analysis=search_output[:500],
                 confidence=0.2,
             )
@@ -231,7 +240,14 @@ class SportsAgent:
                     "provider": "serpapi",
                 }
             except Exception:
-                pass
+                from agent.tools.providers.registry import configured_backend
+                if configured_backend('search'):
+                    return {'success': False, 'error': 'SerpAPI search failed.', 'provider': 'serpapi', 'sources': [],
+                            'text': 'SerpAPI could not complete this search. Check its API key, quota or account limits.'}
+                # Automatic mode may try another configured provider, but must
+                # not repeat the same failed SerpAPI request through web_search.
+                from agent.tools.web import search_web
+                return search_web(query, skip_providers=frozenset({'serpapi'}))
         return web_search.invoke({"query": query})
 
     def _search_query(self, query: str, league: str, source_budget: int) -> str:
@@ -266,7 +282,20 @@ class SportsAgent:
         return has_next and has_event
 
     def _normalize_search_result(self, search_result: WebSearchResult) -> tuple[str, list[dict[str, Any]]]:
+        import json
+        if isinstance(search_result, str) and search_result.lstrip().startswith('{'):
+            try:
+                parsed = json.loads(search_result)
+                if isinstance(parsed, dict):
+                    return self._normalize_search_result(parsed)
+            except ValueError:
+                # Never mistake a truncated transport envelope for prose.
+                return '', []
         if isinstance(search_result, dict):
+            if isinstance(search_result.get('data'), dict) and isinstance(search_result['data'].get('web'), list):
+                sources = self._dedupe_sources(extract_web_sources(json.dumps(search_result)))
+                excerpts = [self._clean_search_output(str(source.get('snippet') or source.get('title') or '')).replace('\n', ' ') for source in sources[:5]]
+                return '\n\n'.join('- '+excerpt for excerpt in excerpts if excerpt), sources
             text = str(search_result.get("text") or "")
             raw_facts = search_result.get("facts")
             facts = [str(item) for item in raw_facts if str(item).strip()] if isinstance(raw_facts, list) else []

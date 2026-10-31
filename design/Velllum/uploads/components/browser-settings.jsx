@@ -6,7 +6,7 @@
   const IMPORT_FIELDS = ['search_engine','searxng_url','suggestions_enabled','agent_enabled','agent_browsing','agent_downloads','agent_history','agent_screenshots','show_full_url','web_link_destination','local_link_destination','ask_download_location','expire_site_permissions'];
   IMPORT_FIELDS.push('agent_interactions','cursor_size');
   function Choice({label, value, options, onChange, disabled}) {
-    return <select aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}>{options.map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select>;
+    return <window.VellumUI.VSelect ariaLabel={label} value={String(value)} disabled={disabled} sharedLayout className="bs-choice" onValueChange={onChange} options={options.map(([id,name])=>({value:String(id),label:name}))}/>;
   }
   function Toggle({label, value, onChange, disabled}) {
     return <button type="button" className={'sw' + (value ? ' on' : '')} role="switch" aria-label={label} aria-checked={value} disabled={disabled} onClick={() => onChange(!value)}/>;

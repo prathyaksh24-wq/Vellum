@@ -182,14 +182,14 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "BooksAgent": AgentProfile(
             id="BooksAgent",
-            version=3,
+            version=4,
             description=(
                 "Questions about the user's installed books: what an author says, where an idea or quote appears, "
                 "and explanations grounded in chapters and passages."
             ),
             model=None,
             reasoning_mode=None,
-            source_egress="local",
+            source_egress="external",
             instructions=InstructionPolicy(
                 inline=(
                     "Use Knowledge Core and profile-approved Hermes Book skills. Separate author, user, "

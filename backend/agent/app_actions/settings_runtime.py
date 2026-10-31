@@ -6,8 +6,8 @@ from collections.abc import Callable
 from typing import Any
 from pydantic import ValidationError
 
-from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot, DevicePersonalizationSettings
-from agent.llm.providers import canonical_model_id
+from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot, DevicePersonalizationSettings, DeviceStreamingSettings
+from agent.llm.providers import canonical_model_id, PROVIDER_KEY_ENV
 from agent.llm.routing.models import CredentialStrategy, FallbackTarget, ProviderRoutingPolicy
 from agent.tools.registry import CapabilityAccess
 
@@ -95,9 +95,10 @@ _MEMORY_SETTING_KEYS = frozenset({
     "auto_archive_enabled",
     "use_archived_memories",
 })
-_CREDENTIAL_PROVIDERS = frozenset({"openrouter", "openai", "anthropic", "google"})
+_CREDENTIAL_PROVIDERS = frozenset(PROVIDER_KEY_ENV)
 _ROUTING_PROVIDERS = frozenset({"openrouter", "openai"})
 _DEVICE_SETTING_KEYS = frozenset({
+    'streaming',
     "background",
     "accent",
     "dock_position",
@@ -272,18 +273,27 @@ class SettingsRuntimeActionService:
 
     def _set_default_model(self, arguments: dict[str, Any]) -> dict[str, Any]:
         requested = str(arguments.get("model_id") or arguments.get("model") or "").strip()
-        if not requested:
+        provider = str(arguments.get('provider') or '').strip().casefold()
+        if not requested and not provider:
             raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "model is required")
         registry = self._provider_registry_provider()
         registry.refresh_local_models(force=True)
         previous = registry.current_model()
+        previous_provider = registry.picker_provider() if callable(getattr(registry, 'picker_provider', None)) else previous.provider
         try:
-            selected = registry.set_active(requested)
+            selected = registry.select_picker_provider(provider) if provider else registry.set_active(requested)
+            if provider and self._config_writer:
+                self._config_writer('MODEL_PICKER_PROVIDER', provider)
+                registry = self._provider_registry_provider()
+                selected = registry.select_picker_provider(provider)
         except ValueError as exc:
             raise SettingsRuntimeActionError("MODEL_UNAVAILABLE", str(exc), unavailable=True) from exc
+        except (OSError, RuntimeError) as exc:
+            raise SettingsRuntimeActionError('PROVIDER_SETTINGS_SAVE_FAILED', 'The model provider could not be saved.') from exc
         return {
-            "changed": previous.id != selected.id,
+            "changed": previous.id != selected.id or bool(provider and provider != previous_provider),
             "model": self._public_model(selected),
+            "model_provider": registry.picker_provider() if callable(getattr(registry, 'picker_provider', None)) else selected.provider,
             "previous_model_id": previous.id,
             "_target_kind": "application_setting",
             "_target_id": "default-model",
@@ -324,7 +334,7 @@ class SettingsRuntimeActionService:
         normalized = self._validate_device_patch(patch)
         next_values = dict(current)
         for key, value in normalized.items():
-            if key in {"personalization", 'profile'}:
+            if key in {"personalization", 'profile', 'streaming'}:
                 next_values[key] = {**dict(current.get(key) or {}), **value}
             else:
                 next_values[key] = value
@@ -364,7 +374,14 @@ class SettingsRuntimeActionService:
     def _validate_device_patch(patch: dict[str, Any]) -> dict[str, Any]:
         normalized: dict[str, Any] = {}
         for key, value in patch.items():
-            if key in {"dock_locked", "computer_use_preview"}:
+            if key == 'streaming':
+                try:
+                    if not isinstance(value,dict) or not value:
+                        raise ValueError('Expected streaming preferences.')
+                    normalized[key] = DeviceStreamingSettings.model_validate(value).model_dump(exclude_unset=True)
+                except ValueError as exc:
+                    raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS','Choose a supported streaming style, loading animation, citation mode and speed.') from exc
+            elif key in {"dock_locked", "computer_use_preview"}:
                 if not isinstance(value, bool):
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", f"{key} must be true or false")
                 normalized[key] = value
@@ -694,6 +711,19 @@ class SettingsRuntimeActionService:
                 "PROVIDER_CREDENTIAL_SAVE_FAILED",
                 "The provider credential could not be saved.",
             ) from exc
+        selection = {}
+        if provider in {'openai', 'openrouter'}:
+            registry = self._provider_registry_provider()
+            if callable(getattr(registry, 'select_picker_provider', None)):
+                try:
+                    selected = registry.select_picker_provider(provider)
+                    if self._config_writer:
+                        self._config_writer('MODEL_PICKER_PROVIDER', provider)
+                        registry = self._provider_registry_provider()
+                        selected = registry.select_picker_provider(provider)
+                    selection = {'model_provider':provider, 'model':self._public_model(selected)}
+                except (ValueError, OSError, RuntimeError):
+                    pass
         resumed = {}
         if self._provider_selection_resumer:
             try:
@@ -701,6 +731,7 @@ class SettingsRuntimeActionService:
             except (RuntimeError, ValueError, OSError):
                 resumed = {'message':'The key was saved, but the pending provider switch could not be completed yet. Retry selecting the provider.'}
         return {
+            **selection,
             **resumed,
             "changed": True,
             "provider": provider,
@@ -927,6 +958,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
     for name in ('warm','enthusiastic','headers','emoji'):
         personalization_schema['properties'][name]['enum'] = ['more','default','less']
     device_properties = {
+        'streaming': DeviceStreamingSettings.model_json_schema(),
         'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
         'accent':{'type':'string'},
         'dock_position':{'type':'string','enum':['auto','top','right','bottom','left']},
@@ -957,6 +989,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "computer_use_preview": {"type": "boolean"},
                 "personalization": personalization_schema,
                 'profile': device_properties['profile'],
+                'streaming': device_properties['streaming'],
             },
             "settings-device",
         ),
@@ -966,7 +999,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "Set the process default model without changing an existing chat override.",
             "process",
             "none",
-            {"model": {"type": "string"}, "model_id": {"type": "string"}},
+            {"model": {"type": "string"}, "model_id": {"type": "string"}, "provider": {"type":"string", "enum":["ollama","openrouter","openai"]}},
             "settings-model",
         ),
         (

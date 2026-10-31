@@ -107,6 +107,16 @@ class DevicePersonalizationSettings(BaseModel):
     emoji: Literal["default", "more", "less"] = "default"
 
 
+class DeviceStreamingSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    style: Literal['classic','ink'] = 'ink'
+    loading: Literal['cascade','swap','scramble'] = 'cascade'
+    speed: int = Field(default=12,ge=2,le=24)
+    pencil: bool = True
+    thinking: bool = True
+    citations: Literal['auto','always','hidden'] = 'auto'
+
+
 class DeviceSettingsValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -117,6 +127,7 @@ class DeviceSettingsValues(BaseModel):
     dock_position: str | None = None
     dock_locked: bool | None = None
     computer_use_preview: bool | None = None
+    streaming: DeviceStreamingSettings = Field(default_factory=DeviceStreamingSettings)
     personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)
 
 

@@ -32,7 +32,8 @@ class BooksAgent:
         if INSTALLED_BOOK_CONTEXT_START in text and INSTALLED_BOOK_CONTEXT_END in text:
             return True
         lowered = " ".join(text.casefold().split())
-        if re.search(r"\b(?:in|from|about)\s+(?:my|the)\s+(?:imported|uploaded|installed)\s+", lowered):
+        if (re.search(r"\b(?:in|from|about)\s+(?:my|the)\s+(?:imported|uploaded|installed)\s+", lowered)
+                or re.search(r"\b(?:quote|quotation|excerpt|passage)\b.*\b(?:from|in)\s+", lowered)):
             # A source explicitly named as an import may omit the word "book".
             # Confirm its title through the existing local Library metadata read;
             # never classify arbitrary imported files as books or invent a title.
@@ -46,8 +47,8 @@ class BooksAgent:
                 logger.debug("Installed Book title lookup unavailable during matching")
         return bool(
             self._inventory_kind(lowered)
-            or re.search(r"\b(?:about|from|in)\s+the\s+book\s+", lowered)
-            or re.search(r"\b(?:about|from|in)\s+(?:the\s+)?[\w][\w '\-]{1,100}\s+book\b", lowered)
+            or re.search(r"\b(?:about|from|in)\s+(?:(?:the|a|an|my)\s+)?books?\b", lowered)
+            or re.search(r"\b(?:about|from|in)\s+(?:the\s+)?[\w][\w '\-]{1,100}\s+books?\b", lowered)
             or
             re.search(r"\b(?:my|installed|uploaded|imported)\s+(?:book|books|library)\b", lowered)
             or re.search(r"\b(?:book|books)\s+(?:in|from)\s+my\s+library\b", lowered)
@@ -59,7 +60,9 @@ class BooksAgent:
         lowered = query.casefold()
         if re.search(r"\bskills?\b", lowered) and re.search(r"\b(?:book|books|epub|imported)\b", lowered):
             return "skills"
-        if re.search(r"\b(?:which|what|list|show)\b", lowered) and re.search(r"\b(?:books|library)\b", lowered) and re.search(r"\b(?:my|i|installed|imported|uploaded)\b", lowered):
+        if re.search(r"\b(?:which|what|list|show)\b", lowered) and re.search(r"\b(?:books|library)\b", lowered) and re.search(r"\b(?:my|i|installed|imported|uploaded|collection|user(?:'s)?)\b", lowered):
+            return "library"
+        if re.search(r"\b(?:what|which)\s+books\s+(?:do\s+)?(?:you|u|we)\s+have\b", lowered):
             return "library"
         return ""
 
@@ -173,6 +176,11 @@ class BooksAgent:
             and knowledge_policy.get("source_content") == "untrusted_evidence"
         )
         if evidence and self.synthesizer is not None and policy_valid:
+            from agent.observability.activity import emit_activity
+            from uuid import uuid4
+            synthesis_id = str(uuid4())
+            emit_activity('agent_work_started', 'books.synthesize', item_id=synthesis_id,
+                          label='Summarizing book passages', agent=self.name)
             try:
                 envelope = _validated_synthesis(
                     self.synthesizer(clean_query, evidence),
@@ -182,6 +190,12 @@ class BooksAgent:
                 activity.append(
                     {"name": "books.synthesize", "status": "completed", "count": len(envelope.claims)}
                 )
+                emit_activity('agent_work_completed', 'books.synthesize', item_id=synthesis_id,
+                              label='Summarized book passages', status='completed', agent=self.name)
+                for source in sources:
+                    source.claims = [claim for claim in envelope.claims
+                                     if claim.id in envelope.answer_claim_ids
+                                     and source.id in claim.evidence_ids]
                 confidence = (
                     sum(claim.evidence_confidence for claim in envelope.claims)
                     / len(envelope.claims)
@@ -202,6 +216,8 @@ class BooksAgent:
                     structured_payload={"books_agent": envelope.model_dump(mode="json")},
                 )
             except Exception:
+                emit_activity('agent_work_completed', 'books.synthesize', item_id=synthesis_id,
+                              label='Book summary failed', status='failed', agent=self.name)
                 logger.exception("BooksAgent synthesis failed.")
                 errors.append("books.synthesize")
                 activity.append({"name": "books.synthesize", "status": "error"})
@@ -263,6 +279,7 @@ class BooksAgent:
 
 def _safe_sources(evidence: list[dict[str, Any]], skills: list[dict[str, Any]]) -> list[SpecialistSource]:
     sources: list[SpecialistSource] = []
+    anchors = {anchor.id: anchor for anchor in _evidence_anchors(evidence)}
     for item in evidence[:8]:
         materialization_id = str(item.get("materialization_id") or "").strip()
         chunk_id = str(item.get("chunk_id") or "").strip()
@@ -274,6 +291,8 @@ def _safe_sources(evidence: list[dict[str, Any]], skills: list[dict[str, Any]]) 
                 title=str(item.get("title") or item.get("document_id") or "Installed Book"),
                 path_or_url=f"knowledge://books/{materialization_id}#{chunk_id}",
                 freshness="historical",
+                id=str(item.get("evidence_id") or ""),
+                evidence=anchors.get(str(item.get("evidence_id") or "")),
             )
         )
     for item in skills[:8]:

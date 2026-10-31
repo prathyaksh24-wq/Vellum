@@ -4,9 +4,9 @@
   function parseSseBlock(block) {
     var event = "message";
     var data = "";
-    block.split("\n").forEach(function (line) {
+    block.split(/\r?\n/).forEach(function (line) {
       if (line.indexOf("event:") === 0) event = line.slice(6).trim();
-      else if (line.indexOf("data:") === 0) data += line.slice(5).trim();
+      else if (line.indexOf("data:") === 0) data += (data ? "\n" : "") + line.slice(5).trimStart();
     });
     if (!data) return null;
     try { return { event: event, data: JSON.parse(data) }; }
@@ -45,7 +45,7 @@
     };
     if (known[clean]) return known[clean];
     return clean
-      .replace(/_/g, " ")
+      .replace(/[_:.]+/g, " ")
       .replace(/([a-z])([A-Z])/g, "$1 $2")
       .replace(/\bYoutube\b/g, "YouTube")
       .replace(/\bApi\b/g, "API")
@@ -53,6 +53,8 @@
   }
 
   function activityLabel(type, name, source) {
+    if (type === 'function_call_preparing') return 'Preparing ' + humanToolName(name || 'function');
+    if (type === 'function_call_prepared') return 'Prepared ' + humanToolName(name || 'function') + ' arguments';
     if (type === "thinking_started") return "";
     if (String(name || "").indexOf("agent_reach_x_") === 0) return "";
     if (type === "memory_retrieved") {
@@ -79,6 +81,7 @@
       if (String(name || "").endsWith("_agent")) return "Calling " + humanToolName(name);
       if (name === "search_my_notes") return "Searching your notes";
       if (name === "read_file") return "Reading a note";
+      if (name === "web_extract_pages") return "Reading web pages";
       if (name === "list_files") return "Browsing your vault";
       if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";
       if (name === "youtube_search") return "Searching YouTube";
@@ -92,7 +95,9 @@
     var source = activity.source || null;
     var type = activity.type || "activity";
     var name = activity.name || "";
-    var label = type === "thinking_started"
+    var label = ['failed','error','blocked','cancelled'].includes(activity.status)
+      ? (humanToolName(name || 'Action') + (activity.status === 'blocked' ? ' blocked' : activity.status === 'cancelled' ? ' stopped' : ' failed'))
+      : type === "thinking_started"
       ? "Thinking"
       : (activityLabel(type, name, source) || activity.label || "Agent activity");
     return {
@@ -104,264 +109,197 @@
       status: activity.status || "in_progress",
       source: source,
       metadata: activity.metadata || {},
-      at: activity.at || Date.now(),
+      at: activity.metadata?.occurred_at || activity.at || Date.now(),
     };
   }
 
-  async function stream(payload, handlers) {
-    var controller = new AbortController();
-    if (handlers && handlers.controller) handlers.controller(controller);
-    if (handlers && handlers.playbackRequest) await handlers.playbackRequest.ready;
+  async function stream(payload, handlers = {}) {
+    const controller = new AbortController();
+    if (handlers.controller) handlers.controller(controller);
+    if (handlers.playbackRequest) await handlers.playbackRequest.ready;
     if (controller.signal.aborted) throw new DOMException('Stopped.', 'AbortError');
-    var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
+    const options=client.jsonOptions("POST", payload, controller.signal);
+    options.headers={...options.headers,Accept:'text/event-stream'};
+    options.cache='no-store';
+    const response = await fetch(client.backendBase() + "/api/chat/stream", options);
     if (!response.ok || !response.body) {
-      var failure = new Error("Backend stream failed: HTTP " + response.status);
+      const failure = new Error("Backend stream failed: HTTP " + response.status);
       failure.vellumHttpStatus = response.status;
       throw failure;
     }
-    var reader = response.body.getReader();
-    var decoder = new TextDecoder();
-    var buffer = "";
-    var text = "";
-    var tools = [];
-    var sources = [];
-    var activity = [];
-    var firstTokenSeen = false;
-    var semanticSeen = false;
-    var completed = false;
-    var trace = {
-      status: "thinking",
-      startedAt: Date.now(),
-      completedAt: null,
-      elapsedSeconds: 0,
-      steps: [{ id: "thinking", type: "thinking", label: "Thinking", detail: "", status: "in_progress", at: Date.now() }],
-      sources: [],
-      tools: [],
-    };
-
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = '', text = '', sources = [], tools = [], activity = [];
+    let terminal = false, semanticText = false, semanticActivity = false, threadId = payload.thread_id;
+    const trace = {model:payload.model || '',status:'thinking', startedAt:Date.now(), completedAt:null, elapsedSeconds:0,
+      steps:[{id:'thinking',type:'thinking',label:'Thinking',status:'in_progress',at:Date.now()}], sources:[], tools:[]};
+    const ended = status => ['completed','complete','done','failed','error','cancelled','interrupted','blocked'].includes(status);
     function emitTrace(status) {
-      if (status) trace.status = status;
-      trace.elapsedSeconds = Math.max(0, Math.round(((trace.completedAt || Date.now()) - trace.startedAt) / 1000));
-      if (handlers.trace) {
-        handlers.trace({
-          status: trace.status,
-          startedAt: trace.startedAt,
-          completedAt: trace.completedAt,
-          elapsedSeconds: trace.elapsedSeconds,
-          steps: trace.steps.slice(),
-          sources: trace.sources.slice(),
-          tools: trace.tools.slice(),
-        });
-      }
+      if (status && !terminal) trace.status = status;
+      trace.elapsedSeconds = Math.max(0, ((trace.completedAt || Date.now()) - trace.startedAt) / 1000);
+      trace.sources = sources.slice(); trace.tools = tools.slice();
+      if (handlers.trace) handlers.trace({...trace, steps:trace.steps.map(item => ({...item})), sources:sources.slice(), tools:tools.slice()});
     }
-
-    function upsertStep(step) {
-      var next = Object.assign({ id: "step-" + trace.steps.length, type: "activity", detail: "", status: "running", at: Date.now() }, step || {});
-      if (!next.id) next.id = next.name ? "step-" + next.name : "step-" + trace.steps.length;
-      var key = next.id || next.name || next.label;
-      var index = trace.steps.findIndex(function (item) { return (item.id || item.name || item.label) === key; });
-      if (index >= 0) trace.steps[index] = Object.assign({}, trace.steps[index], next);
-      else trace.steps.push(next);
-    }
-
-    function addTool(name) {
-      if (name && tools.indexOf(name) < 0) tools.push(name);
-      if (name && trace.tools.indexOf(name) < 0) trace.tools.push(name);
+    function upsert(step) {
+      const id = step.id || ('activity-' + activity.length);
+      const index = activity.findIndex(item => item.id === id), old = index < 0 ? {} : activity[index];
+      const metadata = {...old.metadata, ...step.metadata};
+      const next = {...old, ...step, id, metadata};
+      if (old.type && !step.type) next.type = old.type;
+      if (old.label && !step.label) next.label = old.label;
+      if (old.detail && !step.detail) next.detail = old.detail;
+      next.at = old.at || step.at || Date.now(); next.updatedAt = step.at || Date.now();
+      if (!old.input && step.detail && !ended(step.status)) next.input = step.detail;
+      next.events = [...(old.events || [])];
+      const event = {type:step.type,status:step.status,label:step.label,detail:step.detail,at:step.at || Date.now()};
+      const last = next.events.at(-1);
+      if (!last || last.type !== event.type || last.status !== event.status || last.detail !== event.detail) next.events.push(event);
+      if (index < 0) activity.push(next); else activity[index] = next;
+      const ti = trace.steps.findIndex(item => item.id === id);
+      if (ti < 0) trace.steps.push(next); else trace.steps[ti] = next;
+      if (next.name && !tools.includes(next.name) && /tool|function|sub.?agent|memory/.test(next.type || '')) tools.push(next.name);
+      if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
+      return next;
     }
     function addSource(source) {
-      if (!source || !source.url) return;
-      if (!sources.some(function (item) { return item.url === source.url; })) sources.push(source);
-      if (!trace.sources.some(function (item) { return item.url === source.url; })) trace.sources.push(source);
-      upsertStep({
-        id: "source-" + source.url,
-        type: "source",
-        label: "Reading " + sourceLabel(source),
-        detail: source.title || source.snippet || source.url || "",
-        status: "completed",
-        source: source,
-      });
+      if (!source || !(source.url || source.id)) return;
+      const index = sources.findIndex(item => (item.id || item.url) === (source.id || source.url));
+      if (index < 0) sources.push(source); else sources[index] = {...sources[index],...source};
+      if (handlers.sources) handlers.sources(sources.slice());
     }
-
-    emitTrace("thinking");
-
-    while (true) {
-      var chunk = await reader.read();
-      if (chunk.done) break;
-      buffer += decoder.decode(chunk.value, { stream: true });
-      var sep;
-      while ((sep = buffer.indexOf("\n\n")) >= 0) {
-        var parsed = parseSseBlock(buffer.slice(0, sep));
-        buffer = buffer.slice(sep + 2);
-        if (!parsed) continue;
-        var ev = parsed.event;
-        var data = parsed.data;
-        if (ev === "app.action.requested") {
-          if (handlers.actionRequested) handlers.actionRequested(data.request || data, { turn_kind: data.turn_kind || "action" });
-          continue;
+    function delta(value) {
+      if (!value) return;
+      text += value; emitTrace('answering');
+      if (handlers.delta) handlers.delta(text, value);
+    }
+    function settle(status, message) {
+      trace.completedAt = Date.now(); trace.status = status; terminal = true;
+      trace.steps = trace.steps.map(item => ended(item.status) ? item : {...item,
+        status:status === 'done' && ['thinking','answer'].includes(item.type) ? 'completed' : 'interrupted'});
+      activity = activity.map(item => trace.steps.find(step => step.id === item.id) || item);
+      if (message) trace.error = message;
+      if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
+      emitTrace();
+    }
+    function fail(message) {
+      if (/request could not finish|response was interrupted|before completion/i.test(message) && activity.some(item=>['failed','error','blocked'].includes(item.status))) message=interruptedMessage();
+      settle('error', message);
+      if (handlers.error) handlers.error(message);
+    }
+    function interruptedMessage() {
+      const failed=activity.filter(item=>['failed','error','blocked'].includes(item.status)).at(-1);
+      if(failed) {
+        const evidence=[failed.name,failed.detail,failed.metadata?.output].map(value=>typeof value==='string'?value:JSON.stringify(value || '')).join(' ');
+        if(/serpapi/i.test(evidence))return 'SerpAPI search failed. Check its connection, quota or account limits.';
+        return humanToolName(failed.name || 'The tool')+' failed before the response could finish. Your partial answer is preserved.';
+      }
+      return 'The response stream was interrupted. Your partial answer is preserved. Try again.';
+    }
+    function receive(block) {
+      const parsed = parseSseBlock(block);
+      if (!parsed) return;
+      const ev = parsed.event, data = parsed.data;
+      // Receipts are independent of response rendering and retain their original ordering.
+      if (ev === 'app.action.requested') {
+        if (handlers.actionRequested) handlers.actionRequested(data.request || data, {turn_kind:data.turn_kind || 'action'});
+        return;
+      }
+      if (ev === 'app.action.receipt') {
+        if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data, {turn_kind:data.turn_kind || 'action'});
+        return;
+      }
+      if (terminal) return;
+      if ((ev === 'meta' || ev === 'response.created' || ev === 'response.in_progress') && data.thread_id) {
+        threadId = data.thread_id;
+        if (handlers.meta) handlers.meta({thread_id:threadId});
+      } else if (ev === 'agent.activity') {
+        semanticActivity = true;
+        const act = normalizeAgentActivity(data.activity || data);
+        if (!act) return;
+        if (act.type==='runtime_prepared' && act.metadata?.model)trace.model=act.metadata.model;
+        if (act.source) addSource(act.source);
+        // Answer deltas have their own channel; do not duplicate every token in the activity ledger.
+        if (act.type === 'final_answer_delta') {emitTrace('answering'); return;}
+        upsert(act);
+        emitTrace(act.type.startsWith('final_answer') ? 'answering' : act.type === 'thinking_started' ? 'thinking' : 'researching');
+      } else if (ev === 'response.output_item.added' || ev === 'response.output_item.done') {
+        const item = data.item || {};
+        if (item.type === 'source') {addSource(item.source); emitTrace(); return;}
+        const previous = activity.find(act => act.id === item.id);
+        const act = activityFromItem(item);
+        if (act) {
+          // Lifecycle + output-item aliases describe the same execution, never two rows.
+          upsert({...act, type:previous?.type || act.type, label:previous?.label || act.label,
+            status:ev.endsWith('.done') ? (item.status || 'completed') : (previous?.status || act.status || 'in_progress')});
+          emitTrace(text ? 'answering' : 'researching');
         }
-        if (ev === "app.action.receipt") {
-          if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data, { turn_kind: data.turn_kind || "action" });
-          continue;
-        }
-        if (ev === "agent.activity") {
-          semanticSeen = true;
-          var agentAct = normalizeAgentActivity(data.activity || data);
-          if (!agentAct) continue;
-          var existingIndex = activity.findIndex(function (item) { return item.id && item.id === agentAct.id; });
-          if (existingIndex >= 0) activity[existingIndex] = Object.assign({}, activity[existingIndex], agentAct);
-          else activity.push(agentAct);
-          if (agentAct.name) addTool(agentAct.name);
-          if (agentAct.source) {
-            addSource(agentAct.source);
-            if (handlers.sources) handlers.sources(sources.slice());
-          }
-          upsertStep(agentAct);
-          if (agentAct.type === "thinking_started") emitTrace("thinking");
-          else if (agentAct.type === "final_answer_started" || agentAct.type === "final_answer_delta") emitTrace("answering");
-          else if (agentAct.type === "final_answer_completed") emitTrace("done");
-          else emitTrace("researching");
-          if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-          continue;
-        }
-        if (ev.indexOf("response.") === 0 || ev === "error") {
-          semanticSeen = true;
-          if ((ev === "response.created" || ev === "response.in_progress") && data.thread_id && handlers.meta) {
-            handlers.meta({ thread_id: data.thread_id });
-            emitTrace("thinking");
-          }
-          else if (ev === "response.output_item.added") {
-            var item = data.item || {};
-            if (item.type === "source" && item.source) {
-              addSource(item.source);
-              if (handlers.sources) handlers.sources(sources.slice());
-              emitTrace("researching");
-            } else {
-              var act = activityFromItem(item);
-              if (act) {
-                activity.push(act);
-                if (item.name) addTool(item.name);
-                upsertStep(act);
-                if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-                emitTrace("researching");
-              }
-            }
-          } else if (ev === "response.output_text.delta") {
-            if (data.delta) {
-              if (!firstTokenSeen) {
-                firstTokenSeen = true;
-                upsertStep({ id: "answering", type: "answer", label: "Answering from gathered context", detail: "", status: "in_progress" });
-                emitTrace("answering");
-              }
-              text += data.delta;
-              if (handlers.delta) handlers.delta(text, data.delta);
-            }
-          } else if (ev === "response.function_call_arguments.delta") {
-            var fnItemId = data.item_id || "function";
-            var foundFn = false;
-            activity = activity.map(function (item) {
-              if (item.id === fnItemId) {
-                foundFn = true;
-                return Object.assign({}, item, { detail: ((item.detail || "") + (data.delta || "")).slice(-500), status: "in_progress" });
-              }
-              return item;
-            });
-            if (!foundFn) activity.push({ id: fnItemId, type: "tool_call", label: "Preparing function call", detail: data.delta || "", status: "in_progress" });
-            upsertStep({ id: fnItemId, type: "tool_call", label: "Preparing function call", detail: data.delta || "", status: "in_progress" });
-            if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-            emitTrace("researching");
-          } else if (ev === "response.function_call_arguments.done") {
-            var doneFnId = data.item_id || "function";
-            activity = activity.map(function (item) {
-              return item.id === doneFnId ? Object.assign({}, item, { detail: data.arguments || item.detail || "", status: "completed" }) : item;
-            });
-            upsertStep({ id: doneFnId, type: "tool_call", label: "Prepared function call", detail: data.arguments || "", status: "completed" });
-            if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-            emitTrace(trace.status);
-          } else if (ev === "response.completed") {
-            var finalResponse = data.response || {};
-            if (finalResponse.thread_id && handlers.meta) handlers.meta({ thread_id: finalResponse.thread_id });
-            text = finalResponse.output_text || text || "";
-            sources = finalResponse.sources || sources;
-            tools = finalResponse.tools || tools;
-            trace.sources = sources.slice();
-            trace.tools = tools.slice();
-            trace.completedAt = Date.now();
-            upsertStep({ id: "thinking", status: "completed" });
-            upsertStep({ id: "answering", status: "completed" });
-            completed = true;
-            emitTrace("done");
-            if (handlers.playbackRequest) handlers.playbackRequest.complete(finalResponse).catch(() => {});
-            if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: finalResponse.thread_id });
-          } else if (ev === "response.output_item.done") {
-            var doneItem = data.item || {};
-            activity = activity.map(function (item) {
-              return (item.id && doneItem.id && item.id === doneItem.id) || (item.name && doneItem.name && item.name === doneItem.name) ? Object.assign({}, item, { status: doneItem.status || "completed" }) : item;
-            });
-            upsertStep({ id: doneItem.id, name: doneItem.name, status: doneItem.status || "completed" });
-            if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-            emitTrace(trace.status);
-          } else if (ev === "error" && handlers.error) {
-            trace.completedAt = Date.now();
-            upsertStep({ id: "error", type: "error", label: "Stream error", detail: (data.error && (data.error.message || data.error)) || "Backend error", status: "failed" });
-            completed = true;
-            emitTrace("error");
-            handlers.error((data.error && (data.error.message || data.error)) || "Backend error");
-          }
-          continue;
-        }
-
-        if (ev === "meta" && data.thread_id && handlers.meta) handlers.meta({ thread_id: data.thread_id });
-        else if (ev === "activity" && !semanticSeen) {
-          var fallbackAct = { label: data.label || "Agent activity", detail: data.detail || "", status: "running" };
-          activity.push(fallbackAct);
-          upsertStep(fallbackAct);
-          if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-          emitTrace("researching");
-        } else if (ev === "tool" && !semanticSeen) {
-          addTool(data.name);
-          var fallbackTool = { label: "Used " + (data.name || "tool"), detail: "", name: data.name || "tool", status: "running" };
-          activity.push(fallbackTool);
-          upsertStep(fallbackTool);
-          if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
-          emitTrace("researching");
-        } else if (ev === "source" && !semanticSeen) {
-          addSource(data);
-          if (handlers.sources) handlers.sources(sources.slice());
-          emitTrace("researching");
-        } else if (ev === "token" && !semanticSeen && data.text) {
-          if (!firstTokenSeen) {
-            firstTokenSeen = true;
-            upsertStep({ id: "answering", type: "answer", label: "Answering from gathered context", detail: "", status: "in_progress" });
-            emitTrace("answering");
-          }
-          text += data.text;
-          if (handlers.delta) handlers.delta(text, data.text);
-        } else if (ev === "final" && !semanticSeen) {
-          if (data.thread_id && handlers.meta) handlers.meta({ thread_id: data.thread_id });
-          text = data.answer || text || "";
-          sources = data.sources || sources;
-          tools = data.tools || tools;
-          trace.sources = sources.slice();
-          trace.tools = tools.slice();
-          trace.completedAt = Date.now();
-          upsertStep({ id: "thinking", status: "completed" });
-          upsertStep({ id: "answering", status: "completed" });
-          completed = true;
-          emitTrace("done");
-          if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: data.thread_id });
-        }
+      } else if (ev === 'response.output_text.delta') {
+        semanticText = true; delta(data.delta);
+      } else if (ev === 'response.function_call_arguments.delta' || ev === 'response.function_call_arguments.done') {
+        const old = activity.find(item => item.id === data.item_id) || {};
+        const detail = ev.endsWith('.done') ? data.arguments || old.detail : (old.detail || '') + (data.delta || '');
+        upsert({...old, id:data.item_id, type:old.type || 'function_call', label:old.label || 'Preparing function call',
+          detail, input:detail, status:ev.endsWith('.done') ? 'completed' : 'in_progress'});
+        emitTrace();
+      } else if (ev === 'response.reasoning_text.delta' || ev === 'response.reasoning_text.done') {
+        const id=data.item_id || 'model-thinking',old=activity.find(item=>item.id===id),done=ev.endsWith('.done');
+        upsert({id,type:'model_reasoning',label:'Thought process',detail:done?(data.text || old?.detail || ''):(old?.detail || '')+(data.delta || ''),status:done?'completed':'in_progress'});emitTrace();
+      } else if (ev === 'response.reasoning_summary_text.delta') {
+        const id = data.item_id || 'reasoning-summary';
+        const old = activity.find(item => item.id === id);
+        upsert({id,type:'reasoning_summary',label:'Reasoning summary',detail:(old?.detail || '') + (data.delta || ''),status:'in_progress'});
+        emitTrace();
+      } else if (ev === 'response.reasoning_summary_text.done') {
+        const id = data.item_id || 'reasoning-summary', old = activity.find(item => item.id === id);
+        upsert({id,type:'reasoning_summary',label:'Reasoning summary',detail:data.text || old?.detail || '',status:'completed'}); emitTrace();
+      } else if (ev === 'response.completed' || (ev === 'final' && !semanticText)) {
+        const final = data.response || data;
+        threadId = final.thread_id || threadId;
+        text = final.output_text ?? final.answer ?? text;
+        sources = final.sources || sources; tools = final.tools || tools;
+        settle('done');
+        if (handlers.meta && threadId) handlers.meta({thread_id:threadId});
+        if (handlers.playbackRequest) handlers.playbackRequest.complete(final).catch(() => {});
+        if (handlers.done) handlers.done({text,sources,tools,activity,trace:{...trace},thread_id:threadId});
+      } else if (['error','response.failed','response.incomplete'].includes(ev)) {
+        fail(data.error?.message || data.error || data.response?.error?.message || 'The response was interrupted.');
+      } else if (ev === 'token' && !semanticText) delta(data.text);
+      else if (ev === 'source' && !semanticActivity) {addSource(data); emitTrace();}
+      else if (ev === 'activity' && !semanticActivity) {
+        upsert({type:'activity',label:data.label || 'Working',detail:data.detail || '',status:'in_progress'}); emitTrace('researching');
+      } else if (ev === 'tool' && !semanticActivity) {
+        upsert({id:'legacy-tool-' + activity.length,type:'tool_call',name:data.name,label:'Using ' + humanToolName(data.name),status:'in_progress'}); emitTrace('researching');
       }
     }
-    if (!completed && handlers.done) {
-      trace.completedAt = Date.now();
-      emitTrace("done");
-      handlers.done({ text: text || "No response.", sources: sources, tools: tools, activity: activity });
+    emitTrace();
+    try {
+      while (!terminal) {
+        const chunk = await reader.read();
+        buffer += chunk.done ? decoder.decode() : decoder.decode(chunk.value, {stream:true});
+        let separator;
+        while ((separator = /\r?\n\r?\n/.exec(buffer))) {
+          const block = buffer.slice(0, separator.index); buffer = buffer.slice(separator.index + separator[0].length);
+          receive(block);
+        }
+        if (chunk.done) {if (buffer.trim()) receive(buffer); break;}
+      }
+      if (!terminal) fail(interruptedMessage());
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        // Headers arrived: this is a response interruption, not an unreachable API.
+        error.vellumStreamInterrupted = true;
+        error.vellumDisplayMessage = interruptedMessage();
+      }
+      if (!terminal) settle(controller.signal.aborted ? 'cancelled' : 'error', error.vellumDisplayMessage || error.message);
+      throw error;
+    } finally {
+      await reader.cancel().catch(() => {}); reader.releaseLock();
     }
-    return { abort: function () { controller.abort(); } };
+    return {abort:() => controller.abort()};
   }
 
   function failureMessage(error) {
     if (error && error.vellumPlaybackError) return error.message;
+    if (error && error.vellumStreamInterrupted) return error.vellumDisplayMessage;
     if (error && error.vellumHttpStatus) return 'Vellum API returned HTTP ' + error.vellumHttpStatus + '. Try again shortly.';
     if (error && error.name === 'TypeError' && /fetch|network|load failed|terminated/i.test(error.message || '')) {
       return 'Backend unreachable. Check the Vellum API connection and try again.';

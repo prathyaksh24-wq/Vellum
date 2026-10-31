@@ -79,6 +79,12 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/PatternWaves.jsx",
   "design/Velllum/uploads/components/Particles.jsx",
   "design/Velllum/uploads/components/DvkMotionBackground.jsx",
+  "design/Velllum/uploads/components/settings-overview.jsx",
+  "design/Velllum/uploads/components/thinking-orbs.jsx",
+  "design/Velllum/uploads/components/response-progress.js",
+  "design/Velllum/uploads/components/agent-response.js",
+  "design/Velllum/uploads/components/streaming-text.js",
+  "design/Velllum/uploads/components/morphic-ui.js",
 ];
 
 function reactScripts(content) {
@@ -117,6 +123,10 @@ export function visualHandlers(path, content) {
   });
   const handlers = [];
   visit(parsed, null, (node, parent) => {
+    if (/(?:agent-response|streaming-text|morphic-ui)\.js$/.test(path) && node.type === 'ObjectProperty' && /^on[A-Z]/.test(node.key?.name || '')) {
+      handlers.push(`createElement|${node.key.name}|${source.slice(node.value.start,node.value.end).replace(/\s+/g,' ').trim()}`);
+      return;
+    }
     if (node.type !== "JSXAttribute" || !/^on[A-Z]/.test(node.name?.name || "")) return;
     if (node.value?.type !== "JSXExpressionContainer") return;
     const tag = parent?.name?.name || parent?.name?.property?.name || "unknown";
@@ -143,7 +153,7 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   const servedExternalSources = new Set();
   for (const path of SOURCE_FILES.filter(item => item.endsWith(".html"))) {
     for (const script of reactScripts(sources[path])) {
-      const source = script.getAttribute("src");
+      const source = script.getAttribute("src")?.split(/[?#]/,1)[0];
       if (!source) continue;
       const referenced = resolve(root, "design/Velllum/uploads", source).replaceAll("\\", "/");
       const expected = resolve(root, "design/Velllum/uploads").replaceAll("\\", "/") + "/";

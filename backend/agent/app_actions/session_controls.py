@@ -133,7 +133,8 @@ class SessionControlService:
         if provider:
             if provider not in {'openai', 'openrouter', 'anthropic', 'google', 'ollama'}:
                 raise SessionControlError('PROVIDER_UNAVAILABLE', 'That model provider is not supported.', unavailable=True)
-            models = [entry for entry in self.provider_registry.list_models() if entry.provider == provider]
+            picker = getattr(self.provider_registry, 'list_picker_models', None)
+            models = picker(provider) if callable(picker) and provider in {'ollama','openrouter','openai'} else [entry for entry in self.provider_registry.list_models() if entry.provider == provider]
             if not models:
                 if provider == 'ollama':
                     raise SessionControlError('MODEL_UNAVAILABLE', 'No local models are available. Start Ollama and load a model first.', unavailable=True)

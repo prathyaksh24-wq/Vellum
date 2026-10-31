@@ -79,7 +79,7 @@ class ObservabilityActionService:
                 "navigation": {"view": "ledger"},
                 "_target_kind": "ui_surface",
                 "_target_id": "observability",
-                "_message": "Observability opened.",
+                "_message": "Analytics opened.",
             }
         if action_id == OBSERVABILITY_STREAM_SET_ACTION_ID:
             return self._set_stream(arguments)
@@ -96,13 +96,13 @@ class ObservabilityActionService:
         if not isinstance(enabled, bool):
             raise ObservabilityActionError(
                 "INVALID_ACTION_ARGUMENTS",
-                "Observability streaming enabled must be true or false.",
+                "Analytics streaming enabled must be true or false.",
             )
         reconnect = arguments.get("reconnect", False)
         if not isinstance(reconnect, bool):
             raise ObservabilityActionError(
                 "INVALID_ACTION_ARGUMENTS",
-                "Observability reconnect must be true or false.",
+                "Analytics reconnect must be true or false.",
             )
         label = "resumed" if enabled else "paused"
         return {
@@ -114,7 +114,7 @@ class ObservabilityActionService:
             },
             "_target_kind": "observability_stream",
             "_target_id": "local-browser",
-            "_message": f"Observability {label}.",
+            "_message": f"Analytics {label}.",
         }
 
     def _read_snapshot(self, action_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -122,20 +122,20 @@ class ObservabilityActionService:
         if period not in _PERIODS:
             raise ObservabilityActionError(
                 "INVALID_ACTION_ARGUMENTS",
-                "Observability period must be today, 7d, 30d, month, or all.",
+                "Analytics period must be today, 7d, 30d, month, or all.",
             )
         try:
             raw_snapshot = self._snapshot_provider(period)
         except OSError as exc:
             raise ObservabilityActionError(
                 "OBSERVABILITY_UNAVAILABLE",
-                "Observability collectors are unavailable.",
+                "Analytics collectors are unavailable.",
                 unavailable=True,
             ) from exc
         except Exception as exc:
             raise ObservabilityActionError(
                 "OBSERVABILITY_REFRESH_FAILED",
-                "Observability could not be refreshed.",
+                "Analytics could not be refreshed.",
             ) from exc
         snapshot = content_free_snapshot(raw_snapshot)
         if action_id == OBSERVABILITY_STATUS_ACTION_ID:
@@ -160,7 +160,7 @@ class ObservabilityActionService:
                 "_target_kind": "observability_status",
                 "_target_id": "native",
                 "_message": (
-                    f"Observability is {state} with {active} active run"
+                    f"Analytics is {state} with {active} active run"
                     f"{'s' if active != 1 else ''} and {calls} recorded call"
                     f"{'s' if calls != 1 else ''} over {snapshot.get('period') or period}."
                 ),
@@ -170,7 +170,7 @@ class ObservabilityActionService:
             "observability_snapshot": snapshot,
             "_target_kind": "observability_snapshot",
             "_target_id": period,
-            "_message": "Observability refreshed.",
+            "_message": "Analytics refreshed.",
         }
 
 
@@ -219,8 +219,8 @@ def observability_action_definitions() -> list[AppActionDefinition]:
             id=OBSERVABILITY_OPEN_ACTION_ID,
             version="1",
             owner="observability",
-            title="Open observability",
-            description="Open Vellum's native observability surface.",
+            title="Open analytics",
+            description="Open Analytics in Vellum Settings.",
             scope="session",
             access_class=CapabilityAccess.READ.value,
             confirmation_rule="none",
@@ -236,7 +236,7 @@ def observability_action_definitions() -> list[AppActionDefinition]:
             id=OBSERVABILITY_STATUS_ACTION_ID,
             version="1",
             owner="observability",
-            title="Get observability status",
+            title="Get analytics status",
             description="Read current collector, run, and usage status without logged content.",
             scope="application",
             access_class=CapabilityAccess.READ.value,
@@ -253,8 +253,8 @@ def observability_action_definitions() -> list[AppActionDefinition]:
             id=OBSERVABILITY_STREAM_SET_ACTION_ID,
             version="1",
             owner="observability",
-            title="Set observability live stream",
-            description="Pause, resume, or reconnect this browser's live observability feed.",
+            title="Set analytics live stream",
+            description="Pause, resume, or reconnect this browser's live analytics feed.",
             scope="session",
             access_class=CapabilityAccess.WRITE.value,
             confirmation_rule="none",
@@ -275,7 +275,7 @@ def observability_action_definitions() -> list[AppActionDefinition]:
             id=OBSERVABILITY_REFRESH_ACTION_ID,
             version="1",
             owner="observability",
-            title="Refresh observability",
+            title="Refresh analytics",
             description="Read a fresh operational snapshot from Vellum's native stores.",
             scope="application",
             access_class=CapabilityAccess.READ.value,

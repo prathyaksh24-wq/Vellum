@@ -106,7 +106,7 @@ img.browser-brand-icon{background:none;object-fit:contain}
 .browser-home-content{width:min(640px,calc(100% - 80px));padding:36px 0 64px;position:relative;text-align:center}
 .browser-home-title{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:30px;min-height:84px;transition:transform .15s ease}
 .browser-home-title:has(.browser-engine-menu){z-index:5}
-.browser-home-title h1{display:flex;align-items:center;gap:13px;margin:0;font-family:inherit;font-size:clamp(30px,3.4vw,46px);font-weight:600;line-height:1.15;letter-spacing:-1.4px}
+.browser-home-title h1{display:flex;align-items:center;gap:13px;margin:0;font-family:inherit;font-size:clamp(30px,3.4vw,46px);font-weight:500;line-height:1.15;letter-spacing:0}
 .browser-google-wordmark{width:238px;height:auto;display:block;filter:brightness(.72) saturate(1.2)}
 .browser-engine-picker{position:relative;display:flex;align-items:center}
 .browser-engine-trigger{width:44px;height:40px;display:grid;place-items:center;border:1px solid var(--home-border);border-radius:7px;background:var(--home-field);color:var(--home-ink);cursor:pointer;transition:transform .15s ease,border-color .15s ease}
@@ -148,7 +148,7 @@ img.browser-brand-icon{background:none;object-fit:contain}
 @keyframes browser-menu-in{from{opacity:0}to{opacity:1}}
 @container(min-width:760px){.browser-engine-menu{top:auto;bottom:-50px;left:calc(100% + 12px);right:auto}.browser-home-title:has(.browser-engine-menu){transform:translateX(-40px)}}
 @container(max-width:500px){.browser-home-shortcuts{gap:12px}.browser-shortcut-add{background:var(--home-field);border-color:var(--home-border);padding:10px 14px}.browser-home-title h1>.browser-brand-icon{width:46px!important;height:46px!important}}
-@media(min-width:1500px){.browser-home-title h1{font-size:48px}.browser-google-wordmark{width:248px}.browser-home-shortcuts{gap:16px}}
+@media(min-width:1500px){.browser-home-title h1{font-size:48px;letter-spacing:0;font-weight:500}.browser-google-wordmark{width:248px}.browser-home-shortcuts{gap:16px}}
 @media(max-width:1200px){.browser-heading-actions .browser-status{display:none}.browser-home-content{width:calc(100% - 40px);max-width:640px}.browser-shortcut{min-width:104px;padding:10px}.browser-home-shortcuts{gap:12px}}
-@media(max-width:520px){.browser-heading-actions .secondary{display:none}.browser-brand{display:none}.browser-home-content{width:calc(100% - 32px);padding-bottom:40px}.browser-home-title h1{font-size:32px}.browser-google-wordmark{width:180px}.browser-shortcut{min-width:104px}.browser-address-row{gap:2px;padding:6px}.browser-address-row>.browser-icon{width:26px}.browser-home-edit{position:relative;top:auto;left:auto;transform:none;box-sizing:border-box;margin:20px auto 0}.browser-home-title{margin-bottom:22px}}
+@media(max-width:520px){.browser-heading-actions .secondary{display:none}.browser-brand{display:none}.browser-home-content{width:calc(100% - 32px);padding-bottom:40px}.browser-home-title h1{font-size:32px;letter-spacing:0;font-weight:500}.browser-google-wordmark{width:180px}.browser-shortcut{min-width:104px}.browser-address-row{gap:2px;padding:6px}.browser-address-row>.browser-icon{width:26px}.browser-home-edit{position:relative;top:auto;left:auto;transform:none;box-sizing:border-box;margin:20px auto 0}.browser-home-title{margin-bottom:22px}}
 @media(prefers-reduced-motion:reduce){.browser-panel *{transition:none!important;animation:none!important}}

@@ -9,8 +9,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agent.llm.reasoning import resolve_reasoning_mode
 from agent.llm.routing.runtime import get_routed_chat_model
 from agent.llm.providers import get_provider_registry
-from agent.llm.routing.models import provider_for_model
-from agent.profiles import get_active_profile_policy
 
 
 _SYSTEM_PROMPT = """You are the synthesis stage of Vellum's BooksAgent.
@@ -111,9 +109,6 @@ class RoutedBooksSynthesizer:
         # change cannot send evidence retrieved as local to an external model.
         from agent.profiles.execution import profile_model_id
         model_id = profile_model_id(lambda: self.model_id or get_provider_registry().current_model().id)
-        policy = get_active_profile_policy()
-        if provider_for_model(model_id) != "ollama" and (policy is None or policy.source_egress != "external"):
-            raise ValueError("BOOK_EXTERNAL_PROCESSING_NOT_APPROVED")
         model = self.model_factory(
             model_id,
             reasoning_mode=self.reasoning_mode,

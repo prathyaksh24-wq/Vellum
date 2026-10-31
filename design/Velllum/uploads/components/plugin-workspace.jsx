@@ -1178,8 +1178,11 @@
       if (next.v === 'settings' && mode === 'directory' && onManage) onManage(next);else if (next.v === 'directory' && mode !== 'directory' && onBrowse) onBrowse();else setR(next);
       scroll.current?.scrollTo?.(0, 0);
     };
+    const sidebarToggleRef=useRef(null),sidebarHideRef=useRef(null),sidebarFocusPending=useRef(false);
+    useEffect(()=>{if(sidebarFocusPending.current&&!busy){(sidebarVisible?sidebarHideRef:sidebarToggleRef).current?.focus();sidebarFocusPending.current=false;}},[sidebarVisible,busy]);
     const toggleSidebar=async()=>{
       if(busy||!onSidebarVisibility)return;
+      sidebarFocusPending.current=true;
       setBusy(true);setError('');
       try{const receipt=await onSidebarVisibility(!sidebarVisible);if(receipt?.status!=='applied')throw Error(receipt?.message||'Plugin sidebar visibility was not saved.');}
       catch(error){setError(error.message);}finally{setBusy(false);}
@@ -1294,14 +1297,14 @@
       renderDiscord,
       tryNow,
       loading: catalogState?.loading
-    }}><div className="vplug" data-ui-reference="plugins"><div className="bd"><div className="ct">{mode === 'directory' && sidebarVisible && <aside id="vellum-plugin-sidebar" data-ui-reference="plugin-sidebar" className="pn" aria-label="Customize"><div className="pnh"><h2>Customize</h2>{onSidebarVisibility&&<button className="ib" aria-label="Hide plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="true" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}</div><ActionLink className={'ni2' + (r.v !== 'skills' ? ' on' : '')} onClick={() => go({
+    }}><div className="vplug" data-ui-reference="plugins" data-sidebar-layout={mode} data-variant="inset" data-collapsible="offcanvas" data-sidebar-state={sidebarVisible?'open':'closed'}><div className="bd"><div className="ct">{mode === 'directory' && <aside id="vellum-plugin-sidebar" data-ui-reference="plugin-sidebar" className="pn" aria-label="Customize" inert={!sidebarVisible?'':undefined} aria-hidden={!sidebarVisible}><div className="pnh"><h2>Customize</h2>{onSidebarVisibility&&<button ref={sidebarHideRef} className="ib" aria-label="Hide plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="true" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}</div><ActionLink className={'ni2' + (r.v !== 'skills' ? ' on' : '')} onClick={() => go({
                 v: 'directory'
               })}><Ic n="plug" />Plugins</ActionLink><ActionLink className={'ni2' + (r.v === 'skills' ? ' on' : '')} onClick={() => go({
                 v: 'skills'
               })}><Ic n="grid" />Skills</ActionLink><div className="lbl">Installed</div>{plugins.filter(p => p.installed !== false).map(p => <ActionLink key={p.id} className="pi" onClick={() => go({
                 v: 'detail',
                 p: p.id
-              })}><Tile p={p} sz={22} i={14} r={6} />{p.name}</ActionLink>)}</aside>}<main className="mn" ref={scroll}>{mode==='directory'&&!sidebarVisible&&<button className="ib plugin-sidebar-reveal" aria-label="Show plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="false" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}{(error || catalogState?.error) && <div className="cc" style={{
+              })}><Tile p={p} sz={22} i={14} r={6} />{p.name}</ActionLink>)}</aside>}{mode==='directory'&&sidebarVisible&&<button type="button" className="plugin-sidebar-backdrop" aria-label="Close plugin sidebar" disabled={busy} onClick={toggleSidebar}/>}<main className="mn" ref={scroll}>{mode==='directory'&&!sidebarVisible&&<button ref={sidebarToggleRef} className="ib plugin-sidebar-reveal" aria-label="Show plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="false" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}{(error || catalogState?.error) && <div className="cc" style={{
                 paddingBottom: 0
               }}><p className="error" role="alert">{error || catalogState.error}</p><button className="bs" onClick={refresh}>Retry</button></div>}{r.v === 'directory' && <Directory />}{r.v === 'category' && <Directory category={r.category} />} {r.v === 'detail' && p && <Detail key={p.id} p={p} />} {r.v === 'skills' && <Skills />}{settings && <Settings key={r.tab || r.p || 'plugins'} tab={r.tab} plugin={r.p} />}</main></div></div>{dlg?.t === 'uninstall' && <Uninstall p={dlg.p} close={close} />} {dlg?.t === 'manage' && <Manage p={plugins.find(p => p.id === dlg.p.id) || dlg.p} close={close} />} {dlg?.t === 'install' && <Manage p={plugins.find(p => p.id === dlg.p.id) || dlg.p} close={close} install />}{dlg?.t === 'app' && <AppDialog p={plugins.find(p => p.id === dlg.p.id) || dlg.p} app={dlg.app} mcp={dlg.mcp} close={close} />} {dlg?.t === 'skill' && <SkillDialog s={dlg.s} details={dlg.details} close={close} />} {['create', 'archive', 'marketplace', 'mcp', 'skillAdd'].includes(dlg?.t) && <AddDialog kind={dlg.t} close={close} />} {pending && <Review pending={pending} close={() => decide(false)} />}</div></X.Provider>;
   }
