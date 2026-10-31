@@ -36,7 +36,7 @@ beforeEach(async () => {
 afterEach(async () => {await act(async () => root.unmount());host.remove();});
 const button=text=>[...host.querySelectorAll('button')].find(node=>node.textContent===text);
 const click=async node=>act(async () => node.click());
-const choose=async(label,text)=>{await click(host.querySelector(`[aria-label="${label}"]`));await click([...host.querySelectorAll('[role="option"]')].find(node=>node.querySelector('.v-select-option-copy > span')?.textContent===text));};
+const choose=async(label,text)=>{const trigger=host.querySelector(`[aria-label="${label}"]`),control=trigger.closest('.v-select');await click(trigger);await click([...control.querySelectorAll('[role="option"]')].find(node=>node.querySelector('.v-select-option-copy > span')?.textContent===text));};
 const type=async (label,value)=>act(async () => {
   const input=host.querySelector(`[aria-label="${label}"]`);
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);

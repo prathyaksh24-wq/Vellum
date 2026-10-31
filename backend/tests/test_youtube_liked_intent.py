@@ -110,7 +110,9 @@ def test_youtube_chat_formatting_retains_account_links_but_removes_reference_lin
     assert cleaned.count("https://www.youtube.com/watch?v=") == 2
     assert "example.com" not in cleaned and "evil.test" not in cleaned
     assert "[1]" not in cleaned
-    assert "https://" not in _clean_answer_body(text)
+    # Ordinary answers preserve Markdown and citations; account-result links
+    # use the specialist-only filtering above.
+    assert _clean_answer_body(text) == text
 
 
 @pytest.mark.parametrize("stream", [False, True])
