@@ -479,7 +479,7 @@ def test_stream_agent_turn_reports_missing_specialist_evidence(monkeypatch):
     final = json.loads(next(data for name, data in events if name == "final"))
     token_text = "".join(json.loads(data)["text"] for name, data in events if name == "token")
 
-    assert final["answer"] == "I couldn't verify this request because the sports lookup returned no source evidence."
+    assert final["answer"] == specialist_result["summary"]
     assert "Today is" not in final["answer"]
     assert token_text == final["answer"]
     assert final["sources"] == []
@@ -590,7 +590,7 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert "tool_call_started" in activity_types
     assert "tool_call_completed" in activity_types
     assert "source_discovered" in activity_types
-    assert "source_reading" in activity_types
+    assert "source_reading" not in activity_types  # Search discovery does not imply page extraction.
     assert "final_answer_started" in activity_types
     assert "final_answer_delta" in activity_types
     assert "final_answer_completed" in activity_types
@@ -601,8 +601,8 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
         for item in agent_activities
     )
     assert any(
-        item["type"] == "source_reading"
-        and item["label"] == "Reading Formula 1..."
+        item["type"] == "source_discovered"
+        and item["label"] == "Found Formula 1"
         and item["source"]["domain"] == "formula1.com"
         for item in agent_activities
     )
@@ -916,14 +916,16 @@ def test_stream_agent_turn_emits_agent_activity_for_function_calls(monkeypatch):
     ]
 
     assert any(
-        item["type"] == "tool_call_started"
+        item["type"] == "function_call_preparing"
         and item["name"] == "web_search"
-        and item["label"] == "Using web_search..."
+        and item["label"] == "Preparing web_search..."
         for item in agent_activities
     )
     assert any(
-        item["type"] == "tool_call_delta"
+        item["type"] == "function_call_preparing"
         and item["name"] == "web_search"
         and item["detail"] == '{"query":'
         for item in agent_activities
     )
+
+    assert not any(item["type"] == "tool_call_started" for item in agent_activities)

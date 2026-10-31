@@ -31,13 +31,17 @@ def client(monkeypatch):
     return TestClient(api_mod.app)
 
 
-def test_list_models_returns_catalog(client: TestClient) -> None:
+def test_list_models_returns_catalog(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(providers_mod, "configured_provider_keys", lambda: {"openrouter": True, "openai": True})
+    providers_mod.get_provider_registry().select_picker_provider("openrouter")
     r = client.get("/api/models")
     assert r.status_code == 200
     body = r.json()
     assert "active" in body and "groups" in body and "models" in body
     ids = {m["id"] for m in body["models"]}
-    # User's wanted models are present
+    assert body["model_provider"] == "openrouter"
+    assert all(not model_id.startswith("ollama/") for model_id in ids)
+    # The selected OpenRouter source exposes the reviewed cloud catalog.
     assert "google/gemma-4-31b-it" in ids
     assert "anthropic/claude-opus-4.7" in ids
     assert "openai/gpt-5.5" in ids

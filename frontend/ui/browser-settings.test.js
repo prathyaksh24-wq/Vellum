@@ -8,8 +8,8 @@ import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 const compiled=execFileSync(process.execPath,['-e',`
   const {createRequire}=require('node:module');
   const esbuild=createRequire(require.resolve('vite'))('esbuild');
-  process.stdout.write(esbuild.transformSync(require('node:fs').readFileSync(process.argv[1],'utf8'),{loader:'jsx'}).code);
-`,resolve('../design/Velllum/uploads/components/browser-settings.jsx')],{encoding:'utf8'});
+  process.stdout.write(process.argv.slice(1).map(file=>esbuild.transformSync(require('node:fs').readFileSync(file,'utf8'),{loader:'jsx'}).code).join(';'));
+`,...['morphic-ui.js','v-select.jsx','browser-settings.jsx'].map(name=>resolve('../design/Velllum/uploads/components/'+name))],{encoding:'utf8'});
 const defaults={location:'ask',camera:'ask',microphone:'ask',notifications:'block',javascript:'allow',images:'allow',popups:'block',third_party_cookies:'allow'};
 let host,root,view,onAction,onConfirm,onCancel,settings;
 beforeEach(async () => {
@@ -29,13 +29,14 @@ beforeEach(async () => {
     return {status:'applied'};
   });
   onConfirm=vi.fn(async () => ({status:'applied'}));onCancel=vi.fn();
-  Function('React','window',compiled)(React,window);
+  window.React=React;Function('React','window',compiled)(React,window);
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
   await act(async () => root.render(React.createElement(window.VellumUI.BrowserSettings,{onAction,onConfirm,onCancel})));
 });
 afterEach(async () => {await act(async () => root.unmount());host.remove();});
 const button=text=>[...host.querySelectorAll('button')].find(node=>node.textContent===text);
 const click=async node=>act(async () => node.click());
+const choose=async(label,text)=>{await click(host.querySelector(`[aria-label="${label}"]`));await click([...host.querySelectorAll('[role="option"]')].find(node=>node.querySelector('.v-select-option-copy > span')?.textContent===text));};
 const type=async (label,value)=>act(async () => {
   const input=host.querySelector(`[aria-label="${label}"]`);
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
@@ -56,8 +57,7 @@ test('browser agent switch persists its actual preference',async () => {
 });
 
 test('cursor style and routine permissions save through the canonical settings action',async()=>{
-  const select=host.querySelector('[aria-label="Routine browser interactions"]');
-  await act(async()=>{select.value='ask';select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await choose('Routine browser interactions','Ask for each action');
   expect(onAction).toHaveBeenCalledWith('browser.settings.manage',{operation:'preferences',patch:{agent_interactions:'ask'},profile_id:'default'});
   await click(button('Cursor'));
   await click(host.querySelector('[aria-label="Mint cursor"]'));
@@ -79,8 +79,7 @@ test('failed preference save retains the old value and gives a recovery error',a
 });
 test('site permissions are staged until Save and WebMCP is labelled unavailable',async () => {
   await click(button('Site access'));
-  const select=host.querySelector('[aria-label="Camera permission"]');
-  await act(async () => {select.value='block';select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await choose('Camera permission','Block');
   expect(onAction).not.toHaveBeenCalled();
   await click(button('Save website permissions'));
   expect(onAction).toHaveBeenCalledWith('browser.settings.manage',expect.objectContaining({operation:'site_defaults',defaults:expect.objectContaining({camera:'block'})}));

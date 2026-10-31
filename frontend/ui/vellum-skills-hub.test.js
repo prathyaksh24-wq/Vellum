@@ -10,7 +10,8 @@ describe("production Skills Hub", () => {
   test("uses live catalog contracts without a runtime seed catalog", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
     expect(html).toContain("const SkillsHubView");
-    expect(html).toContain("<SkillsHubView onSkillAction={dispatchSkillAction}/>");
+    expect(html).toContain('<SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>');
+    expect(html).not.toContain("view === 'skills' && <SkillsHubView");
     expect(html).not.toContain("useState(SEED_SKILLS)");
     expect(html).not.toContain("const SEED_SKILLS");
     expect(html).toContain("API.plugins.skillsCatalog");

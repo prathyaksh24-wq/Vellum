@@ -38,3 +38,11 @@ The earlier local notes describe unresolved drift and unpublished state at their
 The image is an earlier capture from this chat's running development UI, with isolated guest presentation and no chat messages. It illustrates the retained landing signature; it is not a new render of the isolated branch.
 
 ![Landing interface](vellum-chat-interface-2026-10-31/landing-desktop.png)
+
+## Hosted CI follow-up
+
+The first main-targeted run for PR #238, run 41163856595 on commit 7caf69a, passed its production frontend build, dependency audits, dependency review and secret scanning. Its backend suite reported 18 failures / 3913 passes / 28 skips; its frontend suite reported 88 failures / 664 passes. These are hosted results, not local execution.
+
+The repair handles dictionary/list-valued tool status metadata without hashing it, restores the explicit cloud-escalation tool guidance while keeping the protected prompt below its existing 7500-character budget, retains timeout wording and preserves YouTube account-link filtering without flattening ordinary Markdown answers. Test fixtures now load the actual shared menu dependencies and use the current off-canvas, provider-scoped, Analytics and event-driven response contracts. Source discovery must not claim a page was read; completed dispatcher results must not fabricate retrospective live activity. The cross-agent memory handoff check still rejects external destinations.
+
+No local tests or builds were run for these corrections. Python/JavaScript syntax and scoped whitespace are checked before publication; GitHub's automatic PR workflow supplies runtime validation. No assertions are skipped and workflow gates are unchanged.

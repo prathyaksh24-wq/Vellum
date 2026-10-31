@@ -6,12 +6,12 @@ import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 const require=createRequire(import.meta.url),rootPath=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
-const original=globalThis.Uint8Array;let pageCode,localCode,selectCode;
+const original=globalThis.Uint8Array;let pageCode,localCode,selectCode,morphicCode;
 try{
   globalThis.Uint8Array=new TextEncoder().encode('').constructor;
   const esbuild=createRequire(require.resolve('vite'))('esbuild');
   const compile=name=>esbuild.transformSync(readFileSync(resolve(rootPath,'design/Velllum/uploads/components/'+name),'utf8'),{loader:'jsx'}).code;
-  pageCode=compile('music-page.jsx');localCode=compile('local-music.jsx');selectCode=compile('v-select.jsx');
+  morphicCode=compile('morphic-ui.js');pageCode=compile('music-page.jsx');localCode=compile('local-music.jsx');selectCode=compile('v-select.jsx');
 }finally{globalThis.Uint8Array=original;}
 let root,host,api,music,Player,props,localState;
 const song=(id,name)=>({id,uri:'spotify:track:'+id,name,kind:'track',artists:['Artist'],artwork_url:'https://images.example/'+id,playable:true,duration_ms:180000});
@@ -19,7 +19,7 @@ const playlist=(id,name)=>({id,uri:'spotify:playlist:'+id,name,kind:'playlist',a
 const album=(id,name)=>({...playlist(id,name),kind:'album',uri:'spotify:album:'+id,artists:['Artist']});
 const textButton=text=>[...host.querySelectorAll('button')].find(node=>node.textContent===text);
 const click=async label=>act(async()=>host.querySelector('[aria-label="'+label+'"]').click());
-const press=async text=>act(async()=>{const provider={Spotify:'spotify','Apple Music':'apple','Local files':'local'}[text],trigger=host.querySelector('[aria-label="Music provider"]');if(provider && trigger){trigger.click();[...host.querySelectorAll('#music-provider-list [role="option"]')].find(node=>node.textContent===text).click();}else textButton(text).click();});
+const press=async text=>act(async()=>{const provider={Spotify:'spotify','Apple Music':'apple','Local files':'local'}[text],trigger=host.querySelector('[aria-label="Music provider"]');if(provider && trigger){trigger.click();[...host.querySelectorAll('#music-provider-list [role="option"]')].find(node=>node.querySelector('.v-select-option-copy > span')?.textContent===text).click();}else textButton(text).click();});
 const navigate=async text=>act(async()=>[...host.querySelectorAll('.mw-nav button')].find(node=>node.textContent===text).click());
 const input=async(label,value)=>act(async()=>{
   const node=host.querySelector('[aria-label="'+label+'"]');
@@ -40,6 +40,7 @@ async function editablePlaylist(){
 }
 beforeEach(()=>{
   globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
   api={
     capabilities:vi.fn(async()=>({features:{spotify:{enabled:true,endpoints:{browse:'browse',search:'search'}}}})),
@@ -53,11 +54,11 @@ beforeEach(()=>{
   window.VellumApi={plugins:api,localMusic:{library:vi.fn(async()=>localState),action:vi.fn(async()=>({status:'applied',message:'Imported song list',result:{collection_id:'saved'}})),upload:vi.fn(),exportUrl:id=>'http://127.0.0.1/export/'+id},
     appActions:{dispatch:vi.fn(async()=>({status:'applied',message:'Playlist links added'})),catalog:vi.fn(async()=>({actions:[{id:'spotify.playlist.edit'},{id:'spotify.playlists.link'},...['playlist','file','playback'].map(name=>({id:'local_music.'+name}))]}))}};
   window.VellumLocalMusicPlayback={start:vi.fn(()=>({wake:vi.fn()})),subscribe:vi.fn(()=>()=>{})};
-  window.VellumUI={};new Function('React',selectCode)(React);new Function('React',localCode)(React);new Function('React',pageCode)(React);Player=window.VellumUI.MusicPage;
+  window.React=React;window.VellumUI={};new Function('React',morphicCode)(React);new Function('React',selectCode)(React);new Function('React',localCode)(React);new Function('React',pageCode)(React);Player=window.VellumUI.MusicPage;
   music={player:{track:song('Ride','Ride'),artists:['Artist'],is_playing:true,duration_ms:180000,progress_ms:84000,device:{volume_percent:25}},playback:{ready:true},upcoming:[],busy:false,error:'',run:vi.fn(async()=>true),refresh:vi.fn(),enable:vi.fn()};
   props={spotify:{connected:true,product:'premium',account_name:'Listener',web_playback_ready:true},onReconnect:vi.fn(),onCloseMusic:vi.fn(),onRefreshConnection:vi.fn(),onAskMusic:vi.fn()};
 });
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 test('handoff home has the music sidebar, real album grid and single bottom player',async()=>{
   await render();expect(host.querySelector('.mw-sidebar')).toBeTruthy();expect(host.querySelectorAll('.mw-player')).toHaveLength(1);
@@ -297,7 +298,7 @@ test('playlist artwork warms before offscreen rows intersect',async()=>{
 
 test('outer navigation is retained and its Music image has bounded icon dimensions',()=>{
   const html=readFileSync(resolve(rootPath,'design/Velllum/uploads/Vellum Default Re-designed.html'),'utf8');
-  expect(html).toContain("sidebarPinned && view!=='apps' && <Sidebar");expect(html).toContain("(!sidebarPinned || view==='apps') && <Rail");
+  expect(html).toContain('className="main-sidebar-slot"');expect(html).toContain('data-collapsible="offcanvas"');expect(html).toContain('data-pinned={sidebarPinned}');
   const style=document.createElement('style');style.textContent=readFileSync(resolve(rootPath,'design/Velllum/uploads/components/music-page.css'),'utf8');document.head.append(style);
   const icon=document.createElement('img');icon.className='music-nav-icon';host.append(icon);
   try{expect(getComputedStyle(icon).width).toBe('18px');expect(getComputedStyle(icon).height).toBe('18px');}finally{style.remove();}
@@ -366,9 +367,9 @@ test('the Home search field suggests during typing without Enter or route change
 });
 
 test('provider dropdown switches source and music sidebar can hide and reopen independently',async()=>{
-  await render();const select=host.querySelector('[aria-label="Music provider"]');expect(select.closest('.pdrop-select')).toBeTruthy();
+  await render();const select=host.querySelector('[aria-label="Music provider"]');expect(select.closest('.mw-provider-control')).toBeTruthy();
   await press('Local files');
   expect(host.textContent).toContain('Add your music');
-  await click('Hide music sidebar');expect(host.querySelector('.mw-sidebar')).toBeNull();expect(host.querySelector('[aria-label="Show music sidebar"]')).toBeTruthy();
+  await click('Hide music sidebar');expect(host.querySelector('.mw-sidebar').getAttribute('aria-hidden')).toBe('true');expect(host.querySelector('[aria-label="Show music sidebar"]')).toBeTruthy();
   await click('Show music sidebar');expect(host.querySelector('[aria-label="Music provider"]').textContent).toContain('Local files');expect(props.onCloseMusic).not.toHaveBeenCalled();
 });

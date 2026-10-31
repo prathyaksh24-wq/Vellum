@@ -4745,7 +4745,17 @@ def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool
 
 def _clean_answer_body(text: str | None, *, preserve_youtube_links: bool = False) -> str:
     """Preserve the model's rich answer and citation references across stream completion."""
-    return str(text or "").strip()
+    value = str(text or "").strip()
+    if preserve_youtube_links:
+        # Account-result cards own reference sources; keep only genuine video
+        # and channel links in this specialist's answer without flattening prose.
+        def account_link(match):
+            return match[0] if re.fullmatch(
+                r"https://www\.youtube\.com/(?:watch\?v=[A-Za-z0-9_-]+|channel/[A-Za-z0-9_-]+)", match[2]
+            ) else match[1]
+        value = re.sub(r"\[((?:\\.|[^\]\\])+)\]\((https?://[^)]+)\)", account_link, value)
+        value = re.sub(r"(?<!\w)\[(?:\d+)\](?!\w)", "", value)
+    return value.strip()
 
 
 def _passthrough_text_deltas(text: str, max_chars: int = 160) -> list[str]:
@@ -4826,7 +4836,7 @@ def _public_stream_error(error: BaseException) -> str:
     if isinstance(error, GraphRecursionError):
         return 'The request reached its tool-step limit before completion. Check the action receipts before retrying a write.'
     if isinstance(error, TimeoutError):
-        return 'The model did not respond before its time limit. Your partial answer is preserved.'
+        return 'The model stream timed out. Your partial answer is preserved.'
     if 'serpapi' in str(error).casefold():
         return 'SerpAPI search failed. Check its connection, quota or account limits.'
     return 'The request could not finish. Your partial answer is preserved.'

@@ -29,7 +29,7 @@ def test_reasoning_composer_exposes_codex_style_categorized_slash_menu() -> None
     assert "Apps" in ui_source
     assert "MCPs" in ui_source
     assert "Agents" in ui_source
-    assert 'aria-label="Slash commands"' in ui_source
+    assert 'label="Slash commands"' in ui_source
     assert 'role="listbox"' in ui_source
     assert "onOpenPlugins" in ui_source
     assert "plugin-manage" in ui_source

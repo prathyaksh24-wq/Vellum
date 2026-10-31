@@ -157,8 +157,10 @@ def test_stream_agent_turn_preserves_sports_answer_without_model_rewrite(monkeyp
     events = _parse_sse(asyncio.run(_collect()))
     names = [name for name, _ in events]
 
-    assert "activity" in names
-    assert ("tool", json.dumps({"name": "sports_agent"})) in events
+    assert "agent.activity" in names
+    activities = [json.loads(data)["activity"] for name, data in events if name == "agent.activity"]
+    assert any(item["type"] == "sub_agent_completed" and item["name"] == "SportsAgent" for item in activities)
+    assert not any(item["type"] == "tool_call_started" for item in activities)
     source_payload = next(json.loads(data) for name, data in events if name == "source")
     assert source_payload["domain"] == "formula1.com"
     final = json.loads(next(data for name, data in events if name == "final"))
@@ -228,9 +230,11 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
     assert created["thread_id"] == "thread-1"
     assert created["response"]["status"] == "in_progress"
 
-    added = [json.loads(data) for name, data in events if name == "response.output_item.added"]
-    assert any(p["item"]["type"] == "subagent_call" and p["item"]["name"] == "SportsAgent" for p in added)
-    assert any(p["item"]["type"] == "tool_call" and p["item"]["name"] == "web_search" for p in added)
+    activities = [json.loads(data)["activity"] for name, data in events if name == "agent.activity"]
+    assert any(item["type"] == "sub_agent_completed" and item["name"] == "SportsAgent" for item in activities)
+    assert not any(item["type"] == "sub_agent_started" for item in activities)
+    # A dispatcher that reports a completed result must not fabricate live work.
+    assert any(item["source"]["domain"] == "formula1.com" for item in activities if item.get("source"))
 
     delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
     assert delta["type"] == "response.output_text.delta"
@@ -286,9 +290,9 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
         return chunks
 
     events = _parse_sse(asyncio.run(_collect()))
-    done_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.done"]
-
-    assert any(item["type"] == "subagent_call" and item["status"] == "failed" for item in done_items)
+    activities = [json.loads(data)["activity"] for name, data in events if name == "agent.activity"]
+    assert any(item["type"] == "sub_agent_completed" and item["status"] == "failed" for item in activities)
+    assert not any(item["type"] == "sub_agent_started" for item in activities)
 
 
 def test_stream_agent_turn_times_out_silent_model_stream(monkeypatch):

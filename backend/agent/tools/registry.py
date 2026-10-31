@@ -24,7 +24,7 @@ class ToolPermissionError(PermissionError):
 
 def tool_result_failed(result: Any) -> bool:
     """Interpret the existing tool envelope consistently in execution and SSE."""
-    if getattr(result, 'status', '') in {'error', 'failed', 'blocked'}:
+    if getattr(result, 'status', '') in ('error', 'failed', 'blocked'):
         return True
     value = getattr(result, 'content', result)
     if isinstance(value, str):
@@ -34,7 +34,7 @@ def tool_result_failed(result: Any) -> bool:
         except (ValueError, TypeError):
             return False
     return isinstance(value, dict) and (bool(value.get('error')) or value.get('ok') is False or
-        value.get('success') is False or value.get('status') in {'error', 'failed', 'blocked', 'unavailable'})
+        value.get('success') is False or value.get('status') in ('error', 'failed', 'blocked', 'unavailable'))
 
 
 CapabilityAdapter = Callable[[dict[str, Any]], Any]

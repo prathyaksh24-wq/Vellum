@@ -175,7 +175,7 @@ async def test_observability_nlp_streams_a_navigation_receipt_without_calling_ag
     assert receipt["status"] == "applied"
     assert receipt["action_id"] == "observability.open"
     assert receipt["result"]["navigation"] == {"view": "ledger"}
-    assert completed["output_text"] == "Observability opened."
+    assert completed["output_text"] == "Analytics opened."
 
 
 @pytest.mark.asyncio

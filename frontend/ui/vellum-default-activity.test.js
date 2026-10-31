@@ -105,12 +105,13 @@ describe("Vellum default activity status", () => {
     expect(html).not.toContain('<span className="sm-item-text">{m.text}</span>');
   });
 
-  test("collapsed sidebar chat menus open inward beside the flyout", () => {
+  test("sidebar chat menus clamp to the viewport with off-canvas navigation", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
     expect(html).toContain("preferLeft");
     expect(html).toContain("pos.x - width - 10");
-    expect(html).toContain("preferLeft: true");
+    expect(html).toContain('className="main-sidebar-slot"');
+    expect(html).toContain('data-collapsible="offcanvas"');
   });
 
   test("dreaming console triggers the backend consolidation job", () => {

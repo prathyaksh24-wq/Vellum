@@ -34,7 +34,7 @@ def reusable_result(message: ToolMessage, *, delegation: bool = False) -> bool:
     except (ValueError, TypeError):
         return not delegation
     if isinstance(value, dict) and (value.get('error') or value.get('ok') is False or
-            value.get('status') in {'error', 'failed', 'blocked', 'unavailable'}):
+            value.get('status') in ('error', 'failed', 'blocked', 'unavailable')):
         return False
     return not _has_action(value) and (not delegation or isinstance(value, dict) and value.get('status') == 'answered')
 

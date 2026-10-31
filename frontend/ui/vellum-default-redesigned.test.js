@@ -23,7 +23,8 @@ const mcpSetup = readFileSync(
 describe("Vellum default redesigned frontend", () => {
   test('dictation keeps the text field and placeholder available above the recording toolbar', () => {
     expect(html).toContain("const dictationActive = !['idle','error'].includes(dictation.state);");
-    expect(html).toContain("{!text && (() => {");
+    expect(html).toContain("{!text && (animated");
+    expect(html).toContain("COMPOSER_PLACEHOLDER");
     expect(html).toContain('{dictationActive && dictationUi}');
     expect(html).not.toContain('.dictation-draft-empty');
   });
@@ -76,7 +77,7 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("dispatchKnowledgeAction('youtube.connection.disconnect'");
     expect(html).toContain("dispatchKnowledgeAction('plugin.state.set'");
     expect(html).toContain("receipt.action_id === 'book.import'");
-    expect(html).toContain("Sports stays available on demand without a background feed");
+    expect(html).not.toContain("tab === 'Feeds'");
     expect(html).not.toContain("runWikiAction(() => API.knowledge.indexRebuild())");
     expect(html).not.toContain("runWikiAction(() => API.knowledge.lint())");
     expect(html).not.toContain("sources: [item, ...(p.sources || [])]");
@@ -84,9 +85,9 @@ describe("Vellum default redesigned frontend", () => {
 
   test("loads the modular frontend API bridge used by backend integrations", () => {
     expect(html).toMatch(/<script src="api\/client\.js(?:\?[^\"]+)?"><\/script>/);
-    expect(html).toContain('<script src="api/chat.js"></script>');
+    expect(html).toMatch(/<script src="api\/chat\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/app-actions.js"></script>');
-    expect(html).toContain('<script src="components/app-action-runtime.js"></script>');
+    expect(html).toMatch(/<script src="components\/app-action-runtime\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="components/observability-action-runtime.js"></script>');
     expect(html).toContain('<script src="components/coding-action-runtime.js"></script>');
     expect(html).toContain('<script src="components/attachment-runtime.js"></script>');
@@ -101,8 +102,9 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)");
     expect(html).toContain("actionReceipt: (receipt, turn) =>");
     expect(html).toContain("workspaceActionRuntimeRef.current.applyReceipt(receipt)");
-    expect(html).toContain("onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}");
-    expect(html).toContain("onExpand={() => dispatchSidebarVisibility(true, {learn:true})}");
+    expect(html).toContain("dispatchSidebarVisibility(!sidebarPinned, {learn:true})");
+    expect(html).toContain("setSidebarPeeking(false)");
+    expect(html).toContain("dispatchSidebarVisibility(true,{learn:true})");
     expect(html).toContain("className=\"toast-action\"");
     expect(html).toContain("adaptiveRuleReceipt");
     expect(html).toContain("Don't learn this");
@@ -206,23 +208,16 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("keeps model selection request-scoped and persisted with conversations", () => {
-    for (const id of [
-      "openai/gpt-5.6-sol",
-      "openai/gpt-5.6-terra",
-      "openai/gpt-5.6-luna",
-      "anthropic/claude-opus-5",
-      "moonshotai/kimi-k3",
-      "deepseek/deepseek-v4-flash-0731",
-    ]) {
-      expect(html).toContain(id);
-    }
+    expect(html).toContain("API.settings.models()");
+    expect(html).toContain("pickerModels(modelData)");
+    expect(html).toContain("modelMetadata.model_provider");
     expect(html).toContain("model: turnModel");
     expect(html).toContain("model: modelId");
     expect(html).toContain("chat.model || selModel");
-    expect(html).toContain("MODEL_PROVIDER_FILTERS");
-    expect(html).toContain("modelFamily");
-    expect(html).toContain("label: 'OpenAI'");
-    expect(html).toContain("label: 'Claude'");
+    expect(html).toContain("MODEL_SOURCES");
+    expect(html).toContain("modelVendor");
+    expect(html).toContain("value:'openai'");
+    expect(html).toContain("anthropic");
     expect(html).toContain("dispatchConversationAction('model.select', {model_id:id})");
     expect(html).toContain("updateChat(chatId, chat => ({...chat, model: id}), true)");
     expect(html).not.toContain("API.settings.setActiveModel(id)");
@@ -279,8 +274,10 @@ describe("Vellum default redesigned frontend", () => {
 
   test("includes routing, OpenRouter, memory, and source-aware plugin management", () => {
     expect(html).toContain("OpenRouter");
-    expect(html).toContain("Provider routing, fallback models, and credential pools");
-    expect(html).toContain("memoryDreamingRun");
+    const overview=readFileSync(resolve(here,"../../design/Velllum/uploads/components/settings-overview.jsx"),"utf8");
+    expect(overview).toContain("Direct model selection for this connection is not available");
+    expect(html).toContain("backendSettings?.provider_connections");
+    expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
     expect(pluginWorkspace).toContain('aria-label="Plugin information"');
     expect(pluginWorkspace).toContain("p.source");
     expect(pluginWorkspace).toContain("p.mcp_connectors.length");
