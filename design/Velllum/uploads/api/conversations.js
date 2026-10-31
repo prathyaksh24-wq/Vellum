@@ -2,7 +2,7 @@
   var client = window.VellumApi.client;
   window.VellumApi.conversations = {
     list: function () { return client.request("/api/conversations"); },
-    library: function () { return client.request("/api/conversations/library"); },
+    library: function (options) { return client.request("/api/conversations/library" + (options?.includeMessages === false ? "?include_messages=false" : "")); },
     search: function (query, filters) {
       var params = new URLSearchParams();
       params.set("q", query || "");

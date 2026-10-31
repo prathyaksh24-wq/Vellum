@@ -7,7 +7,7 @@
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
       "count": 932,
-      "sha256": "1df4086a72cdaac2e184c9558159da0162cf45e560e8fefd1e6ab038211f074b"
+      "sha256": "d19c12af343f2e229dd377a6389b7347bc7e7c888566bb6144e0b0f66000b89d"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -35,7 +35,7 @@
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
-      "sha256": "53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"
+      "sha256": "acd8b5f049e7c251c49af0a5429e4880a9229cbf349edeaf2197789824b98b0e"
     },
     "design/Velllum/uploads/components/dictation-settings.jsx": {
       "count": 26,
@@ -62,8 +62,8 @@
       "sha256": "43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"
     },
     "design/Velllum/uploads/components/music-page.jsx": {
-      "count": 105,
-      "sha256": "d21257377cde4fa7c9da67c8bf606f81224b89eb047fd08f381d53d38ee76d90"
+      "count": 107,
+      "sha256": "40baa682e2c015a69dd3b84bdbca43e08f3a6d22f4b1849b88a3283779db0901"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
       "count": 17,
@@ -150,8 +150,8 @@
       "sha256": "42e0e4cbd918d5eb8538c70fa2ca8a3167766bf6635a7e2e751ea359d1bde0d2"
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
-      "count": 129,
-      "sha256": "ab5abecdc343fdf09aa7a73a51169b1c5940fb42bb63775caa3343464a3b89cc"
+      "count": 130,
+      "sha256": "bbe46e5375292637436a0fc9eefa8e48a105e402811fe2fd2654b1afad154acd"
     },
     "design/Velllum/uploads/books-entry.js": {
       "count": 0,
@@ -224,6 +224,30 @@
     "design/Velllum/uploads/components/local-music.jsx": {
       "count": 18,
       "sha256": "62932c41f79c678981dac1d561ecb71900d049246f484147866462f7cea3135e"
+    },
+    "design/Velllum/uploads/components/settings-overview.jsx": {
+      "count": 17,
+      "sha256": "1f015109cfb280db165ae23282515e48562d414581a27ef229ed3d356dc85b25"
+    },
+    "design/Velllum/uploads/components/agent-response.js": {
+      "count": 14,
+      "sha256": "7c4b7188894b4d834ac123be0153d8f2bb403a45c4832c4e5ddcf45e23452788"
+    },
+    "design/Velllum/uploads/components/streaming-text.js": {
+      "count": 8,
+      "sha256": "948198c6d6c61ea3e4cc51cba1e836188f279bac2e54cbfa8cce420ac4ac637d"
+    },
+    "design/Velllum/uploads/components/thinking-orbs.jsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/response-progress.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/morphic-ui.js": {
+      "count": 6,
+      "sha256": "5dd15da467c9c1ce8612317638901da9310ee087620856e0c3aec848c3d4a6b1"
     }
   },
   "covered": [
@@ -373,11 +397,11 @@
     },
     {
       "surface": "Workspace Layout",
-      "name": "sidebar pin and rail expand",
+      "name": "main sidebar pin and reopen",
       "actionId": "ui.sidebar.set",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}"
+        "text": "dispatchSidebarVisibility(!sidebarPinned, {learn:true})"
       }
     },
     {
@@ -2161,6 +2185,24 @@
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "API.localMusic.action('playback',args)"
       }
+    },
+    {
+      "surface": "Composer",
+      "name": "composer reasoning effort",
+      "actionId": "reasoning.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('reasoning.set', {mode})"
+      }
+    },
+    {
+      "surface": "Composer",
+      "name": "composer provider selection",
+      "actionId": "settings.default_model.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('settings.default_model.set', {provider})"
+      }
     }
   ],
   "exemptions": [
@@ -2291,6 +2333,30 @@
     {
       "scope": "Music handoff routes, source selection, accent previews, queue and lyrics tabs, read refresh, explicit metadata export and chat drafts",
       "reason": "Session presentation only. Provider/mode routes and accent selection do not change account grants or the Vellum background. File/folder pickers stage explicit user selections, whose imports dispatch local_music.file. Playlist information imports and saved links use their typed actions. Ask Vellum composes an existing chat draft and does not submit it. Export reads playlist metadata. Unimplemented audio settings, Apple streaming and transfer remain disabled."
+    },
+    {
+      "scope": "Agent activity and thought process disclosures, source details, citation markers, streaming preview, Show full response and unsaved speed drafts",
+      "reason": "Transient read-only presentation over existing messages and evidence. Saved response preferences use settings.device.update and applied revisioned device-setting receipts."
+    },
+    {
+      "scope": "Settings Archive and Analytics section navigation and legacy Skills, Archive, and Analytics view redirects",
+      "reason": "Transient navigation reuses the existing Settings surface and Plugins skill management. Analytics opening and stream controls retain observability.open/stream.set/refresh; archive restore and delete retain their existing conversation actions and confirmations."
+    },
+    {
+      "scope": "Response thinking-orb animation, model identity and event-derived progress labels",
+      "reason": "Decorative presentation of existing chat-adapter lifecycle and provider reasoning events. No timed work stages, model selection, network request or persistent state is introduced by the orb. Existing response detail disclosures and saved response preferences retain their owners."
+    },
+    {
+      "scope": "Composer shared menu motion and opted-in morphic tooltips",
+      "reason": "Provider/vendor filters, command hover, keyboard focus, disclosure, search and tooltip geometry are temporary presentation. Model selection retains model.select; connected provider changes retain settings.default_model.set and update the current conversation through model.select. Effort for an existing chat uses reasoning.set; a new chat stages effort until its first send. Browser settings reuse VSelect with shared row motion, retaining browser.settings.manage/data and existing confirmation flows."
+    },
+    {
+      "scope": "Main sidebar hover-owned profile menu",
+      "reason": "The profile popover joins the unpinned sidebar hover region, retains a short crossing delay, and closes with that temporary sidebar when the pointer leaves both. Menu ownership, enter/leave callbacks, focus and dismissal are local presentation only; profile, settings, account and pin actions retain their existing owners."
+    },
+    {
+      "scope": "Chat-scoped interface publication",
+      "reason": "Reviewed against the matching Music PR base: General and Configuration forward canonical settings/model/credential actions; Archive and Analytics move their existing action callbacks into Settings; Skills routes to existing Plugins management. Main/Music/Plugins hover, focus, search, disclosure, backdrop, tooltip geometry and response text reveals are transient presentation. Provider/effort selection retains settings.default_model.set, model.select and reasoning.set. Supplied thinking orbs have no action handlers. No new mutation endpoint or confirmation bypass."
     }
   ],
   "deferred": [

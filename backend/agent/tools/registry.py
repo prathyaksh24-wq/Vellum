@@ -22,6 +22,21 @@ class ToolPermissionError(PermissionError):
     pass
 
 
+def tool_result_failed(result: Any) -> bool:
+    """Interpret the existing tool envelope consistently in execution and SSE."""
+    if getattr(result, 'status', '') in ('error', 'failed', 'blocked'):
+        return True
+    value = getattr(result, 'content', result)
+    if isinstance(value, str):
+        import json
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return False
+    return isinstance(value, dict) and (bool(value.get('error')) or value.get('ok') is False or
+        value.get('success') is False or value.get('status') in ('error', 'failed', 'blocked', 'unavailable'))
+
+
 CapabilityAdapter = Callable[[dict[str, Any]], Any]
 
 
@@ -88,11 +103,61 @@ class ToolRegistry:
         runtime_config: RunnableConfig | None = None,
     ) -> Any:
         record = self.get(name)
-        self._check_permission(record, payload, agent_name=agent_name)
-        if record.runtime_tool is not None:
-            result = record.runtime_tool.invoke(payload, config=runtime_config)
-        else:
-            result = record.adapter(payload)
+        from agent.observability.activity import emit_activity as publish_activity
+        from uuid import uuid4
+        def emit_activity(*args, **kwargs):
+            # The main graph already publishes its execution callbacks. Inner
+            # specialist tools need this projection because they run in workers.
+            if agent_name != 'VellumAgent':
+                publish_activity(*args, **kwargs)
+        item_id = str(uuid4())
+        emit_activity('tool_call_preparing', name, item_id=item_id, label=f'Checking access to {name}',
+                      agent=agent_name, input=payload)
+        try:
+            self._check_permission(record, payload, agent_name=agent_name)
+            emit_activity('tool_call_started', name, item_id=item_id, label=f'Using {name}', agent=agent_name)
+            if record.runtime_tool is not None:
+                result = record.runtime_tool.invoke(payload, config=runtime_config)
+            else:
+                result = record.adapter(payload)
+        except Exception as exc:
+            emit_activity('tool_call_completed', name, item_id=item_id, label=f'{name} failed',
+                          status='blocked' if isinstance(exc, ToolPermissionError) else 'failed',
+                          agent=agent_name, output=exc.__class__.__name__)
+            raise
+        observed = result
+        if isinstance(result, str) and result.lstrip().startswith('{'):
+            import json
+            try:
+                observed = json.loads(result)
+            except ValueError:
+                pass
+        failed = tool_result_failed(result)
+        emit_activity('tool_call_completed', name, item_id=item_id, label=f'{name} failed' if failed else record.stream_label,
+                      status='failed' if failed else 'completed', agent=agent_name, output=result)
+        if not failed and agent_name != 'VellumAgent':
+            try:
+                # Expose returned public sources as soon as the read finishes,
+                # before specialist synthesis. A discovered URL is not a page read.
+                from agent.tools.web import extract_web_sources
+                from urllib.parse import urlparse
+                sources = observed.get('sources') if isinstance(observed, dict) else None
+                if not isinstance(sources, list):
+                    import json
+                    sources = extract_web_sources(result if isinstance(result, str) else json.dumps(observed, default=str))
+                for source in sources[:20]:
+                    if not isinstance(source, dict):
+                        continue
+                    url = str(source.get('url') or source.get('path_or_url') or '')
+                    if not url.startswith(('https://', 'http://')):
+                        continue
+                    domain = urlparse(url).netloc.removeprefix('www.')
+                    public = {'url':url, 'title':str(source.get('title') or domain),
+                              'domain':domain, 'source_type':'web'}
+                    emit_activity('source_reading' if name=='web_extract_pages' else 'source_discovered', '', item_id='source-'+url,
+                                  label=('Read ' if name=='web_extract_pages' else 'Found ')+domain, status='completed', source=public, agent=agent_name)
+            except Exception as exc:
+                logger.debug('Tool source progress omitted (%s)', type(exc).__name__)
         if self._observer is not None:
             try:
                 self._observer(
@@ -162,7 +227,7 @@ class ToolRegistry:
                     args_schema=tool.args_schema,
                     return_direct=tool.return_direct,
                     tags=tool.tags,
-                    metadata=tool.metadata,
+                    metadata={**(tool.metadata or {}), 'vellum_access':record.access.value},
                     handle_tool_error=tool.handle_tool_error,
                     handle_validation_error=tool.handle_validation_error,
                     response_format=tool.response_format,

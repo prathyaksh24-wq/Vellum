@@ -469,7 +469,7 @@ def _updated_at(conversation: dict[str, Any]) -> str:
     return str(conversation.get("updated_at") or conversation.get("created_at") or conversation.get("created") or "")
 
 
-def build_conversation_library(conversations: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def build_conversation_library(conversations: Iterable[dict[str, Any]], *, include_messages: bool = True) -> dict[str, Any]:
     enriched: list[dict[str, Any]] = []
     space_rows: dict[str, dict[str, Any]] = {}
     topic_counts: dict[str, Counter[tuple[str, str]]] = defaultdict(Counter)
@@ -526,6 +526,10 @@ def build_conversation_library(conversations: Iterable[dict[str, Any]]) -> dict[
         if smart_counts[key]
     ]
     enriched.sort(key=_updated_at, reverse=True)
+    if not include_messages:
+        enriched = [{**{key: value for key, value in item.items() if key != 'messages'},
+                     'messages': [], 'message_count': len(item.get('messages') or []),
+                     'history_loaded': False} for item in enriched]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "spaces": spaces,

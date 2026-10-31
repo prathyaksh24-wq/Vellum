@@ -46,7 +46,7 @@ test('plugin sidebar hide and show are driven by the applied visibility owner',a
   function Owner(){const [visible,setVisible]=React.useState(true);return React.createElement(window.VellumUI.PluginWorkspace,{apps:items,mode:'directory',sidebarVisible:visible,onSidebarVisibility:async next=>{visibility(next);setVisible(next);return {status:'applied'};}});}
   await act(async()=>root.render(React.createElement(Owner)));
   await click(host.querySelector('[aria-label="Hide plugin sidebar"]'));
-  expect(host.querySelector('[aria-label="Customize"]')).toBeNull();
+  expect(host.querySelector('[aria-label="Customize"]').getAttribute('aria-hidden')).toBe('true');
   expect(visibility).toHaveBeenLastCalledWith(false);
   await click(host.querySelector('[aria-label="Show plugin sidebar"]'));
   expect(host.querySelector('[aria-label="Customize"]')).toBeTruthy();

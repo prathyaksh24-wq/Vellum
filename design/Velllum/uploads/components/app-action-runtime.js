@@ -22,6 +22,7 @@
   var DEVICE_SETTINGS_STORAGE_KEY = "vellum-device-settings-v1";
   var DEVICE_SETTINGS_UPDATE_ACTION_ID = "settings.device.update";
   var DEVICE_SETTINGS_DEFAULTS = {
+    streaming: {style:'ink',loading:'cascade',speed:12,pencil:true,thinking:true,citations:'auto'},
     background: "galaxy",
     previous_background: null,
     accent: "default",
@@ -200,6 +201,7 @@
     }
     var effectiveRevision = deviceState.revision;
     var listeners = [];
+    var dispatchTail = Promise.resolve();
 
     function composeState() {
       var next = normalizeLayout(deviceState);
@@ -280,22 +282,29 @@
       return receipt;
     }
 
-    async function dispatch(actionId, args, dispatchOptions) {
-      if (!client || typeof client.dispatch !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
-      dispatchOptions = dispatchOptions || {};
+    function dispatch(actionId, args, dispatchOptions) {
+      dispatchOptions = Object.assign({}, dispatchOptions || {});
       var request = {
         request_id: requestIdFactory(),
         action_id: actionId,
         action_version: "1",
-        arguments: args || {},
+        arguments: clone(args || {}),
       };
-      var receipt = await client.dispatch(
-        request,
-        Object.assign(context(dispatchOptions.source || "ui", dispatchOptions.conversationId || ""), {
-          adaptive_learning_signal: dispatchOptions.learn === true,
-        }),
-      );
-      return applyReceipt(receipt);
+      var perform = async function () {
+        if (!client || typeof client.dispatch !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+        // Resize, hover/pin controls and adaptive presentation share one revision.
+        // Build context after the preceding receipt, never at enqueue time.
+        var receipt = await client.dispatch(
+          request,
+          Object.assign(context(dispatchOptions.source || "ui", dispatchOptions.conversationId || ""), {
+            adaptive_learning_signal: dispatchOptions.learn === true,
+          }),
+        );
+        return applyReceipt(receipt);
+      };
+      var pending = dispatchTail.then(perform);
+      dispatchTail = pending.then(function () {}, function () {});
+      return pending;
     }
 
     function dispatchSidebar(visible, dispatchOptions) {
@@ -416,6 +425,7 @@
       revision: Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
       values: Object.assign({}, DEVICE_SETTINGS_DEFAULTS, rawValues, {
         profile: Object.assign({}, rawValues.profile || {}),
+        streaming: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.streaming, rawValues.streaming || {}),
         personalization: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.personalization, rawValues.personalization || {}),
       }),
     };
@@ -488,6 +498,7 @@
       if (patch.version !== state.version) throw new Error("DEVICE_SETTINGS_VERSION_MISMATCH");
       if (patch.base_revision !== state.revision) throw new Error("STALE_DEVICE_SETTINGS_RECEIPT");
       var nextValues = Object.assign({}, state.values, patch.values);
+      if (patch.values.streaming) nextValues.streaming=Object.assign({},state.values.streaming,patch.values.streaming);
       if (patch.values.personalization) {
         nextValues.personalization = Object.assign({}, state.values.personalization, patch.values.personalization);
       }

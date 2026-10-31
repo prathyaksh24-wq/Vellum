@@ -4,6 +4,7 @@ import re
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
+from agent.contracts.books import BookEvidenceAnchor, BookClaim
 
 
 def user_query_text(message: str) -> str:
@@ -24,6 +25,9 @@ class SpecialistSource(BaseModel):
     snippet: str = ""
     captured_at: str = ""
     freshness: Freshness = "historical"
+    id: str = ""
+    evidence: BookEvidenceAnchor | None = None
+    claims: list[BookClaim] = Field(default_factory=list)
 
 
 class MemoryProposal(BaseModel):

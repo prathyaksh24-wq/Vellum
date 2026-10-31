@@ -19,7 +19,7 @@
   const CheckIcon = props => <Icon {...props} d="M20 6L9 17l-5-5" />;
   const ChevronIcon = props => <Icon {...props} d="M6 9l6 6 6-6" />;
   const normalizeOptions = options => options.map(option => typeof option === "object"
-    ? { value: option.value, label: option.label ?? option.value, sub: option.sub, disabled: !!option.disabled }
+    ? { value: option.value, label: option.label ?? option.value, icon: option.icon, sub: option.sub, disabled: !!option.disabled }
     : { value: option, label: option, sub: "", disabled: false });
 
   const VSelect = ({
@@ -31,6 +31,7 @@
     className = "",
     ariaLabel = "Select",
     menuWidth,
+    sharedLayout = false,
   }) => {
     const items = normalizeOptions(options);
     const rootRef = useRef(null);
@@ -45,6 +46,8 @@
     const selected = items.find(item => item.value === value);
     const enabled = items.map((item, index) => item.disabled ? -1 : index).filter(index => index >= 0);
     const controlId = ariaLabel.replace(/\s+/g, "-").toLowerCase();
+    const SharedList = sharedLayout && window.VellumUI.SharedRowBackground;
+    const List = SharedList || 'div';
 
     const move = (from, delta) => {
       if (!enabled.length) return -1;
@@ -134,7 +137,7 @@
     };
 
     return (
-      <div ref={rootRef} className={`v-select ${placement} ${open ? "open" : ""} ${className}`.trim()}>
+      <div ref={rootRef} className={`v-select ${placement} ${open ? "open" : ""} ${SharedList ? 'shared-layout' : ''} ${className}`.trim()}>
         <button
           ref={triggerRef}
           type="button"
@@ -149,6 +152,7 @@
           onClick={() => open ? closeMenu() : openMenu()}
           onKeyDown={onTriggerKeyDown}
         >
+          {selected?.icon && ((selected.icon.includes('google-deepmind') || selected.icon.includes('ollama-color')) ? <span className="model-vendor-icon model-monochrome-mark" style={{maskImage:`url(${selected.icon})`,WebkitMaskImage:`url(${selected.icon})`}} aria-hidden="true"/> : <img className="model-vendor-icon" src={selected.icon} alt=""/>)}
           <span className={`v-select-value ${selected ? "" : "placeholder"}`}>{selected?.label ?? placeholder}</span>
           <span className="v-select-chevron"><ChevronIcon size={14} /></span>
         </button>
@@ -161,7 +165,7 @@
           className="v-select-content"
           style={menuWidth ? { width: menuWidth } : undefined}
         >
-          <div className="v-select-list">
+          <List className="v-select-list" {...(SharedList ? {activeSelector:'.v-select-option.active:not(:disabled)',refreshKey:open+':'+activeIndex} : {})}>
             {items.map((item, index) => (
               <button
                 key={item.value}
@@ -169,6 +173,7 @@
                 id={`${controlId}-option-${index}`}
                 type="button"
                 role="option"
+                data-shared-row={SharedList ? '' : undefined}
                 aria-selected={item.value === value}
                 disabled={item.disabled}
                 tabIndex={open && index === activeIndex ? 0 : -1}
@@ -178,6 +183,7 @@
                 onClick={() => choose(index)}
                 onKeyDown={event => onOptionKeyDown(event, index)}
               >
+                {item.icon && ((item.icon.includes('google-deepmind') || item.icon.includes('ollama-color')) ? <span className="model-vendor-icon model-monochrome-mark" style={{maskImage:`url(${item.icon})`,WebkitMaskImage:`url(${item.icon})`}} aria-hidden="true"/> : <img className="model-vendor-icon" src={item.icon} alt=""/>)}
                 <span className="v-select-option-copy">
                   <span>{item.label}</span>
                   {item.sub && <span className="v-select-option-sub">{item.sub}</span>}
@@ -185,7 +191,7 @@
                 <span className="v-select-check"><CheckIcon size={14} /></span>
               </button>
             ))}
-          </div>
+          </List>
         </div>
       </div>
     );

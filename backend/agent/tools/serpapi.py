@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
+from functools import wraps
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +14,18 @@ import urllib.request
 from agent.config import get_settings
 
 GOOGLE_RESULT_SEPARATOR = "\n\n---\n\n"
+_search_deadline: ContextVar[float | None] = ContextVar('serpapi_search_deadline', default=None)
+
+
+def _bounded_search(method):
+    @wraps(method)
+    def bounded(self, *args, **kwargs):
+        token = _search_deadline.set(time.monotonic() + self.timeout_seconds)
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            _search_deadline.reset(token)
+    return bounded
 
 
 class SerpApiClient:
@@ -20,7 +35,7 @@ class SerpApiClient:
         api_key: str | None = None,
         base_url: str | None = None,
         log_path: Path | str | None = None,
-        timeout_seconds: int = 45,
+        timeout_seconds: int = 15,
     ) -> None:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.serpapi_api_key
@@ -40,12 +55,20 @@ class SerpApiClient:
         base_url = 'https://serpapi.com/search.json' if not self._explicit_key and managed('serpapi') else self.base_url
         url = f"{base_url}?{urllib.parse.urlencode(request_params, doseq=True)}"
         request = urllib.request.Request(url, headers={"Accept": "application/json"})
+        deadline = _search_deadline.get()
+        timeout = min(self.timeout_seconds, deadline - time.monotonic()) if deadline is not None else self.timeout_seconds
+        if timeout <= 0:
+            raise RuntimeError('SerpAPI search timed out. Try again or choose another search provider.')
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except Exception:
             # urllib errors can carry the credential-bearing URL.
             raise RuntimeError('SerpAPI did not complete this search. Check its connection and account limits.') from None
+        if not isinstance(payload, dict) or payload.get('error') or str((payload.get('search_metadata') or {}).get('status') or '').casefold() == 'error':
+            # Error payloads must not masquerade as empty results and launch
+            # another engine (or echo a credential-bearing provider response).
+            raise RuntimeError('SerpAPI rejected this search. Check its API key, quota and account limits.')
         self._log_search(params=clean_params, payload=payload)
         return payload
 
@@ -53,6 +76,7 @@ class SerpApiClient:
         payload = self.search({"engine": "google", "q": query, "num": num})
         return _google_payload_text(payload, num=num)
 
+    @_bounded_search
     def fresh_google_search_text(self, query: str, *, num: int = 5) -> str:
         for engine in ("google_ai_mode", "google_light", "google"):
             payload = self.search({"engine": engine, "q": query, "num": num})
@@ -61,6 +85,7 @@ class SerpApiClient:
                 return text
         return "No web results found."
 
+    @_bounded_search
     def fresh_google_search(self, query: str, *, num: int = 5, min_sources: int = 3) -> dict[str, Any]:
         text = ""
         facts: list[str] = []

@@ -10,7 +10,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 const html = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
 const musicCss=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../design/Velllum/uploads/components/music-page.css'),'utf8');
 const browserCss=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../design/Velllum/uploads/components/browser-panel.css'),'utf8');
-const source = html.slice(html.indexOf('let dockLastHiddenAt ='), html.indexOf('/* closes on a document-level')) +
+const source = html.slice(html.indexOf('const DockTooltip ='), html.indexOf('/* closes on a document-level')) +
   html.slice(html.indexOf('const DockMusicMarquee ='), html.indexOf('const SettingsModal ='));
 const require = createRequire(import.meta.url);
 // jsdom and Node use different typed-array realms; esbuild runs in Node's realm.
@@ -34,6 +34,8 @@ async function renderPlayer(queue, sdk = false, options = {}) {
     return {prepare:vi.fn(async () => {}), dispose};
   })};
   const plugins = {capabilities:vi.fn(async () => ({features:{spotify:{enabled:true,endpoints:{playback_token:'token'}}}}))};
+  window.React=React;
+  new Function(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../design/Velllum/uploads/components/morphic-ui.js'),'utf8'))();
   const iconNames=['IcPencilSq','IcSearch','IcLibrary','IcTerminal','IcSettings','IcPin','IcCheck'];
   const {Player,GlobalDock} = new Function('React','useState','useRef','useEffect','SpotifyAPI','API','I','fmtSpotifyTime','ReactDOM','AGENTS',...iconNames,
     compiled + '; return {Player:SpotifyPlayer,GlobalDock};')(React,useState,useRef,useEffect,api,{plugins,localMusic:options.localApi},() => null,() => '0:00',ReactDOM,[],...iconNames.map(() => () => null));

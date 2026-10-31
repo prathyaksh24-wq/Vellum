@@ -91,8 +91,12 @@ def test_private_summary_only_agents_cannot_export_packets(tmp_path,source,recip
     runtime,_=build_runtime(tmp_path)
     profiles=builtin_profiles()
     runtime.memory_orchestrator.store.save_memory(scope=f"agent:{source}",kind="fact",text="Private messages evidence",source_thread_id="t",confidence=1)
-    packet=runtime.memory_orchestrator.build_agent_handoff(source=profiles[source],recipient=profiles[recipient],query="messages",thread_id="t",user_id="u")
-    assert packet["items"] == []
+    if profiles[recipient].source_egress == "external":
+        with pytest.raises(PermissionError, match="not allowed by both profiles"):
+            runtime.memory_orchestrator.build_agent_handoff(source=profiles[source],recipient=profiles[recipient],query="messages",thread_id="t",user_id="u")
+    else:
+        packet=runtime.memory_orchestrator.build_agent_handoff(source=profiles[source],recipient=profiles[recipient],query="messages",thread_id="t",user_id="u")
+        assert packet["items"] == []
 
 
 @pytest.mark.parametrize("change", ["source_denies","recipient_denies","external"])

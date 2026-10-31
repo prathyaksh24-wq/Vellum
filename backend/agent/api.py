@@ -525,6 +525,9 @@ async def _prepare_book_attachments(
     return "\n".join(lines), remaining
 
 
+from agent.contracts.books import BookEvidenceAnchor, BookClaim
+
+
 class Source(BaseModel):
     url: str
     title: str = ""
@@ -535,6 +538,9 @@ class Source(BaseModel):
     source_type: str = ""
     favicon_url: str = ""
     provider_label: str = ""
+    id: str = ""
+    evidence: BookEvidenceAnchor | None = None
+    claims: list[BookClaim] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -1750,12 +1756,7 @@ app.add_middleware(
 router = APIRouter(prefix="/api")
 
 
-_PROVIDER_KEY_ENV = {
-    "openrouter": "OPENROUTER_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "google": "GOOGLE_API_KEY",
-}
+from agent.llm.providers import PROVIDER_KEY_ENV as _PROVIDER_KEY_ENV, configured_provider_keys, provider_connections
 
 
 def _env_path() -> Path:
@@ -2427,7 +2428,8 @@ def _message_content(message: Any) -> str:
         parts = []
         for item in content:
             if isinstance(item, dict):
-                parts.append(str(item.get("text") or item.get("content") or ""))
+                if item.get("type") in {"text", "output_text", None}:
+                    parts.append(str(item.get("text") or item.get("content") or ""))
             else:
                 parts.append(str(item))
         return "".join(parts).strip()
@@ -3178,8 +3180,8 @@ async def health(deep: bool = Query(default=False)) -> dict[str, Any]:
         "checks": {"mode": "deep" if deep else "lightweight"},
     }
     if deep:
-        body["vector"] = _vector_health()
-        body["embeddings"] = _embedding_health()
+        body["vector"], body["embeddings"] = await asyncio.gather(
+            asyncio.to_thread(_vector_health), asyncio.to_thread(_embedding_health))
     return body
 
 
@@ -3247,9 +3249,9 @@ async def list_conversations() -> dict[str, Any]:
 
 
 @router.get("/conversations/library", response_model=ConversationLibraryResponse)
-async def conversation_library() -> ConversationLibraryResponse:
+async def conversation_library(include_messages: bool = True) -> ConversationLibraryResponse:
     projection = await asyncio.to_thread(
-        lambda: build_conversation_library(_read_ui_conversations())
+        lambda: build_conversation_library(_read_ui_conversations(), include_messages=include_messages)
     )
     return ConversationLibraryResponse.model_validate(projection)
 
@@ -3933,11 +3935,28 @@ def _chunk_text(chunk: Any) -> str:
         parts: list[str] = []
         for item in content:
             if isinstance(item, dict):
-                parts.append(str(item.get("text") or item.get("content") or ""))
+                if item.get("type") in {"text", "output_text", None}:
+                    parts.append(str(item.get("text") or item.get("content") or ""))
             else:
                 parts.append(str(item))
         return "".join(parts)
     return str(content or "")
+
+
+def _chunk_reasoning_summary(chunk: Any) -> str:
+    content = chunk.get("content", []) if isinstance(chunk, dict) else getattr(chunk, "content", [])
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") in {"reasoning_summary", "summary_text"}:
+            parts.append(str(block.get("text") or ""))
+        elif block.get("type") == "reasoning" and isinstance(block.get("summary"), list):
+            parts.extend(str(item.get("text") or "") for item in block["summary"]
+                         if isinstance(item, dict) and item.get("type") == "summary_text")
+    return "".join(parts)
 
 
 def _is_primary_chat_model_stream_event(event: dict[str, Any]) -> bool:
@@ -3950,7 +3969,10 @@ def _is_primary_chat_model_stream_event(event: dict[str, Any]) -> bool:
     """
 
     name = str(event.get("name") or "").strip()
-    return not name or name == "RoutedChatModel"
+    node = (event.get('metadata') or {}).get('langgraph_node')
+    # Specialist synthesis and compaction also use RoutedChatModel. Their
+    # structured/internal output is tool evidence, never the main answer stream.
+    return (not name or name == "RoutedChatModel") and node in {None, 'agent', 'final_answer'}
 
 
 def _chunk_tool_call_chunks(chunk: Any) -> list[dict[str, Any]]:
@@ -4274,22 +4296,12 @@ def _agent_activity_event(
     source: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str:
-    return _response_event(
-        "agent.activity",
-        response_id=response_id,
-        thread_id=thread_id,
-        activity={
-            "id": item_id or _stream_id("activity"),
-            "type": activity_type,
-            "label": label,
-            "detail": detail[:1000],
-            "status": status,
-            "name": name,
-            "source": source,
-            "metadata": metadata or {},
-            "at": _stream_now(),
-        },
-    )
+    from agent.contracts.chat_activity import AgentActivity, activity_detail
+    activity = AgentActivity(id=item_id or _stream_id("activity"), type=activity_type,
+        label=str(activity_detail(label)), detail=str(activity_detail(detail)), status=status,
+        name=name, source=source, metadata=activity_detail(metadata or {}), at=_stream_now())
+    return _response_event("agent.activity", response_id=response_id, thread_id=thread_id,
+                           activity=activity.model_dump())
 
 
 from agent.tools.web import extract_web_sources
@@ -4732,30 +4744,17 @@ def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool
 
 
 def _clean_answer_body(text: str | None, *, preserve_youtube_links: bool = False) -> str:
-    """Keep structured sources out of the visible answer and normalize plain-text Markdown."""
+    """Preserve the model's rich answer and citation references across stream completion."""
     value = str(text or "").strip()
-    if not value:
-        return ""
-    value = re.split(
-        r"(?im)^\s{0,3}#{1,6}\s+(?:references|sources|sources checked|evidence)\s*$",
-        value,
-        maxsplit=1,
-    )[0]
-    value = re.sub(r"(?m)^\s*\[(?:\d+)\]\s+(@)", r"- \1", value)
-    value = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", value)
-    def clean_link(match):
-        if preserve_youtube_links and re.fullmatch(
-            r"https://www\.youtube\.com/(?:watch\?v=[A-Za-z0-9_-]+|channel/[A-Za-z0-9_-]+)", match[2]
-        ):
-            return match[0]
-        return match[1]
-
-    value = re.sub(r"\[((?:\\.|[^\]\\])+)\]\((https?://[^)]+)\)", clean_link, value)
-    value = re.sub(r"(?<!\w)\[(?:\d+)\](?!\w)", "", value)
-    value = value.replace(r"\(", "").replace(r"\)", "")
-    value = value.replace(r"\-", "-").replace(r"\|", "|")
-    value = re.sub(r"[ \t]+\n", "\n", value)
-    value = re.sub(r"\n{3,}", "\n\n", value)
+    if preserve_youtube_links:
+        # Account-result cards own reference sources; keep only genuine video
+        # and channel links in this specialist's answer without flattening prose.
+        def account_link(match):
+            return match[0] if re.fullmatch(
+                r"https://www\.youtube\.com/(?:watch\?v=[A-Za-z0-9_-]+|channel/[A-Za-z0-9_-]+)", match[2]
+            ) else match[1]
+        value = re.sub(r"\[((?:\\.|[^\]\\])+)\]\((https?://[^)]+)\)", account_link, value)
+        value = re.sub(r"(?<!\w)\[(?:\d+)\](?!\w)", "", value)
     return value.strip()
 
 
@@ -4824,7 +4823,85 @@ async def _checkpoint_specialist_exchange(message: str, answer: str, thread_id: 
     )
 
 
+def _public_stream_error(error: BaseException) -> str:
+    from agent.llm.routing.models import RoutingTerminalError, RoutingStreamInterrupted
+    if isinstance(error, (RoutingTerminalError, RoutingStreamInterrupted)):
+        failures = list(getattr(error, 'failures', ()))
+        failure = getattr(error, 'failure', None) or (failures[-1] if failures else None)
+        if failure:
+            # ProviderFailure summaries are controlled, sanitized classifications.
+            return failure.summary.rstrip('.') + '.'
+    if isinstance(error, ContextBudgetExceeded):
+        return str(error)
+    if isinstance(error, GraphRecursionError):
+        return 'The request reached its tool-step limit before completion. Check the action receipts before retrying a write.'
+    if isinstance(error, TimeoutError):
+        return 'The model stream timed out. Your partial answer is preserved.'
+    if 'serpapi' in str(error).casefold():
+        return 'SerpAPI search failed. Check its connection, quota or account limits.'
+    return 'The request could not finish. Your partial answer is preserved.'
+
+
 async def _stream_agent_turn(**kwargs):
+    """Multiplex executor progress and existing response events without replaying work."""
+    from agent.observability.activity import observe_activity
+    response_id = _stream_id("resp")
+    thread_id = kwargs["active_thread_id"]
+    queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    live_agents: set[str] = set()
+    closed = False
+
+    def deliver(activity):
+        if closed:
+            return
+        def enqueue():
+            if closed:
+                return
+            if activity["type"] == "sub_agent_started":
+                live_agents.add(activity["name"])
+            queue.put_nowait(("activity", activity))
+        loop.call_soon_threadsafe(enqueue)
+
+    async def produce():
+        try:
+            with observe_activity(deliver):
+                async for block in _stream_agent_turn_events(**kwargs, _response_id=response_id, _live_agents=live_agents):
+                    await queue.put(("block", block))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            await queue.put(("error", exc))
+        finally:
+            await queue.put(("end", None))
+
+    producer = loop.create_task(produce())
+    try:
+        while True:
+            kind, value = await queue.get()
+            if kind == "end":
+                break
+            if kind == "error":
+                _LOGGER.error('Agent turn failed before completion (%s)', type(value).__name__)
+                message = _public_stream_error(value)
+                yield _response_error(response_id=response_id, thread_id=thread_id, message=message)
+                yield _sse('error', {'error':message})
+                break
+            if kind == "block":
+                yield value
+            else:
+                yield _agent_activity_event(response_id=response_id, thread_id=thread_id,
+                    activity_type=value["type"], item_id=value["id"], name=value["name"],
+                    label=value["label"], detail=value["detail"], status=value["status"],
+                    source=value.get('source'),
+                    metadata={**value["metadata"], "occurred_at":value["at"]})
+    finally:
+        closed = True
+        producer.cancel()
+        await asyncio.gather(producer, return_exceptions=True)
+
+
+async def _stream_agent_turn_events(**kwargs):
     from agent.llm.providers import request_model_scope
     from agent.personalization import personalization_scope
     from agent.tools.app_actions import app_action_session
@@ -4849,9 +4926,11 @@ async def _stream_agent_turn_scoped(
     attachments: list[ChatAttachment] | None = None,
     turn_audit: TurnAudit | None = None,
     reasoning_mode: str | None = None,
+    _response_id: str = "",
+    _live_agents: set[str] | None = None,
 ):
     from agent.tools.app_actions import app_action_result_guard, app_action_read_only_google_turn
-    response_id = _stream_id("resp")
+    response_id = _response_id or _stream_id("resp")
     message_item_id = _stream_id("msg")
     yield _response_created(response_id=response_id, thread_id=active_thread_id)
     yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
@@ -4971,133 +5050,26 @@ async def _stream_agent_turn_scoped(
             _delegated_agent_message(effective_message, live_result, live_sources),
             attached_context,
         )
-        subagent_item = {
-            "id": _stream_id("item"),
-            "type": "subagent_call",
-            "name": live_result.agent_name,
-            "status": "in_progress",
-            "label": f"Routed to {live_result.agent_name}",
-            "detail": clean_message[:200],
-            "metadata": {
-                "run_id": live_result.run_id,
-                "cache_status": live_result.cache_status,
-                "cache_reason": live_result.cache_reason,
-                "route_source": live_result.route_source,
-            },
-        }
-        yield _agent_activity_event(
-            response_id=response_id,
-            thread_id=active_thread_id,
-            activity_type="sub_agent_started",
-            label=f"Calling {live_result.agent_name}...",
-            detail=clean_message[:200],
-            item_id=str(subagent_item["id"]),
-            name=live_result.agent_name,
-        )
-        yield _response_output_item_added(
-            response_id=response_id,
-            thread_id=active_thread_id,
-            item=subagent_item,
-        )
-        yield _sse("activity", {"label": f"Routed to {live_result.agent_name}", "detail": clean_message[:200]})
-        for activity in live_result.activity_events:
-            label = str(activity.get("label") or "Agent activity")
-            activity_type = str(activity.get("type") or "tool_call_started")
-            name = str(activity.get("name") or "")
-            detail = str(activity.get("detail") or "")
-            status = str(activity.get("status") or "in_progress")
-            yield _agent_activity_event(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                activity_type=activity_type,
-                label=label,
-                detail=detail,
-                status=status,
-                item_id=str(activity.get("id") or _stream_id("activity")),
-                name=name,
-                metadata=dict(activity.get("metadata") or {}),
-            )
-        suppress_generic_tool_activity = any(
-            bool((activity.get("metadata") or {}).get("suppress_generic_tool"))
-            for activity in live_result.activity_events
-        )
-        for tool_name in live_result.tools:
-            if suppress_generic_tool_activity:
-                yield _sse("tool", {"name": tool_name})
-                continue
-            tool_item = {
-                "id": _stream_id("item"),
-                "type": "tool_call",
-                "name": tool_name,
-                "status": "in_progress",
-                "label": f"Used {tool_name}",
-                "detail": "",
-            }
-            yield _agent_activity_event(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                activity_type="tool_call_started",
-                label=f"Using {tool_name}...",
-                item_id=str(tool_item["id"]),
-                name=tool_name,
-            )
-            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=tool_item)
-            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=tool_item)
-            yield _agent_activity_event(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                activity_type="tool_call_completed",
-                label=f"Used {tool_name}",
-                status="completed",
-                item_id=str(tool_item["id"]),
-                name=tool_name,
-            )
-            yield _sse("tool", {"name": tool_name})
-        for source_record in live_sources:
-            source_item = {
-                "id": _stream_id("item"),
-                "type": "source",
-                "status": "completed",
-                "source": source_record,
-            }
-            source_label = str(source_record.get("provider_label") or source_record.get("domain") or "source")
-            yield _agent_activity_event(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                activity_type="source_discovered",
-                label=f"Found {source_label}",
-                status="completed",
-                item_id=str(source_item["id"]),
-                source=source_record,
-            )
-            yield _agent_activity_event(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                activity_type="source_reading",
-                label=f"Reading {source_label}...",
-                detail=str(source_record.get("title") or source_record.get("snippet") or ""),
-                item_id=str(source_item["id"]) + "-reading",
-                source=source_record,
-            )
-            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
-            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
-            yield _sse("source", source_record)
-        subagent_status = "failed" if live_result.status == "error" else "completed"
-        yield _response_output_item_done(
-            response_id=response_id,
-            thread_id=active_thread_id,
-            item=subagent_item,
-            status=subagent_status,
-        )
-        yield _agent_activity_event(
-            response_id=response_id,
-            thread_id=active_thread_id,
-            activity_type="sub_agent_completed",
-            label=f"{live_result.agent_name} finished",
-            status=subagent_status,
-            item_id=str(subagent_item["id"]),
-            name=live_result.agent_name,
-        )
+        if live_result.agent_name not in (_live_agents or set()):
+            yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                activity_type="sub_agent_completed", label=f"{live_result.agent_name} finished",
+                item_id="reported-" + (live_result.run_id or live_result.agent_name),
+                name=live_result.agent_name,
+                status="failed" if live_result.status == "error" else "blocked" if live_result.status == "blocked" else "completed",
+                metadata={"reported_after_completion":True,"output":live_result.answer[:12000],
+                          "cache_status":live_result.cache_status})
+        for index, activity in enumerate(live_result.activity_events):
+            yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                activity_type="reported_activity", label=str(activity.get("label") or activity.get("name") or "Specialist activity"),
+                item_id=str(activity.get("id") or f"reported-{live_result.run_id}-{index}"),
+                name=str(activity.get("name") or ""), detail=str(activity.get("detail") or ""),
+                status="failed" if activity.get("status") in {"failed","error"} else "completed",
+                metadata={**dict(activity.get("metadata") or {}), "reported_after_completion":True})
+        for record in live_sources:
+            yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                activity_type="source_discovered", label=f"Found {record.get('title') or record.get('domain') or 'source'}",
+                item_id="source-" + str(record.get("url") or ""), status="completed", source=record)
+            yield _sse("source", record)
         if _should_passthrough_live_result(live_result):
             answer = _clean_answer_body(live_result.answer,
                 preserve_youtube_links=live_result.agent_name == "YoutubeAgent" or "youtube_agent" in live_result.tools) or "No response."
@@ -5197,10 +5169,14 @@ async def _stream_agent_turn_scoped(
         sources: list[dict] = list(live_sources)
         seen_urls: set[str] = {str(source.get("url") or "") for source in live_sources if source.get("url")}
         active_tool_items: dict[str, dict[str, Any]] = {}
+        nested_tool_runs: set[str] = set()
         function_stream_items: dict[str, dict[str, Any]] = {}
         function_stream_args: dict[str, str] = {}
+        reasoning_summaries: dict[str, str] = {}
+        local_thinking: dict[str, str] = {}
         last_chat_model_output: Any | None = None
         specialist_gap = ""
+        specialist_failure_summary = ""
         specialist_summaries: list[str] = []
         completed_specialists: set[str] = set()
         expected_specialist_results = 0
@@ -5215,11 +5191,23 @@ async def _stream_agent_turn_scoped(
         message_item_started = False
         final_answer_started = False
         try:
+            preparation_id = _stream_id('prepare')
+            yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                activity_type='runtime_preparing', label='Preparing the model', item_id=preparation_id,
+                name='model_runtime', status='in_progress')
             resolved_model = await _ensure_model(model)
             resolved_reasoning = _resolve_reasoning_mode(reasoning_mode)
             prepare_agent = getattr(agent, "prepare", None)
             if prepare_agent is not None:
                 await prepare_agent(resolved_model, resolved_reasoning)
+            thinking_available = False
+            if str(resolved_model).startswith('ollama/'):
+                from agent.llm.providers import get_provider_registry
+                thinking_available = 'thinking' in get_provider_registry().model_capabilities(resolved_model)
+            yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                activity_type='runtime_prepared', label='Model ready', item_id=preparation_id,
+                name='model_runtime', status='completed',
+                metadata={'model':resolved_model, 'thinking_available':thinking_available})
             await _ensure_fork_runtime_context(
                 active_thread_id,
                 model=resolved_model,
@@ -5261,10 +5249,18 @@ async def _stream_agent_turn_scoped(
                     continue
                 kind = event.get("event")
                 if kind == 'on_chain_end' and event.get('name') == 'tool_failure':
+                    # This graph stop has no provider chat-model event.
                     output = event.get('data', {}).get('output') or {}
                     terminal_messages = output.get('messages', []) if isinstance(output, dict) else []
                     if terminal_messages:
                         last_chat_model_output = terminal_messages[-1]
+                if kind in {'on_chain_start', 'on_chain_end'} and event.get('name') == 'context':
+                    context_done = kind == 'on_chain_end'
+                    yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                        activity_type='context_ready' if context_done else 'context_preparing',
+                        label='Conversation context ready' if context_done else 'Preparing conversation context',
+                        item_id='context-' + str(event.get('run_id') or 'primary'), name='conversation_context',
+                        status='completed' if context_done else 'in_progress')
                 if kind == "on_custom_event" and event.get("name") == "vellum_context_compacted":
                     yield _agent_activity_event(
                         response_id=response_id, thread_id=active_thread_id,
@@ -5274,6 +5270,14 @@ async def _stream_agent_turn_scoped(
                     )
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):
+                        summary_id = "summary-" + str(event.get("run_id") or "primary")
+                        if summary_id in reasoning_summaries:
+                            yield _response_event("response.reasoning_summary_text.done", response_id=response_id,
+                                thread_id=active_thread_id, item_id=summary_id, text=reasoning_summaries[summary_id])
+                        thinking_id = "thought-" + str(event.get("run_id") or "primary")
+                        if thinking_id in local_thinking:
+                            yield _response_event("response.reasoning_text.done", response_id=response_id,
+                                thread_id=active_thread_id, item_id=thinking_id, text=local_thinking[thinking_id])
                         last_chat_model_output = event.get("data", {}).get("output")
                         calls = _message_tool_calls(last_chat_model_output)
                         expected_specialist_results = sum(1 for call in calls if _tool_call_field(call, "name") == "delegate_to_agent")
@@ -5282,6 +5286,21 @@ async def _stream_agent_turn_scoped(
                     if not _is_primary_chat_model_stream_event(event):
                         continue
                     chunk = event.get("data", {}).get("chunk")
+                    # Ollama deliberately exposes a separate local thinking output.
+                    if str(resolved_model).startswith('ollama/'):
+                        additional = chunk.get('additional_kwargs', {}) if isinstance(chunk, dict) else getattr(chunk, 'additional_kwargs', {})
+                        thinking = additional.get('reasoning_content', '')
+                        if isinstance(thinking, str) and thinking:
+                            thinking_id = "thought-" + str(event.get("run_id") or "primary")
+                            local_thinking[thinking_id] = local_thinking.get(thinking_id, '') + thinking
+                            yield _response_event("response.reasoning_text.delta", response_id=response_id,
+                                thread_id=active_thread_id, item_id=thinking_id, delta=thinking)
+                    summary = _chunk_reasoning_summary(chunk)
+                    if summary:
+                        summary_id = "summary-" + str(event.get("run_id") or "primary")
+                        reasoning_summaries[summary_id] = reasoning_summaries.get(summary_id, "") + summary
+                        yield _response_event("response.reasoning_summary_text.delta", response_id=response_id,
+                            thread_id=active_thread_id, item_id=summary_id, delta=summary)
                     for call_chunk in _chunk_tool_call_chunks(chunk):
                         call_id = str(call_chunk.get("id") or call_chunk.get("index") or "0")
                         delta = str(call_chunk.get("delta") or "")
@@ -5308,8 +5327,8 @@ async def _stream_agent_turn_scoped(
                             yield _agent_activity_event(
                                 response_id=response_id,
                                 thread_id=active_thread_id,
-                                activity_type="tool_call_started",
-                                label=f"Using {name or 'function'}...",
+                                activity_type="function_call_preparing",
+                                label=f"Preparing {name or 'function'}...",
                                 item_id=str(item["id"]),
                                 name=name or "function",
                             )
@@ -5329,8 +5348,8 @@ async def _stream_agent_turn_scoped(
                             yield _agent_activity_event(
                                 response_id=response_id,
                                 thread_id=active_thread_id,
-                                activity_type="tool_call_delta",
-                                label=f"Using {item.get('name') or 'function'}...",
+                                activity_type="function_call_preparing",
+                                label=f"Preparing {item.get('name') or 'function'}...",
                                 detail=function_stream_args[call_id][-500:],
                                 item_id=str(item["id"]),
                                 name=str(item.get("name") or "function"),
@@ -5377,6 +5396,13 @@ async def _stream_agent_turn_scoped(
                     raw_name = event.get("name") or ""
                     if raw_name:
                         raw_input = event.get("data", {}).get("input")
+                        resolved_name, _ = unwrap_bridge_call(raw_name, raw_input)
+                        if any(active_tool_items.get(str(parent), {}).get('name') == resolved_name
+                               for parent in event.get('parent_ids', [])):
+                            # Registry and underlying LangChain tool callbacks
+                            # describe one execution. Keep its outer lifecycle.
+                            nested_tool_runs.add(str(event.get('run_id') or ''))
+                            continue
                         if str(raw_name) == "delegate_to_agent" and isinstance(raw_input, dict):
                             requested_agent = str(raw_input.get("agent_id") or "").strip()
                             if requested_agent and requested_agent in completed_specialists:
@@ -5400,8 +5426,8 @@ async def _stream_agent_turn_scoped(
                                 yield _agent_activity_event(
                                     response_id=response_id,
                                     thread_id=active_thread_id,
-                                    activity_type="tool_call_completed",
-                                    label=f"Used {item.get('name') or 'function'}",
+                                    activity_type="function_call_prepared",
+                                    label=f"Prepared {item.get('name') or 'function'} arguments",
                                     status="completed",
                                     item_id=str(item["id"]),
                                     name=str(item.get("name") or "function"),
@@ -5421,7 +5447,7 @@ async def _stream_agent_turn_scoped(
                             "label": label,
                             "detail": detail,
                         }
-                        active_tool_items[raw_name] = item
+                        active_tool_items[str(event.get("run_id") or raw_name)] = item
                         lifecycle_type = "memory_retrieved" if str(name) in {"search_my_notes", "memory_search", "obsidian_search"} else "tool_call_started"
                         lifecycle_label = "Using memory..." if lifecycle_type == "memory_retrieved" else f"Using {name}..."
                         yield _agent_activity_event(
@@ -5432,6 +5458,7 @@ async def _stream_agent_turn_scoped(
                             detail=detail,
                             item_id=str(item["id"]),
                             name=str(name),
+                            metadata={"input":tool_input},
                         )
                         yield _response_output_item_added(
                             response_id=response_id,
@@ -5441,16 +5468,24 @@ async def _stream_agent_turn_scoped(
                         yield _sse("tool", {"name": name})
                         yield _sse("activity", {"label": label, "detail": detail})
                 elif kind == "on_tool_end":
+                    if str(event.get('run_id') or '') in nested_tool_runs:
+                        nested_tool_runs.discard(str(event.get('run_id') or ''))
+                        continue
                     tool_name = str(event.get("name") or "")
                     from agent.tools.app_actions import drain_app_action_events
                     for action_event in drain_app_action_events():
                         turn = {'turn_kind':'mixed','thread_id':active_thread_id}
                         yield _sse('app.action.requested', {**turn,'request':action_event['request']})
                         yield _sse('app.action.receipt', {**turn,'receipt':action_event['receipt']})
-                    if tool_name == "web_search":
+                    if tool_name in {"web_search", "web_extract_pages"}:
                         output_text = _tool_output_text(event.get("data", {}).get("output"))
                         for record in extract_web_sources(output_text):
                             if record["url"] in seen_urls:
+                                if tool_name == 'web_extract_pages':
+                                    existing = next((source for source in sources if source.get('url') == record['url']), record)
+                                    yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                                        activity_type='source_reading', label='Read '+str(existing.get('provider_label') or existing.get('domain') or existing.get('title') or 'source'),
+                                        item_id='source-read-'+record['url'], status='completed', source=existing)
                                 continue
                             seen_urls.add(record["url"])
                             record = _decorate_source_record(
@@ -5468,21 +5503,13 @@ async def _stream_agent_turn_scoped(
                             yield _agent_activity_event(
                                 response_id=response_id,
                                 thread_id=active_thread_id,
-                                activity_type="source_discovered",
-                                label=f"Found {source_label}",
+                                activity_type="source_reading" if tool_name == 'web_extract_pages' else "source_discovered",
+                                label=f"Read {source_label}" if tool_name == 'web_extract_pages' else f"Found {source_label}",
                                 status="completed",
                                 item_id=str(source_item["id"]),
                                 source=record,
                             )
-                            yield _agent_activity_event(
-                                response_id=response_id,
-                                thread_id=active_thread_id,
-                                activity_type="source_reading",
-                                label=f"Reading {source_label}...",
-                                detail=str(record.get("title") or record.get("snippet") or ""),
-                                item_id=str(source_item["id"]) + "-reading",
-                                source=record,
-                            )
+
                             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _sse("source", record)
@@ -5497,6 +5524,8 @@ async def _stream_agent_turn_scoped(
                             specialist_status = str(specialist_result.get("status") or "")
                             specialist_summary = _clean_answer_body(str(specialist_result.get("summary") or ""),
                                 preserve_youtube_links=specialist_name == "YoutubeAgent")
+                            if specialist_status in {"error", "blocked", "needs_connection"}:
+                                specialist_failure_summary = specialist_summary
                             completed_specialists.add(specialist_name)
                             received_specialist_results += 1
                             if expected_specialist_results > 1 and specialist_summary:
@@ -5508,7 +5537,7 @@ async def _stream_agent_turn_scoped(
                                 yield _response_output_text_delta(response_id=response_id, thread_id=active_thread_id, item_id=message_item_id, delta=delta)
                                 yield _sse("token", {"text":delta})
 
-                            if (specialist_status in {"answered", "blocked", "stale"} or expected_specialist_results > 1) and specialist_summary:
+                            if (specialist_status in {"answered", "blocked", "stale", "error", "needs_connection", "needs_fetch"} or expected_specialist_results > 1) and specialist_summary:
                                 specialist_summaries.append(specialist_summary)
                             raw_sources = specialist_result.get("sources")
                             specialist_sources = raw_sources if isinstance(raw_sources, list) else []
@@ -5526,6 +5555,9 @@ async def _stream_agent_turn_scoped(
                                         "snippet": str(raw_source.get("snippet") or ""),
                                         "fetched_at": str(raw_source.get("captured_at") or _now_iso()),
                                         "source_type": str(raw_source.get("kind") or "web"),
+                                        "id": str(raw_source.get("id") or ""),
+                                        "evidence": raw_source.get("evidence"),
+                                        "claims": raw_source.get("claims", []),
                                         "provider": specialist_name,
                                     },
                                     source_index=len(sources) + 1,
@@ -5563,28 +5595,45 @@ async def _stream_agent_turn_scoped(
                                 and specialist_summary
                                 and specialist_sources
                                 and received_specialist_results >= expected_specialist_results
+                                or specialist_status in {"error", "blocked", "needs_connection"}
+                                and specialist_summary
+                                and received_specialist_results >= expected_specialist_results
                             )
                             if (
                                 specialist_status in {"error", "needs_fetch", "stale"}
                                 and not sources
                             ):
                                 specialist_gap = specialist_name
-                    done_item = active_tool_items.pop(str(event.get("name") or ""), None)
+                    done_item = active_tool_items.pop(str(event.get("run_id") or event.get("name") or ""), None)
                     if done_item:
+                        tool_output = event.get("data", {}).get("output")
+                        from agent.tools.registry import tool_result_failed
+                        tool_status = "failed" if tool_result_failed(tool_output) else "completed"
                         yield _response_output_item_done(
                             response_id=response_id,
                             thread_id=active_thread_id,
-                            item=done_item,
+                            item=done_item, status=tool_status,
                         )
                         yield _agent_activity_event(
                             response_id=response_id,
                             thread_id=active_thread_id,
                             activity_type="tool_call_completed",
-                            label=f"Used {done_item.get('name') or 'tool'}",
-                            status="completed",
+                            label=f"{done_item.get('name') or 'Tool'} finished",
+                            status=tool_status,
                             item_id=str(done_item["id"]),
                             name=str(done_item.get("name") or ""),
+                            metadata={"output":_tool_output_text(event.get("data", {}).get("output"))},
                         )
+                elif kind == "on_tool_error":
+                    if str(event.get('run_id') or '') in nested_tool_runs:
+                        nested_tool_runs.discard(str(event.get('run_id') or ''))
+                        continue
+                    failed = active_tool_items.pop(str(event.get("run_id") or event.get("name") or ""), None)
+                    if failed:
+                        yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                            activity_type="tool_call_completed", label=f"{failed.get('name')} failed",
+                            item_id=failed["id"], name=failed.get("name", ""), status="failed",
+                            metadata={"output":str(event.get("data", {}).get("error") or "Tool failed")})
                 capture_from_stream_event(
                     ledger=_api_ledger,
                     event=event,
@@ -5681,7 +5730,7 @@ async def _stream_agent_turn_scoped(
                     "Discord": "Discord",
                     "Memory": "memory",
                 }.get(specialist_domain, specialist_domain.replace("_", " "))
-                answer = f"I couldn't verify this request because the {specialist_domain} lookup returned no source evidence."
+                answer = specialist_failure_summary or f"I couldn't verify this request because the {specialist_domain} lookup returned no source evidence."
                 if not message_item_started:
                     yield _response_output_item_added(
                         response_id=response_id,
@@ -5817,10 +5866,7 @@ async def _stream_agent_turn_scoped(
             stream_skill_usage.__exit__(None, None, None)
             await _repair_incomplete_tool_history(active_thread_id)
             _LOGGER.exception("Agent stream failed")
-            public_error = str(exc) if isinstance(exc, ContextBudgetExceeded) else (
-                "The request reached its tool-step limit before completion. Check the action receipts before retrying a write."
-                if isinstance(exc, GraphRecursionError) else
-                "Model stream timed out." if isinstance(exc, TimeoutError) else "Unreachable.")
+            public_error = _public_stream_error(exc)
             yield _response_error(response_id=response_id, thread_id=active_thread_id, message=public_error)
             yield _sse("error", {"error": public_error})
 
@@ -6192,6 +6238,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         return StreamingResponse(
             _audited_turn_stream(combined, turn_audit),
             media_type="text/event-stream",
+            headers={"Cache-Control":"no-cache, no-transform", "X-Accel-Buffering":"no"},
         )
 
     if submitted_actions and (not action_turn.conversation_message or deferred_selection):
@@ -6690,9 +6737,13 @@ async def list_models() -> dict[str, Any]:
     from agent.llm.providers import configured_provider_keys, get_provider_registry
 
     registry = get_provider_registry()
-    inventory = await asyncio.to_thread(registry.refresh_local_models, force=True)
+    inventory = await asyncio.to_thread(registry.refresh_local_models)
     active = registry.current_available_model()
     provider_keys = configured_provider_keys()
+    picker_models = registry.list_picker_models()
+    model_provider = registry.picker_provider()
+    if active is not None and active.id not in {entry.id for entry in picker_models}:
+        active = None
     if inventory.reachable:
         local_status = "ready" if inventory.models else "no_models"
     else:
@@ -6706,6 +6757,7 @@ async def list_models() -> dict[str, Any]:
             "capabilities": list(active.capabilities),
             "tool_calling_compatibility": active.tool_calling_compatibility,
         } if active is not None else None),
+        "model_provider": model_provider,
         "groups": [
             {"key": g.key, "label": g.label, "default_id": g.default_id}
             for g in registry.list_groups()
@@ -6721,7 +6773,7 @@ async def list_models() -> dict[str, Any]:
                 "capabilities": list(m.capabilities),
                 "tool_calling_compatibility": m.tool_calling_compatibility,
             }
-            for m in registry.list_models()
+            for m in picker_models
         ],
         "provider_keys": provider_keys,
         "ollama": {
@@ -7069,12 +7121,8 @@ async def public_settings() -> dict[str, Any]:
         "chroma_path": str(settings.chroma_path) if settings.chroma_path is not None else None,
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
-        "provider_keys": {
-            "openrouter": bool(settings.openrouter_api_key),
-            "openai": bool(settings.openai_api_key),
-            "anthropic": bool(os.environ.get("ANTHROPIC_API_KEY")),
-            "google": bool(os.environ.get("GOOGLE_API_KEY")),
-        },
+        "provider_keys": configured_provider_keys(),
+        "provider_connections": [connection.model_dump() for connection in provider_connections()],
     }
 
 

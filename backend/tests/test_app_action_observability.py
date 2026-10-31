@@ -117,8 +117,8 @@ def test_open_and_repeated_stream_controls_return_the_same_client_contract() -> 
     assert opened.result["navigation"] == {"view": "ledger"}
     assert first_pause.result["observability_control_patch"] == second_pause.result["observability_control_patch"]
     assert first_resume.result["observability_control_patch"] == second_resume.result["observability_control_patch"]
-    assert first_pause.message == "Observability paused."
-    assert first_resume.message == "Observability resumed."
+    assert first_pause.message == "Analytics paused."
+    assert first_resume.message == "Analytics resumed."
 
 
 def test_status_and_refresh_receipts_allow_only_operational_metadata() -> None:

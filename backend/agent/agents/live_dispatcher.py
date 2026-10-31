@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 import re
 from uuid import uuid4
+from typing import Any
 
 from agent.agents.base import SpecialistResponse, user_query_text
 from agent.agents.skill_router import SkillRouteResolver
@@ -450,7 +451,7 @@ class LiveAgentDispatcher:
         match = re.match(r"https?://(?:www\.)?([^/]+)", url)
         return match.group(1) if match else ""
 
-    def _source_record(self, source) -> dict[str, str]:
+    def _source_record(self, source) -> dict[str, Any]:
         domain = self._domain(source.path_or_url) if source.kind == "web" else source.kind
         return {
             "url": source.path_or_url,
@@ -458,6 +459,10 @@ class LiveAgentDispatcher:
             "snippet": str(getattr(source, "snippet", "") or ""),
             "domain": domain,
             "fetched_at": source.captured_at,
+            "id": getattr(source, 'id', ''),
+            "source_type": source.kind,
+            "claims": [claim.model_dump(mode="json") for claim in getattr(source, 'claims', [])],
+            **({"evidence":source.evidence.model_dump(mode="json")} if getattr(source, 'evidence', None) is not None else {}),
         }
 
     def _tool_name(self, agent_name: str) -> str:

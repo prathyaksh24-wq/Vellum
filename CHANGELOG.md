@@ -6,6 +6,12 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Handle structured tool status metadata without crashing; preserve YouTube account-link filtering and restore bounded cloud-escalation instructions. Align component fixtures and contracts with provider-scoped catalogs, live progress and off-canvas navigation.
+
+- Refine Vellum's response streaming and live tool/source trace; bound duplicate reads and SerpAPI search attempts, preserve useful provider failures, load conversation summaries on startup, and follow newly sent messages.
+- Add source-scoped model selection and provider key management, real vendor marks, shared composer/dropdown motion, and selective themed tooltips. Move Archive and Analytics into Settings and Skills management into Plugins.
+- Align inset off-canvas sidebars, Music navigation and shared interface styling; retain landing text animation and the curved glowing input, and dismiss hover-owned profile menus with the sidebar.
+
 ### Music workspace and dictation
 
 - Load Spotify public metadata through the canonical portable-plugin runtime, parse Apple metadata with HTMLParser, and tokenize local commands without whitespace backtracking.

@@ -9,7 +9,9 @@ const api = readFileSync(resolve(here, "../../design/Velllum/uploads/api/convers
 
 describe("conversation library frontend", () => {
   test("exposes organization and message search through the API adapter", () => {
-    expect(api).toContain('client.request("/api/conversations/library")');
+    expect(api).toContain('client.request("/api/conversations/library" +');
+    expect(api).toContain('?include_messages=false');
+    expect(html).toContain('API.conversations.library({includeMessages:false})');
     expect(api).toContain('client.request("/api/conversations/search?" + params.toString())');
     expect(api).toContain('"/organization"');
     expect(api).toContain('client.request("/api/conversations/organization/rebuild"');

@@ -214,7 +214,7 @@ class RoutingEngine:
                         policy=policy,
                         max_tokens=effective_max_tokens,
                         reasoning_mode=reasoning_mode,
-                        **({"context_length": budget.window} if target.provider == "ollama" else {}),
+                        **({"context_length": budget.window, "thinking_capable": self._thinking_capable(target.model)} if target.provider == "ollama" else {}),
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
@@ -334,11 +334,17 @@ class RoutingEngine:
         )
 
     @staticmethod
+    def _thinking_capable(model_id: str) -> bool:
+        from agent.llm.providers import get_provider_registry
+        return 'thinking' in get_provider_registry().model_capabilities(model_id)
+
+    @staticmethod
     def _visible_chunk(chunk: Any) -> bool:
         return bool(
             getattr(chunk, "content", None)
             or getattr(chunk, "tool_calls", None)
             or getattr(chunk, "tool_call_chunks", None)
+            or getattr(chunk, "additional_kwargs", {}).get("reasoning_content")
         )
 
     @staticmethod
@@ -437,7 +443,7 @@ class RoutingEngine:
                         policy=policy,
                         max_tokens=effective_max_tokens,
                         reasoning_mode=reasoning_mode,
-                        **({"context_length": budget.window} if target.provider == "ollama" else {}),
+                        **({"context_length": budget.window, "thinking_capable": self._thinking_capable(target.model)} if target.provider == "ollama" else {}),
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:

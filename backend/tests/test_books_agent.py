@@ -761,7 +761,7 @@ def test_delegation_runtime_executes_books_agent_under_profile_tool_policy(tmp_p
     assert result.profile_id == "BooksAgent"
     assert result.cache_reason == "memory_orchestrator_unavailable"
     assert core.requests[0].user_id == "user-books"
-    assert core.requests[0].destination == "local"
+    assert core.requests[0].destination == "external"
 
 
 def test_delegation_runtime_submits_books_learning_to_governed_sink(tmp_path) -> None:
