@@ -1,9 +1,9 @@
 """Local, account-scoped creator monitoring contracts."""
-from typing import Annotated, Literal
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-CreatorUploadDayFilter = Literal["", "Today", "Yesterday"] | Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from agent.contracts.youtube_history import HistoryDayFilter
 
 
 class CreatorRule(BaseModel):
@@ -12,6 +12,7 @@ class CreatorRule(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     aliases: list[str] = Field(default_factory=list, max_length=20)
     relationship: Literal["auto", "long_term", "seasonal", "current", "former", "excluded"] = "auto"
+    notification_frequency: Literal['adaptive', 'reduced', 'muted'] = 'adaptive'
     topic_terms: list[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
@@ -26,6 +27,8 @@ class CreatorRule(BaseModel):
 class CreatorTrackingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str = Field(min_length=1, max_length=200)
+    # Pin the connected OAuth source without changing a local aggregate account.
+    subscription_account_id: str = Field(default="", pattern=r"^(?:UC[A-Za-z0-9_-]{22})?$")
     # These are canonical source account IDs. Linking two accounts is explicit.
     history_accounts: list[str] = Field(min_length=1, max_length=5)
     enabled: bool = False
@@ -41,6 +44,7 @@ class CreatorTrackingConfig(BaseModel):
     related_discovery: bool = True
     related_channels_per_topic: int = Field(default=3, ge=0, le=5)
     conversation_topics: bool = False
+    rediscovery_notifications: bool = False
     topic_preferences: dict[str, Literal["current", "excluded"]] = Field(default_factory=dict, max_length=8)
     timezone: str = Field(default="UTC", max_length=100)
 
@@ -62,7 +66,7 @@ class CreatorTrackingRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
     limit: int = Field(default=20, ge=1, le=100)
     creator: str = Field(default="", max_length=200)
-    day_label: CreatorUploadDayFilter = ""
+    day_label: HistoryDayFilter = ""
 
 
 class SavedCreatorUploads(BaseModel):
@@ -88,6 +92,8 @@ class CreatorAssessment(BaseModel):
     total_video_days: int
     last_watched: str
     reason: str
+    notification_frequency: Literal['adaptive', 'reduced', 'muted'] = 'adaptive'
+    rediscovery: bool = False
     topic_terms: list[str] = Field(default_factory=list)
 
 
@@ -96,6 +102,7 @@ class CreatorTrackingSnapshot(BaseModel):
     local_only: bool = True
     configured: bool = False
     enabled: bool = False
+    rediscovery_notifications: bool = False
     account_id: str = ""
     creators: list[CreatorAssessment] = Field(default_factory=list)
     excluded: list[str] = Field(default_factory=list)

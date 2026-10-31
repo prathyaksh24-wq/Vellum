@@ -26,11 +26,11 @@ class BookQualityModel(BaseModel):
 
 class EpubParseQualityPolicy(BookQualityModel):
     version: str = Field(
-        default="epub-parse-quality-v1",
+        default="epub-parse-quality-v3",
         pattern=r"^[A-Za-z0-9._-]{1,120}$",
     )
-    native_parser_version: str = "epub-native-v1"
-    approved_alternate_parser_versions: tuple[str, ...] = ()
+    native_parser_version: str = "epub-native-v2"
+    approved_alternate_parser_versions: tuple[str, ...] = ("epub-native-v1",)
     ocr_trigger: Literal["empty_native_spine_text"] = "empty_native_spine_text"
     allowed_exclusion_codes: tuple[str, ...] = ("NOT_EXTRACTED_TEXT_RESOURCE",)
     require_complete_spine: bool = True
@@ -404,7 +404,9 @@ def _repeated_boilerplate_blocks(
     for section_index, section in enumerate(document.sections):
         for block in section.blocks:
             normalized = " ".join(block.text.casefold().split())
-            if block.type == "heading" or len(normalized) < policy.repeated_boilerplate_min_characters:
+            # Epigraphs and quotations may intentionally recur in introductions
+            # and chapters. Their repetition is not extraction boilerplate.
+            if block.type in {"heading", "quotation"} or len(normalized) < policy.repeated_boilerplate_min_characters:
                 continue
             occurrences.setdefault(normalized, set()).add(section_index)
     return sum(

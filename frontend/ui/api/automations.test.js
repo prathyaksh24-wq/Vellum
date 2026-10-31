@@ -20,6 +20,19 @@ describe("Vellum automations API client", () => {
     vi.restoreAllMocks();
   });
 
+  test('subscribes through the configured backend and closes the event stream',async () => {
+    const api = await loadAutomationsApi(()=>{});
+    window.VellumApi.client.backendBase=()=> 'http://127.0.0.1:8000';
+    const addEventListener=vi.fn(),close=vi.fn();
+    vi.stubGlobal('EventSource',vi.fn(function(){return {addEventListener,close};}));
+    const changed=vi.fn();
+    const unsubscribe=api.notificationEvents(changed);
+    expect(window.EventSource).toHaveBeenCalledWith('http://127.0.0.1:8000/api/automations/notifications/events');
+    expect(addEventListener).toHaveBeenCalledWith('notifications.changed',changed);
+    unsubscribe();expect(close).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
   test("lists automations", async () => {
     const calls = [];
     const api = await loadAutomationsApi((path, options) => calls.push({ path, options }));

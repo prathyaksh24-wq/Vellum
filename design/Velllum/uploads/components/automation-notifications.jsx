@@ -39,10 +39,37 @@
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
     return date.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
   }
-  function AutomationNotificationCenter({onAction, onPing, browserVisible=false, sidebarPinned=false}) {
+  function NotificationTrigger({unread=0, expanded=false, compact=false, onClick}) {
+    const hover = (event,inside) => {
+      if (event.pointerType === 'touch') return;
+      window.dispatchEvent(new CustomEvent('vellum:notifications-hover',{detail:{inside,trigger:event.currentTarget}}));
+    };
+    return <button type="button" className={(compact ? 'rail-btn' : 'sb-row')+' notification-trigger'} data-notification-trigger="" title="Notifications" aria-label={'Notifications'+(unread ? ', '+unread+' recent unread' : '')} aria-expanded={expanded} aria-controls="notification-panel" onClick={onClick} onPointerEnter={event=>hover(event,true)} onPointerLeave={event=>hover(event,false)}>
+      <span className="sb-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span>
+      {!compact && <span>Notifications</span>}
+      {unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+    </button>;
+  }
+  function AutomationNotificationCenter({onAction, onPing, onStateChange, browserVisible=false, sidebarPinned=false}) {
     const [snapshot,setSnapshot] = useState({items:[],recent_unread_count:0,total_count:0});
     const [history,setHistory] = useState({items:[],matched_count:0,has_more:false});
-    const [open,setOpen] = useState(false);
+    const [mode,setMode] = useState('closed');
+    const open = mode !== 'closed';
+    const modeRef = useRef('closed');
+    const focusOnPin = useRef(false);
+    const hoverOpenTimer = useRef(null), hoverCloseTimer = useRef(null);
+    function setVisibility(value) {modeRef.current=value;setMode(value);}
+    function clearHoverTimers() {clearTimeout(hoverOpenTimer.current);clearTimeout(hoverCloseTimer.current);}
+    function enterPreview() {clearTimeout(hoverCloseTimer.current);}
+    function leavePreview() {
+      clearTimeout(hoverOpenTimer.current);
+      clearTimeout(hoverCloseTimer.current);
+      if (modeRef.current === 'preview') hoverCloseTimer.current=setTimeout(()=>{
+        if (modeRef.current === 'preview') setVisibility('closed');
+      },200);
+    }
+    function pinPreview() {clearHoverTimers();if(modeRef.current==='preview') {focusOnPin.current=false;setVisibility('pinned');}}
+    const [anchorLeft,setAnchorLeft] = useState(sidebarPinned ? 272 : 64);
     const [view,setView] = useState('recent');
     const [query,setQuery] = useState('');
     const [offset,setOffset] = useState(0);
@@ -53,12 +80,14 @@
     const [busy,setBusy] = useState(false);
     const callbacks = useRef({onAction,onPing,browserVisible}); callbacks.current = {onAction,onPing,browserVisible};
     const refreshRef = useRef(null);
+    const historyRefreshRef = useRef(null);
     const container = useRef(null), trigger = useRef(null), closeButton = useRef(null);
     useEffect(() => {
-      let alive = true, reading = false, supported = false;
+      let alive = true, reading = false, supported = false, refreshQueued = false, unsubscribe = null;
       const seen = new Set(); let initialized = false, lastPollAt=Date.now();
       async function refresh() {
-        if (reading || !alive) return;
+        if (!alive) return;
+        if (reading) {refreshQueued=true;return;}
         reading = true;
         const startedAt=Date.now();
         try {
@@ -66,54 +95,92 @@
             const contract = await window.VellumApi.plugins.capabilities();
             supported = !!contract.features?.automation_notifications?.enabled;
             if (!supported) {setError('Notifications are not available on this backend.'); return;}
+            if (alive && contract.features.automation_notifications.endpoints?.events && window.VellumApi.automations.notificationEvents) {
+              unsubscribe = window.VellumApi.automations.notificationEvents(() => refresh());
+            }
           }
           const next = await window.VellumApi.automations.notifications({view:'recent',limit:50});
           if (!alive) return;
           setAvailable(true); setError(''); setSnapshot(next);
+          historyRefreshRef.current?.();
           const fresh = next.items.filter(item => isRecentUnread(item) && !seen.has(item.id) && new Date(item.created_at).getTime() >= lastPollAt);
           next.items.forEach(item => seen.add(item.id));
           // Reopening Vellum exposes retained unread items without replaying old pings.
-          if (initialized && fresh.length && !callbacks.current.browserVisible) callbacks.current.onPing({message:fresh.length === 1 ? fresh[0].message.split('\n')[0] : fresh.length + ' new upload notifications', duration:4500, notificationPing:true});
+          if (initialized && fresh.length) callbacks.current.onPing({message:fresh.length === 1 ? fresh[0].message.split('\n')[0] : fresh.length + ' new upload notifications', duration:4500, notificationPing:true});
           initialized = true;
           lastPollAt=startedAt;
           // Keep this projection bounded; durable deduplication belongs to the backend.
           if (seen.size > 600) {seen.clear(); next.items.forEach(item => seen.add(item.id));}
         } catch (_) {if (alive) setError('Notifications are temporarily unavailable.');}
-        finally {reading = false;}
+        finally {reading = false;if (alive && refreshQueued) {refreshQueued=false;queueMicrotask(refresh);}}
       }
       refreshRef.current = refresh;
       refresh();
       const timer = setInterval(() => {if (document.visibilityState !== 'hidden') refresh();},15000);
       const focus = () => refresh();
+      const visibility = () => {if (document.visibilityState === 'visible') refresh();};
       window.addEventListener('focus',focus);
-      return () => {alive=false; clearInterval(timer); window.removeEventListener('focus',focus);};
+      document.addEventListener('visibilitychange',visibility);
+      return () => {alive=false;unsubscribe?.();clearInterval(timer); window.removeEventListener('focus',focus); document.removeEventListener('visibilitychange',visibility);};
     },[]);
-    useEffect(() => {setOpen(false);},[browserVisible]);
     useEffect(() => {
-      const show = () => {trigger.current=document.activeElement;setView('recent');setOpen(true);refreshRef.current?.();};
+      if (!open) return;
+      const place = () => {
+        const nav=trigger.current?.closest('.sidebar,.rail');
+        const frame=nav?.closest('.win');
+        setAnchorLeft(nav && frame ? nav.getBoundingClientRect().right-frame.getBoundingClientRect().left+12 : sidebarPinned ? 272 : 64);
+      };
+      place(); window.addEventListener('resize',place);
+      return () => window.removeEventListener('resize',place);
+    },[open,sidebarPinned]);
+    useEffect(() => {clearHoverTimers();setVisibility('closed');},[browserVisible]);
+    useEffect(() => {
+      const show = event => {
+        clearHoverTimers();
+        trigger.current=event.detail?.trigger || document.activeElement;
+        if (modeRef.current === 'closed') setView('recent');
+        const nextMode=event.detail?.toggle && modeRef.current === 'pinned' ? 'closed' : 'pinned';
+        focusOnPin.current=nextMode==='pinned';
+        setVisibility(nextMode);
+        refreshRef.current?.();
+      };
+      const hover = event => {
+        if (!event.detail?.inside) {leavePreview();return;}
+        clearHoverTimers();
+        trigger.current=event.detail.trigger;
+        if (modeRef.current !== 'closed') return;
+        hoverOpenTimer.current=setTimeout(()=>{
+          setView('recent');setVisibility('preview');refreshRef.current?.();
+        },120);
+      };
       window.addEventListener('vellum:notifications-open',show);
-      return () => window.removeEventListener('vellum:notifications-open',show);
+      window.addEventListener('vellum:notifications-hover',hover);
+      return () => {clearHoverTimers();window.removeEventListener('vellum:notifications-open',show);window.removeEventListener('vellum:notifications-hover',hover);};
     },[]);
     useEffect(() => {
       if (!open || view !== 'history') return;
-      let alive=true;
+      let alive=true, reading=false;
       setLoading(true);
       setHistory({items:[],matched_count:0,has_more:false});
-      const timer=setTimeout(async () => {
+      async function refreshHistory() {
+        if (!alive || reading) return;
+        reading=true;
         try {
           const next=await window.VellumApi.automations.notifications({view:'history',limit:50,offset,query});
           if (alive) {setHistory(next);setError('');}
         } catch (_) {if (alive) setError('History is temporarily unavailable. Try reopening notifications.');}
-        finally {if (alive) setLoading(false);}
-      },query ? 250 : 0);
-      return () => {alive=false;clearTimeout(timer);};
+        finally {reading=false;if (alive) setLoading(false);}
+      }
+      historyRefreshRef.current=refreshHistory;
+      const timer=setTimeout(refreshHistory,query ? 250 : 0);
+      return () => {alive=false;clearTimeout(timer);historyRefreshRef.current=null;};
     },[open,view,offset,query,revision]);
-    function close() {setOpen(false); trigger.current?.focus();}
+    function close() {clearHoverTimers();setVisibility('closed'); trigger.current?.focus();}
+    useEffect(() => {if(mode==='pinned' && focusOnPin.current) {focusOnPin.current=false;closeButton.current?.focus();}},[mode]);
     useEffect(() => {
       if (!open) return;
-      closeButton.current?.focus();
       const key = event => {if (event.key === 'Escape') close();};
-      const outside = event => {if (!container.current?.contains(event.target)) setOpen(false);};
+      const outside = event => {if (!container.current?.contains(event.target) && !event.target.closest?.('[data-notification-trigger]')) {clearHoverTimers();setVisibility('closed');}};
       window.addEventListener('keydown',key); document.addEventListener('pointerdown',outside);
       return () => {window.removeEventListener('keydown',key);document.removeEventListener('pointerdown',outside);};
     },[open]);
@@ -130,15 +197,12 @@
     }
     const recentItems = snapshot.items.filter(isRecentUnread);
     const unread = snapshot.recent_unread_count ?? recentItems.length;
+    useEffect(() => {onStateChange?.({unread,open});},[unread,open,onStateChange]);
     const items = view === 'history' ? history.items : recentItems;
     const groups = new Map(); items.forEach(item=>{const day=dayLabel(item.created_at);if (!groups.has(day)) groups.set(day,[]);groups.get(day).push(item);});
     if (!available && !open) return null;
-    return <div ref={container} className={'automation-notifications'+(browserVisible ? ' browser-quiet' : '')} style={browserVisible ? {left:sidebarPinned ? 270 : 64,right:'auto'} : undefined}>
-      {!browserVisible && available && <button type="button" className="notification-bell" aria-label={'Notifications' + (unread ? ', ' + unread + ' recent unread' : '')} aria-expanded={open} aria-controls="notification-panel" onClick={event => {trigger.current=event.currentTarget;setOpen(!open); refreshRef.current();}}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
-        {unread > 0 && <span className="notification-count">{unread > 99 ? '99+' : unread}</span>}
-      </button>}
-      {open && <section id="notification-panel" className="notification-panel" aria-label="Notifications">
+    return <div ref={container} className="automation-notifications" style={{left:anchorLeft}}>
+      {open && <section id="notification-panel" className="notification-panel" aria-label="Notifications" onPointerEnter={enterPreview} onPointerLeave={leavePreview} onPointerDownCapture={pinPreview} onFocusCapture={pinPreview}>
         <header><h2>Notifications</h2><button ref={closeButton} type="button" aria-label="Close notifications" onClick={close}>×</button></header>
         <div className="notification-views" role="group" aria-label="Notification views">
           <button type="button" aria-pressed={view==='recent'} onClick={()=>setView('recent')}>Recent {unread > 0 && <span>{unread}</span>}</button>
@@ -160,5 +224,5 @@
       </section>}
     </div>;
   }
-  window.VellumAutomationNotifications = {AutomationRunHistory, AutomationNotificationCenter};
+  window.VellumAutomationNotifications = {AutomationRunHistory, AutomationNotificationCenter, NotificationTrigger};
 })();

@@ -459,13 +459,13 @@ def test_structured_epub_passes_the_current_quality_policy(tmp_path: Path) -> No
     assert assessed.quality_outcome == "PASS"
     assert approved.document_id == structured.document_id
     assert approved.metadata.title == "Structured Fixture"
-    assert quality.policy.version == "epub-parse-quality-v1"
-    assert quality.policy.native_parser_version == "epub-native-v1"
-    assert quality.policy.approved_alternate_parser_versions == ()
+    assert quality.policy.version == "epub-parse-quality-v3"
+    assert quality.policy.native_parser_version == "epub-native-v2"
+    assert quality.policy.approved_alternate_parser_versions == ("epub-native-v1",)
     assert quality.policy.ocr_trigger == "empty_native_spine_text"
     assert quality.policy.allowed_exclusion_codes == ("NOT_EXTRACTED_TEXT_RESOURCE",)
     assert quality.policy_snapshot_hash == quality.policy.snapshot_hash
-    assert quality.parser_version == "epub-native-v1"
+    assert quality.parser_version == "epub-native-v2"
     assert quality.document_schema_version == "book-document-v1"
     safe_metadata = json.dumps(
         {
@@ -1588,13 +1588,14 @@ def test_missing_non_spine_resource_is_degraded(tmp_path: Path) -> None:
     assert quality.metrics["missing_resources"] == 1
 
 
-def test_repeated_long_boilerplate_across_spine_items_is_degraded(tmp_path: Path) -> None:
+@pytest.mark.parametrize("tag,expected", [("p", "DEGRADED"), ("blockquote", "PASS")])
+def test_repeated_long_boilerplate_across_spine_items_is_degraded(tmp_path: Path, tag: str, expected: str) -> None:
     boilerplate = (
         "This publication notice is repeated across every chapter and contains enough text "
         "to distinguish substantial boilerplate from a short running label or heading."
     )
     chapter = """<html xmlns="http://www.w3.org/1999/xhtml"><body>
-<section id="{fragment}"><h1>{title}</h1><p>{boilerplate}</p></section>
+<section id="{fragment}"><h1>{title}</h1><{tag}>{boilerplate}</{tag}></section>
 </body></html>"""
     content = rewrite_zip_entries(
         structured_epub_bytes(),
@@ -1603,11 +1604,13 @@ def test_repeated_long_boilerplate_across_spine_items_is_degraded(tmp_path: Path
                 fragment="first",
                 title="First unique chapter",
                 boilerplate=boilerplate,
+                tag=tag,
             ),
             "OPS/chapter-two.xhtml": chapter.format(
                 fragment="second",
                 title="Second unique chapter",
                 boilerplate=boilerplate,
+                tag=tag,
             ),
         },
     )
@@ -1627,9 +1630,9 @@ def test_repeated_long_boilerplate_across_spine_items_is_degraded(tmp_path: Path
         document_id=structured.document_id,
     )
 
-    assert assessed.quality_outcome == "DEGRADED"
-    assert quality.finding_codes == ["EPUB_QUALITY_REPEATED_BOILERPLATE"]
-    assert quality.metrics["repeated_boilerplate_blocks"] == 1
+    assert assessed.quality_outcome == expected
+    assert quality.finding_codes == (["EPUB_QUALITY_REPEATED_BOILERPLATE"] if expected == "DEGRADED" else [])
+    assert quality.metrics["repeated_boilerplate_blocks"] == (1 if expected == "DEGRADED" else 0)
 
 
 def test_quality_gate_is_exposed_through_the_existing_knowledge_core_api(tmp_path: Path) -> None:
@@ -1738,7 +1741,7 @@ def test_quality_policy_upgrade_retains_the_prior_assessment(tmp_path: Path) -> 
         core.store,
         core.book_documents,
         policy=EpubParseQualityPolicy(
-            version="epub-parse-quality-v2",
+            version="epub-parse-quality-v4",
             require_declared_resources=False,
         ),
     )
@@ -1754,8 +1757,8 @@ def test_quality_policy_upgrade_retains_the_prior_assessment(tmp_path: Path) -> 
     assert first_status.quality_outcome == "DEGRADED"
     assert second_status.quality_outcome == "PASS"
     assert restored_status.quality_outcome == "DEGRADED"
-    assert first.policy_version == "epub-parse-quality-v1"
-    assert second.policy_version == "epub-parse-quality-v2"
+    assert first.policy_version == "epub-parse-quality-v3"
+    assert second.policy_version == "epub-parse-quality-v4"
     assert first.assessment_id != second.assessment_id
     assert core.store.status()["counts"]["book_quality_assessments"] == 2
 

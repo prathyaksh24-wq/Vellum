@@ -9,10 +9,14 @@ scheduler wiring lands with the run-engine ticket.
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
+import hashlib
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Request
+from fastapi.responses import StreamingResponse
 from agent.contracts.automation_notifications import AutomationNotifications as AutomationNotificationSnapshot
+from agent.contracts.automation_notifications import NotificationChangeEvent
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent.automations.store import AutomationStore
@@ -186,6 +190,37 @@ def automation_notifications(response: Response, limit: int = Query(default=200,
                              query: str = Query(default='', max_length=200)):
     response.headers["Cache-Control"] = "no-store"
     return AutomationNotificationSnapshot(**get_store().notification_snapshot(limit=limit, view=view, offset=offset, query=query))
+
+
+def _notification_revision(store):
+    try:
+        stat = store.path.stat()
+        value = f'{stat.st_mtime_ns}:{stat.st_size}'
+    except FileNotFoundError:
+        value = 'empty'
+    return hashlib.sha256(value.encode()).hexdigest()[:24]
+
+
+async def _notification_changes(store, request, *, interval=1):
+    # File revisions observe durable atomic writes across store instances and
+    # backend workers. Events contain no notification text or private state.
+    previous, ticks = None, 0
+    while not await request.is_disconnected():
+        revision = await asyncio.to_thread(_notification_revision, store)
+        if revision != previous:
+            event = NotificationChangeEvent(revision=revision)
+            yield f'id: {revision}\nevent: notifications.changed\ndata: {event.model_dump_json()}\n\n'
+            previous = revision
+        elif ticks % 15 == 0:
+            yield ': keepalive\n\n'
+        ticks += 1
+        await asyncio.sleep(interval)
+
+
+@router.get('/notifications/events', response_class=StreamingResponse)
+async def notification_events(request: Request):
+    return StreamingResponse(_notification_changes(get_store(), request), media_type='text/event-stream',
+        headers={'Cache-Control':'no-store', 'X-Accel-Buffering':'no'})
 
 
 @router.get("")

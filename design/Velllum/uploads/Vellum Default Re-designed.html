@@ -1543,6 +1543,11 @@ body{font-size:14px}
 .cbtn.mic-on{color:var(--ember);background:var(--active)}
 .cbtn.mic-on svg{animation:icPulse 1.2s ease-in-out infinite}
 .toast{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:12px;background:var(--modal);border:1px solid var(--line2);color:var(--txt2);font-size:12.5px;padding:9px 12px 9px 16px;border-radius:11px;box-shadow:0 16px 50px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);animation:toastIn .25s cubic-bezier(.2,.7,.2,1)}
+.toast.notification-ping{left:auto;right:16px;top:16px;bottom:auto;transform:none;width:min(380px,calc(100% - 32px));padding:14px 16px;align-items:flex-start;animation:notificationPingIn .22s cubic-bezier(.16,1,.3,1)}
+.toast.notification-ping>span:first-child{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.5}
+.toast.notification-ping.browser-notification-ping{top:112px}
+@keyframes notificationPingIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.toast.notification-ping{animation:none}}
 .toast-action{border:0;background:color-mix(in srgb,var(--ember) 15%,transparent);color:var(--ember);font:inherit;font-weight:650;padding:5px 9px;border-radius:7px;cursor:pointer}.toast-action:hover{background:color-mix(in srgb,var(--ember) 24%,transparent)}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .sc-modal{width:466px;max-height:80vh;overflow-y:auto}
@@ -1991,6 +1996,7 @@ const SpotifyAPI = {
   action: body => API.plugins.spotifyAction(body),
 };
 const YouTubeAPI = {
+  pushStatus: () => API.plugins.youtubePushStatus ? API.plugins.youtubePushStatus() : Promise.resolve(null),
   creators: () => API.plugins.youtubeCreatorTracking(100),
   historyStatus: () => API.plugins.youtubeHistoryStatus(),
   status: () => API.plugins.youtubeStatus(),
@@ -2032,7 +2038,7 @@ const IcDots = (p)=> <I {...p} sw={0}><circle cx="5" cy="12" r="1.7" fill="curre
 const IcPin = (p)=> <I {...p} d="M12 17v5 M9 4h6l1 7 2.5 2.5H5.5L8 11l1-7z"/>;
 const IcBell = (p)=> <I {...p} d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>;
 // Presentation only: the notification component remains the sole inbox owner.
-const openNotifications = () => window.dispatchEvent(new Event('vellum:notifications-open'));
+const openNotifications = event => window.dispatchEvent(new CustomEvent('vellum:notifications-open', {detail:{toggle:true,trigger:event.currentTarget}}));
 const IcArchive = (p)=> <I {...p}><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9 M10 13h4"/></I>;
 const IcTrash = (p)=> <I {...p} d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6"/>;
 const IcShare = (p)=> <I {...p} d="M12 3v13 M8 7l4-4 4 4 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>;
@@ -2131,7 +2137,7 @@ const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
 );
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const VSelect = window.VellumUI.VSelect;
-const {AutomationRunHistory, AutomationNotificationCenter} = window.VellumAutomationNotifications;
+const {AutomationRunHistory, AutomationNotificationCenter, NotificationTrigger} = window.VellumAutomationNotifications;
 const BooksImportDialog = window.VellumUI.BooksImportDialog;
 
 const SHARED_LAYOUT_TARGETS = '.v-select-option,.sb-row,.chat-row,.project-row,.plus-item,.recent-row,.drop-item,.pdrop-item,.set-item,.ltr,.ltile,.tab,.ctx-item,.app-row,.pop-row';
@@ -3429,7 +3435,7 @@ const SidebarSection = ({id, label, count, open, onToggle, children}) => {
   );
 };
 
-const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onBrowser, browserAvailable}) => {
+const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onBrowser, browserAvailable, notificationState={unread:0,open:false}}) => {
   const sorted = visibleChats(chats);
   const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
   const [expandedSpace, setExpandedSpace] = useState(null);
@@ -3463,6 +3469,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
           <button className={'sb-row' + (view === 'music' ? ' active' : '')} onClick={() => onNav('music')}><span className="sb-ic"><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></span>Music</button>
           <button className="sb-row" onClick={onBrowser}><span className="sb-ic"><IcGlobe/></span>Browser</button>
+          <NotificationTrigger unread={notificationState.unread} expanded={notificationState.open} onClick={openNotifications}/>
           <button className="sb-row" aria-expanded={moreOpen} aria-controls="sidebar-more" onClick={() => setMoreOpen(!moreOpen)}><span className="sb-ic"><IcDots/></span>More<span className={'browser-more-arrow' + (moreOpen ? ' open' : '')}><IcChevR size={13}/></span></button>
         </div>
         {!moreOpen && <section className="sidebar-recent" aria-label="Recent chats"><h2>Recent</h2>{sorted.slice(0,8).map(chat => <ChatRow key={chat.id} chat={chat} active={view === 'chat' && chat.id === activeChatId}
@@ -3470,7 +3477,6 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
         {moreOpen && <div id="sidebar-more">
         <div className="sb-tools">
           <button className={'sb-row' + (view === 'scheduled' ? ' active' : '')} onClick={() => onNav('scheduled')}><span className="sb-ic"><IcGCal/></span>Scheduled</button>
-          <button className="sb-row" onClick={openNotifications}><span className="sb-ic"><IcBell/></span>Notifications</button>
           <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Observability</button>
           <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
           <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcPlugins/></span>Plugins</button>
@@ -3601,7 +3607,7 @@ const RailFly = ({btn, keepOpen, children}) => {
   );
 };
 
-const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject, onBrowser}) => {
+const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject, onBrowser, notificationState={unread:0,open:false}}) => {
   const recents = visibleChats(chats).slice(0, 10);
   const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId);
   return (
@@ -3632,7 +3638,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
         ))}
       </RailFly>
       <button className={'rail-btn' + (view === 'scheduled' ? ' active' : '')} title="Scheduled" onClick={() => onNav('scheduled')}><IcGCal size={17}/></button>
-      <button className="rail-btn" title="Notifications" onClick={openNotifications}><IcBell size={17}/></button>
+      <NotificationTrigger compact unread={notificationState.unread} expanded={notificationState.open} onClick={openNotifications}/>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Observability · Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></button>
@@ -5172,6 +5178,7 @@ const YTLogo = ({size=22}) => (
 const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOpenHistory, onOpenAutomations}) => {
   const [status, setStatus] = useState(null);
   const [creators, setCreators] = useState(null);
+  const [pushStatus, setPushStatus] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyUrl, setHistoryUrl] = useState('https://www.youtube.com/feed/history');
   const [busy, setBusy] = useState('');
@@ -5188,6 +5195,15 @@ const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOp
   };
   useEffect(() => {
     YouTubeAPI.creators().then(setCreators).catch(() => {});
+    let alive=true, readingPush=false;
+    const refreshPush=async()=>{
+      if (!alive || readingPush || !YouTubeAPI.pushStatus) return;
+      readingPush=true;
+      try {const next=await YouTubeAPI.pushStatus();if (alive) setPushStatus(next);}
+      catch (_) {} finally {readingPush=false;}
+    };
+    refreshPush();
+    const pushTimer=setInterval(refreshPush,10000);
     YouTubeAPI.historyStatus().then(next => { setHistory(next); setHistoryUrl(next.config.url); }).catch(() => {});
     loadStatus();
     const onComplete = event => {
@@ -5197,7 +5213,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOp
     const onStorage = event => { if (event.key === 'vellum:youtube-oauth-complete') loadStatus(); };
     window.addEventListener('message', onComplete);
     window.addEventListener('storage', onStorage);
-    return () => { window.removeEventListener('message', onComplete); window.removeEventListener('storage', onStorage); };
+    return () => { alive=false;clearInterval(pushTimer);window.removeEventListener('message', onComplete); window.removeEventListener('storage', onStorage); };
   }, []);
   const begin = async () => {
     if (busy) return;
@@ -5263,6 +5279,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOp
               <div className="gc-perm"><YTLogo size={16}/>Read your channel subscriptions</div>
             </div>
             <div className="gc-trust">Vellum does not request your email, password, uploads, comments, or write access. OAuth tokens stay in your operating-system keyring.</div>
+            {status?.authorization_expires_at && <div className="gc-note" role={status.authorization_expiring ? 'alert' : 'status'}>Google access expires {new Date(status.authorization_expires_at).toLocaleString()}. Renew access before this time to keep notifications running. This deadline comes from Google and is separate from hourly access-token refreshes.</div>}
             {authorizationRequired && <div className="gc-note" role="alert">Google rejected the saved authorization. Reconnect YouTube to verify new video lengths and read public channel topics. Your saved history and creator choices remain available.</div>}
             <div className="gc-perm-title">Watch history through Vellum's browser</div>
             {creators && creators.configured && <div className="gc-note" aria-live="polite">
@@ -5274,6 +5291,13 @@ const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOp
               {creators.excluded.length} explicit exclusions. Current interests fade; seasonal relationships are retained.<br/>
               {!!creators.warnings?.length && <details><summary>Source checks needing attention: {creators.warnings.length}</summary>{creators.warnings.map(warning => warning.replaceAll('_',' ')).join(' ')}</details>}
               Manage creator uploads in Automations using the button below.
+            </div>}
+            {pushStatus && <div className="gc-note" aria-live="polite">{pushStatus.endpoint_configured
+              ? <>YouTube push: {pushStatus.active_channels} of {pushStatus.desired_channels} channel subscriptions active. {pushStatus.pending_channels} awaiting verification; {pushStatus.queued_uploads} received uploads awaiting processing. Last event: {pushStatus.last_received_at ? new Date(pushStatus.last_received_at).toLocaleString() : 'None yet'}. {pushStatus.warnings?.join(' ')}
+                {typeof pushStatus.saved_subscriptions === 'number' && <div>{pushStatus.saved_subscriptions} saved YouTube subscriptions; {pushStatus.eligible_subscriptions} eligible after exclusions. The total above also includes other tracked creators.</div>}
+                {pushStatus.transport === 'hosted' && <div>Hosted receiver · {pushStatus.relay_retention_days}-day catch-up while this laptop is off. Last sync: {pushStatus.last_relay_sync_at ? new Date(pushStatus.last_relay_sync_at).toLocaleString() : 'Not synced yet'}. Older uploads are saved quietly.</div>}
+              </>
+              : <>YouTube push needs a public HTTPS callback endpoint. RSS monitoring continues with the limits above.</>}
             </div>}
             <div className="gc-note">Sign into YouTube once in Vellum's browser. Refresh reads up to 100 loaded history entries and saves them locally. Browser sign-in is separate from Google OAuth.</div>
             {history && <div className="gc-note" aria-live="polite">{history.message}<br/>{history.records} dated history records saved. Last successful refresh: {history.last_success_at ? new Date(history.last_success_at).toLocaleString() : 'Never'}.</div>}
@@ -5289,7 +5313,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOp
             {error && <div className="gc-note" style={{color:'#ff7b72'}}>{error}</div>}
             <div className="gc-actions" style={{flexWrap:'wrap'}}>
               <button className="gc-cancel" onClick={onClose}>Cancel</button>
-              {(!connected || authorizationRequired) && <button className="gc-btn" disabled={busy === 'connect' || !!(status && !status.configured)} onClick={begin}>{busy === 'connect' ? 'Opening Google...' : authorizationRequired ? 'Reconnect with Google' : 'Continue with Google'}</button>}
+              {(!connected || authorizationRequired || status?.authorization_expires_at) && <button className="gc-btn" disabled={busy === 'connect' || !!(status && !status.configured)} onClick={begin}>{busy === 'connect' ? 'Opening Google...' : authorizationRequired ? 'Reconnect with Google' : connected ? 'Renew Google access' : 'Continue with Google'}</button>}
               {connected && <button className="gc-cancel" disabled={busy === 'sync' || authorizationRequired} onClick={sync}>{busy === 'sync' ? 'Syncing...' : 'Sync subscriptions'}</button>}
               {connected && <button className="gc-cancel" disabled={!!busy} onClick={onDisconnect}>Disconnect Google</button>}
               {connected && <button className="gc-btn" onClick={() => onConnected(status)}>Done</button>}
@@ -9291,6 +9315,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [customInstrOpen, setCustomInstrOpen] = useState(false);
   const customInstr = deviceSettings.values.personalization.custom;
   const [toast, setToast] = useState(null);
+  const [notificationState, setNotificationState] = useState({unread:0,open:false});
   const toastTimer = useRef(null);
   const libraryRefreshTimer = useRef(null);
   const shortcutRef = useRef(null);
@@ -10779,6 +10804,15 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  useEffect(() => {
+    const open = async () => {
+      const receipt=await dispatchSurfacePresentation('settings',{visible:false},{notify:false,persistence:'session'});
+      if(receipt?.status==='applied') setYtConnectOpen(true);
+      else pushToast('Could not open the YouTube connection. Try again.');
+    };
+    window.addEventListener('vellum:youtube-connection-open',open);
+    return () => window.removeEventListener('vellum:youtube-connection-open',open);
+  },[]);
   const openBrowser = async () => {
     setBrowserFeature(true);
                   try {
@@ -10978,7 +11012,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} className={'body' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--browser-chat-share':workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}}>
-          {sidebarPinned && view!=='apps' && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
+          {sidebarPinned && view!=='apps' && <Sidebar notificationState={notificationState} chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
                 onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
@@ -10991,7 +11025,7 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onProjectRename={renameProject} onOpenProject={openProject}
                 browserAvailable={browserFeature} onBrowser={openBrowser}/>}
 
-          {(!sidebarPinned || view==='apps') && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
+          {(!sidebarPinned || view==='apps') && <Rail notificationState={notificationState} view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
             onBrowser={openBrowser} onExpand={() => dispatchSidebarVisibility(true, {learn:true})} onNewChat={newChat} onSearch={() => openSearch()}
             onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
             onNav={navigateFromControl} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
@@ -11028,10 +11062,11 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserSplitter value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38} onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})}/>}
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
+            overlayVisible={notificationState.open || Boolean(toast?.notificationPing)}
             suspended={Boolean(settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
             onHide={hideBrowserPanel} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
@@ -11131,7 +11166,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAction={dispatchKnowledgeAction}
           onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>
         }
-        <div hidden={settingsOpen}><AutomationNotificationCenter onAction={dispatchAutomationAction} onPing={pushToast} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned}/></div>{toast && !(toast.notificationPing && browserPanelVisible && view !== 'music') && <div className={'toast'+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true">🔔</span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
+        <div hidden={settingsOpen}><AutomationNotificationCenter onAction={dispatchAutomationAction} onPing={pushToast} onStateChange={setNotificationState} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned && view!=='apps'}/></div>{toast && <div className={'toast'+(toast.notificationPing?' notification-ping'+(browserPanelVisible && view !== 'music'?' browser-notification-ping':''):'')+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true"><IcBell size={18}/></span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
     </div>
     </BackgroundContext.Provider>

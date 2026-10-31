@@ -270,7 +270,7 @@ def test_library_missing_book_and_cover_are_content_free(library_client) -> None
     assert str(tmp_path) not in cover.text
 
 
-def test_library_requires_explicit_approvals_and_bounds_pagination(library_client) -> None:
+def test_library_import_needs_no_repeated_approvals_and_bounds_pagination(library_client) -> None:
     client, core, _ = library_client
     for fields in [
         {"scan_approved": "false", "rights_attestation_version": "local-epub-v1"},
@@ -278,8 +278,8 @@ def test_library_requires_explicit_approvals_and_bounds_pagination(library_clien
     ]:
         response = client.post("/api/knowledge/core/books/library/import", data=fields,
                                files={"file": ("fixture.epub", _epub_bytes())})
-        assert response.status_code == 409
-    assert core.store.status()["counts"]["user_book_imports"] == 0
+        assert response.status_code == 200
+    assert core.store.status()["counts"]["user_book_imports"] == 1
     book_id = _import(client)["book"]["id"]
     for payload, expected in [({"confirm": False}, 409), ({"confirm": "true"}, 422),
                               ({"confirm": True, "user_id": "tenant-b"}, 422)]:
@@ -298,7 +298,14 @@ def test_cover_rejects_non_image_content_and_unscanned_assets(library_client) ->
 
     from agent.knowledge.book_ingestion import UnavailableMalwareScanner
     core.book_ingestion.scanner = UnavailableMalwareScanner()
-    unscanned = _import(client, _epub_bytes())
+    output = BytesIO()
+    with ZipFile(BytesIO(_epub_bytes())) as source, ZipFile(output,"w") as target:
+        for info in source.infolist():
+            content=source.read(info)
+            if info.filename.endswith("chapter.xhtml"):
+                content=content.replace(b"Chapter One", b"A separate book")
+            target.writestr(info,content)
+    unscanned = _import(client, output.getvalue())
     assert unscanned["book"]["state"] == "failed_retryable"
     assert unscanned["book"]["cover_url"] == ""
     assert unscanned["book"]["can_process"] is False
@@ -361,4 +368,30 @@ def test_parser_upgrade_preserves_old_document_and_library_identity(library_clie
     assert second["book"]["id"] == first["book"]["id"]
     assert second["book"]["document_id"] != old_document
     assert second["book"]["skill_status"] == "compiled"
-    assert core.get_book_document(user_id="tenant-a", document_id=old_document).parser_version == "epub-native-v1"
+    assert core.get_book_document(user_id="tenant-a", document_id=old_document).parser_version == "epub-native-v2"
+
+
+def test_reimport_reassesses_old_quality_policy_without_duplicate_books(library_client, monkeypatch):
+    from agent.knowledge import book_quality
+    from agent.knowledge.book_quality import EpubParseQualityPolicy
+
+    client, core, _ = library_client
+    content = _epub_bytes(cover=_cover_png())
+    core.book_quality.policy = EpubParseQualityPolicy(version="epub-parse-quality-v1")
+    with monkeypatch.context() as old_policy:
+        # Reproduce the prior classifier's false positive for repeated quotes.
+        old_policy.setattr(book_quality, "_repeated_boilerplate_blocks", lambda *_: 1)
+        first = _import(client, content)
+    assert first["error_code"] == "BOOK_QUALITY_DEGRADED"
+    assert first["book"]["quality_findings"] == ["EPUB_QUALITY_REPEATED_BOILERPLATE"]
+    core.book_quality.policy = EpubParseQualityPolicy()
+    book_id = first["book"]["id"]
+    before = client.get(f"/api/knowledge/core/books/library/{book_id}").json()["book"]
+    assert before["can_process"] is True
+    second = _import(client, content)
+    assert second["book"]["id"] == book_id
+    assert second["book"]["document_id"] == first["book"]["document_id"]
+    assert second["book"]["quality_outcome"] == "PASS"
+    assert second["book"]["skill_status"] == "compiled"
+    assert client.get("/api/knowledge/core/books/library").json()["total"] == 1
+    assert core.store.status()["counts"]["book_quality_assessments"] == 2

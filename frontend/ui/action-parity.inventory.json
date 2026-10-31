@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 930,
-      "sha256": "6ed2748e70a535fcbd26de8611c9846816156e768e21584d556de9fea97492e0"
+      "count": 932,
+      "sha256": "1df4086a72cdaac2e184c9558159da0162cf45e560e8fefd1e6ab038211f074b"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -22,8 +22,8 @@
       "sha256": "97844561b1105da1a36980f119654ac69b0f251d4b53a78712b2a0d2bf365a64"
     },
     "design/Velllum/uploads/components/books-view.jsx": {
-      "count": 36,
-      "sha256": "7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"
+      "count": 37,
+      "sha256": "a2c94519993932b10470501861e083897c37af35a49b91fb2f7a93c33c083b8f"
     },
     "design/Velllum/uploads/components/calendar-workspace.jsx": {
       "count": 18,
@@ -66,8 +66,8 @@
       "sha256": "d21257377cde4fa7c9da67c8bf606f81224b89eb047fd08f381d53d38ee76d90"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
-      "count": 11,
-      "sha256": "50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"
+      "count": 17,
+      "sha256": "3656c35484035eea5bdf71c0ce1d9bb4a3e7a5515e1cd9df34741c738f171e47"
     },
     "design/Velllum/uploads/components/PatternWaves.jsx": {
       "count": 0,
@@ -150,8 +150,76 @@
       "sha256": "42e0e4cbd918d5eb8538c70fa2ca8a3167766bf6635a7e2e751ea359d1bde0d2"
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
-      "count": 127,
-      "sha256": "c578d962c0c86b3ba3cb7d1cb20b423b7ca9b1d5aafed117c40fac237aaca5f6"
+      "count": 129,
+      "sha256": "ab5abecdc343fdf09aa7a73a51169b1c5940fb42bb63775caa3343464a3b89cc"
+    },
+    "design/Velllum/uploads/books-entry.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/book-upload-entry.jsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/attachment-upload.tsx": {
+      "count": 19,
+      "sha256": "abfcd6e238fedd96a40c7cba98e9b4f3c39b4441daa51ca94e9cc40c17638959"
+    },
+    "design/Velllum/uploads/components/attachment-upload-support.jsx": {
+      "count": 2,
+      "sha256": "965c28e96defd19e5a07601caa38de31534023db58ff04885983d56e41087bb6"
+    },
+    "design/Velllum/uploads/components/bookshelf/VellumBookshelf.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/VellumRuntime.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/SuppliedBooksPage.tsx": {
+      "count": 11,
+      "sha256": "625de7e322c495996c4cfb5c932194f9152c1c09dee3c1759e1250814b946347"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/BriefingBookshelf.tsx": {
+      "count": 2,
+      "sha256": "c9da08252f5bd3f749641bc7ee25589bc4428e6437c6ac5e28f5757e376706ec"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/BriefingOpenOverlay.tsx": {
+      "count": 4,
+      "sha256": "cac950caac85b4e7b337cdf936fdfc3eed9ab05a08a275c5b17a3c79f2d0323e"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ImportBooksDialog.tsx": {
+      "count": 16,
+      "sha256": "40aac8613f45892b570208f72dcb6634fdc703ea8702719ad9943a5c2feb78a5"
+    },
+    "design/Velllum/uploads/components/bookshelf/reader/BookReader.tsx": {
+      "count": 8,
+      "sha256": "e292efb0790be8dc66dd3e509a2e2f220dc74ac031c748245f69f8f09c6b819a"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ui/button.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ui/dialog.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ui/input.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ui/label.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ui/tabs.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/bookshelf/components/ui/textarea.tsx": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/local-music.jsx": {
       "count": 18,
@@ -602,7 +670,7 @@
     },
     {
       "surface": "Books",
-      "name": "import EPUB with scan and rights consent",
+      "name": "import books with the configured local intake policy",
       "actionId": "book.import",
       "probe": {
         "path": "design/Velllum/uploads/api/books.js",
@@ -2032,6 +2100,24 @@
       }
     },
     {
+      "surface": "Books reader",
+      "name": "save reading position",
+      "actionId": "book.reader.progress",
+      "probe": {
+        "path": "design/Velllum/uploads/components/books-state.js",
+        "text": "options.onAction('book.reader.progress'"
+      }
+    },
+    {
+      "surface": "Books",
+      "name": "remove an open book from the reader after explicit confirmation",
+      "actionId": "book.remove",
+      "probe": {
+        "path": "design/Velllum/uploads/components/books-state.js",
+        "text": "options.onAction('book.remove'"
+      }
+    },
+    {
       "surface": "Local music",
       "name": "import and match selected audio files",
       "actionId": "local_music.file",
@@ -2088,7 +2174,7 @@
     },
     {
       "scope": "Notification bell and popover visibility, video link navigation and run ID disclosure",
-      "reason": "Presentation and navigation only; persisted read state uses automation.notifications.read. History is supplied by automation.history."
+      "reason": "Presentation and navigation only; persisted read state uses automation.notifications.read. Automation run history is supplied by automation.history."
     },
     {
       "scope": "Music page navigation, dock player disclosure/dismissal and focus retention, provider preview tabs, search categories, collection filters, display sorting, editor drafts, read-only catalog requests and queue disclosure",
@@ -2189,6 +2275,18 @@
     {
       "scope": "Selected connector authorization-window continuation",
       "reason": "Open the selected provider consent destination or its exact local OAuth-window route. Navigation grants no account authorization; provider consent, state validation and typed flow cancellation remain enforced."
+    },
+    {
+      "scope": "Sidebar notification opening, browser quiet presentation, Recent/History selection, search drafts and history pagination",
+      "reason": "Temporary presentation and read-only notification projections through the Automation adapter. A single notification component owns the sidebar-open event. Marking recent or individual items read dispatches automation.notifications.read; hiding does not delete or archive stored records."
+    },
+    {
+      "scope": "Books AttachmentUpload selection, drop, remove, preview and tooltip controls",
+      "reason": "File selections and attachment status are transient import drafts. Explicit Add to shelf or Import EPUB submits through the existing book.import App Action. The supplied TSX and module entry are included in the served-handler inventory."
+    },
+    {
+      "scope": "Supplied Books shelf browsing, reader chapter navigation, contents disclosure, file/cover drafts, and reader typography",
+      "reason": "Shelf/reader navigation and import drafts are presentation only. Source font size is a local display preference. Explicit Add to shelf or Import EPUB uses book.import and uses the desktop intake policy with malware scanning disabled and a truthful skipped-scan receipt; the user requested removal of repeated consent checkboxes and scanning. Progress uses book.reader.progress; theme uses the existing workspace presentation action."
     },
     {
       "scope": "Music handoff routes, source selection, accent previews, queue and lyrics tabs, read refresh, explicit metadata export and chat drafts",

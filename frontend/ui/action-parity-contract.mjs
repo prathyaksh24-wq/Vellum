@@ -19,7 +19,27 @@ function findRoot() {
 }
 
 export const root = findRoot();
+export const MODULE_SOURCE_FILES = [
+  "design/Velllum/uploads/books-entry.js",
+  "design/Velllum/uploads/components/book-upload-entry.jsx",
+  "design/Velllum/uploads/components/attachment-upload.tsx",
+  "design/Velllum/uploads/components/attachment-upload-support.jsx",
+  "design/Velllum/uploads/components/bookshelf/VellumBookshelf.tsx",
+  "design/Velllum/uploads/components/bookshelf/VellumRuntime.tsx",
+  "design/Velllum/uploads/components/bookshelf/SuppliedBooksPage.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/BriefingBookshelf.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/BriefingOpenOverlay.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ImportBooksDialog.tsx",
+  "design/Velllum/uploads/components/bookshelf/reader/BookReader.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ui/button.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ui/dialog.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ui/input.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ui/label.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ui/tabs.tsx",
+  "design/Velllum/uploads/components/bookshelf/components/ui/textarea.tsx",
+];
 export const SOURCE_FILES = [
+  ...MODULE_SOURCE_FILES,
   "design/Velllum/uploads/components/asana.jsx",
   "design/Velllum/uploads/components/swiggy.jsx",
   "design/Velllum/uploads/components/zomato.jsx",
@@ -93,7 +113,7 @@ export function visualHandlers(path, content) {
   const parsed = babel.parseSync(source, {
     babelrc: false,
     configFile: false,
-    parserOpts: {sourceType: "unambiguous", plugins: ["jsx"]},
+    parserOpts: {sourceType: "unambiguous", plugins: ["jsx", ...(path.endsWith('.tsx') ? ['typescript'] : [])]},
   });
   const handlers = [];
   visit(parsed, null, (node, parent) => {
@@ -135,8 +155,23 @@ export function validateParityInventory(inventory, sources = servedSources()) {
       }
     }
   }
-  for (const path of SOURCE_FILES.filter(item => item.endsWith(".jsx"))) {
+  for (const path of SOURCE_FILES.filter(item => item.endsWith(".jsx") && !MODULE_SOURCE_FILES.includes(item))) {
     if (!servedExternalSources.has(path)) errors.push(`${path}: reviewed React source is no longer served`);
+  }
+  // The module-backed upload has the same handler review requirement as the
+  // legacy Babel components. Lock its integration into the production entry.
+  const moduleLinks = [
+    ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/books-entry.js"'],
+    ['design/Velllum/uploads/books-entry.js', "import './components/book-upload-entry.jsx'"],
+    ['design/Velllum/uploads/components/book-upload-entry.jsx', "import {AttachmentUpload} from './attachment-upload'"],
+    ['design/Velllum/uploads/books-entry.js', "import './components/bookshelf/VellumBookshelf.tsx'"],
+    ['design/Velllum/uploads/components/bookshelf/VellumBookshelf.tsx', "from './SuppliedBooksPage'"],
+    ['design/Velllum/uploads/components/bookshelf/SuppliedBooksPage.tsx', 'from "./components/ImportBooksDialog"'],
+    ['design/Velllum/uploads/components/bookshelf/SuppliedBooksPage.tsx', 'from "./components/BriefingOpenOverlay"'],
+    ['design/Velllum/uploads/components/bookshelf/components/BriefingOpenOverlay.tsx', 'from "../reader/BookReader"'],
+  ];
+  for (const [path, reference] of moduleLinks) {
+    if (!sources[path]?.includes(reference)) errors.push(`${path}: reviewed upload module is no longer served`);
   }
   for (const path of SOURCE_FILES) {
     const expected = inventory.handlerFingerprints[path];

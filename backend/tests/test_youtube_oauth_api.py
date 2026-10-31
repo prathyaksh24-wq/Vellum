@@ -74,8 +74,11 @@ def test_youtube_oauth_start_uses_backend_credentials_without_exposing_secret(mo
 
 
 def test_youtube_oauth_callback_saves_channel_profile(monkeypatch) -> None:
+    from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
     store = FakeStore()
     client = FakeYouTubeClient()
+    resumed=[]
+    monkeypatch.setattr(YouTubeCreatorTracking,'resume_after_authorization',lambda self,channel:resumed.append(channel))
     monkeypatch.setattr(youtube_api, "youtube_store", lambda: store)
     monkeypatch.setattr(youtube_api, "youtube_client", lambda **_kwargs: client)
 
@@ -92,6 +95,19 @@ def test_youtube_oauth_callback_saves_channel_profile(monkeypatch) -> None:
         "code_verifier": "verifier-value",
     }
     assert store.profile["channel_id"] == "UC-primary"
+    assert resumed==['UC-primary']
+
+
+def test_successful_google_connection_survives_deferred_local_queue_recovery(monkeypatch):
+    from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+    store,client=FakeStore(),FakeYouTubeClient()
+    monkeypatch.setattr(youtube_api,'youtube_store',lambda:store)
+    monkeypatch.setattr(youtube_api,'youtube_client',lambda **_:client)
+    def unavailable(*_):raise OSError('private-local-detail')
+    monkeypatch.setattr(YouTubeCreatorTracking,'resume_after_authorization',unavailable)
+    response=build_client().get('/api/plugins/youtube/oauth/callback',params={'code':'code','state':'state-value'})
+    assert response.status_code==200 and 'Background upload checks are deferred' in response.text
+    assert 'private-local-detail' not in response.text
 
 
 def test_youtube_status_preserves_reconnect_requirement(monkeypatch) -> None:
@@ -150,3 +166,13 @@ def test_youtube_disconnect_revokes_tokens(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json() == {"disconnected": True}
     assert client.disconnected is True
+
+
+def test_youtube_status_preserves_grant_expiry_fields(monkeypatch):
+    monkeypatch.setattr(youtube_api,'youtube_status',lambda:{
+        'configured':True,'connected':True,'status':'ready','account_label':'primary',
+        'authorization_expires_at':'2026-11-05T12:13:01+00:00','authorization_expiring':True})
+    response=build_client().get('/api/plugins/youtube/status')
+    assert response.status_code==200
+    assert response.json()['authorization_expires_at']=='2026-11-05T12:13:01+00:00'
+    assert response.json()['authorization_expiring'] is True

@@ -12,6 +12,11 @@ class AutomationNotification(BaseModel):
     read_at: str | None = None
 
 
+class NotificationChangeEvent(BaseModel):
+    contract_version: int = 1
+    revision: str
+
+
 class AutomationNotifications(BaseModel):
     contract_version: int = 1
     local_only: bool = True

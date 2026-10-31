@@ -213,12 +213,13 @@ class AutomationStore:
             return False
 
     def notification_snapshot(self, *, limit: int = 200, view: str = 'all', offset: int = 0,
-                              query: str = '') -> dict[str, Any]:
+                              query: str = '', builtin_key: str = '') -> dict[str, Any]:
         if view not in {'all', 'recent', 'history'}:
             raise ValueError('Unknown notification view')
         now = datetime.now(timezone.utc)
         with self._lock:
             items = [dict(item) for record in self._read().values()
+                     if not builtin_key or record.get('builtin_key') == builtin_key
                      for item in record.get("notification_history", [])]
         items.sort(key=lambda item: (item["created_at"], item["id"]), reverse=True)
         recent = [item for item in items if not item.get('read_at') and self._notification_recent(item, now)]

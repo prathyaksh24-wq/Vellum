@@ -41,8 +41,9 @@ from agent.privacy.scrubber import PrivacyScrubber
 
 
 from agent.knowledge.youtube_tracking import YouTubeTrackingStoreMixin, migrate_tracking
+from agent.knowledge.youtube_push import YouTubePushStoreMixin, migrate_push
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 19
 
 
 class IngestionJobLeaseLost(RuntimeError):
@@ -110,6 +111,7 @@ def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
         "scanner",
         "scanner_version",
         "scan_outcome",
+        "malware_scan_enabled",
         "parser_version",
         "schema_version",
         "resource_count",
@@ -139,6 +141,10 @@ def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", policy_version):
             raise ValueError("Invalid Book policy version.")
         clean["policy_version"] = policy_version
+    if "malware_scan_enabled" in value:
+        if not isinstance(value["malware_scan_enabled"], bool):
+            raise ValueError("Invalid Book scan policy.")
+        clean["malware_scan_enabled"] = value["malware_scan_enabled"]
     if "limits" in value:
         limits = dict(value["limits"] or {})
         expected = {
@@ -163,8 +169,10 @@ def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
             clean[key] = label
     if "scan_outcome" in value:
         outcome = str(value["scan_outcome"] or "")
-        if outcome not in {"clean", "detected", "unavailable", "error"}:
+        if outcome not in {"clean", "detected", "unavailable", "error", "skipped"}:
             raise ValueError("Invalid Book scan outcome.")
+        if outcome == "skipped" and value.get("malware_scan_enabled") is not False:
+            raise ValueError("Skipped Book scan requires the disabled scan policy.")
         clean["scan_outcome"] = outcome
     for key in (
         "parser_version",
@@ -469,11 +477,9 @@ class BlobStore:
     ) -> tuple[str, str, int]:
         if not re.fullmatch(r"[a-z0-9_]{8,80}", tenant_scope):
             raise ValueError("Invalid tenant blob scope.")
-        if category not in {"resources", "documents", "quality", "materialization"} or suffix not in {
-            "json",
-            "md",
-            "txt",
-        }:
+        text_artifact = category in {"resources", "documents", "quality", "materialization"} and suffix in {"json", "md", "txt"}
+        cover_artifact = category == "covers" and suffix in {"png", "jpg", "webp"}
+        if not (text_artifact or cover_artifact):
             raise ValueError("Invalid Book artifact path.")
         raw = bytes(content)
         digest = _content_hash(raw)
@@ -519,7 +525,7 @@ class BlobStore:
         return target
 
 
-class KnowledgeStore(YouTubeTrackingStoreMixin):
+class KnowledgeStore(YouTubeTrackingStoreMixin, YouTubePushStoreMixin):
     """Canonical source, evidence, observation, and projection repository."""
 
     def __init__(self, db_path: str | Path, blob_root: str | Path) -> None:
@@ -599,6 +605,32 @@ class KnowledgeStore(YouTubeTrackingStoreMixin):
                 self._migrate_v14(connection)
             if version < 15:
                 migrate_tracking(connection)
+            if version < 16:
+                migrate_push(connection)
+            if version < 17:
+                connection.execute("BEGIN IMMEDIATE")
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(user_book_imports)")}
+                if "reader_progress" not in columns:
+                    connection.execute("ALTER TABLE user_book_imports ADD COLUMN reader_progress REAL NOT NULL DEFAULT 0")
+                connection.execute("PRAGMA user_version = 17")
+                version = 17
+            if version < 18:
+                if not connection.in_transaction:
+                    connection.execute("BEGIN IMMEDIATE")
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(user_book_imports)")}
+                for name in ("content_fingerprint", "presentation_json"):
+                    if name not in columns:
+                        connection.execute(f"ALTER TABLE user_book_imports ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
+                connection.execute("CREATE INDEX IF NOT EXISTS book_content_fingerprint_lookup ON user_book_imports(user_id,content_fingerprint)")
+                connection.execute("PRAGMA user_version = 18")
+                version = 18
+            if version < 19:
+                if not connection.in_transaction:
+                    connection.execute("BEGIN IMMEDIATE")
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(user_book_imports)")}
+                if "removed_at" not in columns:
+                    connection.execute("ALTER TABLE user_book_imports ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''")
+                connection.execute("PRAGMA user_version = 19")
 
     @staticmethod
     def _migrate_v13(connection: sqlite3.Connection) -> None:
@@ -1598,10 +1630,10 @@ class KnowledgeStore(YouTubeTrackingStoreMixin):
     def list_book_library_imports(self, *, user_id: str, limit: int, offset: int) -> tuple[list[str], int]:
         with closing(self._connect()) as connection:
             total = connection.execute(
-                "SELECT COUNT(*) FROM user_book_imports WHERE user_id = ?", (user_id,),
+                "SELECT COUNT(*) FROM user_book_imports WHERE user_id = ? AND removed_at = ''", (user_id,),
             ).fetchone()[0]
             rows = connection.execute(
-                "SELECT id FROM user_book_imports WHERE user_id = ? "
+                "SELECT id FROM user_book_imports WHERE user_id = ? AND removed_at = '' "
                 "ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?",
                 (user_id, limit, offset),
             ).fetchall()
@@ -1610,7 +1642,8 @@ class KnowledgeStore(YouTubeTrackingStoreMixin):
     def get_book_library_asset(self, *, user_id: str, import_id: str, run_id: str) -> dict[str, Any]:
         with closing(self._connect()) as connection:
             row = connection.execute(
-                "SELECT a.blob_path, a.byte_size, a.sha256, "
+                "SELECT a.blob_path, a.byte_size, a.sha256, i.reader_progress, i.presentation_json, i.removed_at, i.created_at AS date_added, "
+                "(SELECT s.metadata_json FROM book_stage_receipts s WHERE s.run_id = r.id AND s.stage = 'validated' AND s.status = 'succeeded' ORDER BY s.created_at DESC LIMIT 1) AS validation_metadata, "
                 "EXISTS(SELECT 1 FROM book_stage_receipts s WHERE s.run_id = r.id "
                 "AND s.stage = 'validated' AND s.status = 'succeeded') AS validated, "
                 "EXISTS(SELECT 1 FROM book_documents d JOIN book_materializations m "
@@ -1630,6 +1663,74 @@ class KnowledgeStore(YouTubeTrackingStoreMixin):
         if row is None:
             raise KeyError("Unknown Book import.")
         return dict(row)
+
+    def set_book_reader_progress(self, *, user_id: str, import_id: str, progress: float) -> None:
+        if isinstance(progress, bool) or not isinstance(progress, (int, float)) or not math.isfinite(progress) or not 0 <= progress <= 1:
+            raise ValueError("BOOK_READER_PROGRESS_INVALID")
+        with closing(self._connect()) as connection, connection:
+            result = connection.execute("UPDATE user_book_imports SET reader_progress = ? WHERE id = ? AND user_id = ?", (float(progress), import_id, user_id))
+            if result.rowcount != 1:
+                raise KeyError("Unknown Book import.")
+
+    def book_identity_candidates(self, *, user_id: str, include_removed: bool = False) -> list[dict[str, Any]]:
+        with closing(self._connect()) as connection:
+            return [dict(row) for row in connection.execute(
+                "SELECT i.id,i.content_fingerprint,a.blob_path FROM user_book_imports i JOIN book_assets a ON a.id=i.asset_id WHERE i.user_id=? AND (? OR i.removed_at='') ORDER BY i.created_at,i.id", (user_id,include_removed))]
+
+    def set_book_on_shelf(self, *, user_id: str, import_id: str, on_shelf: bool) -> bool:
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row=connection.execute("SELECT removed_at FROM user_book_imports WHERE user_id=? AND id=?", (user_id,import_id)).fetchone()
+            if row is None:
+                raise KeyError("Unknown Book import.")
+            if bool(row["removed_at"]) == (not on_shelf):
+                return False
+            connection.execute("UPDATE user_book_imports SET removed_at=? WHERE user_id=? AND id=?", ("" if on_shelf else _now(),user_id,import_id))
+            return True
+
+    def set_book_content_fingerprint(self, *, user_id: str, import_id: str, fingerprint: str) -> None:
+        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError("BOOK_CONTENT_FINGERPRINT_INVALID")
+        with closing(self._connect()) as connection, connection:
+            if connection.execute("UPDATE user_book_imports SET content_fingerprint=? WHERE user_id=? AND id=?", (fingerprint,user_id,import_id)).rowcount != 1:
+                raise KeyError("Unknown Book import.")
+
+    def merge_duplicate_book_import(self, *, user_id: str, keep_id: str, duplicate_id: str) -> None:
+        """Retain the original shelf identity, best progress, source assets and audit."""
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows=connection.execute("SELECT id,content_fingerprint,reader_progress FROM user_book_imports WHERE user_id=? AND id IN (?,?)", (user_id,keep_id,duplicate_id)).fetchall()
+            if len(rows)!=2 or not rows[0]["content_fingerprint"] or rows[0]["content_fingerprint"]!=rows[1]["content_fingerprint"]:
+                raise ValueError("BOOK_DUPLICATE_IDENTITY_MISMATCH")
+            connection.execute("UPDATE user_book_imports SET reader_progress=? WHERE user_id=? AND id=?", (max(row["reader_progress"] for row in rows),user_id,keep_id))
+            connection.execute("DELETE FROM user_book_imports WHERE user_id=? AND id=?", (user_id,duplicate_id))
+
+    def canonicalize_book_import(self, *, user_id: str, import_id: str, fingerprint: str) -> str:
+        """Reserve one shelf owner even when equivalent EPUB imports race."""
+        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError("BOOK_CONTENT_FINGERPRINT_INVALID")
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current=connection.execute("SELECT reader_progress FROM user_book_imports WHERE user_id=? AND id=?", (user_id,import_id)).fetchone()
+            if current is None:
+                raise KeyError("Unknown Book import.")
+            existing=connection.execute("SELECT i.id,i.reader_progress FROM user_book_imports i WHERE i.user_id=? AND i.removed_at='' AND i.content_fingerprint=? AND i.id<>? AND EXISTS(SELECT 1 FROM book_ingestion_runs r JOIN book_stage_receipts s ON s.run_id=r.id WHERE r.asset_id=i.asset_id AND r.user_id=i.user_id AND s.stage='validated' AND s.status='succeeded') ORDER BY i.created_at,i.id LIMIT 1", (user_id,fingerprint,import_id)).fetchone()
+            if existing is None:
+                connection.execute("UPDATE user_book_imports SET content_fingerprint=? WHERE user_id=? AND id=?", (fingerprint,user_id,import_id))
+                return import_id
+            connection.execute("UPDATE user_book_imports SET reader_progress=? WHERE user_id=? AND id=?", (max(current["reader_progress"],existing["reader_progress"]),user_id,existing["id"]))
+            connection.execute("DELETE FROM user_book_imports WHERE user_id=? AND id=?", (user_id,import_id))
+            return str(existing["id"])
+
+    def set_book_presentation(self, *, user_id: str, import_id: str, values: dict[str, str]) -> None:
+        if set(values)-{"title","cover_blob_path","cover_media_type","cover_source_url"} or any(not isinstance(v,str) or len(v)>2000 for v in values.values()):
+            raise ValueError("BOOK_PRESENTATION_INVALID")
+        with closing(self._connect()) as connection, connection:
+            row=connection.execute("SELECT presentation_json FROM user_book_imports WHERE user_id=? AND id=?", (user_id,import_id)).fetchone()
+            if row is None:
+                raise KeyError("Unknown Book import.")
+            presentation=json.loads(row[0] or "{}")
+            connection.execute("UPDATE user_book_imports SET presentation_json=? WHERE user_id=? AND id=?", (_json({**presentation,**values}),user_id,import_id))
 
     def get_book_import_status(
         self,
@@ -2525,7 +2626,10 @@ class KnowledgeStore(YouTubeTrackingStoreMixin):
                 "m.embedding_count FROM book_materializations m "
                 "JOIN active_book_materializations a ON a.materialization_id = m.id "
                 "AND a.user_id = m.user_id AND a.edition_id = m.edition_id "
-                "WHERE a.user_id = ? AND a.edition_id = ? LIMIT 1",
+                "JOIN book_documents d ON d.id = m.document_id AND d.user_id = m.user_id "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id AND r.user_id = m.user_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id AND i.user_id = m.user_id "
+                "WHERE a.user_id = ? AND a.edition_id = ? AND i.removed_at = '' LIMIT 1",
                 (user_id, edition_id),
             ).fetchone()
         if row is None:
@@ -2551,7 +2655,7 @@ class KnowledgeStore(YouTubeTrackingStoreMixin):
                 "JOIN book_documents d ON d.id = m.document_id AND d.user_id = m.user_id "
                 "JOIN book_ingestion_runs r ON r.id = d.run_id AND r.user_id = m.user_id "
                 "JOIN user_book_imports i ON i.asset_id = r.asset_id AND i.user_id = m.user_id "
-                "WHERE a.user_id = ? ORDER BY a.activated_at DESC, m.id ASC",
+                "WHERE a.user_id = ? AND i.removed_at = '' ORDER BY a.activated_at DESC, m.id ASC",
                 (user_id,),
             ).fetchall()
         return [dict(row) for row in rows]

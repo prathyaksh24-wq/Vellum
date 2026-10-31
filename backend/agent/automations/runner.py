@@ -39,6 +39,16 @@ async def run_automation_now(
                 deliver=lambda delivery_id, text: _deliver_creator_upload(automation, delivery_id, text, store))
             return store.finish_run(automation["id"], run["id"], status="complete",
                 output=f"Creator tracking: {result['status']}. {result['requests']} feed requests; {result.get('fallback_checks', 0)} API fallback checks; {result['delivered']} delivered uploads.")
+        if automation.get('builtin') and automation.get('builtin_key') == 'youtube_browser_history':
+            from agent.automations.builtins import run_builtin
+            result = await run_builtin(automation, raise_errors=True)
+            status = result['status']
+            if status == 'browser_busy':
+                answer = 'History refresh deferred while another browser operation or refresh is running. Saved history is unchanged.'
+            else:
+                answer = ('YouTube history refreshed.' if status == 'ready' else 'YouTube history checked; the current page is empty.')
+                answer += f" {int(result.get('records') or 0)} saved video/day entries."
+            return store.finish_run(automation['id'], run['id'], status='complete', output=answer)
         answer = await _execute_reasoning_turn(automation)
         if (automation.get("destination") or {}).get("kind") == "notification":
             store.deliver_notification(automation["id"], run["id"], answer)

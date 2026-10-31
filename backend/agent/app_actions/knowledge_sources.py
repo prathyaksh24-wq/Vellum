@@ -19,6 +19,8 @@ KNOWLEDGE_INDEX_REBUILD_ACTION_ID = "knowledge.index.rebuild"
 BOOK_IMPORT_ACTION_ID = "book.import"
 BOOK_PROCESS_ACTION_ID = "book.process"
 BOOK_COMPILE_ACTION_ID = "book.compile"
+BOOK_READER_PROGRESS_ACTION_ID = "book.reader.progress"
+BOOK_REMOVE_ACTION_ID = "book.remove"
 
 KNOWLEDGE_SOURCE_ACTION_IDS = frozenset({
     KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
@@ -27,11 +29,14 @@ KNOWLEDGE_SOURCE_ACTION_IDS = frozenset({
     BOOK_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
     BOOK_COMPILE_ACTION_ID,
+    BOOK_READER_PROGRESS_ACTION_ID,
+    BOOK_REMOVE_ACTION_ID,
 })
 KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS = frozenset({
     KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
     BOOK_COMPILE_ACTION_ID,
+    BOOK_REMOVE_ACTION_ID,
 })
 
 
@@ -81,6 +86,17 @@ class KnowledgeSourceActionService:
                 return self._import_source(arguments)
             if action_id == BOOK_IMPORT_ACTION_ID:
                 return self._import_book(arguments)
+            if action_id == BOOK_READER_PROGRESS_ACTION_ID:
+                import_id = _required_string(arguments, "import_id")
+                result = self._book_library_provider().save_reader_progress(import_id, arguments.get("progress"))
+                return {"changed":True, "reader":result, "_target_kind":"book", "_target_id":import_id, "_message":"Reading position saved."}
+            if action_id == BOOK_REMOVE_ACTION_ID:
+                if not confirmed:
+                    raise KnowledgeSourceActionError("CONFIRMATION_REQUIRED", "Confirm removing this book from your shelf.")
+                import_id = _required_string(arguments, "import_id")
+                result = self._book_library_provider().remove(import_id)
+                return {"changed":result["changed"], "library":result, "_target_kind":"book", "_target_id":import_id,
+                        "_message":"Removed the book from your shelf." if result["changed"] else "The book is already off your shelf."}
             if action_id in {BOOK_PROCESS_ACTION_ID, BOOK_COMPILE_ACTION_ID}:
                 if not confirmed:
                     raise KnowledgeSourceActionError("CONFIRMATION_REQUIRED", "Confirm changing this Book knowledge.")
@@ -178,14 +194,17 @@ class KnowledgeSourceActionService:
         result = library.import_epub(
             filename=_required_string(arguments, "file_name"),
             content=bytes(content),
-            rights_attestation_version=_required_string(arguments, "rights_attestation_version"),
-            scan_approved=arguments.get("scan_approved") is True,
+            rights_attestation_version=str(arguments.get("rights_attestation_version") or "local-epub-v1"),
+            scan_approved=True,
             local_only=arguments.get("local_only") is True,
+            defer_processing=arguments.get("defer_processing") is True,
         )
-        if result.get("error_code"):
+        if result.get("error_code") and not result.get("book", {}).get("can_read"):
             code = str(result["error_code"])
             raise KnowledgeSourceActionError(code, _book_error_message(code))
-        return self._book_result(result, message="Imported the EPUB and built its Book knowledge.")
+        if result.get("error_code"):
+            result = {**result, "status": "imported", "error_code": ""}
+        return self._book_result(result, message=("This book is already on your shelf." if result.get("already_present") else "Added the book to your shelf."))
 
     def _book_action(self, action_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         import_id = str(arguments.get("import_id") or arguments.get("reference") or "").strip()
@@ -204,12 +223,14 @@ class KnowledgeSourceActionService:
         book = dict(result.get("book") or {})
         import_id = str(book.get("id") or "books-library")
         return {
-            "changed": True,
+            "changed": not bool(result.get("already_present")),
             "library": {
                 "schema_version": str(result.get("schema_version") or "books-library-v1"),
                 "book": book,
                 "status": str(result.get("status") or "ready"),
                 "error_code": str(result.get("error_code") or ""),
+                "already_present": bool(result.get("already_present")),
+                "processing_pending": bool(result.get("processing_pending")),
             },
             "_target_kind": "book_document",
             "_target_id": import_id,
@@ -288,7 +309,7 @@ def knowledge_source_action_definitions() -> list[AppActionDefinition]:
             id=BOOK_IMPORT_ACTION_ID,
             title="Import an EPUB",
             description="Import an explicitly selected EPUB through the local Book pipeline.",
-            confirmation_rule="existing_import_consent",
+            confirmation_rule="none",
             executor_location="server_and_client",
             argument_schema={
                 "type": "object",
@@ -297,11 +318,21 @@ def knowledge_source_action_definitions() -> list[AppActionDefinition]:
                     "rights_attestation_version": {"type": "string"},
                     "scan_approved": {"type": "boolean"},
                     "local_only": {"type": "boolean"},
+                    "defer_processing": {"type":"boolean"},
                 },
             },
             ui_reference="books.library",
             audit_label="book.import",
             **{key: value for key, value in common.items() if key != "executor_location"},
+        ),
+        AppActionDefinition(
+            id=BOOK_READER_PROGRESS_ACTION_ID,
+            title="Save Book reading position",
+            description="Save the user's reading progress in the local Book library.",
+            confirmation_rule="none",
+            argument_schema={"type":"object", "required":["import_id","progress"], "properties":{
+                "import_id":{"type":"string"}, "progress":{"type":"number","minimum":0,"maximum":1}}, "additionalProperties":False},
+            ui_reference="books.reader", audit_label="book.reader.progress", **common,
         ),
         *[
             AppActionDefinition(
@@ -323,6 +354,7 @@ def knowledge_source_action_definitions() -> list[AppActionDefinition]:
             for action_id, title, description in (
                 (BOOK_PROCESS_ACTION_ID, "Process a Book EPUB", "Construct and evaluate the canonical BookDocument locally."),
                 (BOOK_COMPILE_ACTION_ID, "Build Book skill knowledge", "Compile an eligible BookDocument into canonical Book knowledge."),
+                (BOOK_REMOVE_ACTION_ID, "Remove a Book from the shelf", "Remove the book from the user's shelf and active retrieval while retaining its local source and reading progress."),
             )
         ],
     ]
@@ -364,10 +396,17 @@ def _book_error_message(code: str) -> str:
         "BOOK_EPUB_REQUIRED": "Choose an EPUB file.",
         "BOOK_EPUB_EMPTY": "The EPUB upload is empty.",
         "BOOK_EPUB_TOO_LARGE": "The EPUB exceeds the configured local import limit.",
-        "BOOK_UPLOAD_INVALID": "The EPUB upload is invalid.",
+        "BOOK_UPLOAD_FORMAT_UNSUPPORTED": "Choose an EPUB, TXT or Markdown book file.",
+        "BOOK_TEXT_TOO_SHORT": "This file has too little readable text to import.",
+        "BOOK_TEXT_ENCODING_INVALID": "Save this text file as UTF-8 and try again.",
+        "BOOK_COVER_INVALID": "Choose a valid PNG, JPEG or WebP cover smaller than 6 MB.",
+        "BOOK_URL_PROVIDER_UNSUPPORTED": "Use a direct book URL from Project Gutenberg or Standard Ebooks.",
+        "BOOK_UPLOAD_INVALID": "This file could not be read as an EPUB, TXT or Markdown book. Choose a readable book file and try again.",
         "BOOK_PROCESS_NOT_ELIGIBLE": "This Book is not eligible for local processing.",
         "BOOK_COMPILE_NOT_ELIGIBLE": "This Book is not eligible for Book skill compilation.",
-        "BOOK_OCR_REQUIRED": "The EPUB was imported and scanned, but some pages contain image-only text. Local OCR is required before Vellum can build a verified Book skill.",
+        "BOOK_QUALITY_DEGRADED": "The EPUB was imported, but its text quality checks found duplicated content, missing resources, or damaged text. Open the book to inspect the findings before building its Book skill.",
+        "BOOK_QUALITY_FAILED": "The EPUB was imported, but its structure or source references could not be verified. Open the book to inspect the findings or try another EPUB edition.",
+        "BOOK_OCR_REQUIRED": "The EPUB was imported, but some pages contain image-only text. Local OCR is required before Vellum can build a verified Book skill.",
         "BOOK_PROCESS_FAILED": "The EPUB could not be processed.",
         "BOOK_COMPILE_FAILED": "Book skill knowledge could not be built.",
     }.get(code, code.replace("_", " ").title())

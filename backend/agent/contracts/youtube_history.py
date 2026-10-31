@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from datetime import date
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 
 HISTORY_URL = "https://www.youtube.com/feed/history"
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+DAY_FILTER_PATTERN = r"^(?:|Today|Yesterday|(?:Last )?(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)|\d{4}-\d{2}-\d{2})$"
+
+
+def _valid_day(value: str) -> str:
+    if value[:1].isdigit():
+        date.fromisoformat(value)
+    return value
+
+
+HistoryDayFilter = Annotated[str, Field(max_length=30, pattern=DAY_FILTER_PATTERN), AfterValidator(_valid_day)]
 
 
 class YouTubeHistoryConfig(BaseModel):
@@ -68,6 +80,8 @@ class BrowserHistorySnapshot(BaseModel):
     coverage: Literal["recent_page"] = "recent_page"
     timezone: str = Field(default="UTC", max_length=80)
     truncated: bool = False
+    requested_day: str = Field(default="", max_length=10)
+    earliest_loaded_day: str = Field(default="", max_length=10)
 
     @field_validator("timezone")
     @classmethod
@@ -79,4 +93,5 @@ class BrowserHistoryReadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     limit: int = Field(default=20, ge=1, le=100)
     channel: str = Field(default="", max_length=200)
-    day_label: Literal["", "Today", "Yesterday"] = ""
+    day_label: HistoryDayFilter = ""
+    include_accumulated: bool = False

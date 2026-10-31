@@ -34,7 +34,7 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
         "key": "youtube_browser_history",
         "name": "YouTube history refresh",
-        "instructions": "Accumulate recent YouTube watch-history entries locally from Vellum's signed-in browser profile. Read in a temporary background tab without presenting the Browser panel or switching the user's page. Skip during pause or user control; report sign-in or reader failures. Repeated reads do not duplicate saved video/day entries.",
+        "instructions": "Accumulate recent YouTube watch-history entries locally from Vellum's signed-in browser profile. Read in a temporary background tab without presenting the Browser panel, switching the user's page, or changing browser ownership. Skip overlapping browser operations or refreshes; report sign-in or reader failures. Repeated reads do not duplicate saved video/day entries.",
         "schedule": "every 15m",
         "state": "paused",
     },
@@ -132,16 +132,20 @@ def reset_builtin(store: AutomationStore, record: dict[str, Any]) -> dict[str, A
     )
 
 
-async def run_builtin(record: dict[str, Any]) -> None:
+async def run_builtin(record: dict[str, Any], *, raise_errors: bool = False) -> Any:
     """Dispatch a fired built-in to its original backend function."""
     key = str(record.get("builtin_key") or record.get("name") or "")
     handler = _HANDLERS.get(key)
     if handler is None:
+        if raise_errors:
+            raise ValueError("The built-in automation handler is unavailable.")
         logger.warning("[AUTOMATIONS] no handler for built-in %r; skipping", key)
         return
     try:
-        await handler()
+        return await handler()
     except Exception as exc:  # noqa: BLE001 — maintenance jobs never crash the API
+        if raise_errors:
+            raise
         logger.warning("[AUTOMATIONS] built-in %s failed: %s", key, exc)
 
 
@@ -181,16 +185,18 @@ async def _curator_tick_handler() -> None:
     await asyncio.to_thread(get_curator_runtime().tick)
 
 
-async def _youtube_history_handler() -> None:
+async def _youtube_history_handler() -> dict[str, Any]:
     from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
     result = await asyncio.to_thread(YouTubeBrowserHistory().refresh, automatic=True)
     if result["status"] not in {"ready", "empty", "browser_busy"}:
         raise RuntimeError(result["message"])
+    return result
 
 
 async def _youtube_creator_handler() -> dict[str, Any]:
     from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
     return await asyncio.to_thread(YouTubeCreatorTracking().refresh)
+
 
 _HANDLERS: dict[str, Any] = {
     "youtube_creator_tracking": _youtube_creator_handler,

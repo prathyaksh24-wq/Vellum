@@ -65,6 +65,12 @@ class XAgent:
         self.post_drafter = post_drafter
 
     def can_handle(self, query: str) -> bool:
+        # Generic words such as "feed" do not override an explicit domain.
+        if re.search(r"\b(?:youtube|yt)\b", query, re.I) and not (
+            re.search(r"\b(?:twitter|tweets?|retweets?|reposts?)\b", query, re.I)
+            or any(re.search(pattern, query, re.I) for pattern in self._X_CONTEXT_PATTERNS)
+        ):
+            return False
         lowered = self._clean_post_request(query).lower()
         return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS) or any(
             re.search(pattern, lowered) is not None for pattern in self._X_CONTEXT_PATTERNS

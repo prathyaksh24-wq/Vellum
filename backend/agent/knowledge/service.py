@@ -8,7 +8,7 @@ from typing import Any
 
 from agent.knowledge.book_catalog import BookCatalog
 from agent.knowledge.book_discovery import BookDiscoveryRuntime
-from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
+from agent.knowledge.book_ingestion import BookIngestionPipeline, BookIngestionPolicy, MalwareScanner
 from agent.knowledge.book_documents import BookDocument, BookDocumentPipeline
 from agent.knowledge.book_quality import (
     EpubParseQualityPolicy,
@@ -67,6 +67,7 @@ class KnowledgeCore:
         tool_learning_enabled: bool = False,
         book_ocr_provider=None,
         book_malware_scanner: MalwareScanner | None = None,
+        book_malware_scan_enabled: bool = True,
         book_embedding_provider: BookEmbeddingProvider | None = None,
         book_materialization_compiler_version: str = BOOK_MATERIALIZATION_COMPILER_VERSION,
         book_embedding_model_revision: str = "default",
@@ -90,11 +91,12 @@ class KnowledgeCore:
         self.book_ingestion = BookIngestionPipeline(
             store,
             scanner=book_malware_scanner,
+            policy=BookIngestionPolicy(malware_scan_enabled=book_malware_scan_enabled),
         )
         self.book_documents = BookDocumentPipeline(store, ocr_provider=book_ocr_provider)
         self.book_discovery = BookDiscoveryRuntime(store, self.book_documents, catalog=book_catalog)
         self.book_quality = BookQualityPipeline(store, self.book_documents, policy=EpubParseQualityPolicy(
-            approved_alternate_parser_versions=(self.book_documents.parser_version,) if book_ocr_provider else ()))
+            approved_alternate_parser_versions=("epub-native-v1", self.book_documents.parser_version) if book_ocr_provider else ("epub-native-v1",)))
         if book_embedding_provider is None:
             from agent.rag.embedder import get_embedder
 

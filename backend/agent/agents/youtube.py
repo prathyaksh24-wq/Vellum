@@ -63,6 +63,7 @@ class YoutubeAgent:
         r"\bwhat\s+did\s+(?:i|we)\s+recently\s+watch\b",
     )
     _SUBSCRIPTION_FEED_PATTERNS = (
+        r"\b(?:youtube|yt)\s+(?:subscriptions?\s+)?feed\b",
         r"\b(?:my|our|personalized|personalised)\s+(?:youtube|yt)\s+(?:feed|recommendations?)\b",
         r"\b(?:recommend|suggest)\b.*\b(?:youtube|yt)\b.*\b(?:channels?|creators?|videos?)\b.*\b(?:for me|my|based on)\b",
         r"\b(?:which|what)\s+(?:youtube\s+)?(?:creators?|channels?)\b.*\b(?:tracking|monitoring|following)\b",
@@ -114,7 +115,25 @@ class YoutubeAgent:
 
     def answer_with_context(self, query: str, context: dict) -> SpecialistResponse:
         previous = str(context.get("query") or "")
+        history_followup = None
         if time.time() - float(context.get("at") or 0) <= 1800:
+            from agent.contracts.youtube_history import WEEKDAYS
+            day_only = re.fullmatch(r"(?:and\s+|what about\s+|how about\s+)?(?:on\s+)?((?:last\s+)?(?:" +
+                '|'.join(WEEKDAYS) + r")|today|yesterday|\d{4}-\d{2}-\d{2})[?.!]?", query.strip(), re.I)
+            prior = context.get('account_request') or {}
+            if prior.get('source') in {'history', 'liked', 'subscriptions'} and re.fullmatch(
+                    r'(?:please\s+)?(?:try|check|refresh)(?:\s+again)?(?:\s+now)?[?.!]?', query.strip(), re.I):
+                history_followup = YoutubeReadRequest.model_validate(prior)
+            if prior.get('source') == 'history' and re.search(
+                    r'\b(?:analysis|analyse|analyze|trends?|patterns?|summary|summari[sz]e|explain)\b', query, re.I) and re.search(
+                    r'\b(?:that|it|those|based on|my activity)\b', query, re.I):
+                history_followup = YoutubeReadRequest.model_validate({**prior, 'view':'summary'})
+            if prior.get('source') == 'history' and re.fullmatch(
+                    r'(?:please\s+)?(?:give(?:\s+me)?\s+(?:a\s+)?summary|summari[sz]e|explain)[?.!]?', query.strip(), re.I):
+                history_followup = YoutubeReadRequest.model_validate({**prior, 'view':'summary'})
+            if day_only and prior.get('source') == 'history':
+                day = day_only[1].title() if not day_only[1][:1].isdigit() else day_only[1]
+                history_followup = YoutubeReadRequest.model_validate({**prior, 'day_label':day})
             if re.fullmatch(r"(?:please\s+)?(?:give me a summary|summari[sz]e(?:\s+(?:it|that|my data))?|explain (?:it|that))\??", query.strip(), re.I) and self._is_intelligence_query(previous.lower()):
                 query = previous
             elif re.search(r"\b(?:watched|seen)\b.*\b(?:him|her|them)\b", query, re.I):
@@ -123,7 +142,17 @@ class YoutubeAgent:
                     query = "what videos have I watched from " + creator[1]
         if time.time() - float(context.get("at") or 0) > 1800:
             context = {}
-        response = self.answer(query, context=context)
+        if re.fullmatch(r'(?:please\s+)?(?:(?:give|send|show)(?:\s+me)?\s+)?(?:the\s+)?(?:video\s+)?(?:link|url)(?:\s+(?:please|again|to\s+(?:it|that)))?[?.!]?', query.strip(), re.I):
+            selected = context.get('account_reference')
+            if selected is None and len(context.get('account_items') or []) == 1:
+                selected = 1
+            if selected:
+                history_followup = YoutubeReadRequest(source='previous', view='link', index=selected)
+            else:
+                response = SpecialistResponse(agent=self.name, status='needs_fetch', confidence=1,
+                    summary='Which video do you mean? Give its number or title from the list so I can return the correct link.')
+                return response.model_copy(update={'structured_payload':{'youtube_query':query}})
+        response = self._answer_read_request(history_followup, context) if history_followup else self.answer(query, context=context)
         return response.model_copy(update={"structured_payload":{**response.structured_payload,"youtube_query":query}})
 
     @staticmethod
@@ -133,14 +162,29 @@ class YoutubeAgent:
             return previous
         account = response.structured_payload.get("youtube_account")
         if account is not None:
+            if account['request'].get('source') == 'previous' and response.status == 'needs_fetch':
+                return {**previous, 'query':query, 'at':time.time()}
+            preserve_list = account['request'].get('view') in {'summary', 'count'}
             return {"query":query, "at":time.time(), "account_request":account["request"],
-                "account_items":account["items"]}
+                "account_items":previous.get('account_items', []) if preserve_list else account["items"],
+                'account_reference':previous.get('account_reference') if preserve_list else account.get('reference_index')}
+        if response.status in {'needs_fetch', 'error'} or response.structured_payload.get('youtube_capabilities'):
+            return {**previous, 'query':query, 'at':time.time()}
         return {"query":query, "at":time.time()}
 
     def answer(self, query: str, *, context: dict | None = None) -> SpecialistResponse:
         lowered = query.lower()
+        if re.search(r'\bwhat\s+(?:else\s+)?can\s+(?:the\s+)?(?:you|u|yt\s+agent|youtube\s+agent)\s+do\b|\b(?:your|yt\s+agent|youtube\s+agent)\s+capabilities\b', lowered):
+            return SpecialistResponse(agent=self.name, status='answered', confidence=1,
+                summary='I can read recent watch history from the YouTube account signed into Vellum’s Browser, find videos from a particular day or creator, count the entries I have captured, and describe recurring channels and topics in that activity. '
+                    'I can also return links to videos I showed you. History reads run quietly without taking browser control.\n\n'
+                    'Liked videos and subscriptions use the separate Google connector or an imported Takeout snapshot; signing into the browser alone does not connect those lists. '
+                    'Imported history can support longer-term comparisons when you explicitly ask about that snapshot. I cannot recover exact watch duration, every repeat play, or history that has not been captured.',
+                structured_payload={'youtube_capabilities':True})
         if self._is_subscription_feed_query(lowered):
             return self._answer_subscription_feed()
+        if self._is_intelligence_query(lowered) and not re.search(r'\b(?:takeout|imported|archive|search|changed|change|declining|rising|falling|losing|gaining)\b', lowered):
+            return self._answer_read_request(YoutubeReadRequest(source='history', view='summary'), context or {})
         if re.search(r"\b(?:my|our)\b.*\b(?:youtube music|music library|watch later|playlists)\b", lowered):
             return self._answer_takeout_library(lowered)
         if self._is_takeout_query(lowered):
@@ -149,10 +193,12 @@ class YoutubeAgent:
             return self._answer_takeout_history(lowered)
         if self._is_account_query(lowered):
             return self._answer_account()
+        if self._is_subscription_feed_query(lowered):
+            return self._answer_subscription_feed()
         if self._is_intelligence_query(lowered):
             return self._answer_personal_context(query)
         read_request = clear_read_request(query)
-        if read_request is not None and read_request.source == "uploads":
+        if read_request is not None and read_request.source in {'uploads', 'notifications'}:
             return self._answer_read_request(read_request, context or {})
         if read_request is not None and read_request.source == "previous":
             return self._answer_read_request(read_request, context or {})
@@ -268,6 +314,37 @@ class YoutubeAgent:
             return SpecialistResponse(agent=self.name, status=status, summary=summary, analysis=analysis, confidence=1.0,
                 structured_payload={"youtube_account":{"request":request.model_dump(), "items":list(items)[:100]}})
 
+        if request.source == 'notifications':
+            from agent.plugins.youtube_creator_tracking import _literal
+            payload = {'limit': request.limit, 'view': request.notification_view}
+            try:
+                result = self.tool_registry.invoke('youtube.notifications', payload, agent_name=self.name) \
+                    if self.tool_registry is not None else self.youtube_service.notifications(payload)
+            except Exception:
+                return reply('Saved Vellum YouTube upload notifications are temporarily unavailable. Try again shortly.',
+                    status='needs_fetch')
+            recent = request.notification_view == 'recent'
+            count = result.get('recent_unread_count', 0) if recent else result.get('total_count', 0)
+            label = 'unread upload notifications received in the last 24 hours' if recent else 'retained upload notifications'
+            intro = f'Vellum has {count} {label}.'
+            if request.view == 'count':
+                return reply(intro, analysis='Read youtube.notifications from the canonical local AutomationStore.')
+            rows = result.get('items', [])
+            lines, items = [intro], []
+            for index, row in enumerate(rows, 1):
+                title = str(row.get('message') or row.get('title') or 'Upload notification').split('\n')[0]
+                video = re.fullmatch(r'https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})', str(row.get('url') or ''))
+                label_text = _literal(title)
+                if video:
+                    label_text = f'[{label_text}](https://www.youtube.com/watch?v={video[1]})'
+                lines.append(f'{index}. {label_text} — received {_literal(row.get("created_at", "date unavailable"))}')
+                if video:
+                    items.append({'video_id': video[1], 'title': title})
+            if recent:
+                lines.append('Older and read items remain in notification History. Ask for my YouTube notification history to see retained items.')
+            lines.append('These are upload notifications saved by Vellum. The inbox retains up to 200 per task; reading this answer does not mark them read.')
+            return reply('\n'.join(lines), items,
+                analysis='Read youtube.notifications from the canonical local AutomationStore; no public search or native YouTube bell read.')
         if request.source == 'uploads':
             from agent.plugins.youtube_creator_tracking import _literal
             payload={'limit':request.limit,'creator':request.creator,'day_label':request.day_label}
@@ -311,10 +388,13 @@ class YoutubeAgent:
             # Keep the complete displayed order for another ordinal follow-up.
             response = reply(self._account_item_label(item, id_key, "video" if id_key == "video_id" else "channel"), items)
             response.structured_payload["youtube_account"]["request"] = previous
+            response.structured_payload["youtube_account"]['reference_index'] = request.index
             return response
         try:
             if request.source == 'history':
                 payload = {'limit':100, 'channel':request.creator, 'day_label':request.day_label}
+                if request.view == 'summary' or request.limit > 20:
+                    payload['include_accumulated'] = True
                 result = self.tool_registry.invoke('youtube.watch_history', payload, agent_name=self.name) \
                     if self.tool_registry is not None else self.youtube_service.watch_history(payload)
             else:
@@ -360,26 +440,43 @@ class YoutubeAgent:
             if request.count_kind == "channels":
                 return reply(f"I found {len(items)} distinct channels in the {inspected} recent {'browser history entries' if request.source == 'history' else 'liked videos'} I read.")
             if request.source == 'history':
-                return reply(f"I found {len(items)} entries in the recent browser history snapshot. This is not an all-time watch count.")
+                when = ' for ' + result['requested_day'] if result.get('requested_day') else ''
+                return reply(f"I found {result.get('total', len(items))} recorded history entries{when}. "
+                    "This covers the loaded page and any saved matches, so it may be incomplete.")
             return reply(f"I read {len(items)} recent liked videos. This is a bounded recent sample; "
                 "the connector hasn't supplied your full liked-video total.")
         if request.view == "summary":
             names = list(dict.fromkeys(str(item.get("channel") or item.get("title") or "") for item in items))
             if request.source == 'history':
-                return reply(f"The current browser snapshot contains {len(items)} recent watch-history entries. " +
-                    ("Channels include " + ", ".join(names[:5]) + ". " if names else "") +
-                    "This was refreshed just now; a recent page snapshot does not establish long-term viewing trends.")
+                from agent.contracts.youtube_activity import describe_activity
+                return reply(describe_activity(items, result), analysis='Analyzed counted, account-scoped browser history evidence from youtube.watch_history.')
             return reply(f"This {'imported snapshot' if snapshot else 'account read'} contains {len(items)} "
                 f"{'recent liked videos' if request.source == 'liked' else 'subscribed channels'}. "
                 + ("Channels include " + ", ".join(names[:5]) + "." if names else "No channel names were available."))
         visible = items[:request.limit]
         if request.source == 'history':
             suffix = '\n\nRefreshed from your browser just now. Coverage is the recent history page, not your full watch history.'
+            if result.get('coverage') == 'fresh_and_accumulated':
+                suffix = '\n\nI refreshed your browser account and included history saved locally for the same account. This is partial history, not your full watch history.'
+            if request.day_label:
+                suffix = '\n\nI checked the account currently signed into your browser' + (
+                    ' and included matching history saved locally.' if result.get('coverage') == 'fresh_and_accumulated_day' else '.') + \
+                    ' This is partial history; exact watch times and repeat plays are unavailable.'
             if not visible:
+                if request.day_label:
+                    day = result.get('requested_day') or request.day_label
+                    earliest = result.get('earliest_loaded_day') or ''
+                    if earliest and day < earliest:
+                        return reply(f"I haven't captured entries for {day}{' from that creator' if request.creator else ''}. "
+                            f"The history page I loaded only reaches back to {earliest}, and I found no saved matches for that day. "
+                            "I can't tell what you watched then from the available history.", status='needs_fetch')
+                    return reply(f"I found no entries for {day}{' from that creator' if request.creator else ''} in the history I could read." + suffix)
                 return reply(('No matching entries were visible in this browser history refresh.' if request.creator or request.day_label else
                     'The signed-in YouTube account has no visible watch-history entries in this refresh.') + suffix)
             label = 'channels' if request.view == 'channels' else 'entries'
-            intro = f"Here are {len(visible)} recent {label} from the YouTube account signed into Vellum’s Browser:"
+            when = ' for ' + result['requested_day'] if result.get('requested_day') else ''
+            intro = (f"Here is 1 {'recorded' if when else 'recent'} {label[:-1] if label == 'channels' else 'entry'}" if len(visible) == 1 else
+                f"Here are {len(visible)} {'recorded' if when else 'recent'} {label}") + when + ' from the YouTube account signed into Vellum’s Browser:'
             lines = []
             for index, item in enumerate(visible, 1):
                 key = 'channel_id' if request.view == 'channels' else 'video_id'
@@ -475,11 +572,19 @@ class YoutubeAgent:
         return self._answer_read_request(YoutubeReadRequest(source="liked", view="videos"), {})
 
     def _answer_browser_history(self, query: str, context: dict) -> SpecialistResponse:
-        request = clear_read_request(query) or YoutubeReadRequest(source="history")
+        clear = clear_read_request(query)
+        if clear is not None:
+            return self._answer_read_request(clear, context)
+        request = YoutubeReadRequest(source="history")
+        constraint = request
         if self.planner is not None:
             try:
                 request = self.planner(query, context)
                 request = request if isinstance(request, YoutubeReadRequest) else YoutubeReadRequest.model_validate(request)
+                if constraint.source == 'clarify':
+                    request = constraint
+                elif constraint.day_label and request.source == 'history':
+                    request = request.model_copy(update={'day_label':constraint.day_label})
             except Exception as exc:
                 return SpecialistResponse(agent=self.name, status="needs_fetch", confidence=1,
                     summary="The local request interpreter timed out before reading watch history. Try again when the local model is ready."

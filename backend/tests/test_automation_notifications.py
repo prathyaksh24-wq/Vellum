@@ -14,6 +14,26 @@ def job(store, **fields):
         schedule={"kind": "interval", "seconds": 900}, destination={"kind": "notification"}, **fields)
 
 
+def test_notification_stream_observes_durable_writes_and_reconnects_without_private_content(tmp_path):
+    store = AutomationStore(tmp_path)
+    record = job(store)
+    class Request:
+        async def is_disconnected(self): return False
+    async def read():
+        events = api._notification_changes(store, Request(), interval=0)
+        initial = await anext(events)
+        assert 'notifications.changed' in initial
+        AutomationStore(tmp_path).deliver_notification(record['id'], 'fresh', 'PRIVATE TITLE')
+        changed = await anext(events)
+        assert changed != initial
+        assert 'PRIVATE TITLE' not in changed
+        await events.aclose()
+        reconnected = api._notification_changes(AutomationStore(tmp_path), Request(), interval=0)
+        assert await anext(reconnected) == changed
+        await reconnected.aclose()
+    asyncio.run(read())
+
+
 def test_notifications_persist_once_and_read_state_survives_restart(tmp_path):
     store = AutomationStore(tmp_path)
     record = job(store)

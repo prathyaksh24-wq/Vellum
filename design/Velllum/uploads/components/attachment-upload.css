@@ -1,0 +1,28 @@
+@import "tailwindcss/theme.css" layer(theme);
+@source "./attachment-upload.tsx";
+
+@theme inline {
+  --color-background: var(--bg, #0a0908);
+  --color-foreground: var(--txt2, #f2f0f0);
+  --color-muted: color-mix(in srgb, var(--txt2, #f2f0f0) 10%, var(--bg, #0a0908));
+  --color-muted-foreground: var(--dim, #928a88);
+  --color-border: color-mix(in srgb, var(--txt2, #f2f0f0) 25%, var(--bg, #0a0908));
+  --color-ring: var(--ember, #988686);
+  --color-destructive: #e17070;
+}
+
+/* Keep the pasted component's utilities local to its host. No global preflight. */
+.bk-upload {
+  @tailwind utilities source(none);
+  color: var(--txt2, #f2f0f0);
+  font-family: inherit;
+  line-height: 1.5;
+}
+@layer base {
+  .bk-upload :where(button, input) {font:inherit; color:inherit;}
+  .bk-upload :where(button) {border:0; cursor:pointer; background:transparent;}
+}
+.bk-upload :where(button:disabled) {cursor:default;}
+.bk-upload :where(ul) {list-style:none;}
+.bk-upload .attachment-tooltip-host {position:relative; display:inline-flex; flex-shrink:0;}
+.bk-upload .attachment-tooltip {position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:20; width:max-content; max-width:240px; padding:6px 9px; border-radius:8px; background:color-mix(in srgb, var(--txt2, #f2f0f0) 10%, var(--bg, #0a0908)); color:var(--txt2, #f2f0f0); font-size:12px; pointer-events:none;}

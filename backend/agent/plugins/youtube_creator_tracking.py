@@ -124,6 +124,38 @@ class YouTubeCreatorTracking:
         saved = self._settings()
         return CreatorTrackingConfig.model_validate(saved["config"]) if saved.get("config") else None
 
+    def authorization_required(self, config):
+        if not config.min_duration_seconds or self.duration_provider is not None:
+            return False
+        from agent.plugins.youtube_runtime import youtube_status
+        return bool(youtube_status().get('authorization_required'))
+
+    def resume_after_authorization(self, channel_id):
+        """Release failed checks only for the verified, explicitly linked account."""
+        config=self._config()
+        if not config or (config.subscription_account_id or config.account_id)!=channel_id:
+            return False
+        now,owner=self.clock(),uuid4().hex
+        self.store.save_sync_cursor(SyncCursorInput(connector='youtube_push_reauthorization',account_id=config.account_id,
+            state={'channel_id':channel_id,'pending':True}))
+        if not self.store.youtube_tracking_lock(config.account_id,owner,now.timestamp(),duration=60):
+            return False
+        try:
+            state=dict((self.store.get_sync_cursor('youtube_upload_durations',config.account_id) or {}).get('state') or {})
+            state.pop('provider_next_at',None)
+            pending={row['video_id'] for row in self.store.youtube_tracking_uploads(config.account_id,pending=True,limit=10000)}
+            for video,item in (state.get('videos') or {}).items():
+                if video in pending and item.get('duration_seconds') is None:
+                    item['next_at']=now.isoformat()
+            self.store.save_sync_cursor(SyncCursorInput(connector='youtube_upload_durations',account_id=config.account_id,state=state))
+            self.store.save_sync_cursor(SyncCursorInput(connector='youtube_push_subscription_sync',account_id=config.account_id,
+                state={'status':'pending','next_at':now.isoformat(),'subscription_account_id':channel_id}))
+            self.store.save_sync_cursor(SyncCursorInput(connector='youtube_push_reauthorization',account_id=config.account_id,
+                state={'channel_id':channel_id,'pending':False}))
+            return True
+        finally:
+            self.store.youtube_tracking_unlock(config.account_id,owner)
+
     def configure(self, arguments):
         config = CreatorTrackingConfig.model_validate(arguments)
         if set(config.topic_preferences)-set(TOPICS):
@@ -132,6 +164,8 @@ class YouTubeCreatorTracking:
         # replaces that exact rule with another relationship.
         previous = self._config()
         if previous and previous.account_id == config.account_id:
+            if 'subscription_account_id' not in arguments:
+                config.subscription_account_id = previous.subscription_account_id
             keys = {rule.channel_id or _name(rule.name) for rule in config.rules}
             config.rules.extend(rule for rule in previous.rules if rule.relationship in {"excluded", "former"}
                                 and (rule.channel_id or _name(rule.name)) not in keys)
@@ -211,7 +245,7 @@ class YouTubeCreatorTracking:
                 return rule
         return next((rule for rule in config.rules if rule.channel_id == channel), None)
 
-    def snapshot(self, *, limit=20):
+    def snapshot(self, *, limit=20, apply_capacity=True):
         config = self._config()
         if not config:
             return CreatorTrackingSnapshot().model_dump()
@@ -223,7 +257,8 @@ class YouTubeCreatorTracking:
                 stats.setdefault(rule.channel_id, {"channel_id": rule.channel_id, "name": rule.name, "days": {}, "total": 0, "last_day": ""})
         creators = []
         seeds = self._settings().get("seeds") or {}
-        topic_profile = self._topic_profile(config, reference_day)
+        messages = self._conversation_messages(config)
+        topic_profile = self._topic_profile(config, reference_day, messages=messages)
         active_interest_topics = topic_profile["active_topics"]
         blocked_topics={topic for topic,value in topic_profile['evidence'].items() if value.get('excluded')}
         related_candidates={topic:[] for topic in active_interest_topics}
@@ -278,6 +313,17 @@ class YouTubeCreatorTracking:
                 "state": state, "score": round(score, 3), "recent_video_days": count, "recent_days": days,
                 "total_video_days": row["total"], "last_watched": row["last_day"], "reason": reason,
                 "topic_terms": terms})
+        frequencies = self._notification_preferences(config, creators, messages=messages)
+        pacing=(self.store.get_sync_cursor('youtube_notification_frequency',config.account_id) or {}).get('state') or {}
+        weekly_open=not _time(pacing.get('last_rediscovery_at')) or _time(pacing['last_rediscovery_at'])<=now-timedelta(days=7)
+        for creator in creators:
+            creator['notification_frequency'] = frequencies[creator['channel_id']]
+            last_watch=date.fromisoformat(creator['last_watched']) if creator['last_watched'] else reference_day
+            previous=_time((pacing.get('rediscovered') or {}).get(creator['channel_id']))
+            creator['rediscovery']=bool(config.rediscovery_notifications and weekly_open and
+                creator['state'] in {'quiet','seasonal_quiet'} and frequencies[creator['channel_id']]!='muted' and
+                creator['total_video_days']>=10 and (reference_day-last_watch).days>=90 and
+                (not previous or previous<=now-timedelta(days=90)))
         creators.sort(key=lambda item: (-int(item["state"] == "monitoring" and item["relationship"] != "auto"),
             -int(item["state"] == "monitoring"), -item["score"], item["channel_id"]))
         # Capacity is explicit and deterministic. Protected exclusions still
@@ -286,7 +332,7 @@ class YouTubeCreatorTracking:
         for creator in creators:
             if creator["state"] == "monitoring":
                 selected += 1
-                if selected > config.max_channels:
+                if apply_capacity and selected > config.max_channels:
                     creator["state"] = "capacity_wait"
                     creator["reason"] = "Polling capacity is occupied by stronger current or explicit relationships."
         active_topics = {creator["channel_id"]: creator["topic_terms"] for creator in creators
@@ -301,6 +347,7 @@ class YouTubeCreatorTracking:
             return math.exp(-age/48)*(1+math.log1p(max(selected_creators[upload['channel_id']]['score'],0)))
         uploads.sort(key=lambda upload:(-feed_rank(upload),upload['video_id']))
         return CreatorTrackingSnapshot(configured=True, enabled=config.enabled, account_id=config.account_id,
+            rediscovery_notifications=config.rediscovery_notifications,
             status=health.get("status", "awaiting_first_check") if config.enabled else "paused",
             last_checked_at=health.get("checked_at", ""), warnings=health.get("warnings", []),
             monitored_channels=health.get("monitored_channels", 0), baselined_channels=health.get("baselined_channels", 0),
@@ -310,7 +357,7 @@ class YouTubeCreatorTracking:
                             "fallback_units_per_day": config.fallback_units_per_day if config.api_fallback else 0},
             min_duration_seconds=config.min_duration_seconds, pending_duration_checks=health.get("pending_duration_checks", 0),
             active_topics=active_interest_topics,topic_evidence=topic_profile["evidence"],
-            creators=creators[:max(1, min(limit, 100))], excluded=list(dict.fromkeys(rule.name for rule in config.rules if rule.relationship == "excluded")),
+            creators=creators[:max(1, min(limit, 100 if apply_capacity else 10000))], excluded=list(dict.fromkeys(rule.name for rule in config.rules if rule.relationship == "excluded")),
             uploads=[{key: str(row[key]) for key in ("channel_id", "video_id", "title", "creator", "published_at", "status")}
                      | {"url": "https://www.youtube.com/watch?v=" + row["video_id"],
                         "reason":selected_creators[row['channel_id']]['reason'],
@@ -319,7 +366,7 @@ class YouTubeCreatorTracking:
             pending_attribution=self.store.youtube_tracking_pending_count(config.account_id),
             unavailable_attribution=self.store.youtube_tracking_unavailable_count(config.account_id)).model_dump()
 
-    def _topic_profile(self, config, reference_day):
+    def _topic_profile(self, config, reference_day, *, messages=None):
         cursor=(self.store.get_sync_cursor("youtube_creator_projection",config.account_id) or {}).get("cursor","")
         attribution=(self.store.get_sync_cursor("youtube_creator_attribution",config.account_id) or {}).get("state",{})
         public_profiles=(self.store.get_sync_cursor('youtube_creator_public_profiles',config.account_id) or {}).get('state') or {}
@@ -360,7 +407,7 @@ class YouTubeCreatorTracking:
             self.store.save_sync_cursor(SyncCursorInput(connector='youtube_creator_topics',account_id=config.account_id,state=saved))
         evidence={topic:dict(value) for topic,value in saved['evidence'].items()}
         seeds=self._settings().get('topic_seeds') or {}
-        declarations=self._conversation_topics(config)
+        declarations=self._conversation_topics(config, messages=messages)
         active=[]
         for topic,counts in evidence.items():
             declared=config.topic_preferences.get(topic)=='current' and self.clock()-(_time(seeds.get(topic)) or self.clock())<=timedelta(days=30)
@@ -380,10 +427,10 @@ class YouTubeCreatorTracking:
         return bool(creator and (not creator['topic_terms'] or any(term.casefold() in title.casefold() for term in creator['topic_terms']))
                     and not any(TOPIC_PATTERNS[topic].search(title) for topic in blocked_topics))
 
-    def _conversation_topics(self, config):
+    def _conversation_messages(self, config):
         """Only direct recent user declarations; no assistant text or quoted examples."""
         if not config.conversation_topics:
-            return {}
+            return []
         if self.conversation_provider is not None:
             chats=self.conversation_provider()
         else:
@@ -393,13 +440,13 @@ class YouTubeCreatorTracking:
             from agent.master.state import MasterThreadStateStore
             settings=get_memory_orchestrator().store.get_settings()
             if any(settings.get(key,True) is False for key in ('memory_enabled','reference_history_enabled','save_new_memories')):
-                return {}
+                return []
             thread_states=MasterThreadStateStore()
             chats=sorted(ConversationLifecycle(path=REPO_ROOT/'data'/'ui'/'conversations.json').list(),
                          key=lambda row:row.get('updated_at',''),reverse=True)[:200]
             chats=[chat for chat in chats if not chat.get('archived') and
                    thread_states.get(chat.get('thread_id') or chat['id']).store_to_memory]
-        declarations={}
+        messages=[]
         for chat in sorted(chats,key=lambda row:row.get('updated_at',''),reverse=True)[:200]:
             if (chat.get('archived') or chat.get('temporary') or chat.get('profile_eligible') is False
                     or chat.get('memory_enabled') is False or chat.get('memoryEnabled') is False):
@@ -416,15 +463,67 @@ class YouTubeCreatorTracking:
                 text=str(message.get('text') or '')[:1000]
                 if any(mark in text for mark in ('?', '"', '`', '>')) or re.search(r'\b(?:if|example|suppose|pretend|hypothetical|roleplay|demonstration|he said|she said)\b',text,re.I):
                     continue
-                negative=re.search(r"\b(?:i (?:do not|don't|no longer) (?:watch|like|enjoy)|i (?:have )?lost interest in|stop (?:tracking|following))\b",text,re.I)
-                positive=re.search(r"\bi(?: am|'m| have been)?(?: really| currently| now)? (?:like|love|enjoy|watch|watching|into|interested in)\b",text,re.I)
-                if not negative and not positive:
-                    continue
-                clause=text[(negative or positive).end():].split('.')[0]
-                for topic,pattern in TOPIC_PATTERNS.items():
-                    if pattern.search(clause) and (topic not in declarations or at>_time(declarations[topic]['at'])):
-                        declarations[topic]={'preference':'excluded' if negative else 'current','at':at.isoformat()}
+                messages.append((at,text))
+        return sorted(messages,key=lambda item:item[0])
+
+    def _conversation_topics(self, config, *, messages=None):
+        declarations={}
+        for at,text in self._conversation_messages(config) if messages is None else messages:
+            # Notification volume is a channel preference, not evidence that
+            # an entire topic is unwanted (e.g. ChessBase India vs chess).
+            if re.search(r'\b(?:notifications?|pings?|alerts?)\b',text,re.I):
+                continue
+            negative=re.search(r"\b(?:i (?:do not|don't|no longer) (?:watch|like|enjoy)|i (?:have )?lost interest in|stop (?:tracking|following))\b",text,re.I)
+            positive=re.search(r"\bi(?: am|'m| have been)?(?: really| currently| now)? (?:like|love|enjoy|watch|watching|into|interested in)\b",text,re.I)
+            if not negative and not positive:
+                continue
+            clause=text[(negative or positive).end():].split('.')[0]
+            for topic,pattern in TOPIC_PATTERNS.items():
+                if pattern.search(clause) and (topic not in declarations or at>_time(declarations[topic]['at'])):
+                    declarations[topic]={'preference':'excluded' if negative else 'current','at':at.isoformat()}
         return declarations
+
+    def _notification_preferences(self, config, creators, *, messages=None):
+        frequencies={item['channel_id']:(self._rule(item['channel_id'],item['name'],config).notification_frequency
+            if self._rule(item['channel_id'],item['name'],config) else 'adaptive') for item in creators}
+        saved=dict((self.store.get_sync_cursor('youtube_notification_preferences',config.account_id) or {}).get('state') or {})
+        preferences=dict(saved.get('channels') or {})
+        previous=dict(preferences)
+        configured_at=_time(self._settings().get('configured_at'))
+        for channel,preference in preferences.items():
+            if channel in frequencies and preference.get('frequency') in {'adaptive','reduced','muted'}:
+                if frequencies[channel]=='adaptive' or not configured_at or (_time(preference.get('at')) or self.clock())>configured_at:
+                    frequencies[channel]=preference['frequency']
+        for at,text in self._conversation_messages(config) if messages is None else messages:
+            if not re.search(r'\b(?:notifications?|pings?|alerts?)\b',text,re.I):
+                continue
+            if re.search(r"\b(?:don'?t|do not|never) (?:mute|stop|disable)\b|\bnot (?:fewer|less|more)\b",text,re.I):
+                continue
+            muted=re.search(r"\b(?:mute|silence|disable|stop|no more|don'?t send|do not send)\b",text,re.I)
+            reduced=re.search(r"\b(?:fewer|less|reduce|lower|too many|overwhelming|don'?t like|do not like)\b",text,re.I)
+            restore=re.search(r'\b(?:more|resume|unmute|restore|normal)\b',text,re.I)
+            frequency='muted' if muted else 'reduced' if reduced else 'adaptive' if restore else None
+            if frequency is None:
+                continue
+            normalized=' '+re.sub(r'[^\w]+',' ',text.casefold()).strip()+' '
+            matched=[]
+            for item in creators:
+                rule=self._rule(item['channel_id'],item['name'],config)
+                names=[item['name'],*(rule.aliases if rule else [])]
+                aliases=[re.sub(r'[^\w]+',' ',name.casefold()).strip() for name in names]
+                if any(alias and (' '+alias+' ' in normalized or ' '+alias.replace(' ','')+' ' in normalized) for alias in aliases):
+                    matched.append(item['channel_id'])
+            # Ambiguous names do not silently apply to multiple creators.
+            if len(matched)==1:
+                channel=matched[0]
+                if at>=(_time((preferences.get(channel) or {}).get('at')) or datetime.min.replace(tzinfo=UTC)):
+                    frequencies[channel]=frequency
+                    preferences[channel]={'frequency':frequency,'at':at.isoformat()}
+        if preferences!=previous:
+            preferences=dict(sorted(preferences.items(),key=lambda item:item[1]['at'])[-1000:])
+            self.store.save_sync_cursor(SyncCursorInput(connector='youtube_notification_preferences',account_id=config.account_id,
+                state={'channels':preferences}))
+        return frequencies
 
     def _discover_channel_profiles(self, config, budget):
         if not config.related_discovery or not config.discovery_units_per_day:
@@ -495,6 +594,8 @@ class YouTubeCreatorTracking:
             return SavedCreatorUploads().model_dump()
         names={row["channel_id"]:row["name"] for row in self.store.youtube_tracking_stats(config.account_id)}
         names.update({rule.channel_id:rule.name for rule in config.rules if rule.channel_id})
+        names.update({row['channel_id']:row.get('name', row['channel_id'])
+                      for row in self.store.youtube_push_subscriptions(config.account_id)})
         def normalized(value):
             return ''.join(character for character in value.casefold() if character.isalnum())
         key=normalized(request.creator)
@@ -561,27 +662,35 @@ class YouTubeCreatorTracking:
                 and CHANNEL.fullmatch(item.get("channel_id", "")) and 0 < item["duration_seconds"] <= 2678400
                 and (_time(item.get("checked_at")) or datetime.min.replace(tzinfo=UTC)) >= self.clock()-timedelta(hours=6)}
 
-    def _check_durations(self, config, active, budget):
+    def _check_durations(self, config, active, budget, *, push=False):
         if not config.min_duration_seconds:
             return 0
         now = self.clock()
         topics = {channel: creator["topic_terms"] for channel, creator in active.items()}
-        pending = [item for item in self.store.youtube_tracking_uploads(config.account_id, pending=True, topic_filters=topics)
+        pending = [item for item in self.store.youtube_tracking_uploads(config.account_id, pending=True, topic_filters=topics, limit=10000)
                    if (_time(item["published_at"]) or now) >= now - timedelta(days=2)]
         candidates = {item["video_id"]: item for item in pending}
-        for item in self.store.youtube_tracking_uploads(config.account_id, topic_filters=topics):
-            candidates.setdefault(item["video_id"], item)
+        # The fast push worker validates pending pings, not the quiet archive.
+        # RSS can enrich recent baseline evidence within its slower cadence.
+        if not push:
+            for item in self.store.youtube_tracking_uploads(config.account_id, topic_filters=topics):
+                if (_time(item['published_at']) or now) >= now-timedelta(days=2):
+                    candidates.setdefault(item["video_id"], item)
         state = dict((self.store.get_sync_cursor("youtube_upload_durations", config.account_id) or {}).get("state") or {})
         cache = dict(state.get("videos") or {})
         due = [video for video in candidates if video not in cache or
                cache[video].get("channel_id")!=candidates[video]["channel_id"] or
-               (_time(cache[video].get("checked_at")) or now)<now-timedelta(hours=6) or
+               (cache[video].get('duration_seconds') is not None and
+                (_time(cache[video].get("checked_at")) or now)<now-timedelta(hours=6)) or
                (cache[video].get("duration_seconds") is None and (_time(cache[video].get("next_at")) or now) <= now)]
         if budget.get("day") != now.date().isoformat():
             budget.update(day=now.date().isoformat(), requests=0, fallback_units=0, duration_units=0, discovery_units=0)
         times = [stamp for stamp in budget.get("duration_request_times", []) if _time(stamp) and _time(stamp) > now - timedelta(minutes=15)]
         budget["duration_request_times"] = times
-        if due and not times and budget.get("duration_units", 0) < config.duration_units_per_day and (_time(state.get("provider_next_at")) or now) <= now:
+        # Push events may validate promptly, coalesced to one batch per ten
+        # seconds. Both transports reserve the same persisted daily quota.
+        batch_ready = not times or push and all(_time(stamp) <= now-timedelta(seconds=10) for stamp in times)
+        if due and batch_ready and not self.authorization_required(config) and budget.get("duration_units", 0) < config.duration_units_per_day and (_time(state.get("provider_next_at")) or now) <= now:
             videos = due[:50]
             # Reserve before I/O, including failed calls and restart retries.
             budget["duration_units"] = budget.get("duration_units", 0) + 1
@@ -597,15 +706,18 @@ class YouTubeCreatorTracking:
                 state.pop("provider_next_at", None)
             except Exception:
                 metadata = {}
-                state["provider_next_at"] = (now + timedelta(hours=1)).isoformat()
+                state["provider_next_at"] = (now + (timedelta(minutes=5) if push else timedelta(hours=1))).isoformat()
             for video in videos:
                 item = metadata.get(video) or {}
                 seconds = item.get("duration_seconds")
                 valid = (item.get("channel_id") == candidates[video]["channel_id"]
                          and type(seconds) in (int, float) and 0 < seconds <= 2678400)
+                misses = 0 if valid else min(int((cache.get(video) or {}).get('misses',0))+1,8)
+                retry_seconds = min((120 if push else 1800)*2**max(0,misses-1),3600)
                 cache[video] = {"duration_seconds": seconds if valid else None,
                                 "channel_id": candidates[video]["channel_id"],
-                                "checked_at": now.isoformat(), "next_at": (now+timedelta(minutes=30)).isoformat()}
+                                "misses":misses,"checked_at": now.isoformat(),
+                                "next_at": (now+timedelta(seconds=retry_seconds)).isoformat()}
             cache = {video: item for video, item in cache.items()
                      if (_time(item.get("checked_at")) or now) >= now - timedelta(days=90)}
             state["videos"] = dict(sorted(cache.items(), key=lambda pair: pair[1].get("checked_at", ""))[-1000:])
@@ -617,6 +729,63 @@ class YouTubeCreatorTracking:
             if seconds is not None and seconds <= config.min_duration_seconds:
                 self.store.youtube_tracking_ack(config.account_id, item["channel_id"], item["video_id"], "suppressed")
         return sum(item["video_id"]+":"+item["channel_id"] not in durations for item in pending)
+
+    def _deliver_pending(self, config, active, blocked_topics, deliver):
+        """Shared push/RSS delivery identity, relevance and duration gate."""
+        current = self._config()
+        if not current or not current.enabled or current.account_id != config.account_id:
+            return 0
+        if current != config:
+            # Recheck edits made while public metadata was being fetched.
+            config = current
+            profile = self.snapshot(limit=10000, apply_capacity=False)
+            active = {item['channel_id']:item for item in profile['creators'] if item['state'] == 'monitoring' or item.get('rediscovery')}
+            blocked_topics = {topic for topic,value in profile['topic_evidence'].items() if value.get('excluded')}
+        now = self.clock()
+        durations = self._verified_durations(config)
+        pacing=dict((self.store.get_sync_cursor('youtube_notification_frequency',config.account_id) or {}).get('state') or {})
+        last_ping=dict(pacing.get('channels') or {})
+        delivered = 0
+        if deliver is None:
+            return delivered
+        for item in self.store.youtube_tracking_uploads(config.account_id, pending=True, limit=10000):
+            creator = active.get(item['channel_id'])
+            if not self._upload_relevant(creator, item['title'], blocked_topics) or (_time(item['published_at']) or now) < now-timedelta(days=2):
+                self.store.youtube_tracking_ack(config.account_id, item['channel_id'], item['video_id'], 'suppressed')
+                continue
+            frequency=creator.get('notification_frequency','adaptive')
+            if creator.get('rediscovery') and (_time(pacing.get('last_rediscovery_at')) or datetime.min.replace(tzinfo=UTC))>now-timedelta(days=7):
+                self.store.youtube_tracking_ack(config.account_id,item['channel_id'],item['video_id'],'baseline')
+                continue
+            if frequency=='muted' or frequency=='reduced' and (_time(last_ping.get(item['channel_id'])) or datetime.min.replace(tzinfo=UTC))>now-timedelta(hours=24):
+                self.store.youtube_tracking_ack(config.account_id,item['channel_id'],item['video_id'],'baseline')
+                continue
+            if config.min_duration_seconds:
+                duration = durations.get(item['video_id']+':'+item['channel_id'])
+                if duration is None:
+                    continue
+                if duration <= config.min_duration_seconds:
+                    self.store.youtube_tracking_ack(config.account_id, item['channel_id'], item['video_id'], 'suppressed')
+                    continue
+            delivery_id = 'youtube-upload-' + sha256((config.account_id+':'+item['channel_id']+':'+item['video_id']).encode()).hexdigest()[:24]
+            url = 'https://www.youtube.com/watch?v=' + item['video_id']
+            phrasing = ('{name} has a new upload: {title}\n{url}', 'New from {name}: {title}\n{url}', '{name} just uploaded {title}\n{url}')
+            text = phrasing[int(sha256(item['video_id'].encode()).hexdigest()[:2], 16) % 3].format(name=_literal(creator['name']), title=_literal(item['title']), url=url)
+            if creator.get('rediscovery'):
+                text=f"Rediscover {_literal(creator['name'])}: {_literal(item['title'])}\nYou used to watch this creator; no saved watch in at least 90 days.\n{url}"
+            deliver(delivery_id, text)
+            last_ping[item['channel_id']]=now.isoformat()
+            last_ping={channel:stamp for channel,stamp in last_ping.items() if (_time(stamp) or now)>now-timedelta(days=90)}
+            pacing['channels']=last_ping
+            if creator.get('rediscovery'):
+                rediscovered={channel:stamp for channel,stamp in (pacing.get('rediscovered') or {}).items()
+                    if (_time(stamp) or now)>now-timedelta(days=90)}
+                rediscovered[item['channel_id']]=now.isoformat()
+                pacing.update(last_rediscovery_at=now.isoformat(),rediscovered=rediscovered)
+            self.store.save_sync_cursor(SyncCursorInput(connector='youtube_notification_frequency',account_id=config.account_id,state=pacing))
+            self.store.youtube_tracking_ack(config.account_id, item['channel_id'], item['video_id'])
+            delivered += 1
+        return delivered
 
     def refresh(self, *, deliver=None):
         config = self._config()
@@ -644,12 +813,23 @@ class YouTubeCreatorTracking:
             budget.pop("window_start", None)
             budget.pop("window_requests", None)
             self._discover_channel_profiles(config,budget)
-            profile = self.snapshot(limit=100)
+            from agent.config import get_settings
+            push_base = (get_settings().youtube_push_relay_base or get_settings().youtube_push_callback_base).strip().rstrip('/')
+            push_channels = {row['channel_id']: row for row in self.store.youtube_push_subscriptions(config.account_id)
+                             if push_base and row.get('desired') and row.get('base') == push_base}
+            profile = self.snapshot(limit=10000 if push_channels else 100, apply_capacity=not bool(push_channels))
             creators = profile["creators"]
             blocked_topics={topic for topic,value in profile['topic_evidence'].items() if value.get('excluded')}
-            active = {item["channel_id"]: item for item in creators if item["state"] == "monitoring"}
-            states = {channel: dict((self.store.get_sync_cursor("youtube_creator_feed", config.account_id+":"+channel) or {}).get("state") or {}) for channel in active}
-            due = sorted(active, key=lambda channel: states[channel].get("next_at", ""))
+            active = {item["channel_id"]: item for item in creators if item["state"] == "monitoring" or item.get('rediscovery')}
+            # Push subscriptions also participate in bounded reconciliation,
+            # even when their uploads do not currently deserve a ping.
+            collection = dict(active)
+            for channel, row in push_channels.items():
+                rule = self._rule(channel, row.get('name', ''), config)
+                if not rule or rule.relationship not in {'excluded', 'former'}:
+                    collection.setdefault(channel, {'name':row.get('name',channel), 'topic_terms':[]})
+            states = {channel: dict((self.store.get_sync_cursor("youtube_creator_feed", config.account_id+":"+channel) or {}).get("state") or {}) for channel in collection}
+            due = sorted(collection, key=lambda channel: states[channel].get("next_at", ""))
             requests_made = 0
             warnings = []
             fallback_checks = 0
@@ -703,7 +883,7 @@ class YouTubeCreatorTracking:
                         pass
                     delay = now + timedelta(seconds=min(900 * 2**failures, 86400))
                     state.update(failures=failures, error=result["error"], next_at=max(delay, retry or now).isoformat())
-                    warnings.append(active[channel]["name"] + ": " + result["error"])
+                    warnings.append(collection[channel]["name"] + ": " + result["error"])
                     self.store.youtube_tracking_save_feed(config.account_id, channel, [], state, now.isoformat())
                     if result["error"] == "feed_http_429":
                         budget["provider_next_at"] = state["next_at"]
@@ -716,9 +896,9 @@ class YouTubeCreatorTracking:
                     if not VIDEO.fullmatch(str(item.get("video_id", ""))):
                         continue
                     published = _time(item.get("published_at"))
-                    relevant = self._upload_relevant(active[channel],item['title'],blocked_topics)
+                    relevant = self._upload_relevant(active.get(channel),item['title'],blocked_topics)
                     eligible = published and now - timedelta(days=2) <= published <= now and relevant
-                    entries.append(item | {"status": "baseline" if baseline and relevant else "pending" if not baseline and eligible else "suppressed"})
+                    entries.append(item | {"status": "baseline" if channel not in active or baseline and relevant else "pending" if not baseline and eligible else "suppressed"})
                 state.update(initialized=True, failures=0, error="", last_success=now.isoformat(), next_at=(now+timedelta(minutes=30)).isoformat())
                 for key in ("etag", "last_modified"):
                     if key in result:
@@ -737,28 +917,7 @@ class YouTubeCreatorTracking:
             discovery_state = (self.store.get_sync_cursor('youtube_creator_public_profiles', config.account_id) or {}).get('state') or {}
             if config.related_discovery and discovery_state.get('status') == 'unavailable':
                 warnings.append("Public channel topic metadata is unavailable; related selection is limited to saved title evidence.")
-            delivered = 0
-            if deliver is not None:
-                for item in self.store.youtube_tracking_uploads(config.account_id, pending=True):
-                    creator = active.get(item["channel_id"])
-                    relevant = self._upload_relevant(creator,item['title'],blocked_topics)
-                    if not relevant or (_time(item["published_at"]) or now) < now - timedelta(days=2):
-                        self.store.youtube_tracking_ack(config.account_id, item["channel_id"], item["video_id"], "suppressed")
-                        continue
-                    if config.min_duration_seconds:
-                        duration = durations.get(item["video_id"]+":"+item["channel_id"])
-                        if duration is None:
-                            continue
-                        if duration <= config.min_duration_seconds:
-                            self.store.youtube_tracking_ack(config.account_id, item["channel_id"], item["video_id"], "suppressed")
-                            continue
-                    delivery_id = "youtube-upload-" + sha256((config.account_id+":"+item["channel_id"]+":"+item["video_id"]).encode()).hexdigest()[:24]
-                    url = "https://www.youtube.com/watch?v=" + item["video_id"]
-                    phrasing = ("{name} has a new upload: {title}\n{url}", "New from {name}: {title}\n{url}", "{name} just uploaded {title}\n{url}")
-                    text = phrasing[int(sha256(item["video_id"].encode()).hexdigest()[:2], 16) % 3].format(name=_literal(creator["name"]), title=_literal(item["title"]), url=url)
-                    deliver(delivery_id, text)
-                    self.store.youtube_tracking_ack(config.account_id, item["channel_id"], item["video_id"])
-                    delivered += 1
+            delivered = self._deliver_pending(config, active, blocked_topics, deliver)
             self.store.youtube_tracking_prune(config.account_id, (now-timedelta(days=90)).isoformat())
             # Surface persisting backoff errors even on ticks that make no I/O.
             baselined = 0

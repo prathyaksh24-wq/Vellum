@@ -28,16 +28,16 @@ test('encodes identities and permits cover assets only from the Books endpoint',
   for (const path of ['https://remote.example/cover', '/api/knowledge/core/books/library/../private/cover', '//evil.example/cover', '/etc/passwd']) expect(api.coverUrl(path)).toBe('');
 });
 
-test('import uses the App Action upload endpoint with explicit consent and no user identity', async () => {
+test('import uses the App Action upload endpoint without requiring permission fields or a user identity', async () => {
   const request = vi.fn(async () => ({action_id:'book.import',status:'applied',result:{library:{schema_version:'books-library-v1'}}}));
   const api = await load(request);
   const file = new File(['epub'], 'example.epub');
-  expect(() => api.importEpub(file, {scanApproved:false})).toThrow(/Confirm/);
-  await api.importEpub(file, {scanApproved:true, rightsAttestationVersion:'test-v1', localOnly:true, user_id:'untrusted'});
+  await api.importEpub(file, {scanApproved:false, localOnly:true, user_id:'untrusted'});
   const [path, opts] = request.mock.calls[0];
   expect(path).toBe('/api/app-actions/books/import');
   expect(opts.body.get('scan_approved')).toBe('true');
   expect(opts.body.get('local_only')).toBe('true');
+  expect(opts.body.get('rights_attestation_version')).toBe('local-epub-v1');
   expect(opts.body.has('user_id')).toBe(false);
   expect(opts.headers).toBeUndefined();
 });
@@ -49,4 +49,15 @@ test('rejects incompatible contracts and sends only explicit processing authorit
   await api.process('installed');
   expect(request.mock.calls[1][0]).toBe('/api/knowledge/core/books/library/installed/process');
   expect(JSON.parse(request.mock.calls[1][1].body)).toEqual({confirm:true});
+});
+
+test('accepts EPUB filenames even when Windows provides no EPUB MIME type', async () => {
+  const request = vi.fn(async () => ({action_id:'book.import',status:'applied'}));
+  const api = await load(request);
+  for (const type of ['', 'application/octet-stream', 'application/epub+zip']) {
+    const file = new File(['epub'], 'BOOK.EPUB', {type});
+    await api.importEpub(file, {scanApproved:true, rightsAttestationVersion:'local-epub-v1', localOnly:true});
+    expect(request.mock.calls.at(-1)[1].body.get('file').name).toBe('BOOK.EPUB');
+  }
+  expect(() => api.importEpub(new File(['pdf'], 'book.pdf'), {scanApproved:true, rightsAttestationVersion:'local-epub-v1'})).toThrow(/EPUB/);
 });

@@ -205,7 +205,7 @@ class YouTubeTrackingStoreMixin:
                 scope += f" AND channel_id IN ({marks}) AND youtube_title_matches(channel_id,title)=1"
                 parameters.extend(filters)
             rows = connection.execute("SELECT * FROM youtube_upload_outbox WHERE account_id=? AND status IN (?,?)" + scope +
-                " ORDER BY published_at DESC LIMIT ?", [*parameters, min(limit, 100)]).fetchall()
+                " ORDER BY published_at DESC LIMIT ?", [*parameters, min(max(limit, 1), 10000)]).fetchall()
         return [dict(row) for row in rows]
 
     def youtube_tracking_ack(self, account, channel, video, status="delivered"):

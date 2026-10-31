@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from agent.contracts.youtube_history import BrowserHistorySnapshot, YouTubeHistoryConfig, YouTubeHistoryStatus
+from agent.contracts.youtube_history import BrowserHistorySnapshot, YouTubeHistoryConfig, YouTubeHistoryStatus, WEEKDAYS
 from agent.knowledge.ingestion import IngestionCoordinator, IngestionResult
 from agent.knowledge.models import (ExternalPolicy, IngestionJobInput, ObservationActor,
     ObservationInput, Sensitivity, SourceItemInput, SyncCursorInput)
@@ -23,11 +23,11 @@ from agent.mcp.playwright_tools import browser_session
 ORIGIN = "youtube_browser_history"
 ACTION = "youtube.history_presence"
 MESSAGES = {
-    "history_access_blocked": "History access is blocked in Settings → Browser. Enable it there before refreshing YouTube history.",
     "ready": "Recent history was saved locally. Exact watch times and repeat plays are unavailable.",
     "empty": "YouTube shows an empty or paused history. Previously saved records remain available.",
     "browser_closed": "Sign into YouTube in Vellum's browser, then refresh history.",
-    "browser_busy": "History refresh skipped while the browser is paused, under your control, or another refresh is running. Resume agent control to refresh.",
+    "browser_busy": "History refresh is waiting for another refresh or browser operation to finish. Try again in a moment.",
+    "history_access_blocked": "History access is blocked in Settings → Browser. Enable it there before refreshing YouTube history.",
     "history_page_required": "The configured History page could not be read. Check the History URL.",
     "sign_in_required": "Sign into YouTube manually in Vellum's browser, then refresh.",
     "account_unavailable": "The reader could not identify the browser account. No history was imported.",
@@ -49,12 +49,27 @@ def history_day(label: str, *, now: datetime, timezone: str) -> str:
     normalized = label.strip().casefold()
     if normalized in {"today", "yesterday"}:
         return (reference - timedelta(days=normalized == "yesterday")).isoformat()
+    weekday = normalized.removeprefix('last ')
+    if weekday in [day.casefold() for day in WEEKDAYS]:
+        delta = (reference.weekday() - [day.casefold() for day in WEEKDAYS].index(weekday)) % 7
+        if normalized.startswith('last ') and delta == 0:
+            delta = 7
+        return (reference - timedelta(days=delta)).isoformat()
     for pattern in ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(label.strip(), pattern).date().isoformat()
         except ValueError:
             pass
-    return ""  # A weekday or localized heading does not establish a date.
+    # English month/day headings refer to the latest occurrence before capture.
+    for pattern in ("%B %d", "%b %d", "%d %B", "%d %b", "%A, %B %d", "%a, %b %d"):
+        for year in (reference.year, reference.year - 1):
+            try:
+                value = datetime.strptime(f'{label.strip()} {year}', pattern + ' %Y').date()
+                if value <= reference:
+                    return value.isoformat()
+            except ValueError:
+                pass
+    return ""  # Localized or ambiguous headings do not establish a date.
 
 
 class YouTubeBrowserHistory:
@@ -111,14 +126,16 @@ class YouTubeBrowserHistory:
         """Compatibility/status interface used by the existing automation."""
         return self._capture(automatic=automatic)[0]
 
-    def refresh_snapshot(self, *, automatic=False):
+    def refresh_snapshot(self, *, automatic=False, day_label=''):
         """Fresh read interface: never replace a failed read with old records."""
-        status, snapshot = self._capture(automatic=automatic)
+        status, snapshot = self._capture(automatic=automatic, day_label=day_label)
         if snapshot is None:
             raise HistoryReadError(status["message"])
         return snapshot
 
-    def _capture(self, *, automatic):
+    def _capture(self, *, automatic, day_label=''):
+        from agent.contracts.youtube_history import BrowserHistoryReadRequest
+        BrowserHistoryReadRequest(day_label=day_label)
         if not self._lock.acquire(blocking=False):
             return {"status": "browser_busy", "message": MESSAGES["browser_busy"]}, None
         try:
@@ -129,7 +146,10 @@ class YouTubeBrowserHistory:
             snapshot = None
             code = "unavailable"
             try:
-                packet = self.browser("youtube_history", {"url": config.url, "automatic": automatic})
+                arguments = {"url": config.url, "automatic": automatic}
+                if day_label:
+                    arguments['day_label'] = day_label
+                packet = self.browser("youtube_history", arguments)
                 # Backward compatibility for trusted legacy browser adapters.
                 if "account_fingerprint" in packet:
                     account = packet["account_fingerprint"]
@@ -145,8 +165,7 @@ class YouTubeBrowserHistory:
                         {**item.model_dump(), "url": "https://www.youtube.com/watch?v=" + item.video_id}
                         for item in read.items], read.truncated
                     code = _STATUS_CODES.get(read.status, read.status)
-                    if "config" not in state:
-                        config = YouTubeHistoryConfig(timezone=read.timezone)
+                    config = YouTubeHistoryConfig(url=config.url, timezone=read.timezone)
                 if code in {"ready", "empty"}:
                     if not account:
                         code = "account_unavailable"
@@ -171,7 +190,9 @@ class YouTubeBrowserHistory:
                             snapshot = {"available": True, "provider": "browser", "local_only": True,
                                 "freshness": "browser_refresh", "source_id": source_id, "account_id": account,
                                 "refreshed_at": now.isoformat(), "coverage": "recent_page", "truncated": truncated,
-                                "total": len(fresh), "items": fresh}
+                                "total": len(fresh), "items": fresh, "timezone":config.timezone,
+                                "requested_day":packet.get('requested_day') or '',
+                                "earliest_loaded_day":packet.get('earliest_loaded_day') or ''}
             except Exception as exc:
                 reason = str(exc).casefold()
                 code = "browser_busy" if any(word in reason for word in ("paused", "takeover", "taken over", "user has control")) else "unavailable"
@@ -219,9 +240,11 @@ class YouTubeBrowserHistory:
         return IngestionResult(stats={"records": len(records), **inserted}, cursor=now.isoformat(),
             cursor_state={"source_id": source["source_id"], "coverage": "recent_loaded_history"})
 
-    def history(self, *, limit=20, channel=""):
+    def history(self, *, limit=20, channel="", day="", account_id=None):
         with self._lock:
             account = self._state().get("account_fingerprint", "")
+            if account_id is not None and account_id != account:
+                raise HistoryReadError(MESSAGES['account_changed'])
             source = self._source(account)
             items = []
             if source:
@@ -233,8 +256,10 @@ class YouTubeBrowserHistory:
             if channel:
                 from agent.plugins.youtube_takeout import filter_channel_history
                 items = filter_channel_history(items, channel)
+            if day:
+                items = [item for item in items if item.get('history_day') == day]
             items.sort(key=lambda item: (item["history_day"], item.get("captured_at", "")), reverse=True)
-            return {"available": bool(items), "items": items[:max(1, min(int(limit), 500))], "total": len(items),
+            return {"available": bool(source), "items": items[:max(1, min(int(limit), 500))], "total": len(items),
                 "provider": ORIGIN, "freshness": self.status(), "coverage": "accumulated_recent_pages", "local_only": True,
                 "timing_note": "Saved video/day entries are partial history; repeat plays, exact watch times and duration are unavailable."}
 
@@ -256,6 +281,6 @@ class YouTubeBrowserHistoryService:
             return get_knowledge_core().store
         return self._store
 
-    def refresh(self, *, automatic=False):
+    def refresh(self, *, automatic=False, day_label=''):
         return YouTubeBrowserHistory(store=self.store, clock=self.clock,
-            browser=(browser_session if self.browser_reader is None else lambda *_args: self.browser_reader())).refresh_snapshot(automatic=automatic)
+            browser=(browser_session if self.browser_reader is None else lambda *_args: self.browser_reader())).refresh_snapshot(automatic=automatic, day_label=day_label)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -56,12 +57,23 @@ class YouTubeAuthStore:
             raise YouTubeAuthError("YouTube token response is incomplete")
         existing = self.load_tokens(required=False)
         refresh_token = str(payload.get("refresh_token") or existing.get("refresh_token") or "").strip()
+        # This is the grant deadline, not the access token's hourly expiry.
+        # Missing lifetime on an access refresh must not extend the old grant.
+        grant_deadline = existing.get("refresh_token_expires_at") if refresh_token == existing.get("refresh_token") else None
+        remaining = payload.get("refresh_token_expires_in")
+        try:
+            seconds = float(remaining) if remaining is not None and not isinstance(remaining, bool) else -1
+            if math.isfinite(seconds) and 0 <= seconds <= 315576000:
+                grant_deadline = time.time() + seconds
+        except (TypeError, ValueError):
+            pass
         expires_at = float(payload.get("expires_at") or 0)
         if not expires_at:
             expires_at = time.time() + max(0, int(payload.get("expires_in") or 0))
         tokens = {
             "access_token": access_token,
             "refresh_token": refresh_token,
+            "refresh_token_expires_at": grant_deadline,
             "expires_at": expires_at,
             "token_type": str(payload.get("token_type") or existing.get("token_type") or "Bearer"),
             "scope": str(payload.get("scope") or existing.get("scope") or " ".join(DEFAULT_SCOPES)),
@@ -80,6 +92,7 @@ class YouTubeAuthStore:
                 "account_label": self.account_label,
                 "scope": tokens["scope"],
                 "expires_at": expires_at,
+                "refresh_token_expires_at": grant_deadline,
                 "authorization_status": "ready",
                 "updated_at": time.time(),
             }

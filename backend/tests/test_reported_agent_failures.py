@@ -26,12 +26,12 @@ def test_x_does_not_claim_published_when_cli_returns_no_post_receipt(tmp_path):
     assert "unconfirmed" in result.summary
 
 
-def test_youtube_my_data_question_reads_local_evidence_not_public_how_to(tmp_path):
+def test_youtube_imported_data_question_reads_local_evidence_not_public_how_to(tmp_path):
     calls = []
     service = YoutubeCapabilityService(vault_root=tmp_path,
         search_backend=lambda query, limit: calls.append(query) or [{"title":"How to start YouTube"}],
         personal_context_backend=_snapshot)
-    result = YoutubeAgent(tmp_path, youtube_service=service).answer("what can u tell me about my youtube data")
+    result = YoutubeAgent(tmp_path, youtube_service=service).answer("what can u tell me about my youtube data from the imported snapshot")
     assert calls == []
     assert "Sidemen" in result.summary
     assert "local Knowledge Core" in result.analysis
