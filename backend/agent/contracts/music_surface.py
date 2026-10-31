@@ -28,6 +28,25 @@ class MusicCardPage(BaseModel):
     total: int = 0
     offset: int = 0
     next_offset: int | None = None
+    source: Literal['api','public_embed'] = 'api'
+    completeness: Literal['complete','partial','unknown'] = 'complete'
+    note: str = ''
+
+
+class MusicTrackArtwork(BaseModel):
+    pending: bool = False
+    id: str = Field(pattern=r'^[A-Za-z0-9]{22}$')
+    artwork_url: str = ''
+
+
+class MusicTrackArtworkPage(BaseModel):
+    items: list[MusicTrackArtwork] = Field(default_factory=list)
+
+
+def public_playlist_page(rows: list[dict], offset: int, limit: int) -> MusicCardPage:
+    return MusicCardPage(items=[MusicCard(**row) for row in rows[offset:offset+limit]],total=len(rows),offset=offset,
+        next_offset=offset+limit if offset+limit<len(rows) else None,source='public_embed',completeness='unknown',
+        note='Songs shown by Spotify’s public playlist view. This view may omit songs; the complete playlist count could not be verified. Playback still uses your Spotify account.')
 
 
 def music_card(item: dict, kind: str) -> MusicCard:

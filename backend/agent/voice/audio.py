@@ -41,7 +41,7 @@ def decode_wav_mono_float32(data: bytes) -> tuple[np.ndarray, int]:
             sample_width = wav.getsampwidth()
             sample_rate = wav.getframerate()
             frames = wav.readframes(wav.getnframes())
-    except wave.Error as exc:
+    except (EOFError, wave.Error) as exc:
         raise ValueError("audio must be a WAV file") from exc
 
     if sample_rate <= 0:

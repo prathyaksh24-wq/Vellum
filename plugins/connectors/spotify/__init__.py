@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import schemas, tools
+from . import public_playlist, schemas, tools
 from .auth import SpotifyAuthStore
 
 

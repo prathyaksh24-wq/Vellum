@@ -1,0 +1,9 @@
+id: local_music
+name: Local Music
+type: connector
+category: Media & Entertainment
+version: 1.0.0
+description: Your local audio library and imported playlist information. Open Music and choose Local to add files or match a song list. Imported audio needs no subscription.
+capabilities:
+  - local_music.library
+  - local_music.playback

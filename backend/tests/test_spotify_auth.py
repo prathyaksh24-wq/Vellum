@@ -16,6 +16,38 @@ from plugins.connectors.spotify.auth import (
 from plugins.connectors.spotify.errors import SpotifyAuthError
 
 
+def test_atomic_credentials_retry_transient_windows_file_lock(tmp_path,monkeypatch):
+    import os
+    from plugins.connectors.spotify import auth
+    original=os.replace
+    attempts=[]
+    def replace(source,target):
+        attempts.append(1)
+        if len(attempts)<3:
+            error=PermissionError('temporarily held by scanner');error.winerror=5
+            raise error
+        return original(source,target)
+    delays=[]
+    monkeypatch.setattr(auth.os,'replace',replace)
+    monkeypatch.setattr(auth.time,'sleep',delays.append)
+    auth.SpotifyAuthStore._atomic_write(tmp_path/'auth.json',{'access_token':'test-only'})
+    assert len(attempts)==3 and delays==[.02,.04]
+    assert json.loads((tmp_path/'auth.json').read_text())=={'access_token':'test-only'}
+
+
+def test_atomic_credentials_preserve_original_when_lock_persists(tmp_path,monkeypatch):
+    from plugins.connectors.spotify import auth
+    path=tmp_path/'auth.json';path.write_text('{"original":true}')
+    attempts=[]
+    def denied(*_args):
+        attempts.append(1);error=PermissionError('permanent denial');error.winerror=5;raise error
+    monkeypatch.setattr(auth.os,'replace',denied)
+    monkeypatch.setattr(auth.time,'sleep',lambda _:None)
+    with pytest.raises(PermissionError):auth.SpotifyAuthStore._atomic_write(path,{'new':True})
+    assert len(attempts)==4 and json.loads(path.read_text())=={'original':True}
+    assert list(tmp_path.glob('*.tmp'))==[]
+
+
 def test_pkce_challenge_uses_s256():
     verifier = "a" * 64
     expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")

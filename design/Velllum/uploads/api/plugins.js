@@ -1,6 +1,40 @@
 (function () {
   var client = window.VellumApi.client;
   var playbackCommand;
+  var artworkCache=new Map(),artworkQueue=new Map(),artworkTimer,artworkRequests=0;
+  function flushArtwork() {
+    clearTimeout(artworkTimer);
+    if(artworkRequests>=2 || !artworkQueue.size)return;
+    var ids=Array.from(artworkQueue.keys()).slice(0,4),batch=new Map();
+    ids.forEach(id=>{batch.set(id,artworkQueue.get(id));artworkQueue.delete(id);});
+    artworkRequests++;
+    var abort=new AbortController(),deadline=setTimeout(()=>abort.abort(),12000);
+    client.request('/api/plugins/spotify/artwork?'+new URLSearchParams({ids:ids.join(',')}),{cache:'no-store',signal:abort.signal})
+      .then(page=>{
+        var items=new Map((page.items || []).map(item=>[item.id,item]));
+        batch.forEach((resolve,id)=>{
+          var item=items.get(id) || {id,artwork_url:''},cached=artworkCache.get(id);
+          if(item.pending && (resolve.attempts || 0)<30){
+            resolve.attempts=(resolve.attempts || 0)+1;
+            setTimeout(()=>{artworkQueue.set(id,resolve);flushArtwork();},250);return;
+          }
+          if(cached)cached.expires=Date.now()+(item.artwork_url?3600000:30000);
+          resolve(item);
+        });
+      },()=>batch.forEach((resolve,id)=>resolve({id,artwork_url:''})))
+      .finally(()=>{clearTimeout(deadline);artworkRequests--;flushArtwork();});
+    if(artworkQueue.size && artworkRequests<2)flushArtwork();
+  }
+  function spotifyTrackArtwork(id) {
+    if(!/^[A-Za-z0-9]{22}$/.test(id))return Promise.resolve({id,artwork_url:''});
+    var prior=artworkCache.get(id);
+    if(prior && prior.expires>Date.now())return prior.promise;
+    var promise=new Promise(resolve=>artworkQueue.set(id,resolve));
+    artworkCache.set(id,{promise,expires:Date.now()+60000});
+    while(artworkCache.size>512)artworkCache.delete(artworkCache.keys().next().value);
+    clearTimeout(artworkTimer);artworkTimer=setTimeout(flushArtwork,25);
+    return promise;
+  }
   function spotifyAction(body) {
     var key = JSON.stringify(body);
     if (playbackCommand) {
@@ -142,6 +176,7 @@
     spotifyPlaylistConfirm: (receipt, args) => window.VellumApi.appActions.confirm(receipt.confirmation.token, {action_id:'spotify.playlist.edit', arguments:args}, {source:'ui'}),
     spotifyPlaylistCancel: receipt => window.VellumApi.appActions.cancel(receipt.confirmation.token, {source:'ui'}),
     spotifyBrowse: (params, signal) => client.request('/api/plugins/spotify/browse?' + new URLSearchParams(params || {}), {signal}),
+    spotifyTrackArtwork,
     spotifySearch: (params, signal) => client.request('/api/plugins/spotify/search?' + new URLSearchParams(params || {}), {signal}),
     spotifyPlaybackToken: forceRefresh => client.request('/api/plugins/spotify/playback/token', {
       ...client.jsonOptions('POST', {force_refresh: !!forceRefresh}), headers: {'Content-Type': 'application/json', 'X-Vellum-Spotify-Playback': '1'}, cache: 'no-store', signal: AbortSignal.timeout(25000),

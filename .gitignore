@@ -81,3 +81,6 @@ Vault/
 
 # Local diagnostic artifacts and isolated worktrees
 .scratch/
+
+# Local audio library, imports and derived artwork
+data/music/

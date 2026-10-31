@@ -32,6 +32,7 @@ dependencies = [
   "keyring>=25.0.0",
   "onnxruntime>=1.20.0; python_version < '3.14'",
   "soundfile>=0.12.1",
+  "mutagen==1.48.1",
   "pydantic-settings>=2.6.0",
   "PyYAML>=6.0.2",
   "python-dotenv>=1.0.1",

@@ -80,6 +80,27 @@ def match_spotify_command(message: str) -> AppActionRequest | None:
 SPOTIFY_PLAYLIST_EDIT_ACTION_ID = 'spotify.playlist.edit'
 
 
+class SpotifyPlaylistLinksRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    uris: list[str] = Field(min_length=1,max_length=20)
+
+    @model_validator(mode='after')
+    def validate_links(self):
+        if any(not re.fullmatch(r'spotify:playlist:[A-Za-z0-9]{22}',uri) for uri in self.uris):
+            raise ValueError('Use exact Spotify playlist links.')
+        return self
+
+
+def execute_spotify_playlist_links(payload):
+    request=SpotifyPlaylistLinksRequest.model_validate(payload.get('arguments') or {})
+    try:
+        result=spotify_client().remember_playlist_links(request.uris)
+    except SpotifyError as exc:
+        raise PluginContributionActionError('SPOTIFY_PLAYLIST_LINK_FAILED',str(exc)) from exc
+    return {'changed':True,'count':result.get('total',0),
+        '_message':f'Added {result.get("total",0)} linked playlists to this Spotify connection.'}
+
+
 class SpotifyPlaylistEditRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     operation: Literal['update_details', 'remove', 'add_items', 'remove_items']
@@ -599,5 +620,12 @@ def spotify_plugin_contribution(
                 required_permissions=['spotify.playlists', 'spotify.library'], **common,
             ), adapter=execute_spotify_playlist_edit, availability=connected,
         ),
+        PluginActionContribution(definition=AppActionDefinition(
+            id='spotify.playlists.link',title='Add Spotify playlist links',
+            description='Remember exact playlist references in this Spotify connection; does not change Spotify playlists.',
+            access_class='write',confirmation_rule='current_user_intent',
+            argument_schema=SpotifyPlaylistLinksRequest.model_json_schema(),
+            ui_reference='music.playlist',audit_label='spotify.playlists.link',
+            required_permissions=['spotify.playlists'],**common),adapter=execute_spotify_playlist_links,availability=connected),
         *_spotify_playback_actions(),
     ))
