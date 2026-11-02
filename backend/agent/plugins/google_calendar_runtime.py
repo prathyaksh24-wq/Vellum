@@ -5,13 +5,13 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from agent.config import REPO_ROOT, get_settings
+from agent.config import REPO_ROOT, SOURCE_ROOT, get_settings
 from agent.plugins.portable import load_portable_plugin
 from agent.plugins.registry import get_plugin_registry
 from agent.tools.registry import ToolPermissionError
 
 
-PLUGIN_DIR = REPO_ROOT / "plugins" / "connectors" / "google_calendar"
+PLUGIN_DIR = SOURCE_ROOT / "plugins" / "connectors" / "google_calendar"
 AUTH_DIR = REPO_ROOT / "data" / "plugins" / "google-calendar"
 
 

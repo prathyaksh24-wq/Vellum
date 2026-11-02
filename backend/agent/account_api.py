@@ -19,7 +19,7 @@ def local_client(request: Request):
 
 def trusted_view(request: Request, response: Response):
     local_client(request)
-    origins = {f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (4242, 5173, 1420, 8000)}
+    origins = {f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (4242, 5173, 5184, 1420, 8000)}
     origins.update({"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"})
     if request.headers.get("origin") not in origins or request.headers.get("x-vellum-accounts") != "1":
         raise HTTPException(403, "Open Accounts from the local Vellum app.")

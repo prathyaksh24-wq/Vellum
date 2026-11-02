@@ -11,15 +11,17 @@
     X = createContext(null),
     useX = () => useContext(X);
   const name = x => x.display_name || x.normalized_name || x.name || x.id;
+  const components=p=>window.VellumComposer?.componentsForPlugin(p) || [...(p.apps||[]).map(row=>({...row,kind:'app'})),...(p.mcp_connectors||[]).map(row=>({...row,kind:'mcp'}))];
   const normalize = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const brand = p => ({
     'googledrive': 'gdrive',
     'googlecalendar': 'gcal'
   })[normalize(p.name)] || normalize(p.name);
+  const pluginIcons={"plus": "Plus", "dots": "DotsHorizontal", "chevR": "ChevronRight", "chevD": "ChevronDown", "search": "Search", "refresh": "ArrowRotateCw", "gear": "SettingsCog", "back": "ArrowLeft", "fwd": "ArrowRight", "panel": "SidebarLeft", "home": "Home", "chat": "Chat", "clock": "Clock", "lib": "BookOpen", "plug": "ConnectApps", "git": "Branch", "check": "Check", "x": "X", "close": "X", "external": "ExternalLink", "download": "Download", "trash": "Trash", "terminal": "Terminal", "code": "Code", "info": "InfoCircle", "link": "Link", "shield": "ShieldCheck", "key": "Key", "folder": "Folder", "file": "File"};
   const Ic = ({
     n,
     s = 18
-  }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{
+  }) => pluginIcons[n]?<window.VellumUI.AppIcon name={pluginIcons[n]} size={s}/>:<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{
     __html: A.I[n] || A.I.plug
   }} />;
   const link = value => {
@@ -500,6 +502,8 @@
       items = usePluginMenus(p),
       ss = skills.filter(s => s.owner_plugin === p.id),
       included = ss.length ? ss : p.skills || [],
+      appItems=components(p).filter(row=>row.kind==='app'),
+      mcpItems=components(p).filter(row=>row.kind==='mcp'),
       meta = p.metadata || {},
       info = [['Developer', p.developer || meta.provider || 'Not supplied'], ['Version', p.version || 'Not supplied'], ['Website', meta.website || p.website], ['Source', meta.integration || p.source], ['Authorization supported', meta.connection?.auth_type || 'Provider managed'], ['Authorization used', meta.connection?.auth_type || 'Not connected']];
     return <div className="cc"><nav className="bc" aria-label="Breadcrumb"><ActionLink onClick={() => go({
@@ -526,7 +530,7 @@
               }} items={items} />}<button className="bt" onClick={() => tryNow(p)}><Ic n="chat" s={14} />Try now</button></> : <button className="bt" onClick={() => setDlg({
               t: 'install',
               p
-            })}><Ic n="plus" s={14} />Install plugin</button>}</div></div><p className="sub">{p.description}</p></div>}{!settings && p.id==='youtube' && <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c}/>}</Connection>}{settings ? <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c} />}</Connection> : <><div className="hero">{(A.prompts[brand(p)] || [p.description, p.notes || 'Use the connected account’s available tools.', meta.integration || p.category || 'Explore this plugin']).map((t, i) => <div className="pr" key={i}><Tile p={p} sz={20} i={16} r={4} /><p><b>{p.name}</b> {t}</p><button className="ar" aria-label="Try this prompt" onClick={() => tryNow(p, t)}><Ic n="fwd" s={14} /></button></div>)}</div><p className="ds0">{p.notes || p.description}</p><h2 className="sc">Apps <span>{p.apps?.length || 0}</span></h2>{(p.apps || []).map(a => <div className="sr" role="button" tabIndex={0} key={a.id || a.name} onClick={() => setDlg({
+            })}><Ic n="plus" s={14} />Install plugin</button>}</div></div><p className="sub">{p.description}</p></div>}{!settings && p.id==='youtube' && <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c}/>}</Connection>}{settings ? <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c} />}</Connection> : <><div className="hero">{(A.prompts[brand(p)] || [p.description, p.notes || 'Use the connected account’s available tools.', meta.integration || p.category || 'Explore this plugin']).map((t, i) => <div className="pr" key={i}><Tile p={p} sz={20} i={16} r={4} /><p><b>{p.name}</b> {t}</p><button className="ar" aria-label="Try this prompt" onClick={() => tryNow(p, t)}><Ic n="fwd" s={14} /></button></div>)}</div><p className="ds0">{p.notes || p.description}</p><h2 className="sc">Apps <span>{appItems.length}</span></h2>{appItems.map(a => <div className="sr" role="button" tabIndex={0} key={a.id || a.name} onClick={() => setDlg({
           t: 'app',
           p,
           app: a
@@ -534,7 +538,7 @@
           t: 'app',
           p,
           app: a
-        })}><Tile p={p} sz={44} i={26} r={10} /><div className="m"><b>{name(a)}</b><span>{a.description || p.description}</span></div><Ic n="chevR" s={16} /></div>)}</>}{p.id==='discord'&&renderDiscord&&<details className="ds" onToggle={e=>setWorkspaceOpen(e.currentTarget.open)}><summary>Discord workspace and data import</summary>{workspaceOpen&&renderDiscord()}</details>}{(p.mcp_connectors||[]).length>0&&<section aria-label="MCP servers"><h2 className="sc">MCP servers <span>{p.mcp_connectors.length}</span></h2>{p.mcp_connectors.map(server=><div className="sr" role="button" tabIndex={0} key={server.name||server.id} aria-label={'Open MCP server '+name(server)} onClick={()=>setDlg({t:'app',p,app:server,mcp:true})} onKeyDown={e=>e.target===e.currentTarget&&e.key==='Enter'&&setDlg({t:'app',p,app:server,mcp:true})}><Tile p={p} sz={44} i={26} r={10}/><div className="m"><b>{name(server)}</b><span>{server.description||p.description}</span></div><Ic n="chevR" s={16}/></div>)}</section>}{included.length > 0 && <><h2 className={settings ? 'h2s' : 'sc'}>Skills <span>{included.length}</span></h2><div className={settings ? 'lc' : ''} style={settings ? {
+        })}><Tile p={p} sz={44} i={26} r={10} /><div className="m"><b>{name(a)}</b><span>{a.description || p.description}</span></div><Ic n="chevR" s={16} /></div>)}</>}{p.id==='discord'&&renderDiscord&&<details className="ds" onToggle={e=>setWorkspaceOpen(e.currentTarget.open)}><summary>Discord workspace and data import</summary>{workspaceOpen&&renderDiscord()}</details>}{mcpItems.length>0&&<section aria-label="MCP servers"><h2 className="sc">MCP servers <span>{mcpItems.length}</span></h2>{mcpItems.map(server=><div className="sr" role="button" tabIndex={0} key={server.name||server.id} aria-label={'Open MCP server '+name(server)} onClick={()=>setDlg({t:'app',p,app:server,mcp:true})} onKeyDown={e=>e.target===e.currentTarget&&e.key==='Enter'&&setDlg({t:'app',p,app:server,mcp:true})}><Tile p={p} sz={44} i={26} r={10}/><div className="m"><b>{name(server)}</b><span>{server.description||p.description}</span></div><Ic n="chevR" s={16}/></div>)}</section>}{included.length > 0 && <><h2 className={settings ? 'h2s' : 'sc'}>Skills <span>{included.length}</span></h2><div className={settings ? 'lc' : ''} style={settings ? {
           marginTop: 0
         } : undefined}>{included.map(s => <div className={settings ? 'li' : 'sr'} key={s.id || s.name} role="button" tabIndex={0} onClick={() => setDlg({
             t: 'skill',
@@ -642,27 +646,28 @@
         busy
       } = useX(),
       plugins = catalog.filter(p => p.installed !== false),
+      packages = plugins.filter(p=>p.relationships?.is_package!==false && p.source!=='mcp_configuration'),
       [q, setQ] = useState('');
     if (plugin) {
       const p = plugins.find(p => p.id === plugin);
       return p ? <Detail p={p} settings /> : <div className="cc">Plugin no longer available.</div>;
     }
-    const apps = plugins.flatMap(p => (p.apps || []).map(item => ({
+    const apps = plugins.flatMap(p => components(p).filter(row=>row.kind==='app').map(item => ({
         p,
         item
       }))),
-      mcps = plugins.flatMap(p => (p.mcp_connectors || []).map(item => ({
+      mcps = plugins.flatMap(p => components(p).filter(row=>row.kind==='mcp').map(item => ({
         p,
         item
       }))),
       cnt = {
-        plugins: plugins.length,
+        plugins: packages.length,
         apps: apps.length,
         mcps: mcps.length,
         skills: skillsLoaded ? skills.length : '…'
       },
       match = t => String(t).toLowerCase().includes(q.toLowerCase());
-    return <div className="cc"><div className="hd"><div><h1>Plugins</h1><p className="sub">Manage plugins, skills, and MCPs</p></div><div className="tl"><button className="bo" onClick={() => go({
+    return <div className="cc"><div className="hd"><div><h1>Plugins</h1><p className="sub">Manage plugins, apps, MCPs, and skills</p></div><div className="tl"><button className="bo" onClick={() => go({
             v: 'directory'
           })}>Browse directory</button><Add settings /></div></div><div className="hd" style={{
         marginTop: 34,
@@ -678,7 +683,7 @@
           apps: 'Search apps',
           mcps: 'Search MCP servers',
           skills: 'Search skills'
-        }[tab]} /></div>{tab === 'plugins' && <div className="lc">{plugins.filter(p => match(p.name)).map(p => <div className="li" role="button" tabIndex={0} key={p.id} onClick={() => go({
+        }[tab]} /></div>{tab === 'plugins' && <div className="lc">{packages.filter(p => match(p.name)).map(p => <div className="li" role="button" tabIndex={0} key={p.id} onClick={() => go({
           v: 'settings',
           p: p.id
         })} onKeyDown={e => e.target === e.currentTarget && e.key === 'Enter' && go({
@@ -706,7 +711,7 @@
           }}>{mcps.filter(({
               p,
               item
-            }) => p.id.startsWith('custom-') === custom && match(name(item) + ' ' + p.name)).map(({
+            }) => (p.relationships?.is_package===false || p.source==='mcp_configuration') === custom && match(name(item) + ' ' + p.name)).map(({
               p,
               item
             }, i) => <div className="li" style={{
@@ -721,7 +726,7 @@
               })}>{name(item)}</ActionLink><button className={custom ? 'ib' : 'bo'} aria-label={'Configure ' + name(item)} onClick={() => go({
                 v: 'settings',
                 p: p.id
-              })}>{custom ? <Ic n="gear" /> : p.metadata?.connection?.connected ? 'Manage' : 'Authenticate'}</button>{custom && <Sw value={p.enabled !== false} label={'Enable ' + name(item)} disabled={busy || p.required} onChange={v => changePlugin(p, v)} />}</div>)}</div></React.Fragment>)}<h2 className="h2s" style={{
+              })}>{custom ? <Ic n="gear" /> : p.metadata?.connection?.connected ? 'Manage' : 'Authenticate'}</button>{custom && <Sw value={p.enabled !== false} label={'Enable ' + name(item)} disabled={busy || p.required || p.manageable===false} onChange={v => changePlugin(p, v)} />}</div>)}</div></React.Fragment>)}<h2 className="h2s" style={{
           fontSize: 15
         }}>MCP Apps</h2><div className="lc" style={{
           marginTop: 0

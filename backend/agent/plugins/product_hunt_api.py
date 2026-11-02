@@ -11,7 +11,7 @@ from agent.plugins.product_hunt import ProductHuntError, product_hunt_service
 
 def trusted_plugin_view(request: Request, response: Response):
     local_client(request)
-    origins = {f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (4242, 5173, 1420, 8000)}
+    origins = {f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (4242, 5173, 5184, 1420, 8000)}
     if request.headers.get("origin") not in origins or request.headers.get("x-vellum-producthunt") != "1":
         raise HTTPException(403, "Open the Product Hunt connection from the local Vellum app.")
     response.headers["Cache-Control"] = "no-store"

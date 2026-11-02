@@ -7,9 +7,11 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Vellum repo root: this file lives at <repo>/backend/agent/config.py,
-# so parents[2] is the repo root regardless of how Python was invoked.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Installed code is immutable; the selected workspace owns settings and data.
+# Source checkouts keep the same defaults as before.
+from agent.desktop_runtime import SOURCE_ROOT, workspace_root
+
+REPO_ROOT = workspace_root()
 os.environ.setdefault("HF_HOME", str(REPO_ROOT / "data" / "cache" / "huggingface"))
 os.environ.setdefault("TRANSFORMERS_CACHE", str(REPO_ROOT / "data" / "cache" / "huggingface" / "transformers"))
 

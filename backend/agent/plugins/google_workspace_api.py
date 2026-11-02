@@ -9,7 +9,7 @@ from agent.plugins.google_workspace import GoogleError, google_service
 
 def trusted_google_view(request: Request, response: Response):
     local_client(request)
-    origins = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (4242, 5173, 1420, 8000)}
+    origins = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (4242, 5173, 5184, 1420, 8000)}
     if request.headers.get("origin") not in origins or request.headers.get("x-vellum-google") != "1":
         raise HTTPException(403, "Open Google connections from Vellum.")
     response.headers["Cache-Control"] = "no-store"

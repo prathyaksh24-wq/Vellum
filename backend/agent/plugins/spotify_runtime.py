@@ -17,8 +17,9 @@ from agent.plugins.registry import get_plugin_registry
 from agent.privacy.classifier import RED_PATTERNS
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_DIR = REPO_ROOT / "plugins" / "connectors" / "spotify"
+from agent.config import REPO_ROOT, SOURCE_ROOT
+
+PLUGIN_DIR = SOURCE_ROOT / "plugins" / "connectors" / "spotify"
 AUTH_DIR = REPO_ROOT / "data" / "plugins" / "spotify"
 
 

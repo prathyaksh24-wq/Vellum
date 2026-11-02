@@ -22,6 +22,8 @@ class PluginSourceRecord:
     capabilities: list[str] = field(default_factory=list)
     required: bool = False
     protected: bool = False
+    relationships: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
 
 
 class CodexPluginSource:
@@ -67,6 +69,9 @@ class CodexPluginSource:
                 or "OpenAI"
             ),
             source="openai_plugin",
+            relationships={**(data.get('relationships') if isinstance(data.get('relationships'), dict) else {}),
+                **{key: data[key] for key in ('canonicalAppId', 'appIds', 'remotePluginId') if key in data}},
+            provenance=dict(data.get('provenance') or {}) if isinstance(data.get('provenance'), dict) else {},
             root=root,
             skills_root=skills_root if skills_root and skills_root.is_dir() else None,
             apps=apps,

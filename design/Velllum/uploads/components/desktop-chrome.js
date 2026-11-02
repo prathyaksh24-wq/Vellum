@@ -12,6 +12,20 @@
     const feedback=document.createElement('span');
     feedback.className='desktop-menu-feedback';
     feedback.setAttribute('role','alert');
+    const navigation=document.createElement('nav');
+    navigation.className='desktop-navigation';
+    navigation.setAttribute('aria-label','Vellum page history');
+    const arrows=['Back','Forward'].map((label,index)=>{
+      const button=document.createElement('button');
+      button.type='button';button.disabled=true;
+      button.setAttribute('aria-label',label);button.title=label+' (Alt+'+(index?'Right':'Left')+')';
+      button.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(index?'m12 5 7 7-7 7M5 12h14':'m12 5-7 7 7 7M5 12h14')+'"/></svg>';
+      button.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('vellum:navigation-traverse',{detail:index?1:-1})));
+      navigation.append(button);return button;
+    });
+    window.addEventListener('vellum:navigation-state',event=>{
+      arrows[0].disabled=!event.detail?.back;arrows[1].disabled=!event.detail?.forward;
+    });
     let opening=false;
     let previousFocus=null;
     const buttons=[];
@@ -40,19 +54,29 @@
       });
       menus.append(button);buttons.push(button);
     }
-    bar.append(menus,feedback);
+    bar.append(navigation,menus,feedback);
     document.body.prepend(bar);
     document.documentElement.classList.add('desktop-chrome-on');
+    window.dispatchEvent(new Event('vellum:navigation-ready'));
     document.addEventListener('keydown',event=>{
+      if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&['ArrowLeft','ArrowRight'].includes(event.key)) {
+        event.preventDefault();event.stopImmediatePropagation();arrows[event.key==='ArrowLeft'?0:1].click();return;
+      }
       if(event.key==='F10'&&!event.shiftKey || event.altKey&&!event.ctrlKey&&!event.metaKey&&['v','e','w'].includes(event.key.toLowerCase())) {
         event.preventDefault();previousFocus=document.activeElement;
         const index=event.key==='F10'?0:({v:2,e:1,w:3})[event.key.toLowerCase()];
         focusButton(index);if(event.key!=='F10')buttons[index].click();
       }
-    });
+    },true);
+    const colorProbe=document.createElement('canvas').getContext('2d',{willReadFrequently:true});
     const hex=(color,fallback)=>{
       const rgb=color.match(/^rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)/);
-      return rgb?'#'+rgb.slice(1,4).map(value=>Number(value).toString(16).padStart(2,'0')).join(''):fallback;
+      if(rgb)return '#'+rgb.slice(1,4).map(value=>Number(value).toString(16).padStart(2,'0')).join('');
+      if(!colorProbe)return fallback;
+      // Theme tokens may resolve to color(srgb ...) or relative CSS colors.
+      // Normalize the actual computed color so native caption buttons match.
+      colorProbe.clearRect(0,0,1,1);colorProbe.fillStyle=fallback;colorProbe.fillStyle=color;colorProbe.fillRect(0,0,1,1);
+      return '#'+Array.from(colorProbe.getImageData(0,0,1,1).data).slice(0,3).map(value=>value.toString(16).padStart(2,'0')).join('');
     };
     function theme() {
       const style=getComputedStyle(bar);

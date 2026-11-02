@@ -12,7 +12,7 @@ const compile = () => compiledPanel ||= execFileSync(process.execPath, ['-e', `
  {loader:'jsx',jsxFactory:'React.createElement',jsxFragment:'React.Fragment'}).code);
 `, resolve('../design/Velllum/uploads/components/browser-panel.jsx')], {encoding:'utf8'});
 
-async function mountPanel(api, state) {
+async function mountPanel(api, state, props={}) {
   window.VellumApi = {browser:api};
   Function('React','window',compile())(React,window);
   const container = document.createElement('div');container.className='body'; document.body.append(container);
@@ -20,8 +20,14 @@ async function mountPanel(api, state) {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const onHide = vi.fn();
   await act(async()=>root.render(React.createElement(window.VellumUI.BrowserPanel,
-    {state,onRefresh:async()=>state,onHide})));
-  return {container, onHide, cleanup:async()=> {await act(async()=>root.unmount());container.remove();}};
+    {state,onRefresh:async()=>state,onHide,...props})));
+  const nativeBounds={x:400,y:80,width:900,height:700};
+  if(state.render_transport==='native'){
+    const screen=container.querySelector('.browser-screen');
+    screen.getBoundingClientRect=()=>({...nativeBounds,left:nativeBounds.x,top:nativeBounds.y,right:nativeBounds.x+nativeBounds.width,bottom:nativeBounds.y+nativeBounds.height});
+    await act(async()=>{window.dispatchEvent(new Event('resize'));await new Promise(resolve=>setTimeout(resolve,40));});
+  }
+  return {container, onHide, nativeBounds, cleanup:async()=> {await act(async()=>root.unmount());container.remove();}};
 }
 const manualState = () => ({running:true,available:true,control:'user',session_id:'session',active_tab_id:'tab',downloads:[],
   tabs:[{id:'tab',active:true,title:'Fixture',url:'https://example.com/'}]});
@@ -38,15 +44,32 @@ test('Electron mounts native content without opening a stream or requesting fram
     expect(api.frame).not.toHaveBeenCalled();expect(api.stream).not.toHaveBeenCalled();
     expect(panel.container.querySelector('[aria-label="Embedded browser page"]')).not.toBeNull();
     expect(panel.container.querySelector('img[alt="Live view of the dedicated browser tab"]')).toBeNull();
-    await act(async()=>panel.container.classList.add('browser-resizing'));
-    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({prepare_only:true}));
-    expect(panel.container.querySelector('img[alt="Page beneath browser menu"]')).not.toBeNull();
-    await act(async()=>await new Promise(resolve=>setTimeout(resolve,55)));
-    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({visible:false}));
+    native.mount.mockClear();
+    await act(async()=>{
+      panel.container.classList.add('browser-resizing');panel.nativeBounds.width=800;
+      window.dispatchEvent(new Event('resize'));
+      await new Promise(resolve=>setTimeout(resolve,45));
+    });
+    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({visible:true,bounds:expect.objectContaining({width:800})}));
+    expect(native.mount.mock.calls.some(([input])=>input.prepare_only || input.visible===false)).toBe(false);
+    expect(panel.container.querySelector('img[alt="Page beneath browser menu"]')).toBeNull();
     await act(async()=>panel.container.classList.remove('browser-resizing'));
-    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({visible:true}));
   } finally {await panel.cleanup();delete window.VellumDesktop;}
   expect(native.mount).toHaveBeenLastCalledWith({visible:false});
+});
+
+test('notification overlays hold the native browser behind its saved page image',async()=>{
+  const api=await autocompleteApi();
+  const native={mount:vi.fn(async data=>data.prepare_only ? {still:sampleFrame.data_url} : {}),subscribe:vi.fn(()=>()=>{})};
+  window.VellumDesktop={browser:native};
+  const panel=await mountPanel(api,{...manualState(),render_transport:'native',native_target_id:'owned-guest'},{overlayVisible:true});
+  try {
+    expect(native.mount).toHaveBeenCalledWith(expect.objectContaining({prepare_only:true,target_id:'owned-guest'}));
+    await act(async()=>await new Promise(resolve=>setTimeout(resolve,60)));
+    expect(native.mount).toHaveBeenLastCalledWith(expect.objectContaining({visible:false,target_id:'owned-guest'}));
+    expect(panel.container.querySelector('img[alt="Page beneath browser menu"]')).not.toBeNull();
+    expect(native.mount.mock.calls.some(([input])=>input.visible===true)).toBe(false);
+  } finally {await panel.cleanup();delete window.VellumDesktop;}
 });
 
 test('a silent live stream falls back to frames so cursor updates keep arriving',async()=>{
@@ -94,24 +117,28 @@ test('agent pointer is visible on its current tab and yields on takeover',async(
   } finally {await panel.cleanup();}
 });
 
-test('browser divider supports keyboard resize and restores the default split',async()=>{
+test('browser divider uses measured constraints, supports keys and restores the saved preference',async()=>{
   Function('React','window',compile())(React,window);
   const container=document.createElement('div');document.body.append(container);
   const root=createRoot(container),changed=vi.fn();globalThis.IS_REACT_ACT_ENVIRONMENT=true;
-  await act(async()=>root.render(React.createElement(window.VellumUI.BrowserSplitter,{value:38,onChange:changed})));
+  const bounds=vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockReturnValue({x:0,y:0,left:0,top:0,width:1000,height:700,right:1000,bottom:700});
+  const render=()=>root.render(React.createElement(window.VellumUI.BrowserSplitView,{active:true,value:38,onChange:changed},
+    React.createElement('main',{className:'main'}),React.createElement('aside',{className:'browser-panel'})));
+  await act(async()=>render());
   try {
-    const handle=container.querySelector('[role="separator"]');
+    const region=container.querySelector('.workspace-split'),handle=container.querySelector('[role="separator"]');
+    expect(region.dataset.splitMode).toBe('split');
     await act(async()=>handle.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true})));
     expect(changed).toHaveBeenLastCalledWith(40);
     await act(async()=>handle.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})));
     expect(changed).toHaveBeenLastCalledWith(38);
-    await act(async()=>handle.dispatchEvent(new MouseEvent('pointerdown',{button:0,clientX:300,bubbles:true})));
-    expect(container.classList.contains('browser-resizing')).toBe(true);
-    await act(async()=>root.render(React.createElement(window.VellumUI.BrowserSplitter,{value:38,onChange:value=>changed(value)})));
-    expect(container.classList.contains('browser-resizing')).toBe(true);
-    await act(async()=>window.dispatchEvent(new MouseEvent('pointerup',{button:0,clientX:300,bubbles:true})));
-    expect(container.classList.contains('browser-resizing')).toBe(false);
-  } finally {await act(async()=>root.unmount());container.remove();}
+    await act(async()=>handle.dispatchEvent(new MouseEvent('pointerdown',{button:0,clientX:380,bubbles:true})));
+    expect(region.classList.contains('browser-resizing')).toBe(true);
+    await act(async()=>render());
+    expect(region.classList.contains('browser-resizing')).toBe(true);
+    await act(async()=>window.dispatchEvent(new MouseEvent('pointerup',{button:0,clientX:380,bubbles:true})));
+    expect(region.classList.contains('browser-resizing')).toBe(false);
+  } finally {await act(async()=>root.unmount());bounds.mockRestore();container.remove();}
 });
 
 async function autocompleteApi() {

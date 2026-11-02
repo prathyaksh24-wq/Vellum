@@ -95,6 +95,7 @@
 <script src="components/dvk-motion-shaders.js"></script>
 <script type="text/babel" data-presets="react" src="components/DvkMotionBackground.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
+<script type="module" src="/composer-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css?v=20261030-vellum-polish"/>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3921,8 +3922,8 @@ const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpen
 const TRENDING = ['Kennedy Center live stream', 'SpaceX IPO', 'Christian Pulisic', 'NBA Finals', 'AI chip export rules', 'Aurora forecast tonight'];
 const SLASH_ITEMS = [
   { k: 'compact', label: 'Compact context', description: 'Shorten working context and keep saved history', ic: IcSparkle, run: 'compact' },
-  { k: 'files', label: 'Add photos & files', description: 'Attach local context to this turn', ic: IcUpload, run: 'file' },
-  { k: 'web', label: 'Web search', description: 'Search current public sources', ic: IcGlobe, run: 'web' },
+  { k: 'files', aliases:['attach','file','upload'], label: 'Add photos & files', description: 'Attach local context to this turn', ic: IcUpload, run: 'file' },
+  { k: 'web', aliases:['search','internet'], label: 'Web search', description: 'Search current public sources', ic: IcGlobe, run: 'web' },
   { k: 'learn', label: 'Learn skill', description: 'Prepare a reusable Hermes skill', ic: IcLibrary, run: 'skills' },
   { k: 'skills', label: 'Manage skills', description: 'Open installed, discover, review, and archived skills', ic: IcSparkle, run: 'skills' },
   { k: 'plugins', label: 'Manage plugins', description: 'Open plugins, apps, MCPs, and included skills', ic: IcPlugins, run: 'plugins' },
@@ -3938,15 +3939,15 @@ const buildReasoningSlashItems = ({q='', apps=[], skills=[], agents=AGENTS}) => 
     description:item.description || 'Installed Hermes skill', owner:item.owner_plugin || item.created_by || item.source || '',
     ic:IcSparkle, raw:item,
   })).filter(item => item.label && matches(item));
-  const pluginRows = (apps || []).map(item => ({
+  const pluginRows = (apps || []).filter(item=>item.installed!==false && item.relationships?.is_package!==false && item.source!=='mcp_configuration').map(item => ({
     kind:'plugin', k:'plugin:'+item.id, label:item.name, description:item.description || item.note || 'Plugin bundle',
     owner:item.developer || '', ic:IcPlugins, raw:item,
   })).filter(matches);
-  const appRows = (apps || []).flatMap(plugin => (plugin.apps || []).map(item => ({
+  const appRows = (apps || []).flatMap(plugin => (window.VellumComposer?.componentsForPlugin(plugin) || (plugin.apps || []).map(item=>({...item,kind:'app'}))).filter(item=>item.kind==='app').map(item => ({
     kind:'app', k:'app:'+plugin.id+':'+(item.id || item.name), label:item.name || item.id,
     description:item.description || ('App included with '+plugin.name), owner:plugin.name, ic:IcGrid, raw:item, plugin,
   }))).filter(item => item.label && matches(item));
-  const mcpRows = (apps || []).flatMap(plugin => (plugin.mcp_connectors || []).map(item => ({
+  const mcpRows = (apps || []).flatMap(plugin => (window.VellumComposer?.componentsForPlugin(plugin) || (plugin.mcp_connectors || []).map(item=>({...item,kind:'mcp'}))).filter(item=>item.kind==='mcp').map(item => ({
     kind:'mcp', k:'mcp:'+plugin.id+':'+(item.id || item.name), label:item.display_name || item.name || item.id || plugin.name,
     description:item.description || item.transport || item.command || 'MCP connector', owner:plugin.name, ic:IcMcp, raw:item, plugin,
   }))).filter(item => item.label && matches(item));
@@ -3965,22 +3966,12 @@ const buildReasoningSlashItems = ({q='', apps=[], skills=[], agents=AGENTS}) => 
 };
 
 const slashProjectItems = (q,projects=[]) => projects.filter(project=>!q || 'projects'.includes(q) || project.name.toLowerCase().includes(q)).map(project=>({kind:'project',k:'project-'+project.id,label:project.name,description:'Open project context',owner:'Project',ic:IcFolder,raw:project}));
-const SlashMenu = ({q,drop,apps,skills,agents,projects,activeIdx,onRun,onActiveChange,id}) => {
-  const sections=buildReasoningSlashItems({q,apps,skills,agents});
-  const projectItems=slashProjectItems(q,projects);
-  if(projectItems.length)sections.push({label:'Projects',items:projectItems});
-  let idx=-1;
-  return <div className={'slash-menu agent-slash-menu'+(drop==='down'?' down':'')}>
-    <window.VellumUI.SharedRowBackground id={id} className="agent-slash-list" role="listbox" label="Commands, skills and agents" refreshKey={q+':'+activeIdx}>
-      {sections.map(section=><React.Fragment key={section.label}><div className="slash-section">{section.label}</div>{section.items.map(item=>{
-        const Icon=item.ic || IcSparkle, index=++idx;
-        return <div key={item.k} id={id+'-'+index} role="option" aria-selected={index===activeIdx} data-shared-row="" className="plus-item" onPointerMove={()=>{if(index!==activeIdx)onActiveChange(index);}} onMouseDown={event=>event.preventDefault()} onClick={()=>onRun(item)}>
-          <span className="sb-ic"><Icon size={15}/></span><span className="slash-name">{item.label}</span><span className="slash-description">{item.description}</span><span className="slash-owner">{item.owner}</span>
-        </div>;
-      })}</React.Fragment>)}
-      {!sections.length && <div className="agent-model-empty" role="status">No matching commands.</div>}
-    </window.VellumUI.SharedRowBackground>
-  </div>;
+// Both legacy web React and bundled desktop React provide their own runtime.
+const RichComposerEditor = props => {
+  const [runtime,setRuntime] = useState(()=>window.VellumComposer);
+  useEffect(()=>{const ready=()=>setRuntime(window.VellumComposer);window.addEventListener('vellum:composer-ready',ready);ready();return()=>window.removeEventListener('vellum:composer-ready',ready);},[]);
+  const Editor=runtime?.component(React,ReactDOM);
+  return Editor ? <Editor {...props}/> : <div role="status">Loading editor…</div>;
 };
 
 const ChatHeadMenu = ({chat, projects, pos, onAction, onMove, onNewProject, onClose}) => {
@@ -4087,7 +4078,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange}) => {
+const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange}) => {
   useEffect(()=>{if(pluginDraft?.text)setText(pluginDraft.text);},[pluginDraft?.id]);
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
@@ -4132,13 +4123,11 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
   const [searchMode, setSearchMode] = useState(false);
   const [searchScope, setSearchScope] = useState('Instant');
   const [scopeOpen, setScopeOpen] = useState(false);
-  const [slashIdx, setSlashIdx] = useState(0);
   const [plusOpen, setPlusOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
   const [libOpen, setLibOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
   const [ghOpen, setGhOpen] = useState(false);
-  const [slashDismissed, setSlashDismissed] = useState(false);
   const fileRef = useRef(null);
   const taRef = useRef(null);
   const cpillRef = useRef(null);
@@ -4161,7 +4150,6 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
     return()=>{cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',sync);motion.removeEventListener('change',sync);};
   },[animated,glow]);
   const modelTriggerRef = useRef(null);
-  const slashId = React.useId();
   const closeModel = (restoreFocus=false) => { setModelOpen(false); if(restoreFocus)requestAnimationFrame(()=>modelTriggerRef.current?.focus()); };
   useEffect(() => {
     if (!API.voice?.createDictation) return;
@@ -4191,7 +4179,7 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
     }
   };
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); setLibOpen(false); setPickOpen(false); setGhOpen(false); setSlashDismissed(true); } };
+    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); setLibOpen(false); setPickOpen(false); setGhOpen(false); taRef.current?.dismissSuggestions(); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -4221,57 +4209,33 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
     window.addEventListener('vellum:attachment-action', onAttachmentAction);
     return () => window.removeEventListener('vellum:attachment-action', onAttachmentAction);
   }, []);
-  const slashMatch = text.match(/(?:^|\s)\/(\S*)$/);
-  const hasSlash = !!slashMatch;
-  const prevSlash = useRef(false);
-  useEffect(() => {
-    if (!hasSlash || !prevSlash.current) setSlashDismissed(false);
-    prevSlash.current = hasSlash;
-  }, [text]);
-  const slashOpen = hasSlash && !slashDismissed;
-  const slashQ = hasSlash ? slashMatch[1].toLowerCase() : '';
-  const removeSlashToken = value => value.replace(/(?:^|\s)\/\S*$/, '').trimEnd();
-  const focusComposer = () => setTimeout(() => { if (taRef.current) taRef.current.focus(); }, 0);
-  const stripSlash = () => { setText(t => removeSlashToken(t)); focusComposer(); };
-  const slashSections = buildReasoningSlashItems({q:slashQ,apps,skills,agents});
-  const slashFlat = [...slashSections.flatMap(section => section.items), ...slashProjectItems(slashQ,projects)];
-  const enableSearch = () => { setSearchMode(true); setText(t => removeSlashToken(t)); setSlashDismissed(true); setSlashIdx(0); focusComposer(); };
+  const [composerRuntime,setComposerRuntime] = useState(()=>window.VellumComposer);
+  useEffect(()=>{const ready=()=>setComposerRuntime(window.VellumComposer);window.addEventListener('vellum:composer-ready',ready);ready();return()=>window.removeEventListener('vellum:composer-ready',ready);},[]);
+  const commands = React.useMemo(()=>[
+    ...buildReasoningSlashItems({q:'',apps,skills,agents}).flatMap(section=>section.items),
+    ...slashProjectItems('',projects),
+  ],[apps,skills,agents,projects]);
+  const references = React.useMemo(()=>composerRuntime?.referenceProviders({library,projects,chats,browserTabs,apps,skills,agents}) || [],[composerRuntime,library,projects,chats,browserTabs,apps,skills,agents]);
+  const focusComposer = () => setTimeout(()=>taRef.current?.focus(),0);
+  const stripSlash = () => {taRef.current?.replaceActiveToken('');focusComposer();};
+  const enableSearch = () => {setSearchMode(true);stripSlash();taRef.current?.dismissSuggestions();};
   const runSlashItem = item => {
-    if (!item) return;
-    if (item.kind === 'command') {
-      if (item.run === 'compact') { setText('/compact'); setSlashDismissed(true); focusComposer(); return; }
-      if (item.run === 'file') { stripSlash(); fileRef.current.click(); return; }
-      if (item.run === 'web') { enableSearch(); return; }
-      stripSlash(); setSlashDismissed(true);
-      if (item.run === 'skills' && onOpenSkills) onOpenSkills();
-      if (item.run === 'plugins' && onOpenPlugins) onOpenPlugins();
+    if(!item)return;
+    if(item.kind==='command'){
+      if(item.run==='compact'){taRef.current?.replaceActiveToken('/compact');return;}
+      if(item.run==='web'){enableSearch();return;}
+      stripSlash();
+      if(item.run==='file')fileRef.current?.click();
+      if(item.run==='skills')onOpenSkills?.();
+      if(item.run==='plugins')onOpenPlugins?.();
       return;
     }
-    if (item.kind === 'skill') {
-      setText(removeSlashToken(text) + (removeSlashToken(text) ? ' ' : '') + '/skill ' + item.label + ' ');
-      setSlashDismissed(true); focusComposer(); return;
-    }
-    if (item.kind === 'project') { stripSlash(); setSlashDismissed(true); onOpenProject?.(item.raw.id); return; }
-    if (item.kind === 'agent') { stripSlash(); setSlashDismissed(true); if (onOpenAgent) onOpenAgent(item.raw.id); return; }
-    if (['plugin','app','mcp'].includes(item.kind)) { stripSlash(); setSlashDismissed(true); if (onOpenPlugins) onOpenPlugins(item.plugin || item.raw); return; }
-    setSlashDismissed(true);
+    if(item.kind==='skill'){taRef.current?.insertReference({kind:'skill',id:String(item.raw.id || item.raw.name),label:item.label});return;}
+    stripSlash();
+    if(item.kind==='project')onOpenProject?.(item.raw.id);
+    if(item.kind==='agent')onOpenAgent?.(item.raw.id);
+    if(['plugin','app','mcp'].includes(item.kind))onOpenPlugins?.(item.plugin || item.raw);
   };
-  const runSlash = i => runSlashItem(slashFlat[i]);
-  useEffect(() => { setSlashIdx(0); }, [text]);
-  useEffect(() => {
-    if (!slashOpen) return;
-    const onDown = e => {
-      const inMenu = e.target.closest && e.target.closest('.slash-menu');
-      const inTa = taRef.current && taRef.current.contains(e.target);
-      if (!inMenu && !inTa) setSlashDismissed(true);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [slashOpen]);
-  useEffect(() => {
-    const ta = taRef.current;
-    if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; }
-  }, [text]);
   const send = () => {
     if (!['idle','error'].includes(voiceState) || dictationActive) return;
     if (busy && !text.trim()) {
@@ -4279,7 +4243,8 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
       return;
     }
     if (!text.trim()) return;
-    onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? 'steer' : 'send', reasoningMode});
+    const refs=composerRuntime?.referenceAttachments(taRef.current?.getReferences() || [],library) || [];
+    onSend(text.trim(), [...attach,...refs], {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? 'steer' : 'send', reasoningMode});
     setText(''); setAttach([]);
     setAttachError('');
     setSearchMode(false);
@@ -4304,9 +4269,6 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
       <div className={'cpill' + (animated && glow?' glowing':'') + (voiceState !== 'idle' ? ' voicing' : '')} ref={cpillRef}
         onDragOver={event => { if (event.dataTransfer && event.dataTransfer.files.length) event.preventDefault(); }}
         onDrop={event => { if (event.dataTransfer && event.dataTransfer.files.length) { event.preventDefault(); prepareComposerFiles(event.dataTransfer.files); } }}>
-          {slashOpen && <SlashMenu q={slashQ} drop={drop} activeIdx={slashIdx} onActiveChange={setSlashIdx} id={slashId}
-            apps={apps} skills={skills} agents={agents} projects={projects} onRun={runSlashItem}
-          />}
       {modelOpen && <ModelDrop model={model} models={models} drop={drop} providerSources={providerSources} modelProvider={modelProvider} onProviderChange={onProviderChange} reasoningMode={reasoningMode} onReasoningChange={onReasoningChange} onPick={m => { setModel(m); closeModel(true); }} onClose={closeModel}/>}
         {attachError && <div className="attach-error" role="alert">{attachError}</div>}
         {attach.length > 0 && (
@@ -4329,19 +4291,10 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
           </div>
         )}
         <div className="ta-wrap">
-          <textarea ref={taRef} rows={1} value={text} data-ui-reference="composer" aria-label="Message" role="combobox" aria-autocomplete="list" aria-expanded={slashOpen} aria-controls={slashOpen?slashId:undefined} aria-activedescendant={slashOpen && slashFlat[slashIdx]?slashId+'-'+slashIdx:undefined}
-            onFocus={()=>{if(animated)setGlow(true);}} onBlur={()=>setGlow(false)}
-            onChange={e => setText(e.target.value)}
-            onPaste={event => { if (event.clipboardData && event.clipboardData.files.length) { event.preventDefault(); prepareComposerFiles(event.clipboardData.files); } }}
-            onKeyDown={e => {
-              if(e.nativeEvent?.isComposing || e.keyCode===229)return;
-              if (slashOpen && slashFlat.length) {
-                if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIdx(i => (i + 1) % slashFlat.length); return; }
-                if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIdx(i => (i - 1 + slashFlat.length) % slashFlat.length); return; }
-                if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); runSlash(slashIdx); return; }
-              }
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-            }}/>
+          <RichComposerEditor editorRef={taRef} value={text} onChange={setText} commands={commands} providers={references}
+            referenceIcon={reference=>['plugin','app','mcp'].includes(reference.kind)?connectorIconSource({id:reference.owner_plugin_id || reference.id,name:reference.label},{localOnly:true}):''}
+            onCommand={runSlashItem} onSubmit={send} onPasteFiles={prepareComposerFiles} preferred={drop}
+            onFocus={()=>{if(animated)setGlow(true);}} onBlur={()=>setGlow(false)}/>
           {!text && (animated
             ? <PerCharacterRise key={voiceState+':'+searchMode+':'+phIdx} className="ph-anim" text={voiceState !== 'idle'?'Type':searchMode?'Search the web':ph || LANDING_PLACEHOLDERS[phIdx]} speed={1.18}/>
             : <span className="ph-anim" aria-hidden="true">{voiceState !== 'idle' ? 'Type a message' : searchMode ? 'Search the web' : ph || COMPOSER_PLACEHOLDER}</span>)}
@@ -4416,7 +4369,6 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
           {searchMode
             ? <button className={'model-pill' + (scopeOpen ? ' select-open' : '')} onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
             : <button ref={modelTriggerRef} className={'model-pill' + (modelOpen ? ' select-open' : '')} aria-haspopup="dialog" aria-expanded={modelOpen} data-tip="Model and effort" onClick={() => setModelOpen(true)}><ModelLogo model={models.find(item=>item.id===model) || {id:model}}/><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
-          {onMemoryChange && <button className={'cbtn' + (memoryEnabled ? '' : ' muted')} aria-label={memoryEnabled ? 'Turn memory off for this chat' : 'Turn memory on for this chat'} onClick={() => onMemoryChange(!memoryEnabled)}><IcBrain size={15}/></button>}
           <button className={'cbtn' + (dictationActive ? ' mic-on' : '')} disabled={!API.voice?.createDictation || !['idle','error'].includes(voiceState) || ['connecting','processing'].includes(dictation.state)} aria-label={dictationActive ? 'Finish dictation' : 'Start dictation'} aria-pressed={dictationActive} title={dictationActive ? 'Finish dictation' : 'Dictate locally'} onClick={toggleDictation}><IcMic/></button>
           {!dictationActive && (voiceState === 'idle' || voiceState === 'error') && (busy && !text.trim()
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
@@ -6508,11 +6460,12 @@ const CONNECTOR_LOCAL_LOGOS = {
   brave:'brave.svg',sentry:'sentry.svg',stripe:'stripe.svg',obsidian:'obsidian.svg',
   context7:'context7.png',gitmcp:'gitmcp.png',serpapi:'serpapi.png',exa:'exa.png',tavily:'tavily.png',apify:'apify.ico',firecrawl:'firecrawl.ico',todoist:'todoist.svg',puppeteer:'puppeteer.svg',slack:'slack.png'
 };
-const connectorIconSource = (c) => {
+const connectorIconSource = (c, {localOnly=false}={}) => {
   const id = String(c?.id || '').toLowerCase();
   const name = String(c?.name || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   const local = CONNECTOR_LOCAL_LOGOS[id] || CONNECTOR_LOCAL_LOGOS[name];
   if (local) return 'assets/plugins/' + local;
+  if (localOnly) return '';
   if (CONNECTOR_ICON_SOURCES[id]) return CONNECTOR_ICON_SOURCES[id];
   const slug = CONNECTOR_ICON_SLUGS[id];
   return slug ? SIMPLE_ICON_ROOT + encodeURIComponent(slug) : '';
@@ -8974,8 +8927,12 @@ const App = () => {
   const mainSidebarTrigger=useRef(null),sidebarWasVisible=useRef(sidebarPinned);
   useEffect(()=>{if(sidebarWasVisible.current!==sidebarPinned)mainSidebarTrigger.current?.focus({preventScroll:true});sidebarWasVisible.current=sidebarPinned;},[sidebarPinned]);
   const settingsOpen = workspaceLayout.surfaces.settings.visible;
+  const desktopWorkspace = window.VellumDesktop?.runtime === 'electron';
   const rightPanelVisible = workspaceLayout.surfaces['right-panel'].visible;
-  const browserPanelVisible = browserFeature && rightPanelVisible && workspaceLayout.surfaces['right-panel'].properties.content === 'browser';
+  const chatDetails = workspaceLayout.surfaces['chat-details'] || {visible:false,properties:{pinned:false}};
+  const browserPanelRef = useRef(null);
+  const preferredSidebarWidth = workspaceLayout.surfaces.sidebar.properties.width;
+  const sidebarWidth = Number.isInteger(preferredSidebarWidth) && preferredSidebarWidth>=200 && preferredSidebarWidth<=400 ? preferredSidebarWidth : 260;
   const composerPresentation = {
     size: workspaceLayout.surfaces.composer.properties.size,
     sendLabel: workspaceLayout.surfaces['composer.send'].properties.label,
@@ -9013,6 +8970,7 @@ const App = () => {
   const setDockPosition = value => dispatchDeviceSettings({dock_position:value});
   const setDockLocked = value => dispatchDeviceSettings({dock_locked:!!value});
   const [view, setView] = useState(() => appViewFromLocation() || 'chat');
+  const browserPanelVisible = browserFeature && rightPanelVisible && workspaceLayout.surfaces['right-panel'].properties.content === 'browser' && !(desktopWorkspace && view === 'apps');
   useEffect(() => {
     const syncLocation = () => setView(current => appViewFromLocation() || (current === '404' ? 'chat' : current));
     window.addEventListener('popstate', syncLocation);
@@ -10746,6 +10704,77 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  // A bounded, session-only journal of page locations. Conversations and
+  // Settings keep their existing owners; history stores no message content.
+  const desktopHistoryRef = useRef({entries:[], index:-1, pending:null});
+  const desktopLocation = {
+    view, chatId:view === 'chat' ? activeChatId : null,
+    agentId:view === 'agent' ? activeAgentId : null,
+    agentConvoId:view === 'agent' ? activeConvo[activeAgentId] || null : null,
+    projectId:view === 'project' ? activeProjectId : null,
+    settingsOpen, settingsTab:settingsOpen ? settingsTab : null,
+  };
+  const desktopLocationKey = JSON.stringify(desktopLocation);
+  const publishDesktopHistory = () => {
+    const journal=desktopHistoryRef.current;
+    window.dispatchEvent(new CustomEvent('vellum:navigation-state',{detail:{
+      back:!journal.pending && journal.index>0,
+      forward:!journal.pending && journal.index<journal.entries.length-1,
+    }}));
+  };
+  useEffect(() => {
+    if(!desktopWorkspace)return;
+    const journal=desktopHistoryRef.current;
+    if(journal.pending){
+      if(desktopLocationKey !== journal.pending.key)return;
+      journal.index=journal.pending.index;journal.pending=null;
+    } else if(journal.entries[journal.index]?.key !== desktopLocationKey){
+      journal.entries=journal.entries.slice(0,journal.index+1);
+      journal.entries.push({key:desktopLocationKey,location:desktopLocation});
+      if(journal.entries.length>100)journal.entries.shift();
+      journal.index=journal.entries.length-1;
+    }
+    publishDesktopHistory();
+  },[desktopWorkspace,desktopLocationKey]);
+  useEffect(() => {
+    if(!desktopWorkspace)return;
+    const traverse=async event => {
+      const direction=event.detail,journal=desktopHistoryRef.current;
+      if(![-1,1].includes(direction)||journal.pending)return;
+      const index=journal.index+direction,entry=journal.entries[index];
+      if(!entry)return;
+      journal.pending={index,key:entry.key};publishDesktopHistory();
+      const target=entry.location;
+      try {
+        if(target.view==='chat' && target.chatId!==activeChatId){
+          if(target.chatId){
+            const receipt=await openChat(target.chatId);
+            if(FEATURE_FLAGS.realConversations && receipt?.status!=='applied')throw new Error('Conversation unavailable');
+          } else applyNewChatNavigation();
+        }
+        if(target.settingsOpen!==settingsOpen){
+          const receipt=await dispatchSurfacePresentation('settings',{visible:target.settingsOpen},{notify:false,persistence:'session'});
+          if(receipt?.status!=='applied')throw new Error('Settings unavailable');
+        }
+        if(target.settingsTab)setSettingsTab(target.settingsTab);
+        if(target.view==='agent'){
+          setActiveAgentId(target.agentId);
+          setActiveConvo(current=>({...current,[target.agentId]:target.agentConvoId}));
+        }
+        if(target.view==='project')setActiveProjectId(target.projectId);
+        setView(target.view);setMenu(null);setActivityMsg(null);
+      } catch (_) {
+        journal.pending=null;publishDesktopHistory();
+        pushToast('That page could not be opened. Try again.');
+      }
+    };
+    window.addEventListener('vellum:navigation-traverse',traverse);
+    window.addEventListener('vellum:navigation-ready',publishDesktopHistory);
+    return () => {
+      window.removeEventListener('vellum:navigation-traverse',traverse);
+      window.removeEventListener('vellum:navigation-ready',publishDesktopHistory);
+    };
+  });
   useEffect(() => {
     const open = async () => {
       const receipt=await dispatchSurfacePresentation('settings',{visible:false},{notify:false,persistence:'session'});
@@ -10963,9 +10992,9 @@ const [slashSkills, setSlashSkills] = useState([]);
   const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
   return (
-    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:false}}>
+    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:desktopWorkspace && settingsOpen}}>
     <window.VellumUI.ResponsePreferencesProvider value={deviceSettings.values.streaming}>
-    <div className="stage" data-ui-reference="workspace" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
+    <div className="stage" data-ui-reference="workspace" onMouseMove={e => { if(desktopWorkspace)return;const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
       <window.VellumUI.MorphicTooltip/>
       <div className="bg-orb orb1"></div>
@@ -10976,7 +11005,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         <AppBackground/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
-        <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} className={'body' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--browser-chat-share':workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}}>
+        <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} className={'body' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
           {!sidebarPinned && <div className="main-sidebar-edge" aria-hidden="true" onMouseEnter={revealSidebar}/>}
           <div className="main-sidebar-slot" id="main-sidebar" data-state={mainSidebarVisible?'open':'closed'} data-pinned={sidebarPinned} data-peeking={sidebarPeeking && !sidebarPinned} data-variant="inset" data-collapsible="offcanvas" onMouseEnter={revealSidebar} onMouseLeave={hideSidebarPeek} inert={!mainSidebarVisible?'':undefined} aria-hidden={!mainSidebarVisible}><Sidebar notificationState={notificationState} chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
@@ -10989,9 +11018,22 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onNewProject={newProject}
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
                 onProjectRename={renameProject} onOpenProject={openProject}
-                browserAvailable={browserFeature} onBrowser={openBrowser}/></div>
+                />
+            {sidebarPinned && <window.VellumUI.SidebarResizeHandle value={sidebarWidth} onChange={width=>dispatchSurfacePresentation('sidebar',{properties:{width}},{notify:false}).then(receipt=>{if(receipt?.status!=='applied')pushToast('Sidebar width could not be saved.');return receipt;})}/>}
+          </div>
 
           {sidebarPinned && <button type="button" className="main-sidebar-backdrop" aria-label="Close main sidebar" onClick={()=>dispatchSidebarVisibility(false,{learn:true})}/>}
+          <div className="workspace-content" data-toolbar={workspaceHasHeader}>
+          {workspaceHasHeader && <window.VellumUI.WorkspaceToolbar controller={workspaceController}
+            sidebar={!sidebarPinned && <button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button>}
+            title={workspaceConversation?.title || (view==='agent'?activeAgent?.name:'') || ''}
+            conversation={workspaceConversation} detailsOpen={workspaceDetailsVisible}
+            onDetails={()=>{setActivityMsg(null);dispatchSurfacePresentation('chat-details',{visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}}
+            onShare={()=>activeChatId && dispatchConversationAction('conversation.share',{conversation_id:activeChatId})}
+            onOptions={event=>setMenu({type:'chathead',x:event.currentTarget.getBoundingClientRect().right,y:event.currentTarget.getBoundingClientRect().bottom})}/>}
+          <div className="workspace-panels">
+          <window.VellumUI.BrowserSplitView active={workspaceBrowserVisible} mode={workspaceMode} value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}
+            onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={hideBrowserPanel}>
           <div className="main" data-variant="inset" data-main-sidebar={sidebarPinned?'open':'closed'}>
             {!sidebarPinned && <header className="workspace-sidebar-toolbar"><button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button></header>}
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
@@ -11005,7 +11047,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -11014,17 +11056,18 @@ const [slashSkills, setSlashSkills] = useState([]);
               onAddSource={addSource}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'apps' && <BackendConnectorsView sidebarVisible={workspaceLayout.surfaces['plugin-sidebar']?.visible!==false} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>
-          {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserSplitter value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38} onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})}/>}
-          {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
+
+          {(browserPanelVisible || browserState.running) && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
+            hidden={!workspaceBrowserVisible} layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
             overlayVisible={notificationState.open || Boolean(toast?.notificationPing)}
             suspended={Boolean(settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
             onHide={hideBrowserPanel} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
@@ -11032,6 +11075,12 @@ const [slashSkills, setSlashSkills] = useState([]);
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
               applyAppActionReceipt(receipt, {notify:false});
             }}/>}
+          </window.VellumUI.BrowserSplitView>
+          {workspaceDetailsVisible && <window.VellumUI.WorkspaceDetails chat={workspaceConversation} activity={activityMsg} pinned={!!chatDetails.properties.pinned}
+            onPin={()=>dispatchSurfacePresentation('chat-details',{properties:{pinned:!chatDetails.properties.pinned}},{notify:false})}
+            onClose={()=>{setActivityMsg(null);dispatchSurfacePresentation('chat-details',{visible:false},{notify:false,persistence:'session'});}} onViewImage={setViewer}/>}
+          </div>
+          </div>
         </div>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
           compactVisible={view !== 'music' && !browserPanelVisible} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}

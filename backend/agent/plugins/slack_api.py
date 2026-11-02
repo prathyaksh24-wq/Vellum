@@ -23,7 +23,8 @@ def status():
 
 @router.get("/setup", response_model=SlackSetup)
 def setup():
-    source = Path(__file__).resolve().parents[3] / "plugins" / "connectors" / "slack" / "slack-app-manifest.json"
+    from agent.config import SOURCE_ROOT
+    source = SOURCE_ROOT / "plugins" / "connectors" / "slack" / "slack-app-manifest.json"
     return SlackSetup(callback_url=CALLBACK, manifest=json.loads(source.read_text(encoding="utf-8")))
 
 

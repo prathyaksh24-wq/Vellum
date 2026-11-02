@@ -8,14 +8,14 @@ import logging
 import sys
 from typing import Any
 
-from agent.config import REPO_ROOT, get_settings
+from agent.config import REPO_ROOT, SOURCE_ROOT, get_settings
 
 
 logger = logging.getLogger(__name__)
 
 
 def _load_retention_runner():
-    path = REPO_ROOT / "scripts" / "apply_retention.py"
+    path = SOURCE_ROOT / "scripts" / "apply_retention.py"
     spec = importlib.util.spec_from_file_location("vellum_apply_retention", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load retention workflow from {path}")

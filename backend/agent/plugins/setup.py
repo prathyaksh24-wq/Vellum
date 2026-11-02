@@ -11,6 +11,7 @@ import zipfile
 import yaml
 
 from agent.contracts.plugin_setup import PluginSetup
+from agent.contracts.plugin_catalog import plugin_relationship_metadata
 from agent.plugins.sources import CodexPluginSource
 from agent.skills.parser import SkillPackageParser
 from agent.skills.security import SkillSecurityScanner
@@ -63,13 +64,19 @@ def add_plugin(registry, request: PluginSetup):
                 record=CodexPluginSource([])._read(entry)
                 connectors=record.mcp_connectors;skills=record.skills_root
                 manifest.update(description=record.description[:500],apps=record.apps)
+            ownership=data.get('relationships',{}) if entry.name=='plugin.yaml' else record.relationships
+            origin=data.get('provenance',{}) if entry.name=='plugin.yaml' else record.provenance
+            projection=plugin_relationship_metadata(manifest,relationships=ownership,provenance=origin)
+            manifest['relationships']={key:projection['relationships'][key] for key in ('canonical_app_id','app_ids','remote_plugin_id')}
+            manifest['provenance']={key:projection['provenance'][key] for key in ('marketplace_id','source_id')}
             validated=[]
             for item in connectors:
                 transport='http' if item.get('url') else 'stdio'
                 config=PluginSetup(kind='mcp',name=str(item.get('name') or plugin_id),transport=transport,
                     url=str(item.get('url') or ''),command=str(item.get('command') or ''),args=item.get('args') or [],env=item.get('env') or {},headers=item.get('headers') or {})
                 validated.append({'name':config.name,'transport':transport,**({'url':config.url} if transport=='http' else {'command':config.command,'args':config.args}),
-                    **({'env':config.env} if config.env else {}),**({'headers':config.headers} if config.headers else {})})
+                    **({'env':config.env} if config.env else {}),**({'headers':config.headers} if config.headers else {}),
+                    **{key:item[key][:512] for key in ('id','app_id','canonical_app_id','canonicalAppId') if isinstance(item.get(key),str)}})
             manifest['mcp_connectors']=validated
             publish=stage/'publish';publish.mkdir()
             if skills and skills.is_dir():

@@ -1,7 +1,7 @@
 /* Motion adapted from the supplied Agent composer.html. Presentation only. */
 (function () {
   const h=(...args)=>window.React.createElement(...args);
-  function SharedRowBackground({children,className='',activeSelector='[aria-selected="true"]',refreshKey,role,label,id,onKeyDown,onMouseLeave}) {
+  function SharedRowBackground({children,className='',activeSelector='[aria-selected="true"]',refreshKey,role,label,id,onKeyDown,onMouseLeave,hoverEnabled=true,revealActive=true}) {
     const ref=window.React.useRef(null),pill=window.React.useRef(null),hovered=window.React.useRef(null);
     const measure=window.React.useCallback(row=>{
       const box=ref.current,bg=pill.current;if(!box || !bg)return;
@@ -13,20 +13,20 @@
     window.React.useLayoutEffect(()=>{
       const box=ref.current,row=box?.querySelector(activeSelector);
       hovered.current=null;
-      if(row && box.scrollHeight>box.clientHeight){
+      if(revealActive && row && box.scrollHeight>box.clientHeight){
         const top=row.offsetTop,bottom=top+row.offsetHeight;
         if(top<box.scrollTop)box.scrollTop=top;
         else if(bottom>box.scrollTop+box.clientHeight)box.scrollTop=bottom-box.clientHeight;
       }
       measure(row);
-    },[activeSelector,refreshKey,measure]);
+    },[activeSelector,refreshKey,measure,revealActive]);
     window.React.useEffect(()=>{
       const box=ref.current;if(!box || typeof ResizeObserver!=='function')return;
       const observer=new ResizeObserver(()=>measure(hovered.current?.isConnected?hovered.current:box.querySelector(activeSelector)));
       observer.observe(box);return()=>observer.disconnect();
     },[activeSelector,measure]);
     return h('div',{ref,id,role,'aria-label':label,'data-shared-layout-group':'',className:'morphic-group '+className,onKeyDown,
-      onPointerOver:event=>{if(event.pointerType==='touch')return;const row=event.target.closest('[data-shared-row]');if(row && row.closest('[data-shared-layout-group]')===ref.current){hovered.current=row;measure(row);}},
+      onPointerOver:event=>{if(!hoverEnabled || event.pointerType==='touch')return;const row=event.target.closest('[data-shared-row]');if(row && row.closest('[data-shared-layout-group]')===ref.current){hovered.current=row;measure(row);}},
       onPointerLeave:()=>{hovered.current=null;measure(ref.current?.querySelector(activeSelector));onMouseLeave?.();},
       onFocus:event=>{const row=event.target.closest('[data-shared-row]');if(row)measure(row);}},
       h('i',{ref:pill,className:'hlb','aria-hidden':true}),children);

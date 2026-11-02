@@ -1,10 +1,10 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const {pathToFileURL} = require('node:url');
-const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 const {conversationTarget, trustedWorkspace, validateCommand} = require('./policy.cjs');
+const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 
-function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null}) {
+function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'})}) {
   const {BrowserWindow, ipcMain, screen, dialog, shell} = electron;
   const windows = new Map();
   const providerAuthWindows = new Map();
@@ -12,14 +12,13 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
   const overlayURL = pathToFileURL(path.join(root, 'overlay.html')).href;
   const known = contents => [...windows.values()].some(win => !win.isDestroyed() && win.webContents === contents);
   const trusted = url => trustedWorkspace(url, workspace) || url === controlsURL;
-
   installChromeHandler(electron,{known,trusted:url=>trustedWorkspace(url,workspace),windows});
 
   function providerAuthStart(value) {
     try {
       const target = new URL(value), api = new URL(backend);
       const flowId = target.searchParams.get('flow_id');
-      const provider = /^\/api\/plugins\/(github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|vercel|clickup|hubspot|asana|swiggy|zomato|district)\/oauth\/open$/.exec(target.pathname)?.[1];
+      const provider = /^\/api\/plugins\/(github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|district|zomato|swiggy|vercel|clickup|asana|hubspot)\/oauth\/open$/.exec(target.pathname)?.[1];
       return target.origin === api.origin && ['127.0.0.1','localhost'].includes(target.hostname) &&
         !target.username && !target.password && !target.hash && provider && target.searchParams.getAll('flow_id').length===1 &&
         [...target.searchParams.keys()].every(key=>key==='flow_id') && /^[A-Za-z0-9_-]{20,100}$/.test(flowId || '') ? {provider,flowId} : null;
@@ -37,7 +36,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     const previous = providerAuthWindows.get(key);
     if (previous && !previous.isDestroyed()) {previous.show(); previous.focus(); return;}
     const auth = new BrowserWindow({parent:owner, width:680, height:780, minWidth:480, minHeight:500,
-      title:'Sign in to '+({github:'GitHub',linear:'Linear',slack:'Slack',airtable:'Airtable',notion:'Notion',firecrawl:'Firecrawl',apify:'Apify',exa:'Exa',tavily:'Tavily',supabase:'Supabase',vercel:'Vercel',clickup:'ClickUp',hubspot:'HubSpot',asana:'Asana',swiggy:'Swiggy',zomato:'Zomato',district:'District'})[provider], autoHideMenuBar:true, show:false,
+      title:'Sign in to '+({github:'GitHub',linear:'Linear',slack:'Slack',airtable:'Airtable',notion:'Notion',firecrawl:'Firecrawl',apify:'Apify',exa:'Exa',tavily:'Tavily',supabase:'Supabase',district:'District',zomato:'Zomato',swiggy:'Swiggy',vercel:'Vercel',clickup:'ClickUp',asana:'Asana',hubspot:'HubSpot'})[provider], autoHideMenuBar:true, show:false,
       webPreferences:{contextIsolation:true, sandbox:true, nodeIntegration:false, webSecurity:true, partition:'vellum-'+provider+'-oauth'}});
     providerAuthWindows.set(key,auth);
     // This window is deliberately outside `windows`/`known`: provider pages get
@@ -169,6 +168,11 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     }
     const args = validateCommand(command, input);
     switch (command) {
+      case 'workspace_ready': {
+        const state=await workspaceReady;
+        return {ready:true,reused:state.reused};
+      }
+      case 'protected_audio_ready': return await protectedAudioReady;
       case 'backend_health':
         try {
           const response = await fetch(backend + '/api/health', {signal: AbortSignal.timeout(2000)});
@@ -177,6 +181,18 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
       case 'open_vellum_window': openWorkspace(); break;
       case 'open_conversation_window': openConversation(args.conversationId); break;
       case 'set_overlay': setOverlay(args.enabled); break;
+      case 'skill_file': {
+        if (!trustedWorkspace(event.senderFrame.url,workspace)) throw new Error('Skill files are available only in the workspace.');
+        const response=await fetch(backend+'/api/skills/'+encodeURIComponent(args.name),{signal:AbortSignal.timeout(5000)});
+        if (!response.ok) throw new Error('The registered skill could not be found.');
+        const detail=await response.json();
+        // Resolve through the canonical backend catalog; the renderer cannot supply a path.
+        const target=detail.local_file;
+        if (typeof target!=='string' || !path.isAbsolute(target) || path.basename(target)!=='SKILL.md' || !fs.statSync(target).isFile()) throw new Error('No local SKILL.md is available.');
+        if (args.operation==='reveal') shell.showItemInFolder(target);
+        else {const error=await shell.openPath(target);if(error)throw new Error('The default editor could not open SKILL.md.');}
+        return {ok:true};
+      }
     }
   });
 
@@ -190,14 +206,6 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
 
   function configurePermissions(session) {
     const granted = new Set();
-    const protectedAudio = (contents, origin) => {
-      if (!known(contents) || !trustedWorkspace(contents.getURL(), workspace)) return false;
-      try {
-        const url = new URL(origin);
-        return !url.username && !url.password &&
-          [new URL(workspace).origin, 'https://sdk.scdn.co', 'https://open.spotify.com'].includes(url.origin);
-      } catch { return false; }
-    };
     const pending = new Map();
     const workspaceScope = new URL(workspace).origin + new URL(workspace).pathname;
     const profile = electron.app?.getPath('userData');
@@ -231,6 +239,14 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
           if (url.origin !== new URL(workspace).origin || url.username || url.password) return false;
         }
         return !details.requestingUrl || trustedWorkspace(details.requestingUrl,workspace);
+      } catch { return false; }
+    };
+    const protectedAudio = (contents, origin) => {
+      if (!known(contents) || !trustedWorkspace(contents.getURL(), workspace)) return false;
+      try {
+        const url = new URL(origin);
+        return !url.username && !url.password &&
+          [new URL(workspace).origin, 'https://sdk.scdn.co', 'https://open.spotify.com'].includes(url.origin);
       } catch { return false; }
     };
     session.setPermissionCheckHandler((contents, permission, origin, details = {}) => {

@@ -6,6 +6,21 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Removed the legacy standalone Coding mode, including its workspace pages, session API/runtime, provider adapters, session-bound PR actions and SDK dependency. Vellum uses its main chat/workspace interface; existing user data and worktrees remain on disk. Future coding harness integration is separate work.
+
+- Organize composer commands and context references into category sections with scoped browsing, connector/skill icons and coordinated menu corners. Project package/app/MCP/skill ownership and declared provenance from the existing plugin registry, preserve those links through archive import, and use the same classification in the existing Plugins settings tabs. Keep connection state separate from installation and enablement; omit a Sites category.
+
+- Replace composer autocomplete with a ProseMirror caret-token controller and portal menus for commands and structured references. Match menu width to the input, retain keyboard selection across catalog refreshes, keep trackpad scrolling independent, and reuse the shared moving row background. Show borderless connector logos/colours and skill icons inline; remove the memory toggle from the input toolbar. Preserve attachment, dictation and disclosure paths.
+
+- Add a draggable, saved 200–400px main sidebar that keeps its width when the browser opens. Measure the workspace region beside navigation to size the chat/browser split. Preserve the saved proportion while clamping usable widths, switch to a drawer when space is insufficient, coalesce divider input, and keep native browser content mounted while resizing with serialized bounds updates.
+
+- Repair desktop workspace spacing, opaque Settings placement, sidebar/title overlap and Plugins width while preserving the web layout. Remove the extra desktop frame and title-bar separator, normalize native menu alignment/colors, pause covered backgrounds, and add session-only Back/Forward navigation between chats, Music and Settings.
+
+- Prepare standalone Windows Electron startup with an explicitly selected existing workspace, bundled Python backend build, backend identity/lease checks, a separate packaged UI port, startup logs, and tray-backed background tasks. Installation and installed-app acceptance remain deferred; existing development services are never forcibly stopped.
+- Compile desktop JSX and React locally, open its window while the backend initializes, gate workspace data on backend readiness, and move protected-audio setup off the window-opening path. Record startup phases for later cold/warm timing verification.
+
+
+
 - Handle structured tool status metadata without crashing; preserve YouTube account-link filtering and restore bounded cloud-escalation instructions. Align component fixtures and contracts with provider-scoped catalogs, live progress and off-canvas navigation.
 
 - Refine Vellum's response streaming and live tool/source trace; bound duplicate reads and SerpAPI search attempts, preserve useful provider failures, load conversation summaries on startup, and follow newly sent messages.

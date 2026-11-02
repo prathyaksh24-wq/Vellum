@@ -15,46 +15,185 @@
       x:frame.pointer.x*scale-(preferences.cursor_style==='custom'?(preferences.cursor_hotspot_x||0):size*3/32),
       y:frame.pointer.y*scale-(preferences.cursor_style==='custom'?(preferences.cursor_hotspot_y||0):size*2/32)};
   }
+  // Saved preference belongs to Workspace Layout. Pixel geometry is a
+  // transient projection of the actual region left after the main sidebar.
+  const SplitContext = React.createContext(null);
+  const SPLIT_CHAT_MIN = 320, SPLIT_BROWSER_MIN = 400, SPLIT_HANDLE = 1;
+  const splitPreference = value => Number.isFinite(value) ? Math.max(20,Math.min(75,value)) : 38;
+  function splitGeometry(width, preference) {
+    width=Math.max(0,width);
+    const available=Math.max(0,width-SPLIT_HANDLE);
+    const mode=available>=SPLIT_CHAT_MIN+SPLIT_BROWSER_MIN ? 'split' : 'drawer';
+    const minimum=mode==='split' ? Math.max(20,SPLIT_CHAT_MIN/available*100) : 20;
+    const maximum=mode==='split' ? Math.min(75,(available-SPLIT_BROWSER_MIN)/available*100) : 75;
+    const ratio=Math.max(minimum,Math.min(maximum,splitPreference(preference)));
+    const left=mode==='split' ? available*ratio/100 : width;
+    const right=mode==='split' ? available-left : Math.min(width,Math.max(SPLIT_BROWSER_MIN,width-48));
+    return {mode,width,left,right,ratio,minimum,maximum};
+  }
+  function BrowserSplitView({active=false,mode='split',value=38,onChange,onDismiss,children}) {
+    const root=useRef(null),preference=useRef(splitPreference(value));
+    const settings=useRef({value,onChange});settings.current={value,onChange};
+    const revision=useRef(0),settleFrame=useRef(0);
+    const [geometry,setGeometry]=useState(()=>splitGeometry(0,value));
+    const apply=(next=preference.current,source='input')=>{
+      const node=root.current;if(!node)return;
+      preference.current=splitPreference(next);
+      const width=node.getBoundingClientRect().width;
+      if(!width)return;
+      const result=splitGeometry(width,preference.current);
+      node.dataset.splitMode=active ? (mode==='full'?'full':result.mode) : 'closed';
+      node.dataset.splitSizing=source;
+      node.style.setProperty('--split-left-width',result.left+'px');
+      node.style.setProperty('--split-right-width',result.right+'px');
+      node.style.setProperty('--split-handle-width',SPLIT_HANDLE+'px');
+      cancelAnimationFrame(settleFrame.current);
+      if(source==='container')settleFrame.current=requestAnimationFrame(()=>{
+        settleFrame.current=requestAnimationFrame(()=>{if(root.current)root.current.dataset.splitSizing='steady';});
+      });
+      setGeometry(current=>Object.keys(result).every(key=>current[key]===result[key]) ? current : result);
+      return result;
+    };
+    const controller=useRef(null);
+    controller.current={
+      geometry,
+      apply,
+      fromPointer:x=>{
+        const node=root.current;if(!node)return;
+        const rect=node.getBoundingClientRect(),current=splitGeometry(rect.width,preference.current);
+        if(current.mode!=='split')return;
+        const ratio=(x-rect.left)/(rect.width-SPLIT_HANDLE)*100;
+        return apply(Math.max(current.minimum,Math.min(current.maximum,ratio)),'drag');
+      },
+      commit:next=>{
+        const committed=Math.round(splitPreference(next)),epoch=++revision.current;
+        apply(committed);
+        Promise.resolve().then(()=>settings.current.onChange?.(committed)).then(receipt=>{
+          if(epoch!==revision.current || !root.current)return;
+          if(receipt===null || (receipt?.status && receipt.status!=='applied'))apply(settings.current.value);
+        }).catch(()=>{if(epoch===revision.current && root.current)apply(settings.current.value);});
+      },
+      cancel:()=>apply(settings.current.value),
+      root,
+    };
+    useLayoutEffect(()=>{
+      preference.current=splitPreference(value);
+      apply(preference.current,'container');
+    },[active,mode,value]);
+    useLayoutEffect(()=>{
+      const node=root.current;if(!node)return;
+      const measure=()=>controller.current.apply(preference.current,'container');
+      const observer=typeof ResizeObserver==='function' ? new ResizeObserver(measure) : null;
+      observer?.observe(node);
+      if(!observer)window.addEventListener('resize',measure);
+      return ()=>{observer?.disconnect();window.removeEventListener('resize',measure);cancelAnimationFrame(settleFrame.current);};
+    },[]);
+    const panes=React.Children.toArray(children),drawer=active && mode!=='full' && geometry.mode==='drawer';
+    useLayoutEffect(()=>{
+      const main=root.current?.querySelector(':scope > .main');
+      if(main)main.inert=drawer;
+      return ()=>{if(main)main.inert=false;};
+    },[drawer]);
+    return <SplitContext.Provider value={controller}>
+      <div ref={root} className={'workspace-split'+(active?' browser-layout':'')} data-split-mode={active?(mode==='full'?'full':geometry.mode):'closed'}>
+        {panes[0] && React.cloneElement(panes[0],{'aria-hidden':drawer?true:undefined})}
+        {drawer && <button type="button" className="browser-drawer-backdrop" aria-label="Return to chat" onClick={onDismiss}/>}
+        {active && mode!=='full' && <BrowserSplitter value={value}/>}
+        {panes[1]}
+      </div>
+    </SplitContext.Provider>;
+  }
   function BrowserSplitter({value=38,onChange}) {
-    const ref=useRef(null),drag=useRef(null);
+    const context=React.useContext(SplitContext);
+    const ref=useRef(null),drag=useRef(null),frame=useRef(0);
+    const settings=useRef({context,value,onChange});settings.current={context,value,onChange};
+    const controls=()=>settings.current.context?.current;
+    const setDragging=enabled=>{
+      const node=controls()?.root.current || ref.current?.parentElement;
+      node?.classList.toggle('browser-resizing',enabled);
+    };
+    const paint=()=>{frame.current=0;if(drag.current)controls()?.fromPointer(drag.current.x);};
+    const finish=(commit=true)=>{
+      if(!drag.current)return;
+      const current=drag.current;drag.current=null;cancelAnimationFrame(frame.current);frame.current=0;
+      const owner=controls(),result=commit ? owner?.fromPointer(current.x) : null;
+      setDragging(false);
+      if(commit && result && Math.abs(result.left-current.left)>.5)owner.commit(result.ratio);else owner?.cancel();
+      if(ref.current?.hasPointerCapture?.(current.id))ref.current.releasePointerCapture(current.id);
+    };
+    const handlers=useRef(null);handlers.current={finish};
+    useEffect(()=>{
+      const end=()=>handlers.current.finish(),cancel=()=>handlers.current.finish(false);
+      window.addEventListener('pointerup',end);window.addEventListener('blur',cancel);
+      return ()=>{window.removeEventListener('pointerup',end);window.removeEventListener('blur',cancel);cancelAnimationFrame(frame.current);setDragging(false);};
+    },[]);
+    const geometry=controls()?.geometry || splitGeometry(0,value);
+    const position=Math.round(geometry.ratio*10)/10;
+    return <div ref={ref} className="browser-splitter" role="separator" aria-label="Resize chat and browser" aria-orientation="vertical"
+      aria-valuemin={Math.round(geometry.minimum*10)/10} aria-valuemax={Math.round(geometry.maximum*10)/10} aria-valuenow={position}
+      aria-valuetext={Math.round(geometry.left)+' pixels for chat, '+Math.round(geometry.right)+' pixels for browser'} tabIndex="0"
+      onPointerDown={event=>{if(event.button!==0 || geometry.mode!=='split')return;event.preventDefault();drag.current={x:event.clientX,left:geometry.left,id:event.pointerId};event.currentTarget.setPointerCapture?.(event.pointerId);setDragging(true);}}
+      onPointerMove={event=>{if(drag.current){drag.current.x=event.clientX;if(!frame.current)frame.current=requestAnimationFrame(paint);}}}
+      onPointerUp={event=>{if(drag.current){drag.current.x=event.clientX;finish();}}}
+      onPointerCancel={()=>finish(false)}
+      onLostPointerCapture={()=>finish()}
+      onDoubleClick={()=>controls()?.commit(38)}
+      onKeyDown={event=>{
+        if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+        event.preventDefault();
+        const next=event.key==='Home'?38:event.key==='End'?geometry.maximum:Math.max(geometry.minimum,Math.min(geometry.maximum,position+(event.key==='ArrowLeft'?-2:2)));
+        controls()?.commit(next);
+      }}><span/></div>;
+  }
+  function SidebarResizeHandle({value=260,onChange}) {
+    const ref=useRef(null),drag=useRef(null),dragBody=useRef(null),frame=useRef(0),epoch=useRef(0);
     const settings=useRef({value,onChange});settings.current={value,onChange};
     const [position,setPosition]=useState(value);
-    useEffect(()=>setPosition(value),[value]);
-    useEffect(()=>{
-      const finish=()=>{
-        if(drag.current===null)return;
-        const x=drag.current;drag.current=null;
-        ref.current?.parentElement?.classList.remove('browser-resizing');
-        apply(x,true);
-      };
-      window.addEventListener('pointerup',finish);
-      window.addEventListener('blur',finish);
-      return ()=>{window.removeEventListener('pointerup',finish);window.removeEventListener('blur',finish);ref.current?.parentElement?.classList.remove('browser-resizing');};
-    },[]);
-    const apply=(x,commit=false)=>{
-      const body=ref.current?.parentElement;
-      if (!body) return;
-      const main=body.querySelector(':scope > .main'),panel=body.querySelector(':scope > .browser-panel');
-      if (!main || !panel) return;
-      const left=main.getBoundingClientRect().left,total=main.clientWidth+panel.clientWidth+ref.current.offsetWidth;
-      if (total<620) return;
-      const percent=Math.round(Math.max(280,Math.min(total-320,x-left))/total*100);
-      const next=Math.max(20,Math.min(75,percent));
-      body.style.setProperty('--browser-chat-share',next);setPosition(next);
-      if (commit) settings.current.onChange(next);
+    useLayoutEffect(()=>{if(drag.current)fromPointer(drag.current.x);else setPosition(value);},[value]);
+    const apply=width=>{
+      const body=ref.current?.closest('.body');if(!body)return;
+      const next=Math.round(Math.max(200,Math.min(400,width)));
+      body.style.setProperty('--workspace-sidebar-width',next+'px');setPosition(next);
       return next;
     };
-    return <div ref={ref} className="browser-splitter" role="separator" aria-label="Resize chat and browser" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="75" aria-valuenow={position} tabIndex="0"
-      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();drag.current=event.clientX;event.currentTarget.setPointerCapture?.(event.pointerId);event.currentTarget.parentElement.classList.add('browser-resizing');}}
-      onPointerMove={event=>{if(drag.current!==null){drag.current=event.clientX;apply(event.clientX);}}}
-      onPointerUp={event=>{if(drag.current!==null){apply(event.clientX,true);drag.current=null;event.currentTarget.parentElement.classList.remove('browser-resizing');event.currentTarget.releasePointerCapture?.(event.pointerId);}}}
-      onPointerCancel={()=>{drag.current=null;ref.current.parentElement.classList.remove('browser-resizing');ref.current.parentElement.style.setProperty('--browser-chat-share',value);setPosition(value);}}
-      onLostPointerCapture={()=>{if(drag.current!==null){const x=drag.current;drag.current=null;ref.current.parentElement.classList.remove('browser-resizing');apply(x,true);}}}
-      onDoubleClick={()=>onChange(38)}
-      onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?38:Math.max(20,Math.min(75,position+(event.key==='ArrowLeft'?-2:2)));setPosition(next);onChange(next);}}><span/></div>;
+    const fromPointer=x=>{
+      const body=ref.current?.closest('.body');
+      return body ? apply(x-body.getBoundingClientRect().left) : undefined;
+    };
+    const commit=width=>{
+      const next=apply(width),current=++epoch.current;
+      Promise.resolve().then(()=>settings.current.onChange(next)).then(receipt=>{
+        if(current===epoch.current && ref.current && (receipt===null || (receipt?.status && receipt.status!=='applied')))apply(settings.current.value);
+      }).catch(()=>{if(current===epoch.current && ref.current)apply(settings.current.value);});
+    };
+    const finish=(save=true)=>{
+      if(!drag.current)return;
+      const current=drag.current;drag.current=null;cancelAnimationFrame(frame.current);frame.current=0;
+      const width=save ? fromPointer(current.x) : null;
+      dragBody.current?.classList.remove('sidebar-resizing');dragBody.current=null;
+      if(save && Math.abs(width-current.width)>.5)commit(width);else apply(settings.current.value);
+      if(ref.current?.hasPointerCapture?.(current.id))ref.current.releasePointerCapture(current.id);
+    };
+    const handlers=useRef(null);handlers.current={finish};
+    useEffect(()=>{
+      const end=()=>handlers.current.finish(),cancel=()=>handlers.current.finish(false);
+      window.addEventListener('pointerup',end);window.addEventListener('blur',cancel);
+      return ()=>{
+        window.removeEventListener('pointerup',end);window.removeEventListener('blur',cancel);cancelAnimationFrame(frame.current);
+        if(dragBody.current){dragBody.current.classList.remove('sidebar-resizing');dragBody.current.style.setProperty('--workspace-sidebar-width',settings.current.value+'px');}
+        drag.current=null;dragBody.current=null;
+      };
+    },[]);
+    return <div ref={ref} className="sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="400" aria-valuenow={position} aria-valuetext={position+' pixels'} tabIndex="0"
+      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();drag.current={x:event.clientX,width:position,id:event.pointerId};event.currentTarget.setPointerCapture?.(event.pointerId);dragBody.current=event.currentTarget.closest('.body');dragBody.current.classList.add('sidebar-resizing');}}
+      onPointerMove={event=>{if(drag.current){drag.current.x=event.clientX;if(!frame.current)frame.current=requestAnimationFrame(()=>{frame.current=0;if(drag.current)fromPointer(drag.current.x);});}}}
+      onPointerUp={event=>{if(drag.current){drag.current.x=event.clientX;finish();}}}
+      onPointerCancel={()=>finish(false)} onLostPointerCapture={()=>finish()} onDoubleClick={()=>commit(260)}
+      onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();commit(event.key==='Home'?260:event.key==='End'?400:position+(event.key==='ArrowLeft'?-16:16));}}><span/></div>;
   }
   const assets = 'assets/browser-home/';
-  const Icon = ({name, size=16}) => <span className="browser-glyph" aria-hidden="true" style={{width:size, height:size, maskImage:`url("${assets}icons/${name}.svg")`, WebkitMaskImage:`url("${assets}icons/${name}.svg")`}}/>;
+  const browserIcons={"close": "X", "plus": "Plus", "pause": "Pause", "restore": "SidebarRight", "expand": "Expand", "more": "DotsHorizontal", "back": "ArrowLeft", "forward": "ArrowRight", "reload": "ArrowRotateCw", "home": "Home", "download": "Download", "search": "Search", "chevron": "ChevronDown", "check": "Check", "settings": "SettingsCog", "globe": "Globe"};
+  const Icon = ({name,size=16}) => browserIcons[name]?<window.VellumUI.AppIcon name={browserIcons[name]} size={size}/>:<span className="browser-glyph" aria-hidden="true" style={{width:size,height:size,maskImage:`url("${assets}icons/${name}.svg")`,WebkitMaskImage:`url("${assets}icons/${name}.svg")`}}/>;
   const BrandIcon = ({engine, size=20}) => engine.mask ? <span className={'browser-brand-icon brand-' + engine.id} aria-hidden="true" style={{width:size, height:size, maskImage:`url("${assets}${engine.icon}")`, WebkitMaskImage:`url("${assets}${engine.icon}")`}}/> : <img className="browser-brand-icon" src={assets + engine.icon} width={size} height={size} alt=""/>;
   const fallbackEngines = [
     {id:'google', name:'Google', wallpaper:'google.png', icon:'google.ico'},
@@ -215,7 +354,7 @@
     </section>;
   }
 
-  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false, overlayVisible=false}) {
+  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false, overlayVisible=false, hidden=false, layoutMode='split', onLayoutModeChange, controllerRef, autoFocus=true}) {
     const api = window.VellumApi.browser;
     const native = state.render_transport === 'native';
     const nativeBridge = window.VellumDesktop?.browser;
@@ -235,7 +374,7 @@
     const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
     const selectedAddressItem = useRef(null);
     const [downloadsOpen, setDownloadsOpen] = useState(false);
-    const [expanded, setExpanded] = useState(false);
+    const expanded=layoutMode==='full';
     const [moreOpen, setMoreOpen] = useState(false);
     const screenRef = useRef(null);
     const addressRef = useRef(null);
@@ -335,7 +474,7 @@
       if (!editingAddress.current) setAddress(displayAddress(active?.url));
     }, [active?.url, active?.id, preferences.show_full_url]);
     useEffect(() => {
-      if (home || native) { setFrame(null); setViewError(''); return; }
+      if (home || native || suspended) { setFrame(null); setViewError(''); return; }
       let cancelled = false, timer, reconnect, stopStream, streaming = false, lastStreamFrame = 0;
       const display = next => {
         if (cancelled || next.tab_id !== current.current.state.active_tab_id) return;
@@ -375,42 +514,72 @@
       refresh();
       document.addEventListener('visibilitychange', visibility);
       return () => { cancelled = true; clearTimeout(timer); clearTimeout(reconnect); stopStream?.(); document.removeEventListener('visibilitychange', visibility); };
-    }, [state.session_id, state.running, state.active_tab_id, home, native]);
+    }, [state.session_id, state.running, state.active_tab_id, home, native, suspended]);
 
+    const nativeMountQueue=useRef(Promise.resolve());
     useEffect(() => {
       if (!native || !nativeBridge || !screenRef.current) return;
-      let cancelled=false,revision=0;
-      const update=async()=>{
-        const currentRevision=++revision;
-        const resizing=screenRef.current?.closest('.browser-resizing');
-        const visible=state.running && !home && !document.hidden && !suspended && !overlayVisible && !resizing && !moreOpen && !downloadsOpen && !(addressOpen && suggestions.length);
+      let cancelled=false,frame=0,inFlight=false,dirty=false,lastMounted='';
+      const body=screenRef.current.closest('.body'),region=screenRef.current.closest('.workspace-split'),panel=screenRef.current.closest('.browser-panel');
+      const sidebar=body?.querySelector(':scope > .main-sidebar-slot');
+      const mountNative=request=>{
+        const result=nativeMountQueue.current.catch(()=>{}).then(()=>cancelled || !screenRef.current?.isConnected ? undefined : nativeBridge.mount(request));
+        nativeMountQueue.current=result;
+        return result;
+      };
+      const update=()=>{
+        dirty=true;
+        if(!cancelled && !inFlight && !frame)frame=requestAnimationFrame(flush);
+      };
+      const flush=async()=>{
+        frame=0;if(cancelled || !dirty)return;
+        if(!screenRef.current?.isConnected)return;
+        dirty=false;inFlight=true;
         const rect=screenRef.current.getBoundingClientRect();
+        const navigation=sidebar?.querySelector('.sidebar'),slot=sidebar?.getBoundingClientRect();
+        const navigationOverlay=sidebar?.dataset.state==='open' && slot?.width<1 && navigation && rect.x<slot.x+navigation.offsetWidth;
+        // Resizing is a bounds change, not a visibility change. Keep the native
+        // WebContentsView mounted; transient menus still use the existing still.
+        const composerOverlay=[...document.querySelectorAll('[data-composer-popup]')].some(node=>{
+          const popup=node.getBoundingClientRect();
+          return popup.width>0 && popup.height>0 && popup.left<rect.right && popup.right>rect.left && popup.top<rect.bottom && popup.bottom>rect.top;
+        });
+        const visible=Boolean(state.running && !home && !document.hidden && !suspended && !overlayVisible && !navigationOverlay && !composerOverlay && !moreOpen && !downloadsOpen && !(addressOpen && suggestions.length) && rect.width>0 && rect.height>0);
+        const bounds={x:rect.x,y:rect.y,width:rect.width,height:rect.height};
+        const identity=JSON.stringify({visible,target_id:state.native_target_id,...(visible?bounds:{})});
         try {
+          if(identity===lastMounted)return;
           if (!visible && !home && !suspended && !document.hidden) {
-            const result=await nativeBridge.mount({prepare_only:true,target_id:state.native_target_id});
-            if(cancelled || currentRevision!==revision)return;
+            const result=await mountNative({prepare_only:true,target_id:state.native_target_id});
+            if(cancelled)return;
             if(result?.still) {
               const image=new Image();image.src=result.still;
               await image.decode?.().catch(()=>{});
-              if(cancelled || currentRevision!==revision)return;
+              if(cancelled)return;
               setNativeStill(result.still);
               await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
             }
           }
-          if(cancelled || currentRevision!==revision)return;
-          await nativeBridge.mount({visible,target_id:state.native_target_id,bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height}});
+          if(cancelled)return;
+          await mountNative({visible,target_id:state.native_target_id,bounds});
+          lastMounted=identity;
           if (!cancelled && visible) setNativeStill('');
         } catch(failure) {if(!cancelled)setViewError(failure.message);}
+        finally {inFlight=false;if(dirty && !cancelled)update();}
       };
       const observer=typeof ResizeObserver==='undefined' ? null : new ResizeObserver(update);
       observer?.observe(screenRef.current);
-      const body=screenRef.current.closest('.body');
+      if(sidebar)observer?.observe(sidebar);
       const layoutObserver=typeof MutationObserver==='undefined' ? null : new MutationObserver(update);
       if(body)layoutObserver?.observe(body,{attributes:true,attributeFilter:['class']});
+      if(region)layoutObserver?.observe(region,{attributes:true,attributeFilter:['class','style','data-split-mode']});
+      if(panel)layoutObserver?.observe(panel,{attributes:true,attributeFilter:['class']});
+      if(sidebar)layoutObserver?.observe(sidebar,{attributes:true,attributeFilter:['data-state','data-pinned','data-peeking']});
       window.addEventListener('resize',update);
+      window.addEventListener('vellum:composer-popup',update);
       document.addEventListener('visibilitychange',update);
       update();
-      return ()=>{cancelled=true;observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);document.removeEventListener('visibilitychange',update);};
+      return ()=>{cancelled=true;cancelAnimationFrame(frame);observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);window.removeEventListener('vellum:composer-popup',update);document.removeEventListener('visibilitychange',update);};
     }, [native,state.running,state.native_target_id,home,expanded,suspended,overlayVisible,moreOpen,downloadsOpen,addressOpen,suggestions.length]);
     useEffect(()=>()=>{if(native)nativeBridge?.mount({visible:false}).catch(()=>{});},[native,nativeBridge]);
 
@@ -505,11 +674,16 @@
       return queue.current;
     };
     useEffect(() => {
-      if (!started.current && state.available) {
+      if (autoFocus && !suspended && !started.current && state.available) {
         started.current = true;
         if (home) focusAddress(true);
       }
-    }, [state.available]);
+    }, [state.available,autoFocus,suspended]);
+    useLayoutEffect(()=>{
+      if(!controllerRef)return;
+      controllerRef.current={command,focusAddress};
+      return()=>{controllerRef.current=null;};
+    });
     const sendHover = () => {
       hoverTimer.current = null;
       const pending = hoverPending.current;
@@ -603,7 +777,7 @@
         command('press', {key:[...modifiers, event.key === ' ' ? 'Space' : event.key].join('+')});
       }
     };
-    return <aside className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel"
+    return <aside hidden={hidden} inert={hidden?'':undefined} className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel"
       onKeyDownCapture={shortcut} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDownloadsOpen(false); setMoreOpen(false); } }}>
       <header className="browser-heading">
         <span className="browser-brand" title={native ? 'Vellum embedded Chromium browser' : 'Dedicated Brave session on this device'}>{native ? <Icon name="globe" size={20}/> : <BrandIcon engine={engines[1]} size={20}/>}</span>
@@ -621,9 +795,9 @@
             <button className="browser-button" title={state.control === 'agent' ? 'Pause agent' : 'Resume agent'} onClick={() => command(state.control === 'agent' ? 'pause' : 'resume')} disabled={busy}>{state.control === 'agent' ? <Icon name="pause"/> : 'Resume'}</button>
             {state.control !== 'user' && <button className="browser-button secondary" onClick={() => command('take_over')} disabled={busy}>Take over</button>}
           </> : null}
-          <button className="browser-icon" title={expanded ? 'Restore split view' : 'Expand browser'} aria-pressed={expanded} onClick={() => setExpanded(!expanded)}><Icon name={expanded ? 'restore' : 'expand'}/></button>
+          <button className="browser-icon" title={expanded ? 'Restore split view' : 'Expand browser'} aria-pressed={expanded} onClick={() => onLayoutModeChange?.(expanded?'split':'full')}><Icon name={expanded ? 'restore' : 'expand'}/></button>
           <button className="browser-icon" title="Browser menu" aria-expanded={moreOpen} onClick={() => { setMoreOpen(!moreOpen); setDownloadsOpen(false); }}><Icon name="more"/></button>
-          <button className="browser-icon" title="Close browser" aria-label="Close browser panel" onClick={closeWindow}><Icon name="close"/></button>
+          <button className="browser-icon" title="Hide tabs" aria-label="Hide browser tabs" onClick={onHide}><Icon name="close"/></button>
         </div>
       </header>
       <>
@@ -681,6 +855,8 @@
   }
   window.VellumUI = window.VellumUI || {};
   window.VellumUI.BrowserSplitter = BrowserSplitter;
+  window.VellumUI.BrowserSplitView = BrowserSplitView;
+  window.VellumUI.SidebarResizeHandle = SidebarResizeHandle;
   window.VellumUI.BrowserCursorGraphic = BrowserCursorGraphic;
   window.VellumUI.browserPointerLayout = pointerLayout;
   window.VellumUI.BrowserPanel = BrowserPanel;

@@ -88,6 +88,12 @@ function serveDesignUploads() {
 export default defineConfig({
   cacheDir: resolve(here, '.vite'),
   resolve: {alias: {
+    'prosemirror-model': resolve(here, 'node_modules/prosemirror-model'),
+    'prosemirror-state': resolve(here, 'node_modules/prosemirror-state'),
+    'prosemirror-view': resolve(here, 'node_modules/prosemirror-view'),
+    'prosemirror-keymap': resolve(here, 'node_modules/prosemirror-keymap'),
+    'prosemirror-commands': resolve(here, 'node_modules/prosemirror-commands'),
+    'prosemirror-history': resolve(here, 'node_modules/prosemirror-history'),
     'three/examples': resolve(here, 'node_modules/three/examples'),
     three: resolve(here, 'node_modules/three/build/three.module.js'),
     clsx: resolve(here, 'node_modules/clsx'),

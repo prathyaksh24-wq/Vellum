@@ -11,6 +11,7 @@ test('profile cutover preserves UI storage and the original profile, without cop
   const store = 'Partitions/vellum-workspace/Local Storage';
   fs.mkdirSync(path.join(previous,store),{recursive:true});
   fs.writeFileSync(path.join(previous,store,'fixture'),'saved UI preference');
+  fs.writeFileSync(path.join(previous,'workspace-permissions.json'),'{"microphone":true}');
   fs.writeFileSync(path.join(previous,'Local State'),'old runtime state');
   fs.mkdirSync(path.join(previous,'Cache'));
   let selected;
@@ -18,6 +19,7 @@ test('profile cutover preserves UI storage and the original profile, without cop
   configureWorkspaceProfile(app,{directory});
   assert.equal(selected,directory);
   assert.equal(fs.readFileSync(path.join(directory,store,'fixture'),'utf8'),'saved UI preference');
+  assert.equal(fs.readFileSync(path.join(directory,'workspace-permissions.json'),'utf8'),'{"microphone":true}');
   assert.equal(fs.readFileSync(path.join(previous,store,'fixture'),'utf8'),'saved UI preference');
   assert.equal(fs.existsSync(path.join(directory,'Local State')),false);
   assert.equal(fs.existsSync(path.join(directory,'Cache')),false);

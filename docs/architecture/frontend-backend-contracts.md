@@ -133,3 +133,55 @@ transport and never submits a chat turn. The voice adapter owns discovery and
 WAV transport; the composer and Settings → Voice → Dictation use it. Persisted
 preferences use dictation.settings.update; audio/text deletion uses confirmed
 dictation.history.delete. See docs/voice.md for local retention and setup.
+
+
+### Measured workspace panes and sidebar sizing
+
+The existing Workspace Layout surface contract adds optional integer
+`sidebar.properties.width` (200–400 CSS pixels), configured through
+`ui.surface.configure`. Absent or invalid frontend snapshots render the 260px
+default; the backend rejects invalid writes. Browser visibility does not change
+that width. `right-panel.properties.chat_ratio` remains the persisted split
+preference. `BrowserSplitView` measures the region after navigation, derives
+bounded transient pixel geometry and projects split/drawer mode without writing
+responsive constraints back as preferences. Drag gestures commit once; failed
+receipts roll back the transient preview. Native browser bounds requests are
+coalesced and serialized across effect restarts, retaining the existing bridge.
+
+
+### Structured composer references
+
+`ConversationAttachment` adds optional `reference` metadata: a typed reference
+kind, bounded ID/label and optional HTTP(S) URL. URL credentials are rejected;
+known credential query keys and fragments are removed server-side. The composer
+inserts an atomic reference and sends it only through the existing attachment
+list when the user sends the message. Selecting a reference neither fetches its
+contents nor runs an integration or skill. Prepared library files retain their
+original payload/disclosure flags. Other references carry identity metadata only.
+The API converts that validated metadata to an explicitly untrusted local text
+attachment envelope, using the existing DisclosureBroker or on-device adapter.
+No new endpoint, permission grant, catalog owner or durable draft store is added.
+
+
+The existing plugin catalog also publishes typed `relationships` and `provenance`
+subrecords from PluginRegistry. Components name their app/MCP/skill identity and
+owner, with separate enabled/configured/connected states. Marketplace and source
+identifiers are declared provenance, not authorization or trust. The existing
+settings tabs and composer providers project these same records. Composer
+references add `plugin` and `mcp` kinds plus bounded `owner_plugin_id` and
+`component_id`, preserving a scoped child identity through the existing attachment
+path. These fields grant no access and trigger no connector execution.
+
+
+### Removal of standalone coding mode
+
+Vellum has one main chat/workspace interface. The standalone coding page, its
+`/api/coding/*` router, session engine, Codex/Claude adapters and session-bound
+PR actions have been removed. Their App Action IDs are absent from the catalog;
+old-client dispatch returns `unavailable`. No coding launch receipt handler is
+loaded by the main shell. Coding requests follow the ordinary main-chat path.
+
+The main GitHub connector and terminal retain their existing owners and
+permissions. Existing coding-session databases and user worktrees remain on disk
+and are not opened or migrated. Finishing the current Vellum workspace takes
+priority; selecting and integrating a future coding harness is separate work.

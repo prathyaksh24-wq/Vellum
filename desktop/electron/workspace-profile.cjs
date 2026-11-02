@@ -4,7 +4,7 @@ const path = require('node:path');
 // UI data can be retained across the stock -> protected-audio runtime cutover.
 // Runtime encryption/component state and website cookies are intentionally not
 // transplanted between Chromium profiles. The original profile remains intact.
-const retainedPaths = ['Local Storage','IndexedDB','Session Storage','Preferences',
+const retainedPaths = ['Local Storage','IndexedDB','Session Storage','Preferences','workspace-permissions.json',
   ...['Local Storage','IndexedDB','Session Storage','Preferences'].map(name => path.join('Partitions','vellum-workspace',name))];
 
 function configureWorkspaceProfile(app, {directory, platform = process.platform} = {}) {

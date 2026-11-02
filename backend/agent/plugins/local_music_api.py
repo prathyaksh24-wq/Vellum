@@ -25,7 +25,7 @@ def trusted(request: Request):
     origin = request.headers.get('origin')
     if origin:
         parsed = urlsplit(origin)
-        if parsed.scheme not in {'http','https'} or parsed.hostname not in {'127.0.0.1','localhost','::1'} or parsed.port not in {5173,8000} or parsed.username or parsed.password:
+        if parsed.scheme not in {'http','https'} or parsed.hostname not in {'127.0.0.1','localhost','::1'} or parsed.port not in {5173,5184,8000} or parsed.username or parsed.password:
             raise HTTPException(403,detail='Local music is available only to the Vellum workspace.')
     if request.method != 'GET' and request.headers.get('X-Vellum-Music') != '1':
         raise HTTPException(403,detail='Use the Vellum music controls.')

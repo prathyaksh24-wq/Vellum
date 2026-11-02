@@ -395,3 +395,21 @@ def test_unknown_action_returns_an_unavailable_receipt() -> None:
     assert receipt.status == "unavailable"
     assert receipt.error_code == "ACTION_UNAVAILABLE"
     assert receipt.authorization.decision == "denied"
+
+
+def test_sidebar_width_is_a_bounded_workspace_layout_property() -> None:
+    subject = runtime()
+    for width in (200, 260, 350, 400):
+        receipt = subject.dispatch(
+            AppActionRequest(action_id=SURFACE_ACTION_ID, arguments={"reference": "sidebar", "properties": {"width": width}}),
+            layout_context(source="ui"),
+        )
+        assert receipt.status == "applied"
+        assert receipt.result["workspace_layout_patch"]["surfaces"]["sidebar"]["properties"]["width"] == width
+    for width in (199, 401, "300"):
+        receipt = subject.dispatch(
+            AppActionRequest(action_id=SURFACE_ACTION_ID, arguments={"reference": "sidebar", "properties": {"width": width}}),
+            layout_context(source="ui"),
+        )
+        assert receipt.status == "failed"
+        assert "workspace_layout_patch" not in receipt.result
