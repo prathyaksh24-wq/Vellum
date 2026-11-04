@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Parse and serialize desktop build HTML when removing runtime compilers and extracting JSX, preventing malformed-tag bypasses and script recreation. Keep smoke-run profile paths and raw reports out of console output.
+
 - Restore the shared icon renderer and licensed sprite required by the Electron browser and Plugins UI, including production asset copying. Align composer contract checks with the shared ProseMirror picker and update Electron to 44.10.1 for the compromised-certificate mitigation.
 
 - Removed the legacy standalone Coding mode, including its workspace pages, session API/runtime, provider adapters, session-bound PR actions and SDK dependency. Vellum uses its main chat/workspace interface; existing user data and worktrees remain on disk. Future coding harness integration is separate work.
