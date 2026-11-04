@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
+import {loadPublicIcons} from './public-icons-fixture.js';
 
 const require=createRequire(import.meta.url),base='../design/Velllum/uploads/components/';
 const original=globalThis.Uint8Array;
@@ -18,7 +19,7 @@ const click=async node=>{expect(node).toBeTruthy();await act(async()=>node.click
 const button=text=>[...host.querySelectorAll('button')].find(n=>n.textContent===text);
 const fill=async(node,value)=>{await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(node,value);node.dispatchEvent(new Event('input',{bubbles:true}));});};
 async function render(extra={}){function Owner(){const [apps,setApps]=React.useState(items);return React.createElement(window.VellumUI.PluginWorkspace,{apps,mode:'manage',onAdd,onConfirmAdd:onConfirm,onCancelAdd:vi.fn(async()=>({status:'cancelled'})),onSkillAction:vi.fn(),onRetry:vi.fn(),...extra,onPluginState:async(id,enabled)=>{const receipt=await onState(id,enabled);if(receipt.status==='applied')setApps(old=>old.map(p=>p.id===id?{...p,...receipt.result.plugin}:p));return receipt;}});}await act(async()=>root.render(React.createElement(Owner)));}
-beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;window.VellumUI={};Function(readFileSync(base+'plugin-design-assets.js','utf8'))();window.VellumApi={plugins:{skillsCatalog:vi.fn(async()=>({items:[],next_cursor:null})),skillDetail:vi.fn(async()=>({name:'real-skill',description:'Actual description',skill_md:'# Actual source',read_only:true}))}};Function('React',compiled)(React);host=document.createElement('div');document.body.append(host);root=createRoot(host);items=fixture();onState=vi.fn(async(id,enabled)=>({status:'applied',result:{plugin:{id,enabled}}}));onAdd=vi.fn(async()=>({status:'confirmation_required',message:'Review this change',confirmation:{token:'fixture'}}));onConfirm=vi.fn(async()=>({status:'applied'}));});
+beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;window.VellumUI={};loadPublicIcons(React);Function(readFileSync(base+'plugin-design-assets.js','utf8'))();window.VellumApi={plugins:{skillsCatalog:vi.fn(async()=>({items:[],next_cursor:null})),skillDetail:vi.fn(async()=>({name:'real-skill',description:'Actual description',skill_md:'# Actual source',read_only:true}))}};Function('React',compiled)(React);host=document.createElement('div');document.body.append(host);root=createRoot(host);items=fixture();onState=vi.fn(async(id,enabled)=>({status:'applied',result:{plugin:{id,enabled}}}));onAdd=vi.fn(async()=>({status:'confirmation_required',message:'Review this change',confirmation:{token:'fixture'}}));onConfirm=vi.fn(async()=>({status:'applied'}));});
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();});
 
 test('settings projects installed plugins and protects required controls',async()=>{await render();expect(host.querySelector('[aria-label="Enable Linear"]')).toBeTruthy();expect(host.querySelector('[aria-label="Enable Demo"]')).toBeNull();expect(host.querySelector('[aria-label="Enable Core"]').disabled).toBe(true);expect(host.textContent).not.toContain('pr@example.com');});

@@ -24,6 +24,8 @@ class PortablePluginManifest:
     protected: bool = False
     default_enabled: bool = True
     path: Path = Path()
+    relationships: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -186,6 +188,8 @@ def _read_manifest(path: Path) -> PortablePluginManifest:
         protected=_as_bool(data.get("protected")),
         default_enabled=_as_bool(data.get("default_enabled", True)),
         path=path.parent,
+        relationships=dict(data["relationships"]) if isinstance(data.get("relationships"), dict) else {},
+        provenance=dict(data["provenance"]) if isinstance(data.get("provenance"), dict) else {},
     )
 
 

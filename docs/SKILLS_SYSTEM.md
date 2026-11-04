@@ -83,3 +83,30 @@ runtime as well.
 - Hub install, update, and uninstall use the common pending approval queue.
 - `curator.prune_builtins` is false.
 - SkillsMP is a Vellum-specific adapter with dedicated quota and adversarial controls.
+
+
+## Composer and settings classification
+
+The plugin catalog adds typed `relationships` and `provenance` projections.
+Relationships identify the package, canonical app, other app IDs, remote plugin
+identity and declared app/MCP/skill components. Each child retains its owning
+plugin ID. A portable manifest's declared `connector` type also registers the
+integration itself as an app; a standalone MCP configuration remains a server,
+not an installable package. No component is classified by its display name.
+
+Installation, enablement, configuration and connection remain separate. Unknown
+connection state stays unknown. Relationship projection never resolves a
+credential or starts a server. Provenance records the known source and optional
+declared marketplace/source identifiers; these declarations do not establish
+publisher trust. Portable manifests and read-only external-source adapters retain
+these fields, and declarative archive import preserves only the bounded identity
+fields through its existing validation and publication path.
+
+The existing Plugins settings tabs use the same component projection as composer
+providers. There is no new metadata panel. `/` groups registered operations and
+prepared workflows; `@` browses context categories or searches available sources.
+Canonical app relationships suppress equivalent package/server entries in the
+default context search, while explicit category browsing can still select those
+identities. Owned skills retain ownership and are not duplicated by the standalone
+skill catalog. A marketplace is a discovery source, not a composer context kind.
+No Sites category is added.

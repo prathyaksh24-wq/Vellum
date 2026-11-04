@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from agent.config import REPO_ROOT, get_settings
+from agent.config import REPO_ROOT, SOURCE_ROOT, get_settings
 from agent.knowledge.x_bookmark_categorizer import categorize_bookmarks
 from agent.tools.capabilities.agent_reach_x_provider import (
     AgentReachError,
@@ -32,7 +32,7 @@ MediaUploadBackend = Callable[[str], dict[str, Any]]
 
 
 def _load_script(name: str):
-    path = REPO_ROOT / "scripts" / f"{name}.py"
+    path = SOURCE_ROOT / "scripts" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load script {path}")

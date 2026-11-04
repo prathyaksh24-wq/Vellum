@@ -24,7 +24,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from agent.config import get_settings
+from agent.config import REPO_ROOT, SOURCE_ROOT, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ LEAGUES = ENABLED_LEAGUES
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return SOURCE_ROOT
 
 
 def _import_snapshots_module():

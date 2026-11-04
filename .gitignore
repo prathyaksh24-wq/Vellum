@@ -84,3 +84,7 @@ Vault/
 
 # Local audio library, imports and derived artwork
 data/music/
+
+# Generated standalone backend payloads
+desktop/resources/backend-runtime/
+desktop/resources/backend-staging-*/

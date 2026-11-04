@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 932,
-      "sha256": "d19c12af343f2e229dd377a6389b7347bc7e7c888566bb6144e0b0f66000b89d"
+      "count": 936,
+      "sha256": "4499e92cb898846647176479a1aaaf5429ef08eb22c7e8b05849efd0240739ed"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -30,8 +30,8 @@
       "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
-      "count": 60,
-      "sha256": "f506db087782b1cf82acc5abb6823f8949ee47aec1022ac8eaeb492e5e30e337"
+      "count": 68,
+      "sha256": "1ea92ea00c35a08aeb7bf9d7b7dc77d9dd8f39cfe97e6f263f02168ccb7b7d49"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
@@ -247,7 +247,23 @@
     },
     "design/Velllum/uploads/components/morphic-ui.js": {
       "count": 6,
-      "sha256": "5dd15da467c9c1ce8612317638901da9310ee087620856e0c3aec848c3d4a6b1"
+      "sha256": "f362b8a7fbccbcd5bb0a3422e50bc88ca21b4961b8fbeeea270b03b5a7307f92"
+    },
+    "design/Velllum/uploads/components/desktop-chrome.js": {
+      "count": 5,
+      "sha256": "36f7ead259459a726edffc3ce47e486d69a0c43a92836682499515ed65032611"
+    },
+    "design/Velllum/uploads/composer-entry.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/composer-editor.js": {
+      "count": 19,
+      "sha256": "25fa555bbc1381df82017a0f628d174710f6b25238142be92202285cc717a927"
+    },
+    "design/Velllum/uploads/components/composer-providers.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
   "covered": [
@@ -2357,6 +2373,10 @@
     {
       "scope": "Chat-scoped interface publication",
       "reason": "Reviewed against the matching Music PR base: General and Configuration forward canonical settings/model/credential actions; Archive and Analytics move their existing action callbacks into Settings; Skills routes to existing Plugins management. Main/Music/Plugins hover, focus, search, disclosure, backdrop, tooltip geometry and response text reveals are transient presentation. Provider/effort selection retains settings.default_model.set, model.select and reasoning.set. Supplied thinking orbs have no action handlers. No new mutation endpoint or confirmation bypass."
+    },
+    {
+      "scope": "ProseMirror composer draft editing, caret-token detection, suggestion ranking/scoping, keyboard and pointer selection, mention insertion, popup placement and focus",
+      "reason": "Transient conversational transport using the existing parent draft. Structured identities are sent only on the existing Send path as typed attachments through DisclosureBroker. No reference selection fetches content, executes a provider tool or grants permission. Slash choices delegate to the existing composer file picker, web mode and skills/plugins/projects/agent navigation handlers; saved operations retain their canonical App Actions. The memory toggle is removed from the message input; its existing setting is unchanged."
     }
   ],
   "deferred": [

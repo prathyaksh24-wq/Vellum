@@ -1,0 +1,35 @@
+/* Reference colours distinguish connector identities without adding chip boxes. */
+:root{--composer-mention-warm:#e7c38b;--composer-mention-violet:#aaa1ed;--composer-mention-blue:#91bfee;--composer-mention-green:#98c9ad;--composer-mention-rose:#e0a1b4}
+[data-theme="light"]{--composer-mention-warm:#765120;--composer-mention-violet:#6550a7;--composer-mention-blue:#265f96;--composer-mention-green:#2a6849;--composer-mention-rose:#9c455b}
+.composer-editor-host{min-width:0;width:100%;position:relative}
+.composer-editor-host .ProseMirror{width:100%;background:transparent;border:0;outline:none;color:var(--txt2);font:inherit;font-size:14px;line-height:1.5;min-height:24px;max-height:160px;padding:6px 2px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;caret-color:var(--txt2);scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.composer-editor-host .ProseMirror p{margin:0}
+.composer-reference{display:inline-flex;align-items:center;gap:4px;max-width:100%;vertical-align:baseline;padding:0;border:0;background:transparent;color:var(--composer-mention-warm);white-space:pre-wrap}
+.composer-reference[data-reference-brand="linear"],.composer-reference[data-reference-brand="slack"]{color:var(--composer-mention-violet)}
+.composer-reference[data-reference-brand="spotify"],.composer-reference[data-reference-brand="supabase"]{color:var(--composer-mention-green)}
+.composer-reference[data-reference-brand="gmail"],.composer-reference[data-reference-brand="youtube"]{color:var(--composer-mention-rose)}
+.composer-reference[data-reference-brand="google"],.composer-reference[data-reference-brand="googledrive"]{color:var(--composer-mention-blue)}
+.composer-reference[data-reference-brand="superdesign"]{color:var(--txt)}
+.composer-reference svg{flex:none}
+.composer-reference img{flex:none;object-fit:contain;border-radius:3px;vertical-align:middle}
+.composer-reference img[hidden]{display:none}
+.composer-reference.ProseMirror-selectednode{background:var(--active);outline:none}
+.composer-suggestions{position:fixed;z-index:20000;box-sizing:border-box;--composer-menu-radius:20px;--composer-menu-inset:4px;border:1px solid var(--line2);border-radius:var(--composer-menu-radius);background:var(--menu-solid,var(--modal));color:var(--txt);padding:var(--composer-menu-inset);box-shadow:0 12px 32px rgba(0,0,0,.24);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line2) transparent;font:13px/1.4 var(--font-ui,system-ui,sans-serif)}
+.composer-suggestion{display:flex;align-items:center;gap:10px;min-height:40px;padding:8px 11px;border-radius:calc(var(--composer-menu-radius) - var(--composer-menu-inset));cursor:default;min-width:0}
+.composer-suggestion[aria-selected=true]{background:var(--active);color:var(--txt2)}
+.composer-suggestion-copy{flex:1;min-width:0}
+.composer-suggestion-copy strong{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.composer-suggestion-copy small{display:block;color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.composer-suggestion-kind{color:var(--dim);font-size:11px;flex-shrink:0}
+.composer-suggestion-status{padding:12px 10px;color:var(--dim);font-size:12px}
+
+.composer-suggestions{--composer-row-bg:var(--active)}
+.composer-suggestion-rows .composer-suggestion[aria-selected=true]{background:transparent}
+.composer-suggestions .composer-suggestion-rows>.hlb{border-radius:calc(var(--composer-menu-radius) - var(--composer-menu-inset))}
+
+.composer-suggestion-heading{padding:10px 12px 5px;color:var(--dim);font-size:11px;font-weight:600;line-height:1.4;user-select:none}
+.composer-suggestion-heading:first-child{padding-top:7px}
+.composer-suggestion-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;flex:0 0 20px;color:var(--txt)}
+.composer-suggestion-icon img{object-fit:contain;border-radius:3px}
+.composer-suggestion-kind{max-width:25%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@supports(corner-shape:superellipse(1.5)){.composer-suggestions,.composer-suggestion,.composer-suggestion-rows>.hlb{corner-shape:superellipse(1.5)}}

@@ -62,9 +62,11 @@ def load_soul() -> str:
         if _SOUL_CACHE is None:
             text = ""
             try:
-                from agent.config import REPO_ROOT
+                from agent.config import REPO_ROOT, SOURCE_ROOT
 
                 path = REPO_ROOT / "docs" / "SOUL.md"
+                if not path.exists():
+                    path = SOURCE_ROOT / "docs" / "SOUL.md"
                 if path.exists():
                     text = path.read_text(encoding="utf-8", errors="ignore")
             except Exception as exc:  # pragma: no cover - filesystem edge

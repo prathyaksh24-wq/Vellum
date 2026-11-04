@@ -4597,6 +4597,7 @@ class AppActionRuntime:
                 aliases=["sidebar", "left sidebar"],
                 default_presentation=SurfacePresentation(visible=True, location="left"),
                 supported_locations=["left"],
+                configurable_properties={"width": {"type": "integer", "minimum": 200, "maximum": 400}},
             ),
             UISurfaceDefinition(
                 reference="plugin-sidebar", owner="workspace-layout", title="Plugin sidebar",

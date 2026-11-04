@@ -13,11 +13,12 @@ import mimetypes
 import os
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zipfile import BadZipFile, ZipFile
 import xml.etree.ElementTree as ET
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agent.privacy.classifier import DataClass, classify
 
@@ -31,6 +32,40 @@ _TEXT_EXTENSIONS = {
     ".ts", ".tsx", ".css", ".sql", ".toml", ".ini", ".log", ".rst",
 }
 _IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+class ComposerReference(BaseModel):
+    """An explicitly selected identity, not fetched content or execution authority."""
+
+    kind: Literal["file", "page", "chat", "project", "browser_tab", "plugin", "app", "mcp", "skill", "agent"]
+    id: str = Field(min_length=1, max_length=512)
+    label: str = Field(min_length=1, max_length=256)
+    url: str = Field(default="", max_length=2048)
+    owner_plugin_id: str = Field(default="", max_length=512)
+    component_id: str = Field(default="", max_length=512)
+
+    @field_validator("id", "label")
+    @classmethod
+    def nonempty_identity(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Reference identity cannot be empty")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def safe_reference_url(cls, value: str) -> str:
+        if not value:
+            return ""
+        try:
+            parts = urlsplit(value)
+            if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password:
+                raise ValueError("Reference URL must be HTTP or HTTPS without credentials")
+            secret_keys = {"access_token", "refresh_token", "id_token", "code", "state", "token", "api_key", "key"}
+            query = urlencode([(key, item) for key, item in parse_qsl(parts.query, keep_blank_values=True) if key.casefold() not in secret_keys])
+            # Fragments are unnecessary for identity and can contain OAuth data.
+            return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+        except ValueError as error:
+            raise ValueError("Invalid reference URL") from error
 
 
 class ConversationAttachment(BaseModel):
@@ -50,6 +85,7 @@ class ConversationAttachment(BaseModel):
     egress_scope: str = ""
     privacy_class: str = ""
     metadata_stripped: bool = False
+    reference: ComposerReference | None = None
 
 
 class AttachmentImportError(ValueError):

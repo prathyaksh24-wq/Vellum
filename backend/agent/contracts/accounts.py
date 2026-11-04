@@ -48,7 +48,7 @@ class SignInRequest(BaseModel):
     @classmethod
     def local_vellum_page(cls, value: str) -> str:
         target = urlsplit(value)
-        origins = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (5173, 4242)}
+        origins = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (5173, 5184, 4242)}
         paths = {"/", "/design-uploads/Vellum Default Re-designed.html"}
         if (f"{target.scheme}://{target.netloc}" not in origins or unquote(target.path) not in paths
                 or target.fragment or target.query not in {"", "desktop=1"}):

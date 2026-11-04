@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {expect, test, vi} from 'vitest';
+import {loadPublicIcons} from './public-icons-fixture.js';
 
 test.each([
   ['google', 'https://www.google.com/'],
@@ -30,6 +31,7 @@ test.each([
 
 test('submitting a recognized website name opens that site without a search intermediary', async () => {
   vi.resetModules();
+  loadPublicIcons(React);
   window.VellumApi = {client:{request:vi.fn().mockResolvedValue({})},
     appActions:{dispatch:vi.fn().mockResolvedValue({status:'applied'})}};
   await import('../../design/Velllum/uploads/api/browser.js');

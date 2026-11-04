@@ -15,9 +15,10 @@ const timeout = setTimeout(() => { timedOut = true; child.kill(); }, 30000);
 child.on('error', () => { console.error('Electron smoke could not start.'); clearTimeout(timeout); process.exitCode = 1; });
 child.on('exit', (code, signal) => {
   clearTimeout(timeout);
-  const result = existsSync(env.VELLUM_SMOKE_RESULT) ? JSON.parse(readFileSync(env.VELLUM_SMOKE_RESULT, 'utf8')) : {};
+  let result = {};
+  try {if (existsSync(env.VELLUM_SMOKE_RESULT)) result = JSON.parse(readFileSync(env.VELLUM_SMOKE_RESULT, 'utf8')) || {};} catch {}
   if (timedOut || signal || code !== 0 || result.status !== 'passed') {
-    console.error('Electron smoke failed:', {code, signal, timedOut});
+    console.error('Electron smoke failed.');
     process.exitCode = 1;
-  } else console.log('Electron smoke passed:', result.checks.join(', '));
+  } else console.log('Electron smoke passed.');
 });

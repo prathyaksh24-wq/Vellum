@@ -29,9 +29,21 @@ test('the native bridge rejects other origins and other pages on the local serve
 });
 
 test('desktop commands cannot become an arbitrary IPC or process-execution interface', () => {
+  for(const command of ['workspace_ready','protected_audio_ready']){
+    assert.deepEqual(validateCommand(command,{}),{});
+    assert.throws(()=>validateCommand(command,{url:'https://example.com'}));
+  }
   assert.deepEqual(validateCommand('set_overlay', {enabled: true}), {enabled: true});
   validateCommand('open_conversation_window', {conversationId: 'chat'});
   for (const [command, args] of [['exec', {}], ['set_overlay', {enabled: 'yes'}],
     ['open_vellum_window', {url: 'file:///private'}], ['open_conversation_window', {conversationId: ''}],
     ['backend_health', []]]) assert.throws(() => validateCommand(command, args));
+});
+
+test('skill file actions accept registered identifiers rather than paths or commands',()=>{
+  assert.deepEqual(validateCommand('skill_file',{name:'my-skill',operation:'reveal'}),{name:'my-skill',operation:'reveal'});
+  for(const args of [{name:'../private',operation:'open'},{name:'skill',operation:'exec'},
+    {name:'skill',operation:'open',path:'C:/private.txt'},{name:'skill\ncommand',operation:'open'}]){
+    assert.throws(()=>validateCommand('skill_file',args));
+  }
 });

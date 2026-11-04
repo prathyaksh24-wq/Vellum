@@ -22,6 +22,7 @@ function copyStaticUiAssets() {
       cpSync(resolve(designUploadsRoot, 'assets/backgrounds'), resolve(here, 'ui-dist/assets/backgrounds'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/music'), resolve(here, 'ui-dist/assets/music'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/plugins'), resolve(here, 'ui-dist/assets/plugins'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/icons'), resolve(here, 'ui-dist/assets/icons'), { recursive: true });
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
@@ -88,6 +89,12 @@ function serveDesignUploads() {
 export default defineConfig({
   cacheDir: resolve(here, '.vite'),
   resolve: {alias: {
+    'prosemirror-model': resolve(here, 'node_modules/prosemirror-model'),
+    'prosemirror-state': resolve(here, 'node_modules/prosemirror-state'),
+    'prosemirror-view': resolve(here, 'node_modules/prosemirror-view'),
+    'prosemirror-keymap': resolve(here, 'node_modules/prosemirror-keymap'),
+    'prosemirror-commands': resolve(here, 'node_modules/prosemirror-commands'),
+    'prosemirror-history': resolve(here, 'node_modules/prosemirror-history'),
     'three/examples': resolve(here, 'node_modules/three/examples'),
     three: resolve(here, 'node_modules/three/build/three.module.js'),
     clsx: resolve(here, 'node_modules/clsx'),

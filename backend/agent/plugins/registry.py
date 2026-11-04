@@ -12,10 +12,12 @@ from typing import Any, Iterable
 from agent.plugins.portable import PortablePluginManifest, discover_portable_plugins
 from agent.plugins.sources import CodexPluginSource, LooseSkillBundleSource, PluginSourceRecord
 from agent.plugins.categories import plugin_category
+from agent.contracts.plugin_catalog import plugin_relationship_metadata
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGINS_ROOT = REPO_ROOT / "plugins"
+from agent.config import REPO_ROOT, SOURCE_ROOT
+
+PLUGINS_ROOT = SOURCE_ROOT / "plugins"
 PLUGIN_STATE_PATH = REPO_ROOT / "data" / "plugins" / "state.json"
 MATT_SKILL_NAMES = (
     "ask-matt",
@@ -237,7 +239,7 @@ class PluginRegistry:
         enabled = self.is_enabled(manifest.id)
         configured = bool(status.get("configured", True))
         runtime_state = str(status.get("status") or ("available" if configured else "not_configured"))
-        return {
+        result = {
             "id": manifest.id,
             "name": manifest.name,
             "type": manifest.type,
@@ -272,6 +274,8 @@ class PluginRegistry:
                 },
             },
         }
+        result.update(plugin_relationship_metadata(result, relationships=manifest.relationships, provenance=manifest.provenance))
+        return result
 
     def catalog(
         self,
@@ -342,6 +346,9 @@ class PluginRegistry:
                     "metadata": {"managed_by": "mcp_configuration"},
                 }
             )
+        for record in records:
+            if "relationships" not in record:
+                record.update(plugin_relationship_metadata(record))
         return sorted(
             records,
             key=lambda item: (str(item["category"]).casefold(), str(item["name"]).casefold()),
@@ -367,7 +374,7 @@ class PluginRegistry:
         skills: list[dict[str, Any]] = []
         for root in owned_skill_roots:
             skills.extend(self._skills(root, record.id))
-        return {
+        result = {
             "id": record.id,
             "name": record.name,
             "type": "bundle",
@@ -395,6 +402,8 @@ class PluginRegistry:
                 "read_only_source": True,
             },
         }
+        result.update(plugin_relationship_metadata(result, relationships=record.relationships, provenance=record.provenance))
+        return result
 
     def _skills(self, skill_root: Path, owner_plugin: str) -> list[dict[str, Any]]:
         if not skill_root.exists():

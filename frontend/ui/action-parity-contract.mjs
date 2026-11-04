@@ -20,6 +20,10 @@ function findRoot() {
 
 export const root = findRoot();
 export const MODULE_SOURCE_FILES = [
+  "design/Velllum/uploads/components/desktop-chrome.js",
+  "design/Velllum/uploads/composer-entry.js",
+  "design/Velllum/uploads/components/composer-editor.js",
+  "design/Velllum/uploads/components/composer-providers.js",
   "design/Velllum/uploads/books-entry.js",
   "design/Velllum/uploads/components/book-upload-entry.jsx",
   "design/Velllum/uploads/components/attachment-upload.tsx",
@@ -123,8 +127,16 @@ export function visualHandlers(path, content) {
   });
   const handlers = [];
   visit(parsed, null, (node, parent) => {
-    if (/(?:agent-response|streaming-text|morphic-ui)\.js$/.test(path) && node.type === 'ObjectProperty' && /^on[A-Z]/.test(node.key?.name || '')) {
+    if (path.endsWith('/desktop-chrome.js') && node.type === 'CallExpression' && node.callee?.property?.name === 'addEventListener' && ['click','keydown','mousedown'].includes(node.arguments[0]?.value)) {
+      handlers.push(`native-chrome|${node.arguments[0].value}|${source.slice(node.arguments[1].start,node.arguments[1].end).replace(/\s+/g,' ').trim()}`);
+      return;
+    }
+    if (/(?:agent-response|streaming-text|morphic-ui|composer-editor)\.js$/.test(path) && node.type === 'ObjectProperty' && /^on[A-Z]/.test(node.key?.name || '')) {
       handlers.push(`createElement|${node.key.name}|${source.slice(node.value.start,node.value.end).replace(/\s+/g,' ').trim()}`);
+      return;
+    }
+    if (path.endsWith('/composer-editor.js') && node.type === 'ObjectMethod' && ['handleKeyDown','handlePaste','focus','blur','compositionstart','compositionend'].includes(node.key?.name)) {
+      handlers.push(`editor|${node.key.name}|${source.slice(node.start,node.end).replace(/\s+/g,' ').trim()}`);
       return;
     }
     if (node.type !== "JSXAttribute" || !/^on[A-Z]/.test(node.name?.name || "")) return;
@@ -171,6 +183,9 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   // The module-backed upload has the same handler review requirement as the
   // legacy Babel components. Lock its integration into the production entry.
   const moduleLinks = [
+    ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/composer-entry.js"'],
+    ['design/Velllum/uploads/composer-entry.js', "from './components/composer-editor.js'"],
+    ['design/Velllum/uploads/composer-entry.js', "from './components/composer-providers.js'"],
     ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/books-entry.js"'],
     ['design/Velllum/uploads/books-entry.js', "import './components/book-upload-entry.jsx'"],
     ['design/Velllum/uploads/components/book-upload-entry.jsx', "import {AttachmentUpload} from './attachment-upload'"],

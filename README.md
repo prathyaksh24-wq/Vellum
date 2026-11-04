@@ -209,3 +209,5 @@ Vellum treats privacy as part of the runtime boundary:
 ## Contributing
 
 Keep changes small, testable, and aligned with the existing privacy and capability boundaries. When behavior changes, update the relevant documentation and add a `CHANGELOG.md` entry under `[Unreleased]`.
+
+Standalone Windows preparation bundles the existing Python backend and starts it from Electron after an explicit workspace selection. Its compiled UI uses port 5184; the development web UI stays on 5173. See [desktop setup](docs/desktop.md). Installation/updater acceptance remains deferred.

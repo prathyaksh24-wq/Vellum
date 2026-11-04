@@ -5,11 +5,11 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from agent.config import REPO_ROOT, get_settings
+from agent.config import REPO_ROOT, SOURCE_ROOT, get_settings
 from agent.plugins.portable import load_portable_plugin
 
 
-PLUGIN_DIR = REPO_ROOT / "plugins" / "connectors" / "discord"
+PLUGIN_DIR = SOURCE_ROOT / "plugins" / "connectors" / "discord"
 
 
 @lru_cache(maxsize=1)

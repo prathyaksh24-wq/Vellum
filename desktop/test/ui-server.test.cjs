@@ -8,6 +8,7 @@ const {serveUI} = require('../electron/ui-server.cjs');
 test('packaged UI serves the canonical entry without exposing adjacent files', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'vellum-static-'));
   await writeFile(path.join(root, 'Vellum Default Re-designed.html'), '<title>Vellum</title>');
+  await writeFile(path.join(root,'component.jsx'),'window.component = true;');
   const server = await serveUI(root, 0);
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
@@ -18,6 +19,7 @@ test('packaged UI serves the canonical entry without exposing adjacent files', a
   assert.equal(response.status, 200);
   assert.equal(await response.text(), '<title>Vellum</title>');
   assert.match(response.headers.get('content-type'), /text\/html/);
+  assert.match((await fetch(base+'/component.jsx')).headers.get('content-type'),/text\/javascript/);
   assert.equal((await fetch(base + '/%2e%2e%2foutside.txt')).status, 403);
   assert.equal((await fetch(base + '/missing')).status, 404);
   assert.equal((await fetch(base + '/', {method: 'POST'})).status, 405);
