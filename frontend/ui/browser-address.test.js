@@ -43,6 +43,7 @@ test('submitting a recognized website name opens that site without a search inte
       {loader:'jsx',jsxFactory:'React.createElement',jsxFragment:'React.Fragment'}).code);
   `, resolve('..', 'design/Velllum/uploads/components/browser-panel.jsx')],
     {encoding:'utf8',cwd:process.cwd()});
+  loadPublicIcons(React);
   Function('React', 'window', code)(React, window);
   window.VellumApi.browser.frame = vi.fn().mockResolvedValue({tab_id:'tab', width:1280, height:800, data_url:'data:image/png;base64,aQ=='});
   const container = document.createElement('div');

@@ -120,6 +120,7 @@ test('agent pointer is visible on its current tab and yields on takeover',async(
 });
 
 test('browser divider uses measured constraints, supports keys and restores the saved preference',async()=>{
+  loadPublicIcons(React);
   Function('React','window',compile())(React,window);
   const container=document.createElement('div');document.body.append(container);
   const root=createRoot(container),changed=vi.fn();globalThis.IS_REACT_ACT_ENVIRONMENT=true;
@@ -372,6 +373,7 @@ test('clicking the page takes ownership and retains the click; typing is batched
     return {status:'applied'};
   })};
   window.VellumApi = {browser:api};
+  loadPublicIcons(React);
   Function('React','window',compile())(React,window);
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
@@ -412,6 +414,7 @@ test('native home never streams frames or forwards typing, and switching engines
   const state = {...manualState(),preferences:{...api.defaultPreferences},tabs:[{id:'tab',active:true,title:'New tab',url:'about:blank'}]};
   const rootContainer = document.createElement('div'); document.body.append(rootContainer);
   const root = createRoot(rootContainer);
+  loadPublicIcons(React);
   Function('React','window',compile())(React,window);
   let layoutMode='split';
   const render = () => root.render(React.createElement(window.VellumUI.BrowserPanel,{state:{...state},layoutMode,

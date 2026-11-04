@@ -26,3 +26,6 @@
 .desktop-chrome-on .win>.settings-page>.set-nav{background:rgb(from var(--settings-bg,var(--bg,#171413)) r g b / 1)}
 .desktop-chrome-on .win>.settings-page>.set-body{background:transparent}
 .desktop-chrome-on .body.browser-active>.workspace-split>.main[data-main-sidebar=closed] .chat-head{padding-left:54px}
+
+.desktop-chrome-on .body>.workspace-content[data-toolbar=true]{margin:0;border:0;border-radius:0}
+.desktop-chrome-on .body>.workspace-content>.workspace-panels>.workspace-split>.main[data-variant=inset]{margin:0;border:0;border-radius:0}

@@ -6,6 +6,17 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+### Added
+- Pane-based browser workspace with a New tab tool chooser, shared split/full tabs,
+  file previews, independent side conversations, summary controls and embedded
+  native local terminals. Workspace references use typed layout actions; shell
+  sessions retain the existing dedicated terminal transport.
+
+### Fixed
+- Restore pointer input on workspace header controls, retain music controls while
+  browser panes are open, and animate pane transitions with reduced-motion support.
+
+
 - Parse and serialize desktop build HTML when removing runtime compilers and extracting JSX, preventing malformed-tag bypasses and script recreation. Keep smoke-run profile paths and raw reports out of console output.
 
 - Restore the shared icon renderer and licensed sprite required by the Electron browser and Plugins UI, including production asset copying. Align composer contract checks with the shared ProseMirror picker and update Electron to 44.10.1 for the compromised-certificate mitigation.

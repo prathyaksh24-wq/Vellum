@@ -31,18 +31,32 @@
     const right=mode==='split' ? available-left : Math.min(width,Math.max(SPLIT_BROWSER_MIN,width-48));
     return {mode,width,left,right,ratio,minimum,maximum};
   }
-  function BrowserSplitView({active=false,mode='split',value=38,onChange,onDismiss,children}) {
+  function BrowserSplitView({active=false,mode='split',value=38,onChange,onDismiss,onMotionChange,children}) {
     const root=useRef(null),preference=useRef(splitPreference(value));
     const settings=useRef({value,onChange});settings.current={value,onChange};
     const revision=useRef(0),settleFrame=useRef(0);
     const [geometry,setGeometry]=useState(()=>splitGeometry(0,value));
+    const [present,setPresent]=useState(active),[motion,setMotion]=useState(active?'open':'closed');
+    const motionCallback=useRef(onMotionChange);motionCallback.current=onMotionChange;
+    useLayoutEffect(()=>{
+      const reduced=window.matchMedia?.('(prefers-reduced-motion:reduce)').matches;
+      if(active){setPresent(true);setMotion(reduced?'open':'entering');}
+      else if(present)setMotion(reduced?'closed':'leaving');
+      if(reduced){setPresent(active);motionCallback.current?.(false);return;}
+      if(!active&&!present)return;
+      motionCallback.current?.(true);
+      const timer=setTimeout(()=>{setPresent(active);setMotion(active?'open':'closed');motionCallback.current?.(false);},active?240:170);
+      return()=>clearTimeout(timer);
+    },[active]);
+    const shown=active||present;
     const apply=(next=preference.current,source='input')=>{
       const node=root.current;if(!node)return;
       preference.current=splitPreference(next);
       const width=node.getBoundingClientRect().width;
       if(!width)return;
       const result=splitGeometry(width,preference.current);
-      node.dataset.splitMode=active ? (mode==='full'?'full':result.mode) : 'closed';
+      node.dataset.splitMode=shown ? (mode==='full'?'full':result.mode) : 'closed';
+      node.parentElement?.parentElement?.style.setProperty('--workspace-chat-width',result.left+'px');
       node.dataset.splitSizing=source;
       node.style.setProperty('--split-left-width',result.left+'px');
       node.style.setProperty('--split-right-width',result.right+'px');
@@ -79,7 +93,7 @@
     useLayoutEffect(()=>{
       preference.current=splitPreference(value);
       apply(preference.current,'container');
-    },[active,mode,value]);
+    },[active,present,mode,value]);
     useLayoutEffect(()=>{
       const node=root.current;if(!node)return;
       const measure=()=>controller.current.apply(preference.current,'container');
@@ -88,18 +102,18 @@
       if(!observer)window.addEventListener('resize',measure);
       return ()=>{observer?.disconnect();window.removeEventListener('resize',measure);cancelAnimationFrame(settleFrame.current);};
     },[]);
-    const panes=React.Children.toArray(children),drawer=active && mode!=='full' && geometry.mode==='drawer';
+    const panes=React.Children.toArray(children),drawer=shown && mode!=='full' && geometry.mode==='drawer';
     useLayoutEffect(()=>{
       const main=root.current?.querySelector(':scope > .main');
       if(main)main.inert=drawer;
       return ()=>{if(main)main.inert=false;};
     },[drawer]);
     return <SplitContext.Provider value={controller}>
-      <div ref={root} className={'workspace-split'+(active?' browser-layout':'')} data-split-mode={active?(mode==='full'?'full':geometry.mode):'closed'}>
+      <div ref={root} className={'workspace-split'+(shown?' browser-layout':'')} data-panel-motion={motion} data-split-mode={shown?(mode==='full'?'full':geometry.mode):'closed'}>
         {panes[0] && React.cloneElement(panes[0],{'aria-hidden':drawer?true:undefined})}
         {drawer && <button type="button" className="browser-drawer-backdrop" aria-label="Return to chat" onClick={onDismiss}/>}
-        {active && mode!=='full' && <BrowserSplitter value={value}/>}
-        {panes[1]}
+        {shown && mode!=='full' && <BrowserSplitter value={value}/>}
+        {panes[1]&&React.cloneElement(panes[1],{hidden:!shown,inert:!active?'':undefined})}
       </div>
     </SplitContext.Provider>;
   }
@@ -354,7 +368,7 @@
     </section>;
   }
 
-  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false, overlayVisible=false, hidden=false, layoutMode='split', onLayoutModeChange, controllerRef, autoFocus=true}) {
+  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false, overlayVisible=false, hidden=false, layoutMode='split', onLayoutModeChange, controllerRef, autoFocus=true,sharedTabs=false}) {
     const api = window.VellumApi.browser;
     const native = state.render_transport === 'native';
     const nativeBridge = window.VellumDesktop?.browser;
@@ -393,7 +407,7 @@
     const closing = useRef(false);
     const started = useRef(false);
     const current = useRef({state, frame});
-    current.current = {state, frame};
+    current.current = {state, frame, context, suspended};
     const active = state.tabs.find(tab => tab.active);
     const home = pendingTabs > 0 || !state.running || !active || active.url === 'about:blank' && !active.loading;
     const preferences = state.preferences || api.defaultPreferences || fallbackPreferences;
@@ -474,7 +488,8 @@
       if (!editingAddress.current) setAddress(displayAddress(active?.url));
     }, [active?.url, active?.id, preferences.show_full_url]);
     useEffect(() => {
-      if (home || native || suspended) { setFrame(null); setViewError(''); return; }
+      if (home || native) { setFrame(null); setViewError(''); return; }
+      if(suspended)return;
       let cancelled = false, timer, reconnect, stopStream, streaming = false, lastStreamFrame = 0;
       const display = next => {
         if (cancelled || next.tab_id !== current.current.state.active_tab_id) return;
@@ -540,7 +555,8 @@
         const navigationOverlay=sidebar?.dataset.state==='open' && slot?.width<1 && navigation && rect.x<slot.x+navigation.offsetWidth;
         // Resizing is a bounds change, not a visibility change. Keep the native
         // WebContentsView mounted; transient menus still use the existing still.
-        const composerOverlay=[...document.querySelectorAll('[data-composer-popup]')].some(node=>{
+        const composerOverlay=[...document.querySelectorAll('[data-composer-popup], [data-shell-overlay], .workspace-details')].some(node=>{
+          if(node.getAttribute('aria-hidden')==='true')return false;
           const popup=node.getBoundingClientRect();
           return popup.width>0 && popup.height>0 && popup.left<rect.right && popup.right>rect.left && popup.top<rect.bottom && popup.bottom>rect.top;
         });
@@ -572,20 +588,23 @@
       if(sidebar)observer?.observe(sidebar);
       const layoutObserver=typeof MutationObserver==='undefined' ? null : new MutationObserver(update);
       if(body)layoutObserver?.observe(body,{attributes:true,attributeFilter:['class']});
+      if(region?.parentElement)layoutObserver?.observe(region.parentElement,{childList:true});
       if(region)layoutObserver?.observe(region,{attributes:true,attributeFilter:['class','style','data-split-mode']});
       if(panel)layoutObserver?.observe(panel,{attributes:true,attributeFilter:['class']});
       if(sidebar)layoutObserver?.observe(sidebar,{attributes:true,attributeFilter:['data-state','data-pinned','data-peeking']});
       window.addEventListener('resize',update);
       window.addEventListener('vellum:composer-popup',update);
+      window.addEventListener('vellum:shell-overlay',update);
       document.addEventListener('visibilitychange',update);
       update();
-      return ()=>{cancelled=true;cancelAnimationFrame(frame);observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);window.removeEventListener('vellum:composer-popup',update);document.removeEventListener('visibilitychange',update);};
+      return ()=>{cancelled=true;cancelAnimationFrame(frame);observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);window.removeEventListener('vellum:composer-popup',update);window.removeEventListener('vellum:shell-overlay',update);document.removeEventListener('visibilitychange',update);};
     }, [native,state.running,state.native_target_id,home,expanded,suspended,overlayVisible,moreOpen,downloadsOpen,addressOpen,suggestions.length]);
     useEffect(()=>()=>{if(native)nativeBridge?.mount({visible:false}).catch(()=>{});},[native,nativeBridge]);
 
     useEffect(()=>{
       if (!native || !nativeBridge) return;
       return nativeBridge.subscribe(event=>{
+        if(current.current.suspended)return;
         if (event.type==='take_over') { if (current.current.state.control==='agent') command('take_over'); return; }
         if (event.type!=='shortcut') return;
         if (event.command==='address') focusAddress();
@@ -647,7 +666,7 @@
           if (input && targetTab !== current.current.state.active_tab_id) throw new Error('The active tab changed. Click the current page before typing.');
           let payload = {operation, ...arguments_};
           if (!current.current.state.running && ['navigate','new_tab'].includes(operation)) {
-            const opened = await api.control({operation:'open'}, context);
+            const opened = await api.control({operation:'open'}, current.current.context);
             onReceipt?.(opened);
             const status = await onRefresh();
             if (status) current.current.state = status;
@@ -659,7 +678,7 @@
             // Revalidate ownership and document identity on the server for each input.
             payload.frame_id = current.current.frame?.frame_id || '';
           }
-          const receipt = await api.control(payload, context);
+          const receipt = await api.control(payload, current.current.context);
           if (operation !== 'hover') onReceipt?.(receipt);
           setError('');
           if (!input || takeControl) {
@@ -777,7 +796,7 @@
         command('press', {key:[...modifiers, event.key === ' ' ? 'Space' : event.key].join('+')});
       }
     };
-    return <aside hidden={hidden} inert={hidden?'':undefined} className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel"
+    return <aside hidden={hidden} inert={hidden?'':undefined} className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel" data-shared-tabs={sharedTabs}
       onKeyDownCapture={shortcut} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDownloadsOpen(false); setMoreOpen(false); } }}>
       <header className="browser-heading">
         <span className="browser-brand" title={native ? 'Vellum embedded Chromium browser' : 'Dedicated Brave session on this device'}>{native ? <Icon name="globe" size={20}/> : <BrandIcon engine={engines[1]} size={20}/>}</span>

@@ -8,6 +8,7 @@ const DEFAULT_PROFILES = [
   { id: "git-bash", label: "Git Bash", available: false },
   { id: "macos", label: "macOS SSH", available: false },
 ];
+const escapeHTML=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 function wsUrl(apiBase = "") {
   if (apiBase) {
@@ -31,6 +32,7 @@ export function createTerminalWorkspace(root, options = {}) {
   const tabs = [];
   let activeTab = null;
   let tabCounter = 0;
+  let disposed = false;
 
   function renderShell() {
     root.innerHTML = `
@@ -46,7 +48,7 @@ export function createTerminalWorkspace(root, options = {}) {
     `;
     const select = root.querySelector("[data-terminal-shell]");
     select.innerHTML = profiles.map((profile) => (
-      `<option value="${profile.id}" ${profile.available === false ? "disabled" : ""}>${profile.label}</option>`
+      `<option value="${escapeHTML(profile.id)}" ${profile.available === false ? "disabled" : ""}>${escapeHTML(profile.label)}</option>`
     )).join("");
     root.querySelector("[data-terminal-new]").addEventListener("click", () => newTab());
     select.addEventListener("change", () => switchShell(select.value));
@@ -56,7 +58,7 @@ export function createTerminalWorkspace(root, options = {}) {
     const tabHost = root.querySelector("[data-terminal-tabs]");
     tabHost.innerHTML = tabs.map((tab) => `
       <button class="terminal-tab ${tab === activeTab ? "active" : ""}" data-tab-id="${tab.id}" type="button">
-        <span>${tab.title}</span>
+        <span>${escapeHTML(tab.title)}</span>
         <span class="terminal-tab-close" data-close-tab="${tab.id}">x</span>
       </button>
     `).join("");
@@ -87,14 +89,15 @@ export function createTerminalWorkspace(root, options = {}) {
       cursorBlink: true,
       fontFamily: "JetBrains Mono, Consolas, monospace",
       fontSize: 13,
-      theme: { background: "#050505", foreground: "#f4f4f4" },
+      theme: options.theme || { background: "#050505", foreground: "#f4f4f4" },
     });
   }
 
   function attachSocket(tab) {
     tab.socket = socketFactory(tab.profile);
     tab.socket.onopen = () => {
-      tab.socket.send(JSON.stringify({ type: "start", profile: tab.profile, cols: 120, rows: 32 }));
+      if(disposed)return;
+      tab.socket.send(JSON.stringify({ type: "start", profile: tab.profile, cols: tab.terminal.cols || 120, rows: tab.terminal.rows || 32 }));
       renderStatus(`${activeProfileLabel(tab.profile)} - connecting`);
     };
     tab.socket.onmessage = (event) => {
@@ -104,12 +107,14 @@ export function createTerminalWorkspace(root, options = {}) {
       if (message.type === "error") tab.terminal.writeln(`\r\n${message.message}`);
       if (message.type === "exit") renderStatus(`${activeProfileLabel(tab.profile)} - exited`);
     };
+    tab.socket.onerror = () => renderStatus('Terminal connection failed. Close this terminal and open it again.');
+    tab.socket.onclose = () => {if(!disposed && activeTab===tab)renderStatus('Terminal disconnected');};
     if (tab.socket.readyState === WebSocket.OPEN) {
       tab.socket.send(JSON.stringify({ type: "start", profile: tab.profile, cols: 120, rows: 32 }));
     }
   }
 
-  function newTab(profile = "powershell") {
+  function newTab(profile = profiles.find(profile=>profile.available!==false)?.id || "powershell") {
     const terminal = makeTerminal();
     const tab = {
       id: `term-${++tabCounter}`,
@@ -119,6 +124,7 @@ export function createTerminalWorkspace(root, options = {}) {
       terminal,
       socket: null,
       fit: typeof FitAddonClass === "function" ? new FitAddonClass() : null,
+      host: document.createElement('div'),
     };
     tabs.push(tab);
     activeTab = tab;
@@ -130,15 +136,21 @@ export function createTerminalWorkspace(root, options = {}) {
 
   function mountActiveTerminal() {
     const stage = root.querySelector("[data-terminal-stage]");
-    stage.innerHTML = "";
+    for(const tab of tabs)tab.host.hidden=tab!==activeTab;
     if (!activeTab) return;
-    const host = document.createElement("div");
+    const tab=activeTab,host=tab.host;
     host.className = "terminal-host";
-    stage.appendChild(host);
-    if (activeTab.fit && activeTab.terminal.loadAddon) activeTab.terminal.loadAddon(activeTab.fit);
-    activeTab.terminal.open(host);
-    if (activeTab.fit) activeTab.fit.fit();
-    activeTab.terminal.onData((data) => {
+    if(!host.isConnected)stage.appendChild(host);
+    if(!tab.mounted){
+    tab.mounted=true;
+    if (tab.fit && tab.terminal.loadAddon) tab.terminal.loadAddon(tab.fit);
+    tab.terminal.open(host);
+    tab.terminal.onResize?.(({cols,rows})=>{if(tab.socket?.readyState===WebSocket.OPEN)tab.socket.send(JSON.stringify({type:'resize',cols,rows}));});
+    tab.terminal.onData((data) => {
+      if(options.rawInput){
+        if(tab.socket?.readyState===WebSocket.OPEN)tab.socket.send(JSON.stringify({type:'input',data}));
+        return;
+      }
       if (data === "\r") {
         activeTab.terminal.write("\r\n");
         handleCommand(activeTab.inputBuffer);
@@ -155,7 +167,9 @@ export function createTerminalWorkspace(root, options = {}) {
       activeTab.inputBuffer += data;
       activeTab.terminal.write(data);
     });
-    activeTab.terminal.focus();
+    }
+    if (tab.fit && root.clientWidth && root.clientHeight) tab.fit.fit();
+    tab.terminal.focus();
     root.querySelector("[data-terminal-shell]").value = activeTab.profile;
     renderStatus(`${activeProfileLabel(activeTab.profile)} - active`);
   }
@@ -171,11 +185,13 @@ export function createTerminalWorkspace(root, options = {}) {
     if (index === -1) return;
     const [tab] = tabs.splice(index, 1);
     if (tab.socket) {
-      tab.socket.send(JSON.stringify({ type: "terminate" }));
+      if(tab.socket.readyState===WebSocket.OPEN)tab.socket.send(JSON.stringify({ type: "terminate" }));
       tab.socket.close();
     }
     tab.terminal.dispose();
+    tab.host.remove();
     activeTab = tabs[index] || tabs[index - 1] || null;
+    if(disposed)return;
     if (!activeTab && replaceWhenEmpty) newTab();
     else {
       renderTabs();
@@ -234,14 +250,22 @@ export function createTerminalWorkspace(root, options = {}) {
 
   async function mount() {
     await loadTerminalAdapter();
+    if(disposed)return;
     renderShell();
-    newTab("powershell");
+    newTab(profiles.find(profile=>profile.available!==false)?.id || 'powershell');
   }
 
   return {
     mount,
     newTab,
     handleCommand,
+    focus:()=>activeTab?.terminal.focus(),
+    resize:()=>{if(root.clientWidth && root.clientHeight)activeTab?.fit?.fit();},
+    dispose:()=>{
+      disposed=true;
+      for(const tab of [...tabs])closeTab(tab.id,false);
+      root.replaceChildren();
+    },
     get activeTerminal() {
       return activeTab?.terminal;
     },

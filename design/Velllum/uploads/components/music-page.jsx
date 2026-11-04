@@ -21,7 +21,8 @@
     upload:'M12 16V4M7 9l5-5 5 5M4 20h16',link:'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
     'playlist-add':'M4 6h12M4 12h8M4 18h8M17 14v6M14 17h6',more:'M5 12h.01M12 12h.01M19 12h.01',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
   };
-  const Icon=({name,className=''}) => <svg className={'music-icon '+className} viewBox="0 0 24 24" fill={['play','pause'].includes(name)?'currentColor':'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.music}/></svg>;
+  const musicIcons={"panel": "SidebarLeft", "home": "Home", "search": "Search", "ask": "Sparkle", "list": "Menu", "sources": "Grid", "settings": "SettingsSlider", "music": "Music", "album": "Music", "play": "Play", "pause": "Pause", "next": "Skip", "shuffle": "Shuffle", "heart": "Heart", "queue": "Menu", "close": "X", "chevron": "ChevronLeft", "check": "Check", "refresh": "ArrowRotateCw", "upload": "UploadDocuments", "link": "Link", "playlist-add": "Plus", "more": "DotsHorizontal", "grid": "Grid"};
+  const Icon=({name,className=''}) => musicIcons[name]?<window.VellumUI.AppIcon name={musicIcons[name]} className={'music-icon '+className} size={20}/>:<svg className={'music-icon '+className} viewBox="0 0 24 24" fill={['play','pause'].includes(name)?'currentColor':'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.music}/></svg>;
   const time = ms => { const seconds = Math.floor(Math.max(0, ms || 0) / 1000); return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); };
   const artwork = item => item.artwork_url || item.album?.images?.[0]?.url || item.images?.[0]?.url || '';
   const artists = item => (item.artists || []).map(a => typeof a === 'string' ? a : a.name).filter(Boolean).join(', ');

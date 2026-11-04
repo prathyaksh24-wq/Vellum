@@ -10,6 +10,9 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script src="components/app-icons.js"></script>
 <script type="text/babel" data-presets="react" src="components/v-select.jsx"></script>
+<link rel="stylesheet" href="components/workspace-controller.css"/>
+<link rel="stylesheet" href="components/workspace-views.css"/>
+<script type="text/babel" data-presets="react" src="components/workspace-controller.jsx"></script>
 <script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/accounts.js"></script>
 <link rel="stylesheet" href="components/accounts.css"/>
@@ -97,6 +100,8 @@
 <script type="text/babel" data-presets="react" src="components/DvkMotionBackground.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <script type="module" src="/composer-entry.js"></script>
+<script type="module" src="/workspace-entry.js"></script>
+<script type="text/babel" data-presets="react" src="components/workspace-content.jsx"></script>
 <link rel="stylesheet" href="components/books-view.css?v=20261030-vellum-polish"/>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1828,6 +1833,8 @@ body{font-size:14px;font-family:var(--font-ui)}
 
 /* reusable edge dock + tooltip */
 .dock-layer{position:absolute;inset:0;z-index:52;pointer-events:none}
+.dock-layer[data-browser-visible=true] .dock-shell{max-width:calc(100% - 20px);width:max-content}
+.dock-layer[data-browser-visible=true] .dock{max-width:100%;box-sizing:border-box;flex-wrap:wrap}
 .dock-reveal-zone{position:absolute;z-index:1;pointer-events:auto}
 .dock-reveal-zone.top{top:0;left:25%;right:25%;height:22px}
 .dock-reveal-zone.bottom{bottom:0;left:25%;right:25%;height:22px}
@@ -2102,48 +2109,47 @@ const FEATURE_FLAGS = {
 const I = ({d, size=17, sw=1.5, children, className='', ...rest}) => (
   <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" {...rest}>{d?<path d={d}/>:children}</svg>
 );
-const IcPencilSq = (p)=> <I {...p} d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5 M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
-const IcSearch = (p)=> <I {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></I>;
-const IcLibrary = (p)=> <I {...p} d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20 M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z M9 6h6"/>;
-const IcFolder = (p)=> <I {...p} d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>;
-const IcFolderPlus = (p)=> <I {...p} d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z M12 11v4 M10 13h4"/>;
-const IcFolderOpen = (p)=> <I {...p}><path d="M3.5 18V6a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v1.2"/><path d="M2.8 19l2.3-6.3a2 2 0 0 1 1.9-1.3h14.5l-2.5 6.9a2 2 0 0 1-1.9 1.3H3.9a1.1 1.1 0 0 1-1.1-1.4z"/></I>;
-
+const IcPencilSq = (p)=> <window.VellumUI.AppIcon name="PencilSquare" {...p}/>;
+const IcSearch = (p)=> <window.VellumUI.AppIcon name="Search" {...p}/>;
+const IcLibrary = (p)=> <window.VellumUI.AppIcon name="BookOpen" {...p}/>;
+const IcFolder = (p)=> <window.VellumUI.AppIcon name="Folder" {...p}/>;
+const IcFolderPlus = (p)=> <window.VellumUI.AppIcon name="FolderPlus" {...p}/>;
+const IcFolderOpen = (p)=> <window.VellumUI.AppIcon name="FolderOpen" {...p}/>;
 const FolderIcon = ({open, onToggle}) => (
   <span className={'fold' + (open ? ' on' : '')} title={open ? 'Close folder' : 'Open folder'} onClick={onToggle}>
     <span className="f-closed"><IcFolder size={14}/></span>
     <span className="f-open"><IcFolderOpen size={14}/></span>
   </span>
 );
-const IcPanel = (p)=> <I {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9.5 4v16"/></I>;
-const IcDots = (p)=> <I {...p} sw={0}><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></I>;
-const IcPin = (p)=> <I {...p} d="M12 17v5 M9 4h6l1 7 2.5 2.5H5.5L8 11l1-7z"/>;
-const IcBell = (p)=> <I {...p} d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>;
+const IcPanel = (p)=> <window.VellumUI.AppIcon name="SidebarLeft" {...p}/>;
+const IcDots = (p)=> <window.VellumUI.AppIcon name="DotsHorizontal" {...p}/>;
+const IcPin = (p)=> <window.VellumUI.AppIcon name="Pin" {...p}/>;
+const IcBell = (p)=> <window.VellumUI.AppIcon name="Bell" {...p}/>;
 // Presentation only: the notification component remains the sole inbox owner.
 const openNotifications = event => window.dispatchEvent(new CustomEvent('vellum:notifications-open', {detail:{toggle:true,trigger:event.currentTarget}}));
-const IcArchive = (p)=> <I {...p}><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9 M10 13h4"/></I>;
-const IcTrash = (p)=> <I {...p} d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6"/>;
-const IcShare = (p)=> <I {...p} d="M12 3v13 M8 7l4-4 4 4 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>;
-const IcBranch = (p)=> <I {...p} d="M6 3v6a3 3 0 0 0 3 3h6 M15 6l4 4-4 4 M6 15v6"/>;
-const IcExternal = (p)=> <I {...p} d="M14 3h7v7 M21 3l-9 9 M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/>;
-const IcPlus = (p)=> <I {...p} d="M12 5v14 M5 12h14"/>;
-const IcShield = (p)=> <I {...p} d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z M9.5 12l2 2 3.5-4"/>;
-const IcKey2 = (p)=> <I {...p}><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M16 7l3 3M13 10l2 2"/></I>;
-const IcMic = (p)=> <I {...p}><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0 M12 18v4"/></I>;
-const IcVoice = (p)=> <I {...p} sw={0}><rect x="4" y="9" width="2.4" height="6" rx="1.2" fill="currentColor"/><rect x="8.6" y="5" width="2.4" height="14" rx="1.2" fill="currentColor"/><rect x="13.2" y="8" width="2.4" height="8" rx="1.2" fill="currentColor"/><rect x="17.8" y="10" width="2.4" height="4" rx="1.2" fill="currentColor"/></I>;
-const IcSend = (p)=> <I {...p} d="M12 19V5 M5 12l7-7 7 7"/>;
-const IcCopy = (p)=> <I {...p}><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></I>;
-const IcThumbUp = (p)=> <I {...p} d="M7 10v11 M3 10h4l4-7a2.4 2.4 0 0 1 2.5 2.5L13 10h6a2 2 0 0 1 2 2.4l-1.4 6.5A2 2 0 0 1 17.6 21H7"/>;
-const IcThumbDown = (p)=> <I {...p} d="M17 14V3 M21 14h-4l-4 7a2.4 2.4 0 0 1-2.5-2.5L11 14H5a2 2 0 0 1-2-2.4l1.4-6.5A2 2 0 0 1 6.4 3H17"/>;
-const IcRefresh = (p)=> <I {...p} d="M21 12a9 9 0 1 1-2.6-6.4 M21 3v6h-6"/>;
-const IcSun = (p)=> <I {...p}><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4 M12 19.6V22 M2 12h2.4 M19.6 12H22 M4.9 4.9l1.7 1.7 M17.4 17.4l1.7 1.7 M19.1 4.9l-1.7 1.7 M6.6 17.4l-1.7 1.7"/></I>;
-const IcMoon = (p)=> <I {...p} d="M21 12.8A8.5 8.5 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>;
-const IcCamera = (p)=> <I {...p} size={14}><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/><circle cx="12" cy="13" r="3.4"/></I>;
-const IcGrid = (p)=> <I {...p}><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></I>;
-const IcList = (p)=> <I {...p}><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></I>;
-const IcFilter = (p)=> <I {...p} d="M4 7h16 M7 12h10 M10 17h4"/>;
-const IcChevD = (p)=> <I {...p} d="M6 9l6 6 6-6"/>;
-const IcChevR = (p)=> <I {...p} d="M9 6l6 6-6 6"/>;
+const IcArchive = (p)=> <window.VellumUI.AppIcon name="Archive" {...p}/>;
+const IcTrash = (p)=> <window.VellumUI.AppIcon name="Trash" {...p}/>;
+const IcShare = (p)=> <window.VellumUI.AppIcon name="Share" {...p}/>;
+const IcBranch = (p)=> <window.VellumUI.AppIcon name="Branch" {...p}/>;
+const IcExternal = (p)=> <window.VellumUI.AppIcon name="ExternalLink" {...p}/>;
+const IcPlus = (p)=> <window.VellumUI.AppIcon name="Plus" {...p}/>;
+const IcShield = (p)=> <window.VellumUI.AppIcon name="ShieldCheck" {...p}/>;
+const IcKey2 = (p)=> <window.VellumUI.AppIcon name="Key" {...p}/>;
+const IcMic = (p)=> <window.VellumUI.AppIcon name="Mic" {...p}/>;
+const IcVoice = (p)=> <window.VellumUI.AppIcon name="Voice" {...p}/>;
+const IcSend = (p)=> <window.VellumUI.AppIcon name="ArrowUp" {...p}/>;
+const IcCopy = (p)=> <window.VellumUI.AppIcon name="Copy" {...p}/>;
+const IcThumbUp = (p)=> <window.VellumUI.AppIcon name="ThumbUp" {...p}/>;
+const IcThumbDown = (p)=> <window.VellumUI.AppIcon name="ThumbDown" {...p}/>;
+const IcRefresh = (p)=> <window.VellumUI.AppIcon name="ArrowRotateCw" {...p}/>;
+const IcSun = (p)=> <window.VellumUI.AppIcon name="Sun" {...p}/>;
+const IcMoon = (p)=> <window.VellumUI.AppIcon name="Moon" {...p}/>;
+const IcCamera = (p)=> <window.VellumUI.AppIcon name="Camera" {...p}/>;
+const IcGrid = (p)=> <window.VellumUI.AppIcon name="Grid" {...p}/>;
+const IcList = (p)=> <window.VellumUI.AppIcon name="Menu" {...p}/>;
+const IcFilter = (p)=> <window.VellumUI.AppIcon name="Filter" {...p}/>;
+const IcChevD = (p)=> <window.VellumUI.AppIcon name="ChevronDown" {...p}/>;
+const IcChevR = (p)=> <window.VellumUI.AppIcon name="ChevronRight" {...p}/>;
 const IcGitHub = (p)=> <I {...p} d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5a5.4 5.4 0 0 0-1.5-3.7 5 5 0 0 0-.1-3.7s-1.2-.3-3.9 1.4a13.4 13.4 0 0 0-7 0C4.8 1.3 3.6 1.6 3.6 1.6a5 5 0 0 0-.1 3.7A5.4 5.4 0 0 0 2 9c0 3.5 3 5.5 6 5.5a4.8 4.8 0 0 0-1 3.5v4 M7 18c-3 1-4-1-5-2"/>;
 const IcAirtable = (p)=> <I {...p}><rect x="3" y="4" width="18" height="6.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="6.5" rx="1.5"/></I>;
 const IcLinear = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l4 4 M9.5 8.5l6 6"/></I>;
@@ -2162,8 +2168,7 @@ const SEED_APPS = [
   { id: 'gmail',    name: 'Gmail',    state: 'connect' },
 ];
 
-const IcXCircle = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></I>;
-
+const IcXCircle = (p)=> <window.VellumUI.AppIcon name="XCircleCrossedClose" {...p}/>;
 const AppsPicker = ({apps, drop, onToggle, onGitHub, onClose}) => (
   <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
     {apps.map(a => {
@@ -2217,7 +2222,7 @@ const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
     <div className="plus-item dim" title="Not in this preview"><span className="sb-ic"><IcGrid size={15}/></span>Connect more</div>
   </Popover>
 );
-const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
+const IcCheck = (p)=> <window.VellumUI.AppIcon name="Check" {...p}/>;
 const VSelect = window.VellumUI.VSelect;
 const {AutomationRunHistory, AutomationNotificationCenter, NotificationTrigger} = window.VellumAutomationNotifications;
 const BooksImportDialog = window.VellumUI.BooksImportDialog;
@@ -3159,42 +3164,41 @@ const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
     {selected && <span className="bg-preview-check"><IcCheck size={13}/></span>}
   </button>
 );};
-const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
-const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
-const IcImage = (p)=> <I {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></I>;
-const IcPdf = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M8 13h8 M8 17h5"/>;
-const IcCode = (p)=> <I {...p} d="M16 18l6-6-6-6 M8 6l-6 6 6 6"/>;
-const IcDiffFile = (p)=> <I {...p} d="M12 3v18 M5 8h4 M7 6v4 M15 16h4"/>;
-const IcUserPlus = (p)=> <I {...p}><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0 M19 8v6 M16 11h6"/></I>;
-const IcSettings = (p)=> <I {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h0a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h0a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v0a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></I>;
-const IcHelp = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 0 1 5.5.7c0 1.8-2.7 2.3-2.7 3.8 M12 17h.01"/></I>;
-const IcLogout = (p)=> <I {...p} d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9"/>;
-const IcSparkle = (p)=> <I {...p} d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8L19 17z"/>;
-const IcSkills = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-skills '+className}><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></I>;
-const IcPlugins = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-plugins '+className}><path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"/><rect x="14" y="2" width="8" height="8" rx="1"/></I>;
-const IcBot = (p)=> <I {...p} sw={1.7}><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></I>;
-const IcTool = (p)=> <I {...p} sw={1.7} d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/>;
-const IcPenLine = (p)=> <I {...p} d="M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>;
-const IcGlobe = (p)=> <I {...p} d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20 M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>;
-const IcTrendUp = (p)=> <I {...p} d="M3 17l6-6 4 4 7-7 M14 8h5v5"/>;
-const IcX = (p)=> <I {...p} d="M4 4l16 16 M20 4L4 20"/>;
-const IcInfo = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M12 11v5 M12 7.6h.01"/></I>;
-const IcSort = (p)=> <I {...p} d="M7 5v14 M4 16l3 3 3-3 M17 19V5 M14 8l3-3 3 3"/>;
-const IcArrowUp = (p)=> <I {...p} d="M12 19V5 M5 12l7-7 7 7"/>;
+const IcNote = (p)=> <window.VellumUI.AppIcon name="FileDocument" {...p}/>;
+const IcUpload = (p)=> <window.VellumUI.AppIcon name="UploadDocuments" {...p}/>;
+const IcImage = (p)=> <window.VellumUI.AppIcon name="ImageSquare" {...p}/>;
+const IcPdf = (p)=> <window.VellumUI.AppIcon name="FileDocument" {...p}/>;
+const IcCode = (p)=> <window.VellumUI.AppIcon name="Code" {...p}/>;
+const IcDiffFile = (p)=> <window.VellumUI.AppIcon name="Code" {...p}/>;
+const IcUserPlus = (p)=> <window.VellumUI.AppIcon name="UserAdd" {...p}/>;
+const IcSettings = (p)=> <window.VellumUI.AppIcon name="SettingsCog" {...p}/>;
+const IcHelp = (p)=> <window.VellumUI.AppIcon name="QuestionMarkCircle" {...p}/>;
+const IcLogout = (p)=> <window.VellumUI.AppIcon name="Logout" {...p}/>;
+const IcSparkle = (p)=> <window.VellumUI.AppIcon name="Sparkle" {...p}/>;
+const IcSkills = (p)=> <window.VellumUI.AppIcon name="Sparkles" {...p}/>;
+const IcPlugins = (p)=> <window.VellumUI.AppIcon name="ConnectApps" {...p}/>;
+const IcBot = (p)=> <window.VellumUI.AppIcon name="Agent" {...p}/>;
+const IcTool = (p)=> <window.VellumUI.AppIcon name="Tools" {...p}/>;
+const IcPenLine = (p)=> <window.VellumUI.AppIcon name="Edit" {...p}/>;
+const IcGlobe = (p)=> <window.VellumUI.AppIcon name="Globe" {...p}/>;
+const IcTrendUp = (p)=> <window.VellumUI.AppIcon name="Analytics" {...p}/>;
+const IcX = (p)=> <window.VellumUI.AppIcon name="X" {...p}/>;
+const IcInfo = (p)=> <window.VellumUI.AppIcon name="InfoCircle" {...p}/>;
+const IcSort = (p)=> <window.VellumUI.AppIcon name="ChevronUpDown" {...p}/>;
+const IcArrowUp = (p)=> <window.VellumUI.AppIcon name="ArrowUp" {...p}/>;
 const IcYoutube = (p)=> <I {...p}><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10 9.2l5 2.8-5 2.8z" fill="currentColor" stroke="none"/></I>;
-const IcBook = (p)=> <I {...p} d="M6.2 2H20v20H6.2A2.2 2.2 0 0 1 4 19.8V4.2A2.2 2.2 0 0 1 6.2 2z M4 17.4A2.2 2.2 0 0 1 6.2 16H20"/>;
-const IcTrophy = (p)=> <I {...p} d="M8 21h8 M12 17v4 M7 4h10v5a5 5 0 0 1-10 0V4z M7 6H4v1.5a3 3 0 0 0 3 3 M17 6h3v1.5a3 3 0 0 0-3 3"/>;
-const IcFile = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/>;
-const IcChat = (p)=> <I {...p} d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4A8.5 8.5 0 1 1 21 11.5z"/>;
-const IcTerminal = (p)=> <I {...p} d="M4 17l6-6-6-6 M12 19h8"/>;
-const IcLedger = (p)=> <I {...p} d="M4 20V10 M10 20V4 M16 20v-7 M21 20H3"/>;
-const IcStop = (p)=> <I {...p}><rect x="7" y="7" width="10" height="10" rx="2"/></I>;
-const IcBrain = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-memory '+className}><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M9 13a4.5 4.5 0 0 0 3-4M6.003 5.125A3 3 0 0 0 6.401 6.5M3.477 10.896a4 4 0 0 1 .585-.396M6 18a4 4 0 0 1-1.967-.516M12 13h4M12 18h6a2 2 0 0 1 2 2v1M12 8h8M16 8V5a2 2 0 0 1 2-2"/><circle cx="16" cy="13" r=".5"/><circle cx="18" cy="3" r=".5"/><circle cx="20" cy="21" r=".5"/><circle cx="20" cy="8" r=".5"/></I>;
-const IcMcp = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-mcp '+className}><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></I>;
+const IcBook = (p)=> <window.VellumUI.AppIcon name="Book" {...p}/>;
+const IcTrophy = (p)=> <window.VellumUI.AppIcon name="TrophyTop" {...p}/>;
+const IcFile = (p)=> <window.VellumUI.AppIcon name="File" {...p}/>;
+const IcChat = (p)=> <window.VellumUI.AppIcon name="Chat" {...p}/>;
+const IcTerminal = (p)=> <window.VellumUI.AppIcon name="Terminal" {...p}/>;
+const IcLedger = (p)=> <window.VellumUI.AppIcon name="Analytics" {...p}/>;
+const IcStop = (p)=> <window.VellumUI.AppIcon name="Stop" {...p}/>;
+const IcBrain = (p)=> <window.VellumUI.AppIcon name="MemoryOnRemember" {...p}/>;
+const IcMcp = (p)=> <window.VellumUI.AppIcon name="Connect" {...p}/>;
 const IcFlame = (p)=> <I {...p} d="M12 2c1 3.5-1.5 5-1.5 7.5A3.5 3.5 0 0 0 14 13c0-2 2-3 2-3 .5 4 2 5 2 7a6 6 0 1 1-12 0c0-3 2.5-4 2.5-7 0-1.5-.5-2.5-.5-2.5S10 6 12 2z"/>;
-const IcEye = (p)=> <I {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></I>;
-const IcGraph = (p)=> <I {...p}><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="8" r="2.4"/><circle cx="9" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.8 7.2l8.4 0.6 M7.4 7.9l1.4 8 M10.9 17.4l5.4 0.5 M17.4 10.2l-7.2 5.9"/></I>;
-
+const IcEye = (p)=> <window.VellumUI.AppIcon name="Eye" {...p}/>;
+const IcGraph = (p)=> <window.VellumUI.AppIcon name="Nodes" {...p}/>;
 const DockTooltip = ({content, side='top', children}) => (
   <span className="dock-tooltip-wrap" data-tip={content} data-tooltip-side={side}>{children}</span>
 );
@@ -3217,12 +3221,31 @@ const DockItem = ({children, onClick, active=false, ariaLabel, tooltip, tooltipS
 
 const DockSeparator = () => <span className="dock-separator" aria-hidden="true"/>;
 
-const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, agents = AGENTS, onNewChat, onSearch, onNav, onCoding, onOpenAgent, onSettings, music=null, musicOpen=false, onDismissMusic}) => {
+const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, browserVisible=false, agents = AGENTS, onNewChat, onSearch, onNav, onCoding, onOpenAgent, onSettings, music=null, musicOpen=false, onDismissMusic}) => {
   const [near, setNear] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const closeTimer = useRef(null);
   const rootRef = useRef(null);
   const wasLocked = useRef(locked);
+  React.useLayoutEffect(() => {
+    const node=rootRef.current;if(!node)return;
+    const reset=()=>{node.hidden=false;for(const property of ['left','right','width'])node.style.removeProperty(property);};
+    if(!browserVisible){reset();return;}
+    const container=node.offsetParent || node.closest('.win') || node.parentElement;
+    const main=container.querySelector('.workspace-split > .main'),split=main?.parentElement;
+    const measure=()=>{
+      const pane=main?.getBoundingClientRect(),origin=container.getBoundingClientRect();
+      node.hidden=!pane?.width || split?.dataset.splitMode!=='split';
+      if(pane){node.style.left=Math.max(0,pane.left-origin.left)+'px';node.style.width=pane.width+'px';node.style.right='auto';}
+    };
+    measure();
+    const resize=typeof ResizeObserver==='function'?new ResizeObserver(measure):null;
+    if(main)resize?.observe(main);resize?.observe(container);
+    const mutation=new MutationObserver(measure);
+    if(split)mutation.observe(split,{attributes:true,attributeFilter:['data-split-mode']});
+    window.addEventListener('resize',measure);
+    return()=>{resize?.disconnect();mutation.disconnect();window.removeEventListener('resize',measure);reset();};
+  },[browserVisible]);
   const openDock = () => { clearTimeout(closeTimer.current); setNear(true); };
   const closeDock = () => {
     clearTimeout(closeTimer.current);
@@ -3249,13 +3272,14 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
     return () => document.removeEventListener('pointerdown', closeAgents);
   }, []);
   const visible = locked || near || agentsOpen || musicOpen;
+  useEffect(()=>{window.dispatchEvent(new Event('vellum:shell-overlay'));},[visible,musicOpen,agentsOpen,side]);
   const tooltipSide = side;
   const run = action => { setAgentsOpen(false); onDismissMusic?.(); action(); };
   return (
-    <div ref={rootRef} className={`dock-layer ${visible ? 'open' : ''}`} data-dock-side={side} data-dock-locked={locked ? 'true' : 'false'} onFocusCapture={openDock} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeDock(); }}>
-      <div className={`dock-reveal-zone ${side}`} aria-hidden="true" onMouseEnter={openDock} onMouseLeave={closeDock}/>
+    <div ref={rootRef} className={`dock-layer ${visible ? 'open' : ''}`} data-browser-visible={browserVisible?'true':undefined} data-dock-side={side} data-dock-locked={locked ? 'true' : 'false'} onFocusCapture={openDock} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeDock(); }}>
+      {!browserVisible && <div className={`dock-reveal-zone ${side}`} aria-hidden="true" onMouseEnter={openDock} onMouseLeave={closeDock}/>}
       <button type="button" className={`dock-handle ${side}`} aria-label="Show dock" onMouseEnter={openDock} onMouseLeave={closeDock} onFocus={openDock} onBlur={closeDock} onClick={openDock}/>
-      <div className={`dock-shell ${side}`} onMouseEnter={openDock} onMouseLeave={closeDock}>
+      <div className={`dock-shell ${side}`} data-shell-overlay={visible?'true':undefined} onMouseEnter={openDock} onMouseLeave={closeDock}>
         <Dock side={side}>
           <DockItem ariaLabel="New chat" tooltip="New chat" tooltipSide={tooltipSide} active={view === 'chat'} onClick={() => run(onNewChat)}><IcPencilSq size={18}/></DockItem>
           <DockItem ariaLabel="Search chats" tooltip="Search" tooltipSide={tooltipSide} onClick={() => run(onSearch)}><IcSearch size={18}/></DockItem>
@@ -3498,7 +3522,7 @@ const SidebarSection = ({id, label, count, open, onToggle, children}) => {
   );
 };
 
-const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, pinned=false, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onBrowser, browserAvailable, notificationState={unread:0,open:false}}) => {
+const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, pinned=false, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, notificationState={unread:0,open:false}}) => {
   const sorted = visibleChats(chats);
   const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
   const [expandedSpace, setExpandedSpace] = useState(null);
@@ -3529,8 +3553,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, pinn
         </div>
         <div className="sb-tools">
           <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
-          <button className={'sb-row' + (view === 'music' ? ' active' : '')} onClick={() => onNav('music')}><span className="sb-ic"><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></span>Music</button>
-          <button className="sb-row" onClick={onBrowser}><span className="sb-ic"><IcGlobe/></span>Browser</button>
+          <button className={'sb-row' + (view === 'music' ? ' active' : '')} onClick={() => onNav('music')}><span className="sb-ic"><window.VellumUI.AppIcon name="Music"/></span>Music</button>
           <NotificationTrigger unread={notificationState.unread} expanded={notificationState.open} onClick={openNotifications}/>
           <button className="sb-row" aria-expanded={moreOpen} aria-controls="sidebar-more" onClick={() => setMoreOpen(!moreOpen)}><span className="sb-ic"><IcDots/></span>More<span className={'browser-more-arrow' + (moreOpen ? ' open' : '')}><IcChevR size={13}/></span></button>
         </div>
@@ -3667,7 +3690,7 @@ const RailFly = ({btn, keepOpen, children}) => {
   );
 };
 
-const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject, onBrowser, notificationState={unread:0,open:false}}) => {
+const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject, notificationState={unread:0,open:false}}) => {
   const recents = visibleChats(chats).slice(0, 10);
   const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId);
   return (
@@ -3675,7 +3698,6 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <div className="rail-scroll">
       <button className="rail-btn" title="Expand sidebar ? Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
       <button type="button" className="rail-btn" title="New chat" aria-label="Vellum home" onClick={onNewChat}><IcPencilSq size={17}/></button>
-      <button className="rail-btn" title="Browser" aria-label="Browser" onClick={onBrowser}><IcGlobe size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className="rail-btn" title="Recent chats"><IcChat size={17}/></button>}>
         <div className="fly-head">Recents</div>
         {recents.length === 0 && <div className="sb-empty">No chats yet.</div>}
@@ -3700,7 +3722,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <button className={'rail-btn' + (view === 'scheduled' ? ' active' : '')} title="Scheduled" onClick={() => onNav('scheduled')}><IcGCal size={17}/></button>
       <NotificationTrigger compact unread={notificationState.unread} expanded={notificationState.open} onClick={openNotifications}/>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
-      <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></button>
+      <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><window.VellumUI.AppIcon name="Music"/></button>
       <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
@@ -5538,11 +5560,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
     <div className="thread-wrap">
       <div className="thread-col">
       {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
-      <div className="chat-head">
-        {browserMode && <span className="browser-chat-title">{chat.title || 'New chat'}</span>}
-        <button className="ch-share" title="Review and share this chat" onClick={onShare}><IcShare size={14}/>Share</button>
-        <button className="tbtn" title="Chat options" onClick={e => onHeadMenu(e)}><IcDots size={16}/></button>
-      </div>
+
       <ConversationPreviewRail messages={msgs}/>
       <div className="msgs">
         <div className="msgs-inner">
@@ -7779,7 +7797,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
         </button>
         <button className="spotify-mini-btn primary" aria-label={dockLocal?(dockPlaying?'Pause local music':'Play local music'):(dockPlaying?'Pause Spotify':'Play Spotify')} title={dockPlaying ? 'Pause' : 'Play'} onClick={toggle}>{dockPlaying ? <I d="M9 6v12M15 6v12" size={14}/> : <I><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></I>}</button>
       </div>
-      {open && <div className="spotify-player-panel" id="dock-music-controls" role="dialog" aria-label="Music playback controls">
+      {open && <div className="spotify-player-panel" data-shell-overlay="true" id="dock-music-controls" role="dialog" aria-label="Music playback controls">
         {!dockReady && <div className="spotify-playback-session">
           {playback.status === 'file_preview' || playback.status === 'origin_error' || playback.status === 'unsupported' ? <a className="btn primary" href={window.VellumSpotifyPlayback.playerUrl} target="_blank" rel="noopener noreferrer">Open Vellum in browser</a> : !spotify.web_playback_ready || playback.status === 'reauth_required' ? <button className="btn primary" onClick={onReconnect}>Allow playback in Vellum</button> : <button className="btn primary" disabled={playback.status === 'loading' || playback.status === 'connecting' || playback.status === 'unavailable' || playback.status === 'unsupported' || playback.status === 'account_error'} onClick={() => playbackRef.current?.enable()}>{playback.ready ? 'Vellum player ready' : playback.status === 'autoplay_required' ? 'Enable audio' : playback.status === 'loading' ? 'Loading player...' : 'Enable playback in Vellum'}</button>}
           {playback.enabled && <button className="btn" onClick={() => playbackRef.current?.disable().catch(err => setError(err.message))}>Disable Vellum player</button>}
@@ -8798,6 +8816,10 @@ const App = () => {
     return () => document.removeEventListener('click', handle, true);
   }, []);
   const [browserFeature, setBrowserFeature] = useState(false);
+  const [workspaceTerminalAvailable,setWorkspaceTerminalAvailable]=useState(false);
+  const [workspaceMotion,setWorkspaceMotion]=useState(false);
+  const [workspaceError,setWorkspaceError]=useState('');
+  const workspaceOperations=useRef(Promise.resolve());
   const [browserState, setBrowserState] = useState({available:false, running:false, control:'closed', tabs:[], downloads:[]});
   const browserSeenSession = useRef(null);
   const browserSuppressed = useRef(false);
@@ -8819,6 +8841,7 @@ const App = () => {
   useEffect(() => {
     let alive = true, timer;
     API.plugins.capabilities().then(contract => {
+      if(alive)setWorkspaceTerminalAvailable(!!contract.features?.terminal?.enabled);
       if (!alive || !contract.features?.browser?.enabled) return;
       setBrowserFeature(true);
       const poll = async () => {
@@ -8931,6 +8954,7 @@ const App = () => {
   const desktopWorkspace = window.VellumDesktop?.runtime === 'electron';
   const rightPanelVisible = workspaceLayout.surfaces['right-panel'].visible;
   const chatDetails = workspaceLayout.surfaces['chat-details'] || {visible:false,properties:{pinned:false}};
+  const legacyDetailsVisible=rightPanelVisible && !['browser','workspace'].includes(workspaceLayout.surfaces['right-panel'].properties.content);
   const browserPanelRef = useRef(null);
   const preferredSidebarWidth = workspaceLayout.surfaces.sidebar.properties.width;
   const sidebarWidth = Number.isInteger(preferredSidebarWidth) && preferredSidebarWidth>=200 && preferredSidebarWidth<=400 ? preferredSidebarWidth : 260;
@@ -9123,7 +9147,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [draftApps, setDraftApps] = useState([]);
   const [draftReasoningMode,setDraftReasoningMode] = useState('');
   const [activityMsg, setActivityMsg] = useState(null);
-  useEffect(() => { if (!rightPanelVisible) setActivityMsg(null); }, [rightPanelVisible]);
+  useEffect(() => { if (!chatDetails.visible) setActivityMsg(null); }, [chatDetails.visible]);
   const [xConn, setXConn] = useState(() => { try { return JSON.parse(localStorage.getItem('vellum-xconn')) || {connected:false, handle:''}; } catch { return {connected:false, handle:''}; } });
   useEffect(() => { try { localStorage.setItem('vellum-xconn', JSON.stringify(xConn)); } catch {} }, [xConn]);
   const [xConnectOpen, setXConnectOpen] = useState(false);
@@ -10243,8 +10267,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
 
   const sendMessage = (text, attach, opts = {}) => {
-    navigationEpochRef.current += 1;
-    let chatId = opts.forceNew ? null : activeChatId;
+    if(!opts.background)navigationEpochRef.current += 1;
+    let chatId = opts.forceNew ? null : (opts.conversationId || activeChatId);
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
     const turnReasoningMode = existingChat ? existingChat.reasoning_mode || '' : opts.reasoningMode ?? draftReasoningMode;
     const requestedModel = (existingChat && existingChat.model) || selModel;
@@ -10270,16 +10294,16 @@ const [slashSkills, setSlashSkills] = useState([]);
       setChats(cs => [record, ...cs]);
       if (FEATURE_FLAGS.realConversations) saveConversation({...record, messages:[userMsg]});
       setDraftApps([]);
-      setActiveChatId(chatId);
-      try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
+      if(!opts.background)setActiveChatId(chatId);
+      if(!opts.background)try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     } else {
       setChats(cs => cs.map(c => {
         if (c.id !== chatId) return c;
-        const persisted = {...c, model: turnModel, messages: [...c.messages, userMsg]};
+        const persisted = {...c, ...(opts.background&&!c.messages.length?{title:text.slice(0,60)}:{}), model: turnModel, messages: [...c.messages, userMsg]};
         if (FEATURE_FLAGS.realConversations) setTimeout(() => saveConversation(persisted), 0);
         return {...persisted, messages: [...persisted.messages, aMsg]};
       }));
-      try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
+      if(!opts.background)try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
       enqueueTurn('chat:' + chatId, () => {
@@ -10297,8 +10321,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     setView('chat');
   };
 
-  const regenerate = (msgId) => {
-    const chat = chats.find(c => c.id === activeChatId);
+  const regenerate = (msgId, conversationId = activeChatId) => {
+    const chat = chats.find(c => c.id === conversationId);
     if (!chat) return;
     const idx = chat.messages.findIndex(m => m.id === msgId);
     const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
@@ -10785,18 +10809,32 @@ const [slashSkills, setSlashSkills] = useState([]);
     window.addEventListener('vellum:youtube-connection-open',open);
     return () => window.removeEventListener('vellum:youtube-connection-open',open);
   },[]);
-  const openBrowser = async () => {
-    setBrowserFeature(true);
-                  try {
-                    const requestEpoch = ++browserRequestEpoch.current;
-                    browserSuppressed.current = false;
-                    dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false,persistence:'session'});
-                    const status = await refreshBrowser();
-                    if (requestEpoch !== browserRequestEpoch.current) return;
-                    if (status.available && (!status.running || !status.presentation_requested)) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
-                    if (requestEpoch === browserRequestEpoch.current) return await refreshBrowser();
-                  } catch (error) { pushToast(error.message); return null; }
-
+  const commandWorkspaceBrowser=async (operation,args={})=>{
+    if(browserPanelRef.current)return browserPanelRef.current.command(operation,args);
+    // Before a retained session has mounted its view, use the same canonical
+    // browser action adapter. Once mounted, all chrome shares its input queue.
+    const receipt=await API.browser.control({operation,...args},{invocation_conversation_id:activeChatId || ''});
+    applyAppActionReceipt(receipt,{notify:false});await refreshBrowser();return receipt.status==='applied';
+  };
+  const openBrowser = async ({mode='split',newTab=false,throwOnError=false}={}) => {
+    try {
+      const requestEpoch=++browserRequestEpoch.current;
+      const status=await refreshBrowser();
+      if(requestEpoch!==browserRequestEpoch.current)return null;
+      if(!status.available)throw new Error(status.reason || 'The embedded browser is unavailable. Check Browser settings.');
+      browserSuppressed.current=false;
+      const presentation=await dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser',layout:mode,active_item:''}},{notify:false,persistence:'session'});
+      if(presentation?.status!=='applied')throw new Error(presentation?.message || 'Workspace tabs could not be shown.');
+      if(requestEpoch!==browserRequestEpoch.current)return null;
+      if(!status.running){
+        const receipt=await API.browser.control({operation:'open'},{invocation_conversation_id:activeChatId || ''});
+        applyAppActionReceipt(receipt,{notify:false});
+      }else if(newTab){
+        const applied=await commandWorkspaceBrowser('new_tab');
+        if(!applied)throw new Error('A new browser tab could not be created.');
+      }
+      if(requestEpoch===browserRequestEpoch.current)return await refreshBrowser();
+    }catch(error){if(throwOnError)throw error;pushToast(error.message);return null;}
   };
   browserLinkHandler.current = event => {
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -10815,6 +10853,15 @@ const [slashSkills, setSlashSkills] = useState([]);
     return workspaceActionRuntimeRef.current.dismissRightPanel({conversationId:activeChatId})
       .then(receipt => { showAppActionReceipt(receipt, {notify:false}); return receipt; })
       .catch(() => null);
+  };
+  const configureChatDetails=async (presentation,options={})=>{
+    // Older saved layouts and agent actions can still target right-panel/files.
+    // Retire that presentation only when the user changes the details surface.
+    if(legacyDetailsVisible){
+      const hidden=await dispatchSurfacePresentation('right-panel',{visible:false},{notify:false,persistence:'session'});
+      if(hidden?.status!=='applied')return hidden;
+    }
+    return dispatchSurfacePresentation('chat-details',presentation,options);
   };
   const resetWorkspaceLayout = async (options = {}) => {
     try {
@@ -10855,7 +10902,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     workspaceActionRuntimeRef.current.maybeApply({conversationId:activeChatId, onReceipt:showAppActionReceipt}).catch(() => {});
   }, [activeProjectId, activeAgentId, view]);
   const applyModelSelection = (id, chatId = activeChatId) => {
-    setSelModel(id);
+    if(!chatId || chatId===activeChatId)setSelModel(id);
     if (chatId) {
       updateChat(chatId, chat => ({...chat, model: id}), true);
       return;
@@ -10992,6 +11039,103 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
   const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
+  const workspaceProperties=workspaceLayout.surfaces['right-panel'].properties;
+  const workspaceItems=Array.isArray(workspaceProperties.items)?workspaceProperties.items:[];
+  const workspaceActiveItem=workspaceItems.find(item=>item.id===workspaceProperties.active_item);
+  const workspacePanelVisible=rightPanelVisible && ['browser','workspace'].includes(workspaceProperties.content) && !['music','apps'].includes(view);
+  const workspaceBrowserSelected=workspaceProperties.content==='browser';
+  const workspaceBrowserVisible=workspacePanelVisible && workspaceBrowserSelected && browserFeature;
+  const workspaceMode=workspaceLayout.surfaces['right-panel'].properties.layout==='full'?'full':'split';
+  const workspaceHasHeader=['chat','agent','project'].includes(view) || workspacePanelVisible;
+  const workspaceConversation=view==='chat' && activeChat && activeChat.messages?.length ? activeChat : null;
+  const workspaceDetailsVisible=(chatDetails.visible || legacyDetailsVisible) && (Boolean(workspaceConversation) || Boolean(activityMsg) && view==='agent');
+  const workspaceRouteKey=view+':'+(view==='chat'?(activeChatId||''):view==='agent'?(activeAgentId||''):'');
+  const workspaceController=window.VellumUI.useWorkspaceController({
+    routeKey:workspaceRouteKey,visible:workspacePanelVisible,mode:workspaceMode,state:browserState,available:browserFeature,
+    openBrowser,hideBrowser:hideBrowserPanel,browserRef:browserPanelRef,selectTab:tabId=>commandWorkspaceBrowser('select_tab',{tab_id:tabId}),
+    setMode:layout=>dispatchSurfacePresentation('right-panel',{properties:{layout}},{notify:false,persistence:'session'})
+  });
+  const getWorkspacePresentation=()=>workspaceActionRuntimeRef.current.snapshot().surfaces['right-panel'];
+  const runWorkspace=operation=>{
+    const next=workspaceOperations.current.catch(()=>{}).then(async()=>{
+      setWorkspaceError('');try{return await operation();}catch(error){setWorkspaceError(error.message||'This workspace view could not open.');return null;}
+    });workspaceOperations.current=next;return next;
+  };
+  const setWorkspace=async (properties,visible=true)=>{
+    const receipt=await dispatchSurfacePresentation('right-panel',{visible,properties},{notify:false,persistence:'session'});
+    if(receipt?.status!=='applied')throw new Error(receipt?.message||'Workspace layout could not be updated. Restart the updated backend.');
+    return receipt;
+  };
+  const showWorkspaceItem=(item,mode=workspaceMode)=>runWorkspace(async()=>{
+    if(item.kind==='browser'){
+      await openBrowser({mode,throwOnError:true});
+      const selected=await commandWorkspaceBrowser('select_tab',{tab_id:item.reference_id});
+      if(!selected)throw new Error('The browser tab could not be selected.');
+      return;
+    }
+    await setWorkspace({content:'workspace',active_item:item.id,layout:mode});
+  });
+  const openWorkspace=(kind,mode='split',referenceId,replaceId)=>runWorkspace(async()=>{
+    if(kind==='browser'){
+      await openBrowser({mode,newTab:true,throwOnError:true});
+      if(referenceId){const navigated=await commandWorkspaceBrowser('navigate',{url:API.browser.addressUrl(referenceId,browserState.preferences)});if(!navigated)throw new Error('The browser could not open that address.');}
+      if(replaceId){const current=getWorkspacePresentation().properties;await setWorkspace({items:(current.items||[]).filter(item=>item.id!==replaceId),content:'browser',active_item:''});}
+      return;
+    }
+    if(!['launcher','chat','files','terminal'].includes(kind))return;
+    if(kind==='terminal'&&!workspaceTerminalAvailable)throw new Error('Local terminal support is unavailable. Restart the updated backend.');
+    const properties=getWorkspacePresentation().properties,items=(properties.items||[]).filter(item=>item.id!==replaceId);
+    const reference=referenceId || (kind==='files'?(activeChatId||'library'):kind==='launcher'?'workspace':'');
+    let item=items.find(item=>item.kind===kind && (kind==='terminal'||kind==='files'&&item.reference_id===reference));
+    if(!item){
+      if(items.length>=12)throw new Error('Close a workspace view before opening another.');
+      let chat;
+      if(kind==='chat'){
+        const receipt=await dispatchConversationAction('conversation.new',{create_record:true},{applyNavigation:false,notify:false});
+        if(receipt?.status!=='applied'||!receipt.result?.conversation?.id)throw new Error(receipt?.message||'The side chat could not be created.');
+        chat=receipt.result.conversation;
+      }
+      item={id:'view:'+crypto.randomUUID(),kind,reference_id:chat?.id||reference,title:kind==='launcher'?'New tab':kind==='chat'?'Side chat':kind==='terminal'?'Terminal':'Files and previews'};
+      await setWorkspace({items:[...items,item],content:'workspace',active_item:item.id,layout:mode});
+    }else await setWorkspace({items,content:'workspace',active_item:item.id,layout:mode});
+  });
+  const closeWorkspaceItem=item=>runWorkspace(async()=>{
+    if(item.kind==='browser'){
+      await commandWorkspaceBrowser(browserState.tabs.length===1?'close':'close_tab',browserState.tabs.length===1?{}:{tab_id:item.reference_id});
+      const status=await refreshBrowser();
+      if(status.tabs?.length)return;
+    }else{
+      const properties=getWorkspacePresentation().properties,remaining=(properties.items||[]).filter(row=>row.id!==item.id);
+      const active=properties.active_item===item.id?remaining[0]:remaining.find(row=>row.id===properties.active_item);
+      if(active){await setWorkspace({items:remaining,active_item:active.id,content:'workspace'});return;}
+      if(browserState.tabs.length){await setWorkspace({items:remaining,active_item:'',content:'browser'});return;}
+      await setWorkspace({items:remaining,active_item:''},false);return;
+    }
+    const items=getWorkspacePresentation().properties.items||[];
+    if(items.length)await setWorkspace({content:'workspace',active_item:items[0].id});else await hideBrowserPanel();
+  });
+  const workspaceTabs=[...(browserState.tabs||[]).map(tab=>({id:'browser:'+tab.id,kind:'browser',reference_id:tab.id,title:tab.title||'New tab'})),...workspaceItems.map(item=>item.kind==='chat'?{...item,title:chats.find(chat=>chat.id===item.reference_id)?.title||item.title}:item)];
+  const workspaceViews={
+    tabs:workspaceTabs,activeId:workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item,
+    visible:workspacePanelVisible,mode:workspaceMode,error:workspaceError,browserAvailable:browserFeature,terminalAvailable:workspaceTerminalAvailable,
+    open:openWorkspace,select:showWorkspaceItem,close:closeWorkspaceItem,hide:workspaceController.hide,showMain:workspaceController.hide,
+    reveal:()=>runWorkspace(()=>setWorkspace({},true)),
+    layout:mode=>runWorkspace(()=>setWorkspace({layout:mode},true))
+  };
+  const selectSideConversation=(item,id)=>runWorkspace(async()=>{
+    const chat=chats.find(chat=>chat.id===id);if(!chat)return;
+    const receipt=await dispatchConversationAction('conversation.open',{conversation_id:id},{applyNavigation:false,notify:false});
+    if(receipt?.status!=='applied')throw new Error(receipt?.message||'That conversation could not be opened.');
+    const items=(getWorkspacePresentation().properties.items||[]).map(row=>row.id===item.id?{...row,reference_id:id,title:(chat.title||'Side chat').slice(0,100)}:row);
+    await setWorkspace({items});
+  });
+  const detailsRoute=useRef(workspaceRouteKey);
+  useEffect(()=>{
+    if(detailsRoute.current!==workspaceRouteKey){
+      detailsRoute.current=workspaceRouteKey;setActivityMsg(null);
+      if(chatDetails.visible && !chatDetails.properties.pinned)configureChatDetails({visible:false},{notify:false,persistence:'session'});
+    }
+  },[workspaceRouteKey]);
   return (
     <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:desktopWorkspace && settingsOpen}}>
     <window.VellumUI.ResponsePreferencesProvider value={deviceSettings.values.streaming}>
@@ -11024,29 +11168,29 @@ const [slashSkills, setSlashSkills] = useState([]);
           </div>
 
           {sidebarPinned && <button type="button" className="main-sidebar-backdrop" aria-label="Close main sidebar" onClick={()=>dispatchSidebarVisibility(false,{learn:true})}/>}
-          <div className="workspace-content" data-toolbar={workspaceHasHeader}>
-          {workspaceHasHeader && <window.VellumUI.WorkspaceToolbar controller={workspaceController}
+          <div className="workspace-content" data-toolbar={workspaceHasHeader} data-panel-open={workspacePanelVisible} data-layout={workspaceMode}>
+          {workspaceHasHeader && <window.VellumUI.WorkspaceToolbar controller={workspaceController} workspace={workspaceViews}
             sidebar={!sidebarPinned && <button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button>}
             title={workspaceConversation?.title || (view==='agent'?activeAgent?.name:'') || ''}
             conversation={workspaceConversation} detailsOpen={workspaceDetailsVisible}
-            onDetails={()=>{setActivityMsg(null);dispatchSurfacePresentation('chat-details',{visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}}
+            onDetails={()=>{setActivityMsg(null);configureChatDetails({visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}}
             onShare={()=>activeChatId && dispatchConversationAction('conversation.share',{conversation_id:activeChatId})}
             onOptions={event=>setMenu({type:'chathead',x:event.currentTarget.getBoundingClientRect().right,y:event.currentTarget.getBoundingClientRect().bottom})}/>}
           <div className="workspace-panels">
-          <window.VellumUI.BrowserSplitView active={workspaceBrowserVisible} mode={workspaceMode} value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}
+          <window.VellumUI.BrowserSplitView active={workspacePanelVisible} mode={workspaceMode} onMotionChange={setWorkspaceMotion} value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}
             onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={hideBrowserPanel}>
           <div className="main" data-variant="inset" data-main-sidebar={sidebarPinned?'open':'closed'}>
-            {!sidebarPinned && <header className="workspace-sidebar-toolbar"><button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button></header>}
+            {!workspaceHasHeader && !sidebarPinned && <header className="workspace-sidebar-toolbar"><button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button></header>}
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
 
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
               onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
-              browserMode={browserPanelVisible} filesOpen={rightPanelVisible && !browserPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false}, {learn:true})}
-              onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }}
+              browserMode={browserPanelVisible} filesOpen={false}
+              onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }}
               onAnswerNow={answerNow}
-              activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null}
-              onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
+              activity={null}
+              onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
               composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
@@ -11064,28 +11208,41 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>
 
+          {(workspaceItems.length>0 || browserState.running || browserPanelVisible) && <aside className="workspace-side" aria-label="Workspace content">
+            {workspaceMode!=='full'&&<window.VellumUI.WorkspacePaneTabs workspace={workspaceViews} controller={workspaceController}/>}
           {(browserPanelVisible || browserState.running) && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
-            hidden={!workspaceBrowserVisible} layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
+            hidden={!workspaceBrowserSelected} sharedTabs layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
             overlayVisible={notificationState.open || Boolean(toast?.notificationPing)}
-            suspended={Boolean(settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
+            suspended={Boolean(!workspaceBrowserVisible || workspaceMotion || workspaceDetailsVisible || settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
             onHide={hideBrowserPanel} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
               applyAppActionReceipt(receipt, {notify:false});
             }}/>}
+            <window.VellumUI.WorkspaceContent items={workspaceItems} activeId={workspaceBrowserSelected?'':workspaceProperties.active_item} visible={workspacePanelVisible}
+              chats={chats} mainChatId={activeChatId} library={library} browserAvailable={browserFeature} terminalAvailable={workspaceTerminalAvailable} onOpenTool={(kind,referenceId,replaceId)=>openWorkspace(kind,workspaceMode,referenceId,replaceId)}
+              onSelectChat={selectSideConversation} onOpenMain={id=>{openChat(id);workspaceController.hide();}} onOpenFiles={id=>openWorkspace('files',workspaceMode,id)}
+              renderChat={chat=><ChatView key={chat.id} chat={chat} model={chat.model||selModel} setModel={id=>dispatchConversationAction('model.select',{model_id:id},{conversationId:chat.thread_id||chat.id,applyNavigation:false})} models={models}
+                onSend={(text,attachments)=>sendMessage(text,attachments,{conversationId:chat.id,background:true})} onStop={()=>stopActiveTurn(chat.id)}
+                onRegen={messageId=>regenerate(messageId,chat.id)} onFork={messageId=>dispatchConversationAction('conversation.fork',{conversation_id:chat.id,through_message_id:messageId},{applyNavigation:false})}
+                onShare={()=>dispatchConversationAction('conversation.share',{conversation_id:chat.id},{applyNavigation:false})} onViewImage={setViewer}
+                onAnswerNow={messageId=>answerNow(messageId)} onOpenActivity={message=>{setActivityMsg(message);configureChatDetails({visible:true},{notify:false,persistence:'session'});}}
+                composerExtras={{library,projects,chats,apps,skills:slashSkills,agents:availableAgents,appSel:chat.appIds||[],onOpenLibrary:()=>nav('library'),onOpenProject:openProject,onOpenPlugins:()=>nav('apps'),presentation:composerPresentation,
+                  reasoningMode:chat.reasoning_mode||'',onReasoningChange:mode=>dispatchConversationAction('reasoning.set',{mode},{conversationId:chat.thread_id||chat.id,applyNavigation:false}),modelProvider:composerProvider,providerSources:composerSources,onProviderChange:selectComposerProvider}}/>}/>
+          </aside>}
           </window.VellumUI.BrowserSplitView>
           {workspaceDetailsVisible && <window.VellumUI.WorkspaceDetails chat={workspaceConversation} activity={activityMsg} pinned={!!chatDetails.properties.pinned}
-            onPin={()=>dispatchSurfacePresentation('chat-details',{properties:{pinned:!chatDetails.properties.pinned}},{notify:false})}
-            onClose={()=>{setActivityMsg(null);dispatchSurfacePresentation('chat-details',{visible:false},{notify:false,persistence:'session'});}} onViewImage={setViewer}/>}
+            onPin={()=>configureChatDetails({properties:{pinned:!chatDetails.properties.pinned}},{notify:false})}
+            onClose={()=>{setActivityMsg(null);configureChatDetails({visible:false},{notify:false,persistence:'session'});}} onViewImage={setViewer}/>}
           </div>
           </div>
         </div>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
-          compactVisible={view !== 'music' && !browserPanelVisible} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}
-          renderDock={(music, musicOpen, onDismissMusic) => !settingsOpen && view !== 'music' && <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
+          compactVisible={view !== 'music'} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}
+          renderDock={(music, musicOpen, onDismissMusic) => !settingsOpen && view !== 'music' && <GlobalDock side={dockSide} browserVisible={browserPanelVisible} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
             music={music} musicOpen={musicOpen} onDismissMusic={onDismissMusic} onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
             onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>} />
         {view !== 'music' && !petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}
@@ -11094,7 +11251,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
           onAction={a => {
-            if (a === 'files') { setMenu(null); dispatchSurfacePresentation('right-panel', {visible:true}); return; }
+            if (a === 'files') { setMenu(null); setActivityMsg(null); configureChatDetails( {visible:true}, {persistence:'session'}); return; }
             chatMenuAction(activeChat.id, a);
           }}
           onMove={projId => moveToProject(activeChat.id, projId)}

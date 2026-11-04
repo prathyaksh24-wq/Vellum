@@ -26,6 +26,7 @@ from agent.app_actions.models import (
     SurfacePresentation,
     UISurfaceDefinition,
     WorkspaceLayoutSnapshot,
+    WorkspaceContentTab,
 )
 from agent.app_actions.attachments import AttachmentImportError
 from agent.app_actions.automations import (
@@ -3943,7 +3944,13 @@ class AppActionRuntime:
         )
 
     def _new_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
-        del payload
+        if (payload.get("arguments") or {}).get("create_record") is True:
+            identity = f"chat_{uuid4().hex}"
+            mutation = self._conversation_service().save(identity, {"title": "Side chat", "messages": [], "thread_id": identity})
+            conversation = mutation["conversation"]
+            return {"changed": True, "target_kind": "conversation", "target_id": identity,
+                    "target_revision": conversation.get("revision", 0), "conversation": conversation,
+                    "message": "Side chat ready."}
         return {
             "changed": True,
             "target_kind": "conversation_navigation",
@@ -4299,6 +4306,11 @@ class AppActionRuntime:
                 next_properties[name] = self._validate_property(surface, name, value, schema)
             next_presentation.properties = next_properties
 
+        if surface.reference == "right-panel" and next_presentation.visible and next_presentation.properties.get("content") == "workspace":
+            items = next_presentation.properties.get("items") or []
+            if not any(isinstance(item, dict) and item.get("id") == next_presentation.properties.get("active_item") for item in items):
+                raise SurfaceActionError("INVALID_SURFACE_PROPERTY", "Choose an available workspace view before showing it.")
+
         persistence = str(arguments.get("persistence") or "device")
         if persistence not in {"device", "session"}:
             raise SurfaceActionError("INVALID_PERSISTENCE", "persistence must be device or session.")
@@ -4525,8 +4537,20 @@ class AppActionRuntime:
         value: Any,
         schema: dict[str, Any],
     ) -> Any:
+        if schema.get("workspace_items"):
+            if not isinstance(value, list) or len(value) > 12:
+                raise SurfaceActionError("INVALID_SURFACE_PROPERTY", "Keep up to 12 workspace views open.")
+            try:
+                items = [WorkspaceContentTab.model_validate(item) for item in value]
+            except (ValueError, TypeError) as exc:
+                raise SurfaceActionError("INVALID_SURFACE_PROPERTY", "The workspace view reference is invalid.") from exc
+            if len({item.id for item in items}) != len(items) or any(item.kind != "terminal" and not item.reference_id for item in items):
+                raise SurfaceActionError("INVALID_SURFACE_PROPERTY", "Workspace views need unique identities and a content reference.")
+            return [item.model_dump() for item in items]
         if schema.get("type") == "string" and not isinstance(value, str):
             raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be text.")
+        if schema.get("type") == "boolean" and not isinstance(value, bool):
+            raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be true or false.")
         if schema.get("type") == "integer" and (isinstance(value,bool) or not isinstance(value,int) or value<schema.get('minimum',value) or value>schema.get('maximum',value)):
             raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be within the supported range.")
         if isinstance(value, str):
@@ -4613,10 +4637,23 @@ class AppActionRuntime:
             ),
             UISurfaceDefinition(
                 reference="right-panel", owner="workspace-layout", title="Right panel",
-                aliases=["right panel", "details panel", "panel"],
+                aliases=["right panel", "browser panel", "panel"],
                 default_presentation=SurfacePresentation(visible=False, location="right"),
                 supported_locations=["right"],
-                configurable_properties={"content":{"type":"string", "enum":["files", "browser"]}, "chat_ratio":{"type":"integer","minimum":20,"maximum":75}},
+                configurable_properties={
+                    "content":{"type":"string", "enum":["files", "browser", "workspace"]},
+                    "chat_ratio":{"type":"integer","minimum":20,"maximum":75},
+                    "layout":{"type":"string","enum":["split","full"]},
+                    "items":{"type":"array", "workspace_items":True},
+                    "active_item":{"type":"string","maxLength":160},
+                },
+            ),
+            UISurfaceDefinition(
+                reference="chat-details", owner="workspace-layout", title="Chat details",
+                aliases=["chat details", "conversation details", "details panel", "summary panel"],
+                default_presentation=SurfacePresentation(visible=False, location="right", properties={"pinned": False}),
+                supported_locations=["right"],
+                configurable_properties={"pinned": {"type": "boolean"}},
             ),
             UISurfaceDefinition(
                 reference="composer", owner="control-kernel", title="Composer",
@@ -4775,7 +4812,7 @@ class AppActionRuntime:
     def _conversation_definitions() -> list[AppActionDefinition]:
         reference = {"reference": {"type": "string"}}
         specs = [
-            (CONVERSATION_NEW_ACTION_ID, "Start a new chat", "Prepare an empty chat workspace.", False, True, "none", {}),
+            (CONVERSATION_NEW_ACTION_ID, "Start a new chat", "Prepare an empty chat workspace.", False, True, "none", {"create_record": {"type": "boolean"}}),
             (CONVERSATION_OPEN_ACTION_ID, "Open a chat", "Open an existing conversation.", False, True, "none", {"conversation_id": {"type": "string"}, "reference": {"type": "string"}}),
             (CONVERSATION_PIN_ACTION_ID, "Pin a chat", "Pin a conversation in the sidebar.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_UNPIN_ACTION_ID, "Unpin a chat", "Remove a conversation from the pinned group.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),

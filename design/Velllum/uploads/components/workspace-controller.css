@@ -1,0 +1,35 @@
+.vellum-icon{display:inline-block;vertical-align:middle;flex-shrink:0;overflow:visible}
+.workspace-content{display:flex;flex-direction:column;flex:1 1 0;min-width:0;min-height:0;position:relative}
+.workspace-content[data-toolbar=true]{margin:8px;border:1px solid var(--line);border-radius:14px;overflow:clip}
+.workspace-panels{position:relative;display:flex;flex:1 1 0;min-width:0;min-height:0;container-type:inline-size;isolation:isolate}
+.workspace-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:5px 12px;box-sizing:border-box;flex-shrink:0;z-index:40;position:relative}
+.workspace-header-start,.workspace-header-actions{display:flex;align-items:center;gap:5px;min-width:0}
+.workspace-header-start{flex:1}
+.workspace-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.8}
+.workspace-header .tbtn{height:32px;min-width:32px;border-radius:7px}
+.workspace-header .ch-share{display:flex;gap:6px;align-items:center;border-radius:7px;padding:6px 8px;font-size:12px}
+.workspace-control-error{position:absolute;top:100%;right:12px;max-width:380px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--menu-solid,var(--bg));font-size:12px;line-height:1.5}
+.workspace-control-error button{color:inherit;font:inherit;border:0;background:var(--hover);padding:4px 8px;margin-left:8px;border-radius:5px;cursor:pointer}
+.workspace-content[data-toolbar=true]>.workspace-panels>.workspace-split>.main[data-variant=inset]{margin:0;border:0;border-radius:0}
+.body>.workspace-content[data-toolbar=false]>.workspace-panels>.workspace-split>.main[data-variant=inset]{position:relative;margin:8px;border:1px solid var(--line);border-radius:14px;overflow:clip}
+.workspace-split[data-split-mode=full]>.main,.workspace-split[data-split-mode=full]>.browser-splitter{display:none}
+.workspace-split[data-split-mode=full]>.browser-panel{position:relative;inset:auto;flex:1 1 0;width:100%;min-width:0;max-width:none;box-shadow:none}
+.workspace-split>.browser-panel[hidden]{display:none}
+.workspace-details{display:flex;flex-direction:column;flex:0 0 300px;min-width:0;max-width:calc(100% - 32px);border-left:1px solid var(--line);background:color-mix(in srgb,var(--bg) 94%,transparent);color:var(--txt);z-index:140}
+.workspace-details-heading{display:flex;align-items:center;gap:4px;min-height:46px;padding:0 12px;border-bottom:1px solid var(--line)}
+.workspace-details-heading h2{font-size:13px;font-weight:500;flex:1;margin:0}
+.workspace-details-heading .tbtn[aria-pressed=true]{background:var(--active);color:var(--txt)}
+.workspace-details-body{padding:18px;overflow:auto;font-size:12px;line-height:1.6;scrollbar-width:thin}
+.workspace-details-body h3{font-size:15px;font-weight:500;margin:0 0 4px;overflow-wrap:anywhere}
+.workspace-details-body section{margin-top:24px}
+.workspace-details-body h4{font-size:12px;font-weight:500;margin:0 0 10px}
+.workspace-details-body h4 small{color:var(--dim);margin-left:6px;font-weight:400}
+.workspace-detail-meta{color:var(--dim);margin:4px 0}
+.workspace-detail-file{display:flex;align-items:center;gap:9px;width:100%;padding:9px 0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.workspace-detail-file span{overflow-wrap:anywhere;min-width:0}
+.workspace-detail-file:disabled{cursor:default}
+.workspace-details-body .act-scroll{padding:0}
+@container(max-width:1100px){.workspace-details[data-pinned=false]{position:absolute;inset:0 0 0 auto;width:300px;box-shadow:-12px 0 24px #0002;background:var(--menu-solid,var(--bg))}}
+@container(max-width:780px){.workspace-details{position:absolute;inset:0 0 0 auto;width:300px;box-shadow:-12px 0 24px #0002;background:var(--menu-solid,var(--bg))}}
+@media(max-width:760px){.workspace-content[data-toolbar=true]{margin:6px;border-radius:12px}.body>.workspace-content[data-toolbar=false]>.workspace-panels>.workspace-split>.main[data-variant=inset]{margin:6px;border-radius:12px}.workspace-header{padding:4px 8px;min-height:44px}.workspace-header .ch-share span{display:none}.workspace-title{max-width:160px}}
+@media(prefers-reduced-motion:reduce){}

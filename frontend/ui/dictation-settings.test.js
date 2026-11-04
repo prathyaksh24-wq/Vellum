@@ -1,3 +1,4 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import {beforeEach,afterEach,test,expect,vi} from 'vitest';
 import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -24,6 +25,7 @@ beforeEach(async()=>{
   });
   onConfirm=vi.fn(async()=>{view={...view,items:[],language_counts:{},total:0};return {status:'applied'};});
   onCancel=vi.fn(async()=>({status:'cancelled'}));
+  loadPublicIcons(React);
   Function('React','window',selectCompiled)(React,window);
   Function('React','window',compiled)(React,window);
   host=document.createElement('div');document.body.append(host);root=createRoot(host);

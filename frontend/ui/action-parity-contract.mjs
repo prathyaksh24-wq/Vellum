@@ -20,6 +20,9 @@ function findRoot() {
 
 export const root = findRoot();
 export const MODULE_SOURCE_FILES = [
+  "design/Velllum/uploads/workspace-entry.js",
+  "frontend/ui/terminal/terminal-workspace.js",
+  "frontend/ui/terminal/commands.js",
   "design/Velllum/uploads/components/desktop-chrome.js",
   "design/Velllum/uploads/composer-entry.js",
   "design/Velllum/uploads/components/composer-editor.js",
@@ -43,6 +46,9 @@ export const MODULE_SOURCE_FILES = [
   "design/Velllum/uploads/components/bookshelf/components/ui/textarea.tsx",
 ];
 export const SOURCE_FILES = [
+  "design/Velllum/uploads/components/workspace-content.jsx",
+  "design/Velllum/uploads/components/app-icons.js",
+  "design/Velllum/uploads/components/workspace-controller.jsx",
   ...MODULE_SOURCE_FILES,
   "design/Velllum/uploads/components/asana.jsx",
   "design/Velllum/uploads/components/swiggy.jsx",
@@ -127,6 +133,15 @@ export function visualHandlers(path, content) {
   });
   const handlers = [];
   visit(parsed, null, (node, parent) => {
+    if(path.endsWith('/terminal-workspace.js') && ['CallExpression','OptionalCallExpression'].includes(node.type)){
+      const method=node.callee?.property?.name;
+      if(method==='addEventListener' && ['click','change'].includes(node.arguments[0]?.value)){
+        handlers.push(`terminal|${node.arguments[0].value}|${source.slice(node.arguments[1].start,node.arguments[1].end).replace(/\s+/g,' ').trim()}`);return;
+      }
+      if(['onData','onResize'].includes(method)&&node.arguments[0]){
+        handlers.push(`terminal|${method}|${source.slice(node.arguments[0].start,node.arguments[0].end).replace(/\s+/g,' ').trim()}`);return;
+      }
+    }
     if (path.endsWith('/desktop-chrome.js') && node.type === 'CallExpression' && node.callee?.property?.name === 'addEventListener' && ['click','keydown','mousedown'].includes(node.arguments[0]?.value)) {
       handlers.push(`native-chrome|${node.arguments[0].value}|${source.slice(node.arguments[1].start,node.arguments[1].end).replace(/\s+/g,' ').trim()}`);
       return;
@@ -183,6 +198,8 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   // The module-backed upload has the same handler review requirement as the
   // legacy Babel components. Lock its integration into the production entry.
   const moduleLinks = [
+    ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/workspace-entry.js"'],
+    ['design/Velllum/uploads/workspace-entry.js', "from '../../../frontend/ui/terminal/terminal-workspace.js'"],
     ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/composer-entry.js"'],
     ['design/Velllum/uploads/composer-entry.js', "from './components/composer-editor.js'"],
     ['design/Velllum/uploads/composer-entry.js', "from './components/composer-providers.js'"],

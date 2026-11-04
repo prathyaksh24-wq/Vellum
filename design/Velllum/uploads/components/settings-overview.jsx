@@ -2,8 +2,8 @@
 (() => {
   const {useEffect,useRef,useState}=React;
   const VSelect=props=><window.VellumUI.VSelect {...props}/>;
-  const Arrow=()=> <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>;
-  const Search=()=> <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>;
+  const Arrow=()=> <window.VellumUI.AppIcon name="ChevronRight" size={16}/>;
+  const Search=()=> <window.VellumUI.AppIcon name="Search" size={17}/>;
   function ProviderLogo({provider}) {
     if(!provider?.icon)return null;
     return <span className="cfg-provider-logo" aria-hidden="true">{['ollama','openrouter','openai','opencode','kimi','groq','xai'].includes(provider.id)?<span style={{maskImage:`url(${provider.icon})`,WebkitMaskImage:`url(${provider.icon})`}}/>:<img src={provider.icon} alt=""/>}</span>;

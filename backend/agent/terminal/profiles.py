@@ -7,7 +7,9 @@ import shutil
 import subprocess
 
 
-DEFAULT_CWD = Path(__file__).resolve().parents[3]
+from agent.config import REPO_ROOT
+
+DEFAULT_CWD = REPO_ROOT
 
 PROFILE_ALIASES = {
     "powershell": "powershell",
@@ -84,6 +86,16 @@ def _git_bash_path() -> str | None:
 
 def list_profiles() -> list[TerminalProfile]:
     cwd = DEFAULT_CWD
+    if os.name != "nt":
+        shell = os.environ.get("SHELL", "").strip()
+        if not shell or not Path(shell).is_absolute() or not os.access(shell, os.X_OK):
+            shell = _which("zsh") or _which("bash") or "/bin/sh"
+        profiles = [TerminalProfile("default", Path(shell).name, shell, ["-l"], cwd, True)]
+        for name in ("zsh", "bash", "sh"):
+            executable = _which(name)
+            if executable and executable != shell:
+                profiles.append(TerminalProfile(name, name, executable, ["-l"], cwd, True))
+        return profiles
     powershell_path = _which("powershell.exe") or "powershell.exe"
     cmd_path = _which("cmd.exe") or "cmd.exe"
     pwsh_path = _which("pwsh.exe")
@@ -135,6 +147,8 @@ def list_profiles() -> list[TerminalProfile]:
 
 
 def get_profile(profile_id: str) -> TerminalProfile | None:
+    if os.name != "nt":
+        return next((profile for profile in list_profiles() if profile.id == profile_id.casefold() or Path(profile.command).name == profile_id.casefold()), None)
     canonical = PROFILE_ALIASES.get(profile_id.casefold())
     if not canonical:
         return None

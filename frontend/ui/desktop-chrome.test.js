@@ -1,3 +1,4 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import {readFileSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -17,7 +18,7 @@ afterEach(()=>{
   document.documentElement.classList.remove('desktop-chrome-on');
   document.body.innerHTML='';delete window.VellumDesktop;vi.restoreAllMocks();
 });
-function mount(){new Function(source)();document.dispatchEvent(new Event('DOMContentLoaded'));}
+function mount(){loadPublicIcons();new Function(source)();document.dispatchEvent(new Event('DOMContentLoaded'));}
 test('browser pages keep their ordinary layout without the native chrome bridge',()=>{
   delete window.VellumDesktop;mount();expect(document.querySelector('header')).toBeNull();
 });

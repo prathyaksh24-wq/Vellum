@@ -19,7 +19,10 @@
       const button=document.createElement('button');
       button.type='button';button.disabled=true;
       button.setAttribute('aria-label',label);button.title=label+' (Alt+'+(index?'Right':'Left')+')';
-      button.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(index?'m12 5 7 7-7 7M5 12h14':'m12 5-7 7 7 7M5 12h14')+'"/></svg>';
+      const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      icon.setAttribute('width','16');icon.setAttribute('height','16');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('fill','currentColor');icon.setAttribute('aria-hidden','true');
+      const glyph=document.createElementNS('http://www.w3.org/2000/svg','use');
+      glyph.setAttribute('href',window.VellumUI.iconHref(index?'ArrowRight':'ArrowLeft'));icon.append(glyph);button.append(icon);
       button.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('vellum:navigation-traverse',{detail:index?1:-1})));
       navigation.append(button);return button;
     });
