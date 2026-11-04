@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
 const pluginWorkspace = readFileSync(resolve(here, "../../design/Velllum/uploads/components/plugin-workspace.jsx"), "utf8");
+const composerEditor = readFileSync(resolve(here, "../../design/Velllum/uploads/components/composer-editor.js"), "utf8");
 const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
   "utf8",
@@ -31,8 +32,8 @@ describe("Vellum default redesigned frontend", () => {
 
   test('offers manual compaction through the existing composer slash menu', () => {
     expect(html).toContain("k: 'compact', label: 'Compact context'");
-    expect(html).toContain("item.run === 'compact'");
-    expect(html).toContain("setText('/compact')");
+    expect(html).toMatch(/item\.run\s*===\s*'compact'/);
+    expect(html).toContain("taRef.current?.replaceActiveToken('/compact')");
   });
   test("the production inline React script parses as JSX", () => {
     const require = createRequire(import.meta.url);
@@ -118,7 +119,9 @@ describe("Vellum default redesigned frontend", () => {
   test("normalizes picker, drop, paste, and NLP attachment routes through one record path", () => {
     expect(html).toContain("AttachmentRuntime.prepareFiles(files, attach, API.appActions)");
     expect(html).toContain("onDrop={event =>");
-    expect(html).toContain("onPaste={event =>");
+    expect(html).toContain("onPasteFiles={prepareComposerFiles}");
+    expect(composerEditor).toContain("handlePaste(_view,event)");
+    expect(composerEditor).toContain("latest.current.onPasteFiles?.(files)");
     expect(html).toContain("vellum:attachment-action");
     expect(html).toContain("result.attachments");
   });
@@ -280,7 +283,7 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
     expect(pluginWorkspace).toContain('aria-label="Plugin information"');
     expect(pluginWorkspace).toContain("p.source");
-    expect(pluginWorkspace).toContain("p.mcp_connectors.length");
+    expect(pluginWorkspace).toContain("components(p).filter(row=>row.kind==='mcp')");
     expect(pluginWorkspace).toContain('aria-label="MCP servers"');
     expect(html).toContain("API.runtimes.subagents()");
   });

@@ -22,6 +22,7 @@ function copyStaticUiAssets() {
       cpSync(resolve(designUploadsRoot, 'assets/backgrounds'), resolve(here, 'ui-dist/assets/backgrounds'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/music'), resolve(here, 'ui-dist/assets/music'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/plugins'), resolve(here, 'ui-dist/assets/plugins'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/icons'), resolve(here, 'ui-dist/assets/icons'), { recursive: true });
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });

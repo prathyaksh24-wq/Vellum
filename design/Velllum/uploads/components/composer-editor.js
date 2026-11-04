@@ -298,7 +298,7 @@ export function composerComponent(React,ReactDOM){
       return h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6,strokeLinejoin:'round',strokeLinecap:'round','aria-hidden':true},h('path',{d:icons[item.type==='scope'?item.scope:item.sectionId] || icons.files}));
     };
     const rows=[];let previousSection='';
-    if(menu.loading || menu.error || !menu.items.length)rows.push(h('div',{key:'status',className:'composer-suggestion-status',role:'status'},menu.loading?'Searching…':menu.error || 'No matching '+(token?.trigger==='/'?'commands.':'references.')));
+    if(menu.loading || menu.error || !menu.items.length)rows.push(h('div',{key:'status',className:'composer-suggestion-status',role:'status'},menu.loading?'Searchingâ€¦':menu.error || 'No matching '+(token?.trigger==='/'?'commands.':'references.')));
     for(const [index,item] of menu.items.entries()){
       if(item.section && item.section!==previousSection){previousSection=item.section;rows.push(h('div',{key:'heading:'+item.section,id:id+'-section-'+item.sectionId,role:'presentation',className:'composer-suggestion-heading'},item.section));}
       rows.push(h('div',{

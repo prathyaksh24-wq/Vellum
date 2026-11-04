@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Restore the shared icon renderer and licensed sprite required by the Electron browser and Plugins UI, including production asset copying. Align composer contract checks with the shared ProseMirror picker and update Electron to 44.10.1 for the compromised-certificate mitigation.
+
 - Removed the legacy standalone Coding mode, including its workspace pages, session API/runtime, provider adapters, session-bound PR actions and SDK dependency. Vellum uses its main chat/workspace interface; existing user data and worktrees remain on disk. Future coding harness integration is separate work.
 
 - Organize composer commands and context references into category sections with scoped browsing, connector/skill icons and coordinated menu corners. Project package/app/MCP/skill ownership and declared provenance from the existing plugin registry, preserve those links through archive import, and use the same classification in the existing Plugins settings tabs. Keep connection state separate from installation and enablement; omit a Sites category.

@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {expect, test, vi} from 'vitest';
+import {loadPublicIcons} from './public-icons-fixture.js';
 
 let compiledPanel;
 const compile = () => compiledPanel ||= execFileSync(process.execPath, ['-e', `
@@ -14,6 +15,7 @@ const compile = () => compiledPanel ||= execFileSync(process.execPath, ['-e', `
 
 async function mountPanel(api, state, props={}) {
   window.VellumApi = {browser:api};
+  loadPublicIcons(React);
   Function('React','window',compile())(React,window);
   const container = document.createElement('div');container.className='body'; document.body.append(container);
   const root = createRoot(container);
@@ -193,13 +195,13 @@ test('search suggestion uses the selected engine and Escape dismisses only the s
   } finally {await panel.cleanup();}
 });
 
-test('the close control dismisses immediately and closes the owned session', async()=> {
+test('the hide-tabs control dismisses the panel without closing its owned session', async()=> {
   const api = await autocompleteApi();
   const panel = await mountPanel(api,manualState());
   try {
-    await act(async()=>panel.container.querySelector('[aria-label="Close browser panel"]').click());
+    await act(async()=>panel.container.querySelector('[aria-label="Hide browser tabs"]').click());
     expect(panel.onHide).toHaveBeenCalledOnce();
-    expect(api.control).toHaveBeenCalledWith({operation:'close'},undefined);
+    expect(api.control).not.toHaveBeenCalled();
   } finally {await panel.cleanup();}
 });
 
@@ -411,7 +413,9 @@ test('native home never streams frames or forwards typing, and switching engines
   const rootContainer = document.createElement('div'); document.body.append(rootContainer);
   const root = createRoot(rootContainer);
   Function('React','window',compile())(React,window);
-  const render = () => root.render(React.createElement(window.VellumUI.BrowserPanel,{state:{...state},
+  let layoutMode='split';
+  const render = () => root.render(React.createElement(window.VellumUI.BrowserPanel,{state:{...state},layoutMode,
+    onLayoutModeChange:next=>{layoutMode=next;render();},
     onRefresh:async()=>{render();return state;},onHide:vi.fn()}));
   api.control = vi.fn(async payload => {
     if (payload.operation === 'preferences') state.preferences = {...state.preferences,...payload};

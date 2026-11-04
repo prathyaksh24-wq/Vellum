@@ -19,7 +19,7 @@
     "smoke:browser": "node scripts/native-smoke.cjs"
   },
   "devDependencies": {
-    "electron": "44.9.0",
+    "electron": "44.10.1",
     "@electron-forge/cli": "8.0.1",
     "@electron-forge/maker-zip": "8.0.1"
   }

@@ -29,8 +29,10 @@ def test_reasoning_composer_exposes_codex_style_categorized_slash_menu() -> None
     assert "Apps" in ui_source
     assert "MCPs" in ui_source
     assert "Agents" in ui_source
-    assert 'label="Commands, skills and agents"' in ui_source
-    assert 'role="listbox"' in ui_source
+    editor_source = (ROOT / "design" / "Velllum" / "uploads" / "components" / "composer-editor.js").read_text(encoding="utf-8")
+    assert 'ComposerEditor' in ui_source
+    assert "'Commands, skills and agents'" in editor_source
+    assert "role:'listbox'" in editor_source
     assert "onOpenPlugins" in ui_source
     assert "plugin-manage" in ui_source
     workspace = (ROOT / "design" / "Velllum" / "uploads" / "components" / "plugin-workspace.jsx").read_text(encoding="utf-8")
