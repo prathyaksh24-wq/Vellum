@@ -185,3 +185,33 @@ The main GitHub connector and terminal retain their existing owners and
 permissions. Existing coding-session databases and user worktrees remain on disk
 and are not opened or migrated. Finishing the current Vellum workspace takes
 priority; selecting and integrating a future coding harness is separate work.
+
+
+## Retained workspace views
+
+The served chat entry uses `components/workspace-controller.jsx` and
+`components/workspace-content.jsx`. New tab opens a content pane beside chat with
+address entry and Browser, Files/previews, Side chat and Terminal choices. Split
+view has a content strip; full view includes the main conversation as its first
+tab. The native title bar does not own these controls.
+
+Workspace Layout remains the presentation owner: `ui.surface.configure` accepts
+right-panel `content` (`files`, `browser`, `workspace`), `layout` (`split`, `full`),
+`chat_ratio`, bounded `items` and `active_item`. Items are validated presentation
+references to launcher, chat, files or terminal owners, capped at twelve. The
+independent `chat-details` surface owns visibility and boolean `pinned`. It shows
+an existing summary or a labeled outline without generating/compacting history.
+
+Browser tabs continue through `browser.session.control`. Side chats materialize
+a canonical record through `conversation.new` with `create_record:true`; without
+that option the action retains ordinary navigation-only behavior. Sending,
+streaming, cancellation, model selection and persistence use existing conversation
+owners. HTML file previews are sandboxed with scripts disabled.
+
+`workspace-entry.js` imports the existing frontend terminal owner. Backend
+capabilities publish profile discovery and the dedicated loopback-origin-checked
+terminal WebSocket. Windows keeps its installed profiles and WinPTY; macOS/Linux
+select the configured local shell with a POSIX PTY. Direct shell input remains
+explicitly outside generic App Action parity, is user-operated, and is not an
+agent-command channel. Native platform execution and full interactive acceptance
+remain unverified; see `docs/verification/workspace-content-2026-11-03.md`.

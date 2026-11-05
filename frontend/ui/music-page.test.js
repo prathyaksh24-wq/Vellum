@@ -1,3 +1,4 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {readFileSync} from 'node:fs';
@@ -54,7 +55,7 @@ beforeEach(()=>{
   window.VellumApi={plugins:api,localMusic:{library:vi.fn(async()=>localState),action:vi.fn(async()=>({status:'applied',message:'Imported song list',result:{collection_id:'saved'}})),upload:vi.fn(),exportUrl:id=>'http://127.0.0.1/export/'+id},
     appActions:{dispatch:vi.fn(async()=>({status:'applied',message:'Playlist links added'})),catalog:vi.fn(async()=>({actions:[{id:'spotify.playlist.edit'},{id:'spotify.playlists.link'},...['playlist','file','playback'].map(name=>({id:'local_music.'+name}))]}))}};
   window.VellumLocalMusicPlayback={start:vi.fn(()=>({wake:vi.fn()})),subscribe:vi.fn(()=>()=>{})};
-  window.React=React;window.VellumUI={};new Function('React',morphicCode)(React);new Function('React',selectCode)(React);new Function('React',localCode)(React);new Function('React',pageCode)(React);Player=window.VellumUI.MusicPage;
+  window.React=React;window.VellumUI={};loadPublicIcons(React);new Function('React',morphicCode)(React);new Function('React',selectCode)(React);new Function('React',localCode)(React);new Function('React',pageCode)(React);Player=window.VellumUI.MusicPage;
   music={player:{track:song('Ride','Ride'),artists:['Artist'],is_playing:true,duration_ms:180000,progress_ms:84000,device:{volume_percent:25}},playback:{ready:true},upcoming:[],busy:false,error:'',run:vi.fn(async()=>true),refresh:vi.fn(),enable:vi.fn()};
   props={spotify:{connected:true,product:'premium',account_name:'Listener',web_playback_ready:true},onReconnect:vi.fn(),onCloseMusic:vi.fn(),onRefreshConnection:vi.fn(),onAskMusic:vi.fn()};
 });

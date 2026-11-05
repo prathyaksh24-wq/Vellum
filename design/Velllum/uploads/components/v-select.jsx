@@ -1,23 +1,8 @@
 (() => {
   const { useEffect, useRef, useState } = React;
 
-  const Icon = ({ d, size = 17 }) => (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={d} />
-    </svg>
-  );
-  const CheckIcon = props => <Icon {...props} d="M20 6L9 17l-5-5" />;
-  const ChevronIcon = props => <Icon {...props} d="M6 9l6 6 6-6" />;
+  const CheckIcon = props => <window.VellumUI.AppIcon name="Check" {...props}/>;
+  const ChevronIcon = props => <window.VellumUI.AppIcon name="ChevronDown" {...props}/>;
   const normalizeOptions = options => options.map(option => typeof option === "object"
     ? { value: option.value, label: option.label ?? option.value, icon: option.icon, sub: option.sub, disabled: !!option.disabled }
     : { value: option, label: option, sub: "", disabled: false });

@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 936,
-      "sha256": "4499e92cb898846647176479a1aaaf5429ef08eb22c7e8b05849efd0240739ed"
+      "count": 944,
+      "sha256": "3790b1a4183748ac560d7746d7eef7c669aa89679cccaa430b9db9c14ebd127e"
     },
     "design/Velllum/uploads/vellum-workspace.html": {
       "count": 178,
@@ -264,6 +264,30 @@
     "design/Velllum/uploads/components/composer-providers.js": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/workspace-controller.jsx": {
+      "count": 18,
+      "sha256": "69ae82339db25f80d2c2a5452244f6dcb0586a45374d254b5b42aadc2a7e1ba6"
+    },
+    "design/Velllum/uploads/components/workspace-content.jsx": {
+      "count": 12,
+      "sha256": "60fc6a1c3c8f64081a842f84b4749f581f9db4d4dd4f9c96ef5710ca003251ef"
+    },
+    "design/Velllum/uploads/workspace-entry.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "frontend/ui/terminal/terminal-workspace.js": {
+      "count": 6,
+      "sha256": "616234ec685b871c99ac6c3779e0915529fffc74224ae315c081394055cc4858"
+    },
+    "frontend/ui/terminal/commands.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/app-icons.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
   "covered": [
@@ -431,11 +455,11 @@
     },
     {
       "surface": "Workspace Layout",
-      "name": "right panel visibility",
+      "name": "workspace browser visibility",
       "actionId": "ui.surface.configure",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "dispatchSurfacePresentation('right-panel', {visible:true})"
+        "text": "properties:{content:'browser',layout:mode,active_item:''}"
       }
     },
     {
@@ -2219,6 +2243,60 @@
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "dispatchConversationAction('settings.default_model.set', {provider})"
       }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "independent chat details visibility and pinning",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "return dispatchSurfacePresentation('chat-details',presentation,options);"
+      }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "workspace browser split and full presentation",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "setMode:layout=>dispatchSurfacePresentation('right-panel',{properties:{layout}}"
+      }
+    },
+    {
+      "surface": "Browser",
+      "name": "workspace header browser tabs use the existing session action queue",
+      "actionId": "browser.session.control",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "return browserPanelRef.current.command(operation,args);"
+      }
+    },
+    {
+      "surface": "Workspace Layout",
+      "name": "typed retained content view references and selection",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchSurfacePresentation('right-panel',{visible,properties}"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "create side chat without replacing main navigation",
+      "actionId": "conversation.new",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.new',{create_record:true}"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "select existing side chat through canonical conversation owner",
+      "actionId": "conversation.open",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.open',{conversation_id:id},{applyNavigation:false,notify:false})"
+      }
     }
   ],
   "exemptions": [
@@ -2377,6 +2455,10 @@
     {
       "scope": "ProseMirror composer draft editing, caret-token detection, suggestion ranking/scoping, keyboard and pointer selection, mention insertion, popup placement and focus",
       "reason": "Transient conversational transport using the existing parent draft. Structured identities are sent only on the existing Send path as typed attachments through DisclosureBroker. No reference selection fetches content, executes a provider tool or grants permission. Slash choices delegate to the existing composer file picker, web mode and skills/plugins/projects/agent navigation handlers; saved operations retain their canonical App Actions. The memory toggle is removed from the message input; its existing setting is unchanged."
+    },
+    {
+      "scope": "Workspace slide presence, tab keyboard focus, summary outline jumps, attachment/code selection and sandboxed local previews",
+      "reason": "Transient display over existing conversation and attachment records. New tab opens a typed launcher content pane; its address form uses the existing browser navigation owner and its Tools choices replace that launcher through ui.surface.configure. Side chats retain the main conversation writer, stream queue and scoped model/reasoning controls. Preview selection executes no provider tool or model. Hiding retains live views; closing a shell view disposes its existing terminal owner."
     }
   ],
   "deferred": [
@@ -2415,6 +2497,10 @@
     {
       "surface": "Legacy design previews and setup flow",
       "reason": "Not the production entry point; excluded from the served-control lock pending migration or removal."
+    },
+    {
+      "surface": "Direct local terminal session transport",
+      "reason": "The user-operated terminal retains TerminalSessionManager and its dedicated loopback-origin-checked WebSocket for start/input/resize/terminate. It is not an agent tool or model-command channel. Session lifecycle and direct OS command input are outside generic App Action parity; only workspace presentation is covered by ui.surface.configure. No parity or runtime-test claim is made for shell execution."
     }
   ]
 }

@@ -32,7 +32,9 @@ def test_visible_workspace_controls_dispatch_through_app_actions() -> None:
     assert "AppActions.createWorkspaceLayoutRuntime" in ui_source
     assert "dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})" in ui_source
     assert "dispatchSurfacePresentation('settings', {visible:true})" in ui_source
-    assert "dispatchSurfacePresentation('right-panel', {visible:true})" in ui_source
+    assert "dispatchSurfacePresentation('right-panel',{visible,properties}" in ui_source
+    assert "properties:{content:'browser',layout:mode,active_item:''}" in ui_source
+    assert "dispatchSurfacePresentation('chat-details',presentation,options)" in ui_source
     appearance = ui_source.split("{tab === 'Appearance' && (", 1)[1].split("{tab === '", 1)[0]
     assert "Workspace layout controls" not in appearance
     assert "Adaptive UI" not in appearance

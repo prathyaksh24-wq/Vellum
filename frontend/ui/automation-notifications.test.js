@@ -1,3 +1,4 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {readFileSync} from 'node:fs';
@@ -27,6 +28,7 @@ beforeEach(() => {
   host=document.createElement('div'); document.body.append(host); root=createRoot(host);
   snapshot={items:[],unread_count:0}; notifications=vi.fn(async () => snapshot);
   window.VellumApi={plugins:{capabilities:vi.fn(async () => ({features:{automation_notifications:{enabled:true}}}))},automations:{notifications}};
+  loadPublicIcons(React);
   new Function('React','window',compiled)(React,window);
   ({AutomationNotificationCenter:Center,AutomationRunHistory:History,NotificationTrigger:Trigger}=window.VellumAutomationNotifications);
   onAction=vi.fn(async () => ({status:'applied'})); onPing=vi.fn();

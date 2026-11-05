@@ -135,6 +135,92 @@ class WinPtyTerminalTransport(TerminalTransport):
             self._reader_task.cancel()
 
 
+class PosixPtyTerminalTransport(TerminalTransport):
+    """An owned, controlling PTY for the local user's Unix shell."""
+    def __init__(self, profile: TerminalProfile):
+        self.profile = profile
+        self.pid: int | None = None
+        self.fd: int | None = None
+        self._queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._loop = None
+
+    async def start(self) -> None:
+        import codecs
+        import pty
+        env = {**os.environ, "TERM": "xterm-256color", "COLORTERM": "truecolor"}
+        pid, fd = pty.fork()
+        if pid == 0:
+            try:
+                os.chdir(self.profile.cwd)
+                os.execvpe(self.profile.command, [self.profile.command, *self.profile.args], env)
+            finally:
+                os._exit(127)
+        self.pid, self.fd = pid, fd
+        os.set_blocking(fd, False)
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._loop = asyncio.get_running_loop()
+        self._loop.add_reader(fd, self._ready)
+
+    def _ready(self) -> None:
+        if self.fd is None:
+            return
+        try:
+            data = os.read(self.fd, 65536)
+        except BlockingIOError:
+            return
+        except OSError:
+            data = b""
+        if data:
+            self._queue.put_nowait(self._decoder.decode(data))
+        else:
+            self._loop.remove_reader(self.fd)
+            tail = self._decoder.decode(b"", final=True)
+            if tail:
+                self._queue.put_nowait(tail)
+            self._queue.put_nowait(None)
+
+    async def read(self) -> str | None:
+        return await self._queue.get()
+
+    async def write(self, data: str) -> None:
+        pending = memoryview(data.encode("utf-8"))
+        while pending and self.fd is not None:
+            try:
+                count = os.write(self.fd, pending)
+                pending = pending[count:]
+            except BlockingIOError:
+                await asyncio.sleep(0.01)
+
+    async def resize(self, cols: int, rows: int) -> None:
+        import fcntl
+        import struct
+        import termios
+        if self.fd is not None:
+            fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", max(1, rows), max(1, cols), 0, 0))
+
+    async def terminate(self) -> None:
+        import signal
+        from contextlib import suppress
+        if self.fd is not None:
+            self._loop.remove_reader(self.fd)
+            os.close(self.fd)
+            self.fd = None
+        if self.pid is not None:
+            pid, self.pid = self.pid, None
+            with suppress(ProcessLookupError):
+                os.killpg(pid, signal.SIGHUP)
+            waiter = asyncio.create_task(asyncio.to_thread(os.waitpid, pid, 0))
+            try:
+                await asyncio.wait_for(asyncio.shield(waiter), 2)
+            except asyncio.TimeoutError:
+                with suppress(ProcessLookupError):
+                    os.killpg(pid, signal.SIGKILL)
+                with suppress(ChildProcessError):
+                    await waiter
+            except ChildProcessError:
+                pass
+
+
 def default_transport_factory(profile: TerminalProfile) -> TerminalTransport:
     if os.name == "nt":
         try:
@@ -143,7 +229,7 @@ def default_transport_factory(profile: TerminalProfile) -> TerminalTransport:
             return WinPtyTerminalTransport(profile)
         except Exception:
             return SubprocessTerminalTransport(profile)
-    return SubprocessTerminalTransport(profile)
+    return PosixPtyTerminalTransport(profile)
 
 
 class TerminalSession:

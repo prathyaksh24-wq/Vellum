@@ -114,17 +114,20 @@ test('a fresh chat open request can reveal an existing session after a reload', 
 
 test.each([false,true])('sidebar opens explicitly and a dismissal cancels a pending opening: %s', async cancelled=> {
   const html = readFileSync(resolve('../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
-  const body = html.match(/const openBrowser = async \(\) => \{([\s\S]*?)\n  \};/)[1];
+  const body = html.match(/const openBrowser = async \([^\n]*\) => \{([\s\S]*?)\n  \};/)[1];
   let resolveStatus;
   const refresh = vi.fn().mockImplementationOnce(()=>new Promise(resolve=>{resolveStatus=resolve;})).mockResolvedValue({running:true});
-  const control = vi.fn(async()=>({status:'applied'})), present = vi.fn(), epoch = {current:0};
-  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast','setBrowserFeature',
-    'return async()=>{' + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn(),vi.fn());
+  const control = vi.fn(async()=>({status:'applied'})), present = vi.fn(async()=>({status:'applied'})), epoch = {current:0};
+  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast','applyAppActionReceipt','commandWorkspaceBrowser',
+    "return async ({mode='split',newTab=false,throwOnError=false}={})=>{" + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn(),vi.fn(),vi.fn());
   const pending = open();
-  expect(present).toHaveBeenCalledWith('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'});
+  expect(present).not.toHaveBeenCalled();
   if (cancelled) epoch.current += 1;
   resolveStatus({running:false,available:true});
   await pending;
-  if (cancelled) expect(control).not.toHaveBeenCalled();
-  else expect(control).toHaveBeenCalledWith({operation:'open'},{invocation_conversation_id:'chat'});
+  if (cancelled) {expect(control).not.toHaveBeenCalled();expect(present).not.toHaveBeenCalled();}
+  else {
+    expect(present).toHaveBeenCalledWith('right-panel',{visible:true,properties:{content:'browser',layout:'split',active_item:''}},{notify:false,persistence:'session'});
+    expect(control).toHaveBeenCalledWith({operation:'open'},{invocation_conversation_id:'chat'});
+  }
 });

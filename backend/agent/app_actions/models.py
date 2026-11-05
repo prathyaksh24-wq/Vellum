@@ -27,6 +27,15 @@ class SurfacePresentation(BaseModel):
     properties: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkspaceContentTab(BaseModel):
+    """Presentation references only; content stays with its existing owner."""
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9:_-]+$")
+    kind: Literal["launcher", "chat", "files", "terminal"]
+    reference_id: str = Field(default="", max_length=200)
+    title: str = Field(min_length=1, max_length=100)
+
+
 def _default_surfaces() -> dict[str, SurfacePresentation]:
     return {
         "workspace": SurfacePresentation(visible=True, location="application", properties={"theme": "dark"}),
@@ -34,6 +43,7 @@ def _default_surfaces() -> dict[str, SurfacePresentation]:
         "plugin-sidebar": SurfacePresentation(visible=True, location="left"),
         "settings": SurfacePresentation(visible=False, location="overlay"),
         "right-panel": SurfacePresentation(visible=False, location="right"),
+        "chat-details": SurfacePresentation(visible=False, location="right", properties={"pinned": False}),
         "composer": SurfacePresentation(
             visible=True,
             location="bottom",

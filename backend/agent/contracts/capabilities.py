@@ -43,6 +43,9 @@ def build_capability_contract() -> CapabilityContract:
             canonical_entry="/design-uploads/Vellum%20Default%20Re-designed.html",
         ),
         features={
+            'terminal': FeatureContract(enabled=True, source='agent.terminal',
+                endpoints={'profiles':'/api/terminal/profiles','session':'/api/terminal/ws'},
+                notes='User-operated local shell sessions. Closing a connection terminates its owned session.'),
             'local_music': FeatureContract(enabled=True,source='agent.music_library',plugin_owned=True,
                 endpoints={'library':'/api/music/local/library','player':'/api/music/local/player',
                     'report':'/api/music/local/player/report','audio':'/api/music/local/audio/{entry_id}',

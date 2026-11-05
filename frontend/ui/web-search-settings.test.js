@@ -1,3 +1,4 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {readFileSync} from 'node:fs';
@@ -20,6 +21,7 @@ beforeEach(()=>{
   snapshot={selected:'auto',active:'serpapi',automatic_fallback:true,providers:[{id:'serpapi',name:'SerpAPI',available:true},{id:'exa',name:'Exa',available:true},{id:'tavily',name:'Tavily',available:false}]};
   api={settings:{get:vi.fn(async()=>({web_search:snapshot}))},appActions:{dispatch:vi.fn(async request=>{snapshot={...snapshot,selected:request.arguments.provider,active:request.arguments.provider,automatic_fallback:false};return {status:'applied'};})}};
   window.VellumApi=api;window.VellumUI={};
+  loadPublicIcons(React);
   new Function('React','window',selector)(React,window);
   new Function('React','window',settings)(React,window);
 });

@@ -7264,6 +7264,10 @@ async def terminal_profiles() -> dict[str, list[dict[str, object]]]:
 
 @router.websocket("/terminal/ws")
 async def terminal_ws(websocket: WebSocket) -> None:
+    from agent.mcp.browser_api import local_preview_origin
+    if not local_preview_origin(websocket.headers.get("origin")) or not websocket.client or websocket.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     session = None
     output_task: asyncio.Task[None] | None = None
@@ -7282,7 +7286,7 @@ async def terminal_ws(websocket: WebSocket) -> None:
             message = await websocket.receive_json()
             msg_type = message.get("type")
             if msg_type == "start":
-                profile_id = str(message.get("profile") or "powershell")
+                profile_id = str(message.get("profile") or list_terminal_profiles()[0].id)
                 profile = get_terminal_profile(profile_id)
                 if profile is None:
                     await websocket.send_json({"type": "error", "message": f"Unknown terminal profile: {profile_id}"})
@@ -7290,16 +7294,24 @@ async def terminal_ws(websocket: WebSocket) -> None:
                 if not profile.available:
                     await websocket.send_json({"type": "error", "message": profile.reason or f"{profile.label} is unavailable."})
                     continue
-                session = await terminal_session_manager.create(profile)
-                cols = int(message.get("cols") or 120)
-                rows = int(message.get("rows") or 32)
+                if output_task is not None:
+                    output_task.cancel()
+                if session is not None:
+                    await terminal_session_manager.terminate(session.id)
+                try:
+                    session = await terminal_session_manager.create(profile)
+                except Exception:
+                    await websocket.send_json({"type":"error","message":"The local shell could not start. Check the selected shell installation."})
+                    continue
+                cols = max(20, min(500, int(message.get("cols") or 120)))
+                rows = max(4, min(300, int(message.get("rows") or 32)))
                 await session.resize(cols, rows)
                 await websocket.send_json({"type": "ready", "sessionId": session.id, "profile": profile.id})
                 output_task = asyncio.create_task(pump_output())
             elif msg_type == "input" and session is not None:
                 await session.write(str(message.get("data") or ""))
             elif msg_type == "resize" and session is not None:
-                await session.resize(int(message.get("cols") or 120), int(message.get("rows") or 32))
+                await session.resize(max(20,min(500,int(message.get("cols") or 120))), max(4,min(300,int(message.get("rows") or 32))))
             elif msg_type == "terminate":
                 break
             else:

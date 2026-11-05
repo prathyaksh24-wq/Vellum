@@ -1,4 +1,9 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
+import os
+
+import pytest
+from agent.terminal import profiles as terminal_profiles
 
 from agent.config import REPO_ROOT
 from agent.terminal.profiles import (
@@ -10,13 +15,18 @@ from agent.terminal.profiles import (
 )
 
 
+@pytest.fixture
+def windows_catalog(monkeypatch):
+    monkeypatch.setattr(terminal_profiles, "os", SimpleNamespace(name="nt", environ=os.environ))
+
+
 def test_default_cwd_points_at_repo_root():
     assert DEFAULT_CWD == REPO_ROOT
     assert (DEFAULT_CWD / "backend").exists()
     assert (DEFAULT_CWD / "frontend").exists()
 
 
-def test_catalog_contains_expected_profile_ids(monkeypatch):
+def test_catalog_contains_expected_profile_ids(monkeypatch, windows_catalog):
     monkeypatch.setattr("agent.terminal.profiles._which", lambda name: f"C:/bin/{name}.exe")
     monkeypatch.setattr("agent.terminal.profiles._wsl_distros", lambda: ["Ubuntu"])
     monkeypatch.delenv("VELLUM_MACOS_SSH_TARGET", raising=False)
@@ -33,7 +43,7 @@ def test_catalog_contains_expected_profile_ids(monkeypatch):
     assert "SSH target" in profiles["macos"].reason
 
 
-def test_unavailable_profiles_include_reason(monkeypatch):
+def test_unavailable_profiles_include_reason(monkeypatch, windows_catalog):
     monkeypatch.setattr("agent.terminal.profiles._which", lambda name: None)
     monkeypatch.setattr("agent.terminal.profiles._wsl_distros", lambda: [])
     monkeypatch.delenv("VELLUM_MACOS_SSH_TARGET", raising=False)
@@ -48,7 +58,7 @@ def test_unavailable_profiles_include_reason(monkeypatch):
     assert "Git Bash" in profiles["git-bash"].reason
 
 
-def test_macos_profile_uses_ssh_target_from_environment(monkeypatch):
+def test_macos_profile_uses_ssh_target_from_environment(monkeypatch, windows_catalog):
     monkeypatch.setattr("agent.terminal.profiles._which", lambda name: f"C:/bin/{name}.exe")
     monkeypatch.setenv("VELLUM_MACOS_SSH_TARGET", "archit@mac-mini.local")
 
@@ -60,7 +70,7 @@ def test_macos_profile_uses_ssh_target_from_environment(monkeypatch):
     assert profile.args == ["archit@mac-mini.local"]
 
 
-def test_profile_aliases_resolve_to_canonical_ids(monkeypatch):
+def test_profile_aliases_resolve_to_canonical_ids(monkeypatch, windows_catalog):
     monkeypatch.setattr("agent.terminal.profiles._which", lambda name: f"C:/bin/{name}.exe")
     monkeypatch.setattr("agent.terminal.profiles._wsl_distros", lambda: ["Ubuntu"])
 
@@ -88,3 +98,32 @@ def test_terminal_profile_serializes_for_api():
         "reason": None,
         "cwd": str(Path("C:/work")),
     }
+
+
+@pytest.mark.parametrize("configured_shell", ["/bin/zsh", "/bin/bash"])
+def test_native_unix_catalog_uses_configured_local_shell(monkeypatch, configured_shell):
+    monkeypatch.setattr(terminal_profiles, "os", SimpleNamespace(
+        name="posix", environ={"SHELL": configured_shell}, X_OK=os.X_OK,
+        access=lambda candidate, mode: candidate == configured_shell,
+    ))
+    monkeypatch.setattr(terminal_profiles, "Path", PurePosixPath)
+    monkeypatch.setattr(terminal_profiles, "_which", lambda name: "/bin/" + name)
+    profiles = list_profiles()
+    assert profiles[0].id == "default"
+    assert profiles[0].command == configured_shell
+    assert profiles[0].args == ["-l"]
+    assert profiles[0].cwd == DEFAULT_CWD
+    assert get_profile("default") == profiles[0]
+    assert get_profile(PurePosixPath(configured_shell).name) == profiles[0]
+    assert {profile.id for profile in profiles}.isdisjoint({"powershell", "cmd", "macos"})
+
+
+def test_native_unix_catalog_falls_back_when_shell_is_not_executable(monkeypatch):
+    monkeypatch.setattr(terminal_profiles, "os", SimpleNamespace(
+        name="posix", environ={"SHELL": "/missing/shell"}, X_OK=os.X_OK,
+        access=lambda *_: False,
+    ))
+    monkeypatch.setattr(terminal_profiles, "Path", PurePosixPath)
+    monkeypatch.setattr(terminal_profiles, "_which", lambda name: "/bin/bash" if name == "bash" else None)
+    assert list_profiles()[0].command == "/bin/bash"
+    assert get_profile("powershell") is None

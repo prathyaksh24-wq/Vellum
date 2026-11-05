@@ -1,3 +1,4 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
@@ -29,6 +30,7 @@ beforeEach(async () => {
     return {status:'applied'};
   });
   onConfirm=vi.fn(async () => ({status:'applied'}));onCancel=vi.fn();
+  loadPublicIcons(React);
   window.React=React;Function('React','window',compiled)(React,window);
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
   await act(async () => root.render(React.createElement(window.VellumUI.BrowserSettings,{onAction,onConfirm,onCancel})));
