@@ -71,6 +71,7 @@ def test_catalog_exposes_actions_and_registered_surface_contracts() -> None:
         "plugin-sidebar",
         "settings",
         "right-panel",
+        "chat-details",
         "composer",
         "composer.send",
     }
@@ -79,6 +80,8 @@ def test_catalog_exposes_actions_and_registered_surface_contracts() -> None:
     assert surfaces["plugin-sidebar"].supported_locations == ["left"]
     assert surfaces["settings"].default_presentation.visible is False
     assert set(surfaces["composer.send"].configurable_properties) == {"label", "size"}
+    assert surfaces["chat-details"].default_presentation.properties == {"pinned": False}
+    assert surfaces["chat-details"].configurable_properties == {"pinned": {"type": "boolean"}}
     assert surfaces["composer"].control_kernel is True
 
 

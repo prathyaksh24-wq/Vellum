@@ -1,5 +1,8 @@
 import asyncio
 
+import pytest
+from starlette.websockets import WebSocketDisconnect
+
 from fastapi.testclient import TestClient
 
 from agent import api
@@ -51,7 +54,7 @@ def available_profile():
 def test_terminal_profiles_endpoint(monkeypatch):
     monkeypatch.setattr(api, "list_terminal_profiles", lambda: [available_profile()])
 
-    with TestClient(api.app) as client:
+    with TestClient(api.app, client=("127.0.0.1", 50000)) as client:
         response = client.get("/api/terminal/profiles")
 
     assert response.status_code == 200
@@ -63,8 +66,8 @@ def test_terminal_websocket_starts_profile_and_streams_output(monkeypatch):
     monkeypatch.setattr(api, "terminal_session_manager", fake_manager)
     monkeypatch.setattr(api, "get_terminal_profile", lambda profile_id: available_profile())
 
-    with TestClient(api.app) as client:
-        with client.websocket_connect("/api/terminal/ws") as websocket:
+    with TestClient(api.app, client=("127.0.0.1", 50000)) as client:
+        with client.websocket_connect("/api/terminal/ws", headers={"Origin": "http://127.0.0.1:5184"}) as websocket:
             websocket.send_json({"type": "start", "profile": "powershell", "cols": 100, "rows": 30})
             assert websocket.receive_json() == {
                 "type": "ready",
@@ -79,8 +82,8 @@ def test_terminal_websocket_starts_profile_and_streams_output(monkeypatch):
 def test_terminal_websocket_rejects_unknown_profile(monkeypatch):
     monkeypatch.setattr(api, "get_terminal_profile", lambda profile_id: None)
 
-    with TestClient(api.app) as client:
-        with client.websocket_connect("/api/terminal/ws") as websocket:
+    with TestClient(api.app, client=("127.0.0.1", 50000)) as client:
+        with client.websocket_connect("/api/terminal/ws", headers={"Origin": "http://127.0.0.1:5184"}) as websocket:
             websocket.send_json({"type": "start", "profile": "nope"})
             message = websocket.receive_json()
 
@@ -92,9 +95,26 @@ def test_terminal_websocket_rejects_unavailable_profile(monkeypatch):
     profile = TerminalProfile("macos", "macOS SSH", "ssh", [], api.Path("."), False, "not configured")
     monkeypatch.setattr(api, "get_terminal_profile", lambda profile_id: profile)
 
-    with TestClient(api.app) as client:
-        with client.websocket_connect("/api/terminal/ws") as websocket:
+    with TestClient(api.app, client=("127.0.0.1", 50000)) as client:
+        with client.websocket_connect("/api/terminal/ws", headers={"Origin": "http://127.0.0.1:5184"}) as websocket:
             websocket.send_json({"type": "start", "profile": "macos"})
             message = websocket.receive_json()
 
     assert message == {"type": "error", "message": "not configured"}
+
+
+@pytest.mark.parametrize(("peer", "origin"), [
+    ("127.0.0.1", None),
+    ("127.0.0.1", "https://remote.example"),
+    ("192.0.2.1", "http://127.0.0.1:5184"),
+])
+def test_terminal_websocket_rejects_untrusted_connections(monkeypatch, peer, origin):
+    manager = FakeManager()
+    monkeypatch.setattr(api, "terminal_session_manager", manager)
+    headers = {"Origin": origin} if origin else {}
+    with TestClient(api.app, client=(peer, 50000)) as client:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            with client.websocket_connect("/api/terminal/ws", headers=headers):
+                pass
+    assert closed.value.code == 1008
+    assert manager.created == []

@@ -112,3 +112,26 @@ navigation. Workspace side-chat creation now explicitly requests `create_record`
 and saves the empty record through ConversationLifecycle before storing its
 reference in Workspace Layout; ordinary New chat retains its previous behavior.
 This contract correction has not been exercised with a live model.
+
+## Hosted CI correction — 2026-11-05
+
+The first PR #240 run (`41845477884`, head `63f3e5a`) built the frontend
+successfully but reported 9 backend and 13 frontend test failures. The logs
+identified an omitted zero-handler fingerprint for the shared icon module,
+missing icon dependency setup in the Browser/Web Search settings fixtures,
+and stale workspace/profile/WebSocket expectations.
+
+The follow-up registers that icon source, initializes its real shared fixture
+before rendering the two selectors, updates the browser-open cancellation
+fixture to the parameterized availability-first flow, and aligns the surface
+catalog assertions. Windows catalog fixtures now explicitly select Windows
+within the profile module without changing global pathlib semantics; native
+Unix catalog cases separately cover configured-shell and fallback behavior.
+Terminal fixtures supply an actual loopback peer and local Origin, with
+additional rejection cases for missing/remote origins and a remote peer.
+Production origin and platform behavior remain unchanged.
+
+No local tests or builds were run for this correction. Changed Python and
+JavaScript test sources were syntax-parsed; whitespace review passed. Hosted
+verification for the follow-up commit is recorded in the PR rather than being
+inferred from these source checks.
