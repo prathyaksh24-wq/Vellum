@@ -13,6 +13,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from agent.conversations.library import organization_id, organize_conversation
+from agent.contracts.conversations import ConversationProject
 
 
 _PATH_LOCKS: dict[str, RLock] = {}
@@ -74,6 +75,68 @@ class ConversationLifecycle:
                 return []
             return [self._normalize_loaded(item) for item in conversations if isinstance(item, dict)]
 
+    def projects(self) -> list[dict[str, Any]]:
+        """Conversation folders share the conversation writer, not vault projects."""
+        with self._lock:
+            try:
+                payload = json.loads(self.path.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                return []
+            rows = payload.get('projects', []) if isinstance(payload, dict) else []
+            if not isinstance(rows, list):
+                return []
+            result = []
+            for row in rows:
+                try:
+                    result.append(ConversationProject.model_validate(row).model_dump())
+                except (ValueError, TypeError):
+                    continue
+            return result
+
+    def change_project(self, operation: str, values: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            projects, conversations = self.projects(), self.list()
+            project = None
+            if operation != 'create':
+                project = next((row for row in projects if row['id'] == values.get('project_id')), None)
+                if project is None:
+                    raise ConversationLifecycleError('PROJECT_NOT_FOUND', 'Project not found.')
+                if values.get('target_revision') is not None and values['target_revision'] != project['revision']:
+                    raise ConversationLifecycleError('STALE_ACTION_TARGET', 'The project changed. Refresh and try again.')
+            now = self._clock().isoformat()
+            changed_conversations = []
+            changed_previous = {}
+            if operation in {'create', 'update'}:
+                patch = values.get('patch', {}) if operation == 'update' else values
+                record = dict(project or {'id': 'project_' + uuid4().hex, 'created_at': now})
+                if 'name' in patch and not isinstance(patch['name'], str):
+                    raise ConversationLifecycleError('INVALID_PROJECT_NAME', 'Project name must be text.')
+                if 'name' in patch:
+                    record['name'] = ' '.join(patch['name'].split())
+                for key in ('pinned', 'memory'):
+                    if key in patch:
+                        record[key] = patch[key]
+                record.update(updated_at=now, revision=(project['revision'] + 1 if project else 0))
+                record = ConversationProject.model_validate(record).model_dump()
+                projects = [record if row['id'] == record['id'] else row for row in projects] if project else [record, *projects]
+                project = record
+            elif operation == 'remove':
+                projects = [row for row in projects if row['id'] != project['id']]
+                for index, conversation in enumerate(conversations):
+                    if conversation.get('projectId') != project['id']:
+                        continue
+                    updated = self._normalize(conversation['id'], {**conversation, 'projectId': None}, current=conversation)
+                    updated['revision'] = int(conversation.get('revision', 0)) + 1
+                    changed_previous[updated['id']] = conversation
+                    conversations[index] = updated
+                    changed_conversations.append(updated)
+            else:
+                raise ConversationLifecycleError('INVALID_PROJECT_OPERATION', 'Unknown project operation.')
+            self._write(conversations, projects=projects)
+            for conversation in changed_conversations:
+                self._update_effects(conversation, changed_previous[conversation['id']])
+            return {'projects': projects, 'project': project, 'conversations': changed_conversations}
+
     def replace_all(self, conversations: list[dict[str, Any]]) -> None:
         with self._lock:
             self._write([
@@ -127,6 +190,9 @@ class ConversationLifecycle:
         with self._lock:
             conversations = self.list()
             current = next((item for item in conversations if str(item.get("id")) == clean_id), None)
+            # Membership changes belong to patch/App Actions. An in-flight message
+            # autosave must not move a chat back after a sidebar assignment.
+            payload = {**payload, 'projectId': current.get('projectId')} if current else payload
             record = self._normalize(clean_id, payload, current=current)
             changed = current is None or self._comparable(current) != self._comparable(record)
             if current is not None:
@@ -374,12 +440,21 @@ class ConversationLifecycle:
                 "copied_context_refs": copied_context,
             }
 
-    def _write(self, conversations: list[dict[str, Any]]) -> None:
+    def _write(self, conversations: list[dict[str, Any]], *, projects: list[dict[str, Any]] | None = None) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            payload = json.loads(self.path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        payload['conversations'] = conversations
+        if projects is not None:
+            payload['projects'] = projects
         temporary = self.path.with_name(f".{self.path.name}.{uuid4().hex}.tmp")
         try:
             temporary.write_text(
-                json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             for attempt in range(7):

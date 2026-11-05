@@ -4,14 +4,14 @@
 .composer-editor-host{min-width:0;width:100%;position:relative}
 .composer-editor-host .ProseMirror{width:100%;background:transparent;border:0;outline:none;color:var(--txt2);font:inherit;font-size:14px;line-height:1.5;min-height:24px;max-height:160px;padding:6px 2px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;caret-color:var(--txt2);scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
 .composer-editor-host .ProseMirror p{margin:0}
-.composer-reference{display:inline-flex;align-items:center;gap:4px;max-width:100%;vertical-align:baseline;padding:0;border:0;background:transparent;color:var(--composer-mention-warm);white-space:pre-wrap}
+.composer-reference{display:inline;vertical-align:baseline;padding:0;border:0;background:transparent;color:var(--composer-mention-warm);white-space:pre-wrap}
 .composer-reference[data-reference-brand="linear"],.composer-reference[data-reference-brand="slack"]{color:var(--composer-mention-violet)}
 .composer-reference[data-reference-brand="spotify"],.composer-reference[data-reference-brand="supabase"]{color:var(--composer-mention-green)}
 .composer-reference[data-reference-brand="gmail"],.composer-reference[data-reference-brand="youtube"]{color:var(--composer-mention-rose)}
 .composer-reference[data-reference-brand="google"],.composer-reference[data-reference-brand="googledrive"]{color:var(--composer-mention-blue)}
 .composer-reference[data-reference-brand="superdesign"]{color:var(--txt)}
-.composer-reference svg{flex:none}
-.composer-reference img{flex:none;object-fit:contain;border-radius:3px;vertical-align:middle}
+.composer-reference svg,.composer-reference img{margin-inline-end:4px;vertical-align:-.125em}
+.composer-reference img{object-fit:contain;border-radius:3px}
 .composer-reference img[hidden]{display:none}
 .composer-reference.ProseMirror-selectednode{background:var(--active);outline:none}
 .composer-suggestions{position:fixed;z-index:20000;box-sizing:border-box;--composer-menu-radius:20px;--composer-menu-inset:4px;border:1px solid var(--line2);border-radius:var(--composer-menu-radius);background:var(--menu-solid,var(--modal));color:var(--txt);padding:var(--composer-menu-inset);box-shadow:0 12px 32px rgba(0,0,0,.24);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line2) transparent;font:13px/1.4 var(--font-ui,system-ui,sans-serif)}

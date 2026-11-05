@@ -50,7 +50,7 @@
 
   var SURFACE_DEFINITIONS = [
     { reference: "workspace", title: "Workspace", supportedLocations: ["application"], configurableProperties: ["theme"], controlKernel: true },
-    { reference: "sidebar", title: "Sidebar", supportedLocations: ["left"], configurableProperties: [], controlKernel: false },
+    { reference: "sidebar", title: "Sidebar", supportedLocations: ["left"], configurableProperties: ["width"], controlKernel: false },
     { reference: "plugin-sidebar", title: "Plugin sidebar", supportedLocations: ["left"], configurableProperties: [], controlKernel: false },
     { reference: "settings", title: "Settings", supportedLocations: ["overlay"], configurableProperties: [], controlKernel: false },
     { reference: "right-panel", title: "Right panel", supportedLocations: ["right"], configurableProperties: ["content", "chat_ratio", "layout", "items", "active_item"], controlKernel: false },
@@ -198,8 +198,8 @@
     var sessionOverrides = {};
     // Browser visibility is an explicit session choice, never a startup preference.
     // Mask older saved layouts in this owner without rewriting device settings.
-    if (deviceState.surfaces['right-panel'].properties.content === 'browser') {
-      sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, deviceState.surfaces['right-panel'], {visible:false}));
+    if (['browser','workspace'].includes(deviceState.surfaces['right-panel'].properties.content)) {
+      sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, deviceState.surfaces['right-panel'], {visible:false,properties:Object.assign({},deviceState.surfaces['right-panel'].properties,{layout:'split'})}));
     }
     var effectiveRevision = deviceState.revision;
     var listeners = [];
@@ -536,6 +536,7 @@
     var client = options.client || (window.VellumApi && window.VellumApi.appActions);
     var getConversation = options.getConversation || function () { return null; };
     var upsertConversation = options.upsertConversation || function () {};
+    var updateProjects = options.updateProjects || function () {};
     var removeConversation = options.removeConversation || function () {};
     var navigate = options.navigate || function () {};
     var openNativeWindow = options.openNativeWindow || function () {};
@@ -552,6 +553,7 @@
       CONVERSATION_UNPIN_ACTION_ID,
       CONVERSATION_RENAME_ACTION_ID,
       CONVERSATION_SPACE_ACTION_ID,
+      "conversation.project.set",
       CONVERSATION_ARCHIVE_ACTION_ID,
       CONVERSATION_RESTORE_ACTION_ID,
       CONVERSATION_DELETE_ACTION_ID,
@@ -589,6 +591,8 @@
       } else if (result.conversation && result.conversation.id) {
         upsertConversation(result.conversation);
       }
+      if (Array.isArray(result.projects)) updateProjects(result.projects);
+      if (Array.isArray(result.conversations)) result.conversations.forEach(upsertConversation);
       if (result.navigation && (!receiptOptions || receiptOptions.applyNavigation !== false)) navigate(result.navigation);
       if (result.native_window) {
         try { Promise.resolve(openNativeWindow(result.native_window)).catch(sideEffectError); }

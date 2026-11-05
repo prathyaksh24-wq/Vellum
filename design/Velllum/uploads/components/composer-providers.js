@@ -26,7 +26,7 @@ export function componentsForPlugin(plugin) {
   if(!plugin.type && !plugin.source && !rows.length)rows.push({kind:'app',id:plugin.id,name:plugin.name,owner_plugin_id:plugin.id,canonical_id:plugin.id,enabled:plugin.enabled!==false});
   return rows;
 }
-export function referenceProviders({library=[],chats=[],projects=[],apps=[],skills=[],agents=[],browserTabs=[]}={}) {
+// Slash capability rows and @ results refer to the same catalog identities.// Selecting one supplies context; it does not navigate or execute the provider.export function commandReference(item) {  const kind=item?.kind,raw=item?.raw;  if(!['plugin','app','mcp','skill'].includes(kind) || !raw)return null;  const component=String(raw.id || raw.name || ''),owner=String(item.plugin?.id || raw.owner_plugin_id || raw.owner_plugin || (kind==='plugin'?raw.id:'') || '');  const id=kind==='app'?(raw.canonical_id || raw.canonical_app_id || raw.canonicalAppId || raw.app_id || component):component;  if(!id || !item.label)return null;  return {kind,id:String(id),label:item.label,url:'',owner_plugin_id:owner,component_id:kind==='plugin'?'':component};}export function referenceProviders({library=[],chats=[],projects=[],apps=[],skills=[],agents=[],browserTabs=[]}={}) {
   const item=(kind,id,label,description='',url='',owner='',component='')=>({id:kind+':'+(owner?owner+':':'')+id,label:String(label||id).slice(0,256),description,
     reference:{kind,id:String(id).slice(0,512),label:String(label||id).slice(0,256),url:referenceUrl(url),owner_plugin_id:String(owner).slice(0,512),component_id:String(component).slice(0,512)}});
   const packages=[],integrations=[],servers=[],ownedSkills=new Map(),activeOwners=new Set();
@@ -40,7 +40,7 @@ export function referenceProviders({library=[],chats=[],projects=[],apps=[],skil
     }
     for(const component of components){
       const identity=component.canonical_id || component.id;
-      const description=[component.description || plugin.description,component.connected===true?'Connected':component.configured===false?'Needs setup':'',plugin.name].filter(Boolean).join(' · ');
+      const description=[component.description || plugin.description,component.connected===true?'Connected':component.configured===false?'Needs setup':'',plugin.name].filter(Boolean).join(' Â· ');
       if(component.kind==='app')integrations.push({...item('app',identity,component.name,description,'',plugin.id,component.id),canonicalKey:'app:'+identity,priority:component.connected===true?2:component.configured===true?1:0});
       if(component.kind==='mcp')servers.push({...item('mcp',component.id,component.name,description,'',plugin.id,component.id),duplicateOf:(component.canonical_id || canonical)?'app:'+(component.canonical_id || canonical):''});
       if(component.kind==='skill')ownedSkills.set(component.id,{...component,owner_plugin:plugin.id});

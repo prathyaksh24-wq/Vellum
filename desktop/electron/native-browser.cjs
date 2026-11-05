@@ -1,4 +1,5 @@
 const http = require('node:http');
+const CommandRegistry = require('./commands.cjs');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const {randomBytes, randomUUID, timingSafeEqual} = require('node:crypto');
@@ -113,10 +114,13 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
         contents.executeJavaScript('document.fullscreenElement && document.exitFullscreen()').catch(()=>{});
         return;
       }
-      const command = modifier && key === 'l' ? 'address' : modifier && key === 't' ? 'new_tab'
-        : modifier && key === 'w' ? 'close_tab' : key === 'f5' || modifier && key === 'r' ? 'reload'
-        : input.alt && key === 'arrowleft' ? 'back' : input.alt && key === 'arrowright' ? 'forward' : '';
-      if (command) { event.preventDefault(); sendShortcut(command); }
+      if(input.control&&input.alt&&!input.meta&&input.key.length===1&&!/^[a-z0-9]$/i.test(input.key))return;
+      const inputEvent={key:input.key,code:input.code,ctrlKey:input.control,metaKey:input.meta,shiftKey:input.shift,altKey:input.alt};
+      const entry=CommandRegistry.match(inputEvent,{native:true,browser:true,tabs:true,chat:true,chats:true,attention:true,composer:true,sidebar:true,desktop:true,find:true});
+      if(entry&&mount&&!mount.window.isDestroyed()){
+        event.preventDefault();mount.window.webContents.focus();
+        mount.window.webContents.send('vellum:browser-event',{type:'command',input:inputEvent});
+      }
     });
     contents.setWindowOpenHandler(({url}) => {
       if (permissionFor(contents.getURL(), 'popups') === 'allow') {
@@ -233,6 +237,13 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       const browserSession = session.fromPath(profilePath(root,identity));
       if (data.data_types.includes('cache')) await browserSession.clearCache();
       if (data.data_types.includes('cookies')) await browserSession.clearStorageData({storages:['cookies','localstorage','indexdb','serviceworkers','cachestorage']});
+      return {};
+    },
+    async find(data) {
+      const tab=tabs.get(data.target_id),text=String(data.text||'');
+      if(!tab||tab.view.webContents.isDestroyed()||text.length>10000)throw new Error('Find is unavailable for this tab.');
+      if(text)tab.view.webContents.findInPage(text,{findNext:!!data.find_next,forward:data.forward!==false});
+      else tab.view.webContents.stopFindInPage('clearSelection');
       return {};
     },
     async download_resume(data) { const item=downloads.get(data.download_id); if (!item) throw new Error('Download is unavailable.'); item.item.resume(); return {}; },

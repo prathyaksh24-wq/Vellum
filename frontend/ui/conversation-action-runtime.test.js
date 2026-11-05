@@ -63,6 +63,22 @@ function handlers(initial) {
 describe("Conversation App Action adapter", () => {
   beforeEach(() => vi.restoreAllMocks());
 
+  test("project catalog and membership receipts update the existing owners", async () => {
+    const AppActions = await loadRuntime();
+    const state = handlers([{id:"chat-1", revision:4, projectId:"p1"}]);
+    const updateProjects = vi.fn();
+    const client = {dispatch:vi.fn(async request => ({
+      ...actionReceipt({actionId:request.action_id}),
+      result:{projects:[],conversations:[{id:"chat-1",revision:5,projectId:null}]},
+    }))};
+    const runtime = AppActions.createConversationActionRuntime({client,...state,updateProjects});
+    await runtime.dispatch("conversation.project.set", {conversation_id:"chat-1",project_id:null});
+    expect(client.dispatch.mock.calls[0][0].arguments.target_revision).toBe(4);
+    expect(updateProjects).toHaveBeenCalledWith([]);
+    expect(state.records.get("chat-1").projectId).toBeNull();
+    expect(state.navigate).not.toHaveBeenCalled();
+  });
+
   test("optimistic New chat navigation is not repeated by a delayed receipt", async () => {
     const AppActions = await loadRuntime();
     const state = handlers([]);

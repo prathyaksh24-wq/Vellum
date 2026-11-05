@@ -103,7 +103,7 @@ class BrowserPreferences(BaseModel):
 
 class BrowserControl(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "click", "hover", "type", "press", "scroll", "show_download", "resize", "preferences"]
+    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "reopen_tab", "find", "click", "hover", "type", "press", "scroll", "show_download", "resize", "preferences"]
     search_engine: SearchEngine | None = None
     suggestions_enabled: bool | None = None
     searxng_url: str | None = Field(default=None, max_length=4096)
@@ -112,6 +112,9 @@ class BrowserControl(BaseModel):
     tab_id: str = Field(default="", max_length=80)
     frame_id: str = Field(default="", max_length=160)
     take_control: bool = False
+    ignore_cache: bool = False
+    find_next: bool = False
+    forward: bool = True
     download_id: str = Field(default="", max_length=80)
     x: float = Field(default=0, ge=0, le=1920)
     y: float = Field(default=0, ge=0, le=1080)

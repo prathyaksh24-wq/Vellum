@@ -102,9 +102,9 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)");
     expect(html).toContain("actionReceipt: (receipt, turn) =>");
     expect(html).toContain("workspaceActionRuntimeRef.current.applyReceipt(receipt)");
-    expect(html).toContain("dispatchSidebarVisibility(!sidebarPinned, {learn:true})");
+    expect(html).toContain("dispatchSidebarVisibility(!sidebarPinned,{learn:true})");
     expect(html).toContain("setSidebarPeeking(false)");
-    expect(html).toContain("dispatchSidebarVisibility(true,{learn:true})");
+    expect(html).toContain("toggleContextualSidebar");
     expect(html).toContain("className=\"toast-action\"");
     expect(html).toContain("adaptiveRuleReceipt");
     expect(html).toContain("Don't learn this");

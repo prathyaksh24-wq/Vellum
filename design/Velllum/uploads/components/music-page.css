@@ -1,6 +1,5 @@
 /* Geometry and Manrope typography from the supplied Vellum handoff.
    The host's background and contrast tokens take precedence over board palettes. */
-@font-face{font-family:VellumMusicManrope;src:url('../assets/music/Manrope-Variable.ttf') format('truetype');font-style:normal;font-weight:200 800;font-display:swap}
 .music-page-mount{height:100%;min-height:0;width:100%;overflow:hidden}
 .mw-workspace{
   --mw-text:var(--txt2,#f2f0f0);--mw-muted:var(--dim,#aaa39e);--mw-faint:var(--dim,#aaa39e);
@@ -8,7 +7,7 @@
   --mw-canvas:transparent;--mw-field:rgba(18,17,16,.65);--mw-panel:rgba(18,17,16,.88);
   --mw-accent:#1db954;--mw-on-accent:#000;--music-range-progress:0%;
   width:100%;height:100%;min-height:0;display:grid;grid-template-columns:232px minmax(0,1fr);grid-template-rows:minmax(0,1fr) 96px;
-  background:transparent;isolation:isolate;color:var(--mw-text);font-family:var(--font-ui,Lexend,system-ui,sans-serif);font-size:14px;line-height:1.5;overflow:hidden;position:relative;
+  background:transparent;isolation:isolate;color:var(--mw-text);font-family:var(--font-ui,system-ui,sans-serif);font-size:14px;line-height:1.5;overflow:hidden;position:relative;
 }
 .mw-workspace[data-music-theme="Apple Music"]{--mw-accent:#e0182d;--mw-on-accent:#fff}
 .mw-workspace[data-music-theme="Midnight"]{--mw-accent:#ff7a45;--mw-on-accent:#1a0e08}
@@ -277,7 +276,7 @@
  .mw-now-playing{grid-template-columns:minmax(0,1fr) 300px}
 }
 @media(max-width:760px){
- .mw-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 64px 64px;font-family:var(--font-ui,Lexend,system-ui,sans-serif)}
+ .mw-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 64px 64px;font-family:var(--font-ui,system-ui,sans-serif)}
  .mw-workspace.no-player{grid-template-rows:minmax(0,1fr) 64px}
  .mw-sidebar{display:none;padding:12px 16px}.mw-main{grid-column:1}
  .mw-mobile-heading{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 0}
@@ -360,7 +359,7 @@
 .mw-sidebar-source{position:relative;z-index:4;flex:none;margin:0 0 16px}
 .mw-provider-picker{position:relative;min-width:0;--composer-row-bg:var(--mw-raised)}
 .mw-provider-picker .v-select{width:100%;min-width:0}
-.mw-provider-picker .v-select-trigger{width:100%;min-height:42px;border:1px solid var(--mw-line);border-radius:10px;background:var(--glass-side,transparent);color:var(--mw-text);padding:9px 11px;font:500 13px/1.5 var(--font-ui,Lexend,system-ui,sans-serif);gap:10px}
+.mw-provider-picker .v-select-trigger{width:100%;min-height:42px;border:1px solid var(--mw-line);border-radius:10px;background:var(--glass-side,transparent);color:var(--mw-text);padding:9px 11px;font:500 13px/1.5 var(--font-ui,system-ui,sans-serif);gap:10px}
 .mw-provider-picker .v-select-content{left:0;right:0;min-width:0;width:100%;z-index:10;background:var(--menu-solid,#1b1819);border-color:var(--mw-line);border-radius:12px}
 .mw-provider-picker .v-select-option{padding:9px 10px;min-height:40px;color:var(--mw-muted);font-family:inherit;gap:10px}
 .mw-provider-picker .v-select-option:hover,.mw-provider-picker .v-select-option.active,.mw-provider-picker .v-select-option.selected,.mw-provider-picker .v-select-option:focus-visible{background:transparent;color:var(--mw-text)}

@@ -25,8 +25,20 @@ class ConversationOrganizationPatch(BaseModel):
         return clean
 
 
+class ConversationProject(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=80)
+    pinned: bool = False
+    memory: Literal['default', 'project-only'] = 'default'
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    revision: int = Field(default=0, ge=0)
+    created_at: str = ''
+    updated_at: str = ''
+
+
 class ConversationLibraryResponse(BaseModel):
     generated_at: str
+    projects: list[ConversationProject] = Field(default_factory=list)
     spaces: list[dict[str, Any]] = Field(default_factory=list)
     smart_views: list[dict[str, Any]] = Field(default_factory=list)
     conversations: list[dict[str, Any]] = Field(default_factory=list)

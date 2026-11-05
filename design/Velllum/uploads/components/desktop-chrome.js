@@ -18,7 +18,7 @@
     const arrows=['Back','Forward'].map((label,index)=>{
       const button=document.createElement('button');
       button.type='button';button.disabled=true;
-      button.setAttribute('aria-label',label);button.title=label+' (Alt+'+(index?'Right':'Left')+')';
+      button.setAttribute('aria-label',label);button.dataset.command=index?'history.forward':'history.back';button.title=label;
       const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');
       icon.setAttribute('width','16');icon.setAttribute('height','16');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('fill','currentColor');icon.setAttribute('aria-hidden','true');
       const glyph=document.createElementNS('http://www.w3.org/2000/svg','use');
@@ -29,6 +29,19 @@
     window.addEventListener('vellum:navigation-state',event=>{
       arrows[0].disabled=!event.detail?.back;arrows[1].disabled=!event.detail?.forward;
     });
+    const sidebar=document.createElement('button');
+    sidebar.type='button';sidebar.className='desktop-sidebar-toggle';sidebar.dataset.command='sidebar.toggle';sidebar.disabled=true;
+    sidebar.setAttribute('aria-label','Show sidebar');sidebar.title='Show sidebar';
+    const sidebarIcon=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    sidebarIcon.setAttribute('width','17');sidebarIcon.setAttribute('height','17');sidebarIcon.setAttribute('viewBox','0 0 24 24');sidebarIcon.setAttribute('fill','currentColor');sidebarIcon.setAttribute('aria-hidden','true');
+    const sidebarGlyph=document.createElementNS('http://www.w3.org/2000/svg','use');
+    sidebarGlyph.setAttribute('href',window.VellumUI.iconHref('SidebarLeft'));sidebarIcon.append(sidebarGlyph);sidebar.append(sidebarIcon);
+    sidebar.addEventListener('click',()=>window.dispatchEvent(new Event('vellum:sidebar-toggle')));
+    window.addEventListener('vellum:sidebar-state',event=>{
+      const state=event.detail||{},label=(state.visible?'Hide ':'Show ')+(state.context||'app').toLowerCase()+' sidebar';
+      sidebar.disabled=!!state.disabled;sidebar.setAttribute('aria-label',label);sidebar.setAttribute('aria-expanded',String(!!state.visible));sidebar.title=label;
+    });
+    navigation.append(sidebar);
     let opening=false;
     let previousFocus=null;
     const buttons=[];
@@ -61,10 +74,8 @@
     document.body.prepend(bar);
     document.documentElement.classList.add('desktop-chrome-on');
     window.dispatchEvent(new Event('vellum:navigation-ready'));
+    window.dispatchEvent(new Event('vellum:sidebar-ready'));
     document.addEventListener('keydown',event=>{
-      if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&['ArrowLeft','ArrowRight'].includes(event.key)) {
-        event.preventDefault();event.stopImmediatePropagation();arrows[event.key==='ArrowLeft'?0:1].click();return;
-      }
       if(event.key==='F10'&&!event.shiftKey || event.altKey&&!event.ctrlKey&&!event.metaKey&&['v','e','w'].includes(event.key.toLowerCase())) {
         event.preventDefault();previousFocus=document.activeElement;
         const index=event.key==='F10'?0:({v:2,e:1,w:3})[event.key.toLowerCase()];

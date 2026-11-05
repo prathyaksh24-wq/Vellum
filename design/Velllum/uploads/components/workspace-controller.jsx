@@ -73,6 +73,7 @@
     const tabIcon=tab=>tab.kind==='chat'?'Chat':tab.kind==='files'?'FileDocument':tab.kind==='terminal'?'Terminal':'Globe';
     const newTab=<button ref={c.trigger} type="button" className="tbtn workspace-new-tab" aria-label="New workspace tab" data-tip="New tab" onClick={()=>w.open('launcher',w.mode==='full'?'full':'split')}><Icon name={full?'Plus':'PlusSquareAdd'} size={19}/></button>;
     const actions=<div className="workspace-header-actions">
+      {full&&<><button type="button" className="tbtn" aria-label="Restore split view" data-tip="Restore split view" onClick={()=>w.layout('split')}><Icon name="Restore" size={17}/></button><button type="button" className="tbtn" aria-label="Hide workspace views" onClick={w.hide}><Icon name="X" size={17}/></button></>}
       {conversation&&<><button type="button" className="tbtn" aria-label="Chat options" data-tip="Chat options" onClick={onOptions}><Icon name="DotsHorizontal" size={18}/></button><button type="button" className="tbtn workspace-summary-toggle" data-tip="Summary" aria-label={detailsOpen?'Hide summary':'Show summary'} aria-expanded={detailsOpen} onClick={onDetails}><SummaryIcon/></button></>}
       {!full&&!w.visible&&<>{conversation&&<span className="workspace-control-divider"/>}{newTab}</>}
     </div>;

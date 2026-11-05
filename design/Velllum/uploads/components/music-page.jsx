@@ -86,13 +86,20 @@
     </div>;
   }
 
-  function MusicPage({music, spotify, onReconnect, onRefreshConnection, onCloseMusic, onSelectCollection, onAskMusic, initialProvider='spotify'}) {
+  function MusicPage({navigationRequest,onPreviewEnter,onPreviewLeave,music, spotify, onReconnect, onRefreshConnection, onCloseMusic, onSelectCollection, onAskMusic, initialProvider='spotify'}) {
     const {player, playback, upcoming, run, busy, error, refresh, enable} = music;
     const connected = !!spotify?.connected;
     const [provider, setProvider] = useState(initialProvider);
-    const [sidebarVisible,setSidebarVisible]=useState(true);
+    const [sidebarVisible,setSidebarVisible]=useState(true),[sidebarPeeking,setSidebarPeeking]=useState(false);
+    useEffect(()=>{const listener=event=>setSidebarPeeking(event.detail?.kind==='music');window.addEventListener('vellum:rail-preview',listener);return()=>window.removeEventListener('vellum:rail-preview',listener);},[]);
     const sidebarToggle=useRef(null),sidebarHide=useRef(null),sidebarChanged=useRef(false);
     const setSidebar=visible=>{sidebarChanged.current=true;setSidebarVisible(visible);};
+    useEffect(()=>{
+      const toggle=()=>setSidebarVisible(current=>!current);
+      window.addEventListener('vellum:music-sidebar-toggle',toggle);
+      return()=>window.removeEventListener('vellum:music-sidebar-toggle',toggle);
+    },[]);
+    useEffect(()=>{window.dispatchEvent(new CustomEvent('vellum:music-sidebar-state',{detail:{visible:sidebarVisible}}));},[sidebarVisible]);
     useEffect(()=>{if(sidebarChanged.current)(sidebarVisible?sidebarHide:sidebarToggle).current?.focus();},[sidebarVisible]);
     useEffect(()=>{const media=window.matchMedia('(max-width:760px)');const close=()=>{if(media.matches)setSidebar(false);};close();media.addEventListener('change',close);return()=>media.removeEventListener('change',close);},[]);
     const [screen,setScreen]=useState('home'),[themeMatch,setThemeMatch]=useState(true),[themeChoice,setThemeChoice]=useState('Midnight');
@@ -417,6 +424,7 @@
     const footerVisible=!isLocal || !!local.library?.collections.length;
     const displayCollections=isLocal?local.library?.collections || []:isApple?[]:playlists;
     const navigate=id => {setScreen(id);clearSearch();closeCollection();};
+    useEffect(()=>{if(navigationRequest)navigate(navigationRequest.screen);},[navigationRequest]);
     const control=(action,extra={}) => {
       if(!canPlay)return;
       if(isLocal){
@@ -528,7 +536,7 @@
       <input className="mw-sr-only" ref={local.audioInput} type="file" multiple accept=".mp3,.flac,.m4a,.aac,.ogg,.opus,.wav,.webm" aria-label="Choose local audio files" onChange={local.files}/>
       <input className="mw-sr-only" ref={local.folderInput} type="file" multiple webkitdirectory="" aria-label="Choose local music folder" onChange={local.files}/>
       <input className="mw-sr-only" ref={local.manifestInput} type="file" accept=".json" aria-label="Choose playlist manifest" onChange={local.importManifest}/>
-      <aside className="mw-sidebar" id="mw-sidebar" aria-label="Music sidebar" inert={!sidebarVisible?'':undefined} aria-hidden={!sidebarVisible}>
+      <aside className="mw-sidebar" id="mw-sidebar" aria-label="Music sidebar" data-shell-overlay={sidebarPeeking&&!sidebarVisible?'true':undefined} data-sidebar-preview={sidebarPeeking&&!sidebarVisible} onPointerEnter={onPreviewEnter} onPointerLeave={onPreviewLeave} inert={!sidebarVisible&&!sidebarPeeking} aria-hidden={!sidebarVisible&&!sidebarPeeking}>
         <div className="mw-sidebar-top"><span className="mw-sidebar-title">Music</span><button ref={sidebarHide} className="mw-icon-button" aria-label="Hide music sidebar" aria-expanded="true" aria-controls="mw-sidebar" onClick={()=>setSidebar(false)}><Icon name="panel"/></button></div>
         <div className="mw-sidebar-source">{providerPicker()}</div>
         <nav className="mw-nav" aria-label="Music navigation"><window.VellumUI.SharedRowBackground className="mw-nav-list" activeSelector='[aria-current="page"]' refreshKey={screen}>

@@ -1,0 +1,17 @@
+{
+  "publisher": "Supernotes",
+  "source": "https://download.supernotes.app/fonts/SN-Pro.zip",
+  "license": "OFL-1.1",
+  "files": [
+    {
+      "file": "SNPro-VariableRegular.woff2",
+      "bytes": 108624,
+      "sha256": "75cad23168e7526cb91fcd623ca69cb0813857edc687adc6b3859da713f3a26b"
+    },
+    {
+      "file": "SNPro-VariableItalic.woff2",
+      "bytes": 117248,
+      "sha256": "c236ea3526e55bb7254e351ef8f764f6ae62e5b0b15568b1981024fe0a8b1f39"
+    }
+  ]
+}

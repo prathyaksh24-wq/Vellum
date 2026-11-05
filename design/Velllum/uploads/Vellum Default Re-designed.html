@@ -21,7 +21,6 @@
 <link rel="stylesheet" href="components/settings-overview.css?v=20261030-vellum-polish"/>
 <script type="text/babel" data-presets="react" src="components/settings-overview.jsx?v=20261030-vellum-polish"></script>
 <link rel="stylesheet" href="components/plugin-workspace.css?v=20261030-vellum-polish"/>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=JetBrains+Mono:wght@400;500;600&display=swap"/>
 <script defer src="components/desktop-chrome.js"></script>
 <script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
 <script src="api/chat.js?v=20261030-orbs"></script>
@@ -99,14 +98,13 @@
 <script type="text/babel" data-presets="react" src="components/DvkMotionBackground.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <script type="module" src="/composer-entry.js"></script>
+<script type="module" src="/commands-entry.js"></script>
 <script type="module" src="/workspace-entry.js"></script>
 <script type="text/babel" data-presets="react" src="components/workspace-content.jsx"></script>
+<link rel="stylesheet" href="components/command-menu.css"/>
+<script type="text/babel" data-presets="react" src="components/command-menu.jsx"></script>
 <link rel="stylesheet" href="components/books-view.css?v=20261030-vellum-polish"/>
 <script src="api/runtimes.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link href="https://api.fontshare.com/v2/css?f[]=clash-grotesk@400,500,600,700&display=swap" rel="stylesheet">
 <style>
 /* Interface polish guided by unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. */
 *{box-sizing:border-box;margin:0;padding:0}
@@ -124,9 +122,9 @@
   --background-text-shadow:0 1px 2px rgba(0,0,0,.32);--background-surface-shadow:0 18px 55px rgba(0,0,0,.28);
   --ascii-color:#f3d69b;--ascii-bg:#090b12;
   --color-1:var(--ember);--color-2:var(--accent2);--color-3:color-mix(in srgb,var(--ember) 55%,var(--txt2));--color-4:var(--txt2);--color-5:color-mix(in srgb,var(--accent2) 70%,var(--ember));
-  --font-d:"Clash Grotesk","Poppins","Helvetica Neue",system-ui,sans-serif;
-  --font-m:"Spline Sans Mono",ui-monospace,Consolas,monospace;
-  --font-ui:"Lexend","Helvetica Neue",Helvetica,system-ui,sans-serif;
+  --font-d:var(--font-ui);
+  --font-m:"Cascadia Mono",Consolas,"Liberation Mono",monospace;
+  --font-ui:"SN Pro","Segoe UI","Nirmala UI",system-ui,sans-serif;
   --ui-space:4px;
   --ui-control-radius:8px;
   --ui-panel-radius:12px;
@@ -466,7 +464,7 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .mem-group{margin-bottom:24px}
 .mem-group-head{display:flex;align-items:center;gap:9px;font-family:var(--font-d);font-size:13.5px;font-weight:600;color:var(--txt2);margin-bottom:11px;letter-spacing:-.005em}
 .mem-src-ic{display:flex;width:25px;height:25px;align-items:center;justify-content:center;border-radius:7px;background:var(--grad);color:#fff;box-shadow:0 2px 9px var(--glow)}
-.mem-group-c{font-size:12px;color:var(--dim);font-weight:400;font-family:"Lexend",sans-serif}
+.mem-group-c{font-size:12px;color:var(--dim);font-weight:400;font-family:var(--font-ui)}
 .mem-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));gap:10px}
 .mem-card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px 14px 14px;transition:border-color .18s,transform .18s,box-shadow .18s;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .mem-card:hover{border-color:var(--line2);transform:none;box-shadow:0 8px 22px rgba(0,0,0,.16)}
@@ -2069,11 +2067,15 @@ body{font-size:14px;font-family:var(--font-ui)}
 </style>
 <link rel="stylesheet" href="components/agent-composer.css?v=20261030-morphic-3"/>
 <link rel="stylesheet" href="components/sidebar-inset.css?v=20261030-clean-music"/>
+<link rel="stylesheet" href="components/navigation-shell.css"/>
+<script type="text/babel" data-presets="react" src="components/navigation-shell.jsx"></script>
+<link rel="preload" href="assets/fonts/SNPro-VariableRegular.woff2" as="font" type="font/woff2" crossorigin/>
+<link rel="stylesheet" href="components/typography.css"/>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const {useState, useRef, useEffect, useMemo} = React;
+const {useState, useRef, useEffect, useLayoutEffect, useMemo} = React;
 const API = window.VellumApi;
 const SpotifyAPI = {
   status: () => API.plugins.spotifyStatus(),
@@ -3420,9 +3422,15 @@ const SourceMarks = ({sources = [], limit = 2}) => (
   </span>
 );
 
-const ChatRow = ({chat, active, renaming, nested, showMeta = false, onOpen, onMenu, onRename}) => {
+const ChatRow = ({chat, project, active, renaming, nested, showMeta = false, onOpen, onMenu, onRename, onPin, onArchive}) => {
   const [draft, setDraft] = useState(chat.title);
   const organization = chat.organization || {};
+  const rowRef=useRef(null),titleRef=useRef(null);
+  const hover=window.VellumUI.useSidebarHover('chat:'+chat.id,rowRef,renaming);
+  const [pendingAction,setPendingAction]=useState(null);
+  const hoverCard=hover.open,dismissCard=hover.dismiss,closeCard=hover.leave,openCard=hover.enter;
+  const quickAction=async(event,kind,action)=>{event.stopPropagation();dismissCard();if(pendingAction||!action)return;setPendingAction(kind);try{await action();}finally{setPendingAction(null);}};
+  useLayoutEffect(()=>{const label=titleRef.current;if(!label)return;const measure=()=>{const distance=Math.max(0,label.scrollWidth-label.clientWidth);label.style.setProperty('--title-travel',-distance+'px');label.style.setProperty('--title-duration',Math.max(.7,Math.min(2.4,distance/70))+'s');};const observer=new ResizeObserver(measure);observer.observe(label);measure();return()=>observer.disconnect();},[chat.title,renaming]);
   useEffect(() => { if (renaming) setDraft(chat.title); }, [renaming]);
   if (renaming) {
     return (
@@ -3435,10 +3443,10 @@ const ChatRow = ({chat, active, renaming, nested, showMeta = false, onOpen, onMe
     );
   }
   return (
-    <div className={'chat-row' + (active ? ' active' : '') + (nested ? ' nested' : '')} onClick={onOpen}>
+    <div ref={rowRef} data-hover-active={hover.open} data-sidebar-hover={hover.id} draggable onDragStart={event=>{if(event.target.closest('button,input')){event.preventDefault();return;}dismissCard();event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('application/x-vellum-chat',chat.id);}} className={'chat-row shell-chat-row' + (active ? ' active' : '') + (nested ? ' nested' : '')} role="button" tabIndex={0} aria-current={active?'page':undefined} onClick={onOpen} onKeyDown={event=>{if(event.target===event.currentTarget&&['Enter',' '].includes(event.key)){event.preventDefault();onOpen();}}} onPointerEnter={openCard} onPointerLeave={closeCard} onFocus={event=>{if(event.target===event.currentTarget)openCard();}} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))closeCard();}}>
       {chat.pinned && <span className="chat-pin"><IcPin size={12}/></span>}
       <span className="chat-copy">
-        <span className="chat-title">{chat.title}</span>
+        <span ref={titleRef} className="chat-title"><span>{chat.title}</span></span>
         {showMeta && (organization.topic_label || (organization.sources || []).length > 0) && (
           <span className="chat-meta">
             {organization.topic_label && <span className="chat-topic">{organization.topic_label}</span>}
@@ -3446,36 +3454,32 @@ const ChatRow = ({chat, active, renaming, nested, showMeta = false, onOpen, onMe
           </span>
         )}
       </span>
-      <button className="chat-dots" title="Options"
-        onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
+      <window.VellumUI.ChatStatus chat={chat}/>
+      <div className="shell-chat-actions" onPointerEnter={hover.keep} onFocus={dismissCard}>
+        {onPin&&<button type="button" className="chat-dots chat-quick-action" data-command="chat.pin" title={chat.pinned?'Unpin chat':'Pin chat'} aria-label={(chat.pinned?'Unpin chat ':'Pin chat ')+chat.title} aria-pressed={!!chat.pinned} disabled={!!pendingAction} onClick={event=>quickAction(event,'pin',onPin)}><IcPin size={14}/></button>}
+        {onArchive&&<button type="button" className="chat-dots chat-quick-action" data-command="chat.archive" title="Archive chat" aria-label={'Archive chat '+chat.title} disabled={!!pendingAction} onClick={event=>quickAction(event,'archive',onArchive)}><IcArchive size={14}/></button>}
+        <button type="button" className="chat-dots" title="Options" aria-label={'Options for '+chat.title} disabled={!!pendingAction}
+          onClick={event=>{event.stopPropagation();dismissCard();onMenu(event);}}><IcDots size={14}/></button>
+      </div>
+      {hoverCard&&!renaming&&<window.VellumUI.ChatHoverCard chat={chat} project={project} anchor={rowRef} hoverId={hover.id} hoverCardRef={hover.popup} onDismiss={dismissCard} onOpen={event=>{event?.stopPropagation();dismissCard();onOpen();}} onEnter={hover.keep} onClose={closeCard}/>}
     </div>
   );
 };
 
-const ProjectRow = ({proj, renaming, open, onToggle, onMenu, onOpen, onRename}) => {
-  const [draft, setDraft] = useState(proj.name);
-  useEffect(() => { if (renaming) setDraft(proj.name); }, [renaming]);
-  if (renaming) {
-    return (
-      <div className="chat-row active">
-        <FolderIcon open={open}/>
-        <input className="rename-input" autoFocus value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') onRename(draft); if (e.key === 'Escape') onRename(null); }}
-          onBlur={() => onRename(draft)}/>
-      </div>
-    );
-  }
-  return (
-    <div className="chat-row" onClick={() => { onToggle(); onOpen(); }}>
-      <FolderIcon open={open}/>
-      <span className="chat-title">{proj.name}</span>
-      <button className="chat-dots" title="New chat in this project"
-        onClick={e => { e.stopPropagation(); onOpen(); }}><IcPencilSq size={14}/></button>
-      <button className="chat-dots" title="Project settings"
-        onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
-    </div>
-  );
+const ProjectRow = ({proj, chats=[], menuOpen, renaming, open, onToggle, onMenu, onOpen, onRename, onNewChat, onDropChat, onPin, onEdit}) => {
+  const [draft,setDraft]=useState(proj.name),[dragging,setDragging]=useState(false);
+  const anchor=useRef(null),hover=window.VellumUI.useSidebarHover('project:'+proj.id,anchor,renaming||menuOpen||dragging);
+  const close=hover.leave,dismiss=hover.dismiss;
+  useEffect(()=>{if(renaming)setDraft(proj.name);},[renaming,proj.name]);
+  useEffect(()=>{if(menuOpen)dismiss();},[menuOpen]);
+  if(renaming)return <div className="chat-row active"><FolderIcon open={open}/><input className="rename-input" aria-label="Project name" autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onKeyDown={event=>{if(event.key==='Enter')onRename(draft);if(event.key==='Escape'){event.preventDefault();onRename(null);}}} onBlur={()=>onRename(draft)}/></div>;
+  return <div ref={anchor} data-hover-active={hover.open} data-sidebar-hover={hover.id} className={'chat-row shell-project-row'+(dragging?' is-drop-target':'')} onPointerEnter={hover.enter} onPointerLeave={close} onFocus={hover.enter} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))close();}} onDragOver={event=>{if([...event.dataTransfer.types].includes('application/x-vellum-chat')){event.preventDefault();event.dataTransfer.dropEffect='move';dismiss();setDragging(true);}}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={event=>{event.preventDefault();setDragging(false);dismiss();const id=event.dataTransfer.getData('application/x-vellum-chat');if(chats.some(chat=>chat.id===id))onDropChat(id);}}>
+    <button type="button" className="project-disclosure" aria-label={(open?'Collapse ':'Expand ')+proj.name} aria-expanded={open} onClick={event=>{event.stopPropagation();dismiss();onToggle();}}><IcChevD size={12}/></button>
+    <button type="button" className="project-open" aria-expanded={open} onClick={()=>{dismiss();onToggle();}}><FolderIcon open={open}/><span className="chat-title">{proj.name}</span>{proj.pinned&&<IcPin size={11}/>}</button>
+    <button type="button" className="chat-dots" aria-label={'Options for project '+proj.name} onClick={event=>{dismiss();onMenu(event);}}><IcDots size={14}/></button>
+    <button type="button" className="chat-dots" aria-label={'New chat in '+proj.name} title="New chat in project" onClick={()=>{dismiss();onNewChat();}}><IcPencilSq size={14}/></button>
+    {hover.open&&<window.VellumUI.ProjectHoverCard project={proj} chats={chats.filter(chat=>chat.projectId===proj.id&&!chat.archived)} anchor={anchor} hoverId={hover.id} hoverCardRef={hover.popup} onDismiss={dismiss} onEnter={hover.keep} onClose={close} onPin={onPin} onEdit={()=>{dismiss();onEdit();}} onOpen={()=>{dismiss();onOpen();}} onNewChat={()=>{dismiss();onNewChat();}}/>}
+  </div>;
 };
 
 const SmartViewIcon = ({id, size = 14}) => {
@@ -3496,165 +3500,55 @@ const chatIsToday = chat => {
 };
 
 const CollapsibleRegion = ({open, id, labelledBy, children}) => (
-  <div id={id} role={labelledBy ? 'region' : undefined} aria-labelledby={labelledBy} aria-hidden={!open}
+  <div id={id} role={labelledBy ? 'region' : undefined} aria-labelledby={labelledBy} aria-hidden={!open} inert={!open}
     className={'sb-section-collapse' + (open ? ' open' : '')}>
     <div className="sb-section-inner">{children}</div>
   </div>
 );
 
-const SidebarSection = ({id, label, count, open, onToggle, children}) => {
+const SidebarSection = ({id, label, count, open, onToggle, actions, children}) => {
   const buttonId = `sidebar-section-${id}-button`;
   const regionId = `sidebar-section-${id}`;
   return (
     <section className="sb-section">
-      <button type="button" id={buttonId} className="sb-sec sb-sec-toggle"
+      <div className="sidebar-section-heading"><button type="button" id={buttonId} className="sb-sec sb-sec-toggle"
         aria-expanded={open} aria-controls={regionId} onClick={onToggle}
         title={open ? `Collapse ${label}` : `Expand ${label}`}>
         <span>{label}</span>
         {count !== undefined && count !== null && <span className="sb-sec-count">{count}</span>}
         <span className={'sec-chev' + (open ? '' : ' closed')} aria-hidden="true"><IcChevD size={12}/></span>
       </button>
+      {actions&&<div className="sidebar-section-actions">{actions}</div>}</div>
       <CollapsibleRegion open={open} id={regionId} labelledBy={buttonId}>{children}</CollapsibleRegion>
     </section>
   );
 };
 
-const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, pinned=false, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, notificationState={unread:0,open:false}}) => {
-  const sorted = visibleChats(chats);
-  const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
-  const [expandedSpace, setExpandedSpace] = useState(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const organizedChats = ((conversationLibrary && conversationLibrary.conversations) || chats).filter(chat => !chat.archived);
-  const serverSmartViews = (conversationLibrary && conversationLibrary.smart_views) || [];
-  const smartById = new Map(serverSmartViews.map(item => [item.id, item]));
-  if (!smartById.has('pinned')) smartById.set('pinned', {id: 'pinned', label: 'Pinned', count: organizedChats.filter(chat => chat.pinned).length});
-  if (!smartById.has('follow-up')) smartById.set('follow-up', {id: 'follow-up', label: 'Needs follow-up', count: organizedChats.filter(chat => chat.organization && chat.organization.status === 'Follow-up').length});
-  const smartViews = [...smartById.values()].sort((left, right) => {
-    const order = ['pinned', 'follow-up', 'calendar', 'slack', 'spotify', 'files'];
-    return order.indexOf(left.id) - order.indexOf(right.id);
-  });
-  const continueChat = sorted.find(chat => chat.id === activeChatId) || sorted.find(chat => (chat.messages || []).length > 0) || sorted[0] || null;
-  const todayChats = sorted.filter(chat => chat.id !== (continueChat && continueChat.id) && chatIsToday(chat));
-  const followUpChats = sorted.filter(chat => chat.organization && chat.organization.status === 'Follow-up');
-  const chatsForSpace = spaceId => organizedChats.filter(chat => chat.organization && chat.organization.space_id === spaceId);
-  return (
-    <div className="sidebar" data-ui-reference="sidebar">
-      <div className="sb-head">
-        <button type="button" className="wordmark" title="Vellum home · Ctrl+Shift+H" aria-label="Vellum home" onClick={onNewChat}><em>v</em>ellum</button>
-        <button className="tbtn" title={pinned?'Unpin sidebar':'Pin sidebar'} aria-label={pinned?'Hide main sidebar':'Pin main sidebar'} aria-controls="main-sidebar" aria-expanded={true} aria-pressed={pinned} onClick={onTogglePin}><IcPanel/></button>
-      </div>
-      <div className="sb-scroll">
-        <div className="sb-primary">
-          <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
-          <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
-        </div>
-        <div className="sb-tools">
-          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
-          <button className={'sb-row' + (view === 'music' ? ' active' : '')} onClick={() => onNav('music')}><span className="sb-ic"><window.VellumUI.AppIcon name="Music"/></span>Music</button>
-          <NotificationTrigger unread={notificationState.unread} expanded={notificationState.open} onClick={openNotifications}/>
-          <button className="sb-row" aria-expanded={moreOpen} aria-controls="sidebar-more" onClick={() => setMoreOpen(!moreOpen)}><span className="sb-ic"><IcDots/></span>More<span className={'browser-more-arrow' + (moreOpen ? ' open' : '')}><IcChevR size={13}/></span></button>
-        </div>
-        {!moreOpen && <section className="sidebar-recent" aria-label="Recent chats"><h2>Recent</h2>{sorted.slice(0,8).map(chat => <ChatRow key={chat.id} chat={chat} active={view === 'chat' && chat.id === activeChatId}
-          renaming={renamingId === chat.id} onOpen={() => onOpenChat(chat.id)} onMenu={e => onChatMenu(chat.id, e)} onRename={title => onRename(chat.id, title)}/>)}</section>}
-        {moreOpen && <div id="sidebar-more">
-        <div className="sb-tools">
-          <button className={'sb-row' + (view === 'scheduled' ? ' active' : '')} onClick={() => onNav('scheduled')}><span className="sb-ic"><IcGCal/></span>Scheduled</button>
-          <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
-          <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcPlugins/></span>Plugins</button>
-        </div>
-        <SidebarSection id="now" label="Now" count={sorted.length} open={secOpen.now} onToggle={() => onToggleSec('now')}>
-          <div className="now-group">
-          <div className="now-subhead">Continue<span className="space-count">{continueChat ? 1 : 0}</span></div>
-          {continueChat ? <ChatRow chat={continueChat} showMeta active={view === 'chat' && continueChat.id === activeChatId}
-            renaming={renamingId === continueChat.id}
-            onOpen={() => onOpenChat(continueChat.id)}
-            onMenu={e => onChatMenu(continueChat.id, e)}
-            onRename={t => onRename(continueChat.id, t)}/> : <div className="now-subempty">No conversation to continue.</div>}
-          <div className="now-subhead">Today<span className="space-count">{todayChats.length}</span></div>
-          {todayChats.slice(0, 3).map(chat => <ChatRow key={chat.id} chat={chat} active={view === 'chat' && chat.id === activeChatId}
-            renaming={renamingId === chat.id}
-            onOpen={() => onOpenChat(chat.id)}
-            onMenu={e => onChatMenu(chat.id, e)}
-            onRename={title => onRename(chat.id, title)}/>)}
-          {todayChats.length === 0 && <div className="now-subempty">No other chats today.</div>}
-          <div className="now-subhead">Needs follow-up<span className="space-count">{followUpChats.length}</span></div>
-          {followUpChats.slice(0, 2).map(chat => <ChatRow key={chat.id} chat={chat} showMeta active={view === 'chat' && chat.id === activeChatId}
-            renaming={renamingId === chat.id}
-            onOpen={() => onOpenChat(chat.id)}
-            onMenu={e => onChatMenu(chat.id, e)}
-            onRename={title => onRename(chat.id, title)}/>)}
-          {followUpChats.length === 0 && <div className="now-subempty">Nothing waiting on you.</div>}
-          </div>
+const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, secOpen, expandedProj, onToggleSec, onToggleProj, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onChatAction, onRename, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onProjectNewChat, onMoveToProject, onProjectAction, projectMenuId, hoverEnabled=true}) => {
+  const [activityOnly,setActivityOnly]=useState(false),[recentLimit,setRecentLimit]=useState(16);
+  const [projectSort,setProjectSort]=useState('recent'),[recentSort,setRecentSort]=useState('recent'),[recentFilter,setRecentFilter]=useState('unassigned');
+  const sort=(a,b)=>recentSort==='name'?a.title.localeCompare(b.title):(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0);
+  const sorted=chats.filter(chat=>!chat.archived).slice().sort(sort),status=window.VellumUI.chatStatus;
+  const projectRows=projects.slice().sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(projectSort==='name'?a.name.localeCompare(b.name):(Date.parse(b.updated_at)||0)-(Date.parse(a.updated_at)||0)));
+  const Menu=window.VellumUI.SidebarSectionMenu;
+  const attention=sorted.filter(chat=>status(chat));
+  const pinnedChats=sorted.filter(chat=>chat.pinned);
+  const rows=activityOnly?attention:sorted.filter(chat=>recentFilter==='all'||(recentFilter==='attention'?!!status(chat):!chat.projectId));
+  const row=chat=><ChatRow key={chat.id} chat={chat} project={projects.find(project=>project.id===chat.projectId)} active={view==='chat'&&chat.id===activeChatId} renaming={renamingId===chat.id} onOpen={()=>onOpenChat(chat.id)} onMenu={event=>onChatMenu(chat.id,event)} onRename={title=>onRename(chat.id,title)} onPin={onChatAction?()=>onChatAction(chat.id,'pin'):undefined} onArchive={onChatAction?()=>onChatAction(chat.id,'archive'):undefined}/>;
+  return <window.VellumUI.SidebarHoverProvider enabled={hoverEnabled}><aside className="sidebar shell-conversations" data-ui-reference="sidebar" aria-label="Conversations">
+    <div className="sb-head"><window.VellumUI.ModeSwitcher/><div className="shell-heading-actions"><button type="button" className="tbtn" aria-label="View chat activity" aria-pressed={activityOnly} title="Chat activity" onClick={()=>setActivityOnly(!activityOnly)}><IcBell size={17}/>{attention.length>0&&<span className="shell-attention-dot"/>}</button><button type="button" className="tbtn" data-command="commands.open" aria-label="Search chats" title="Search chats" onClick={onSearch}><IcSearch size={17}/></button></div></div>
+    <div className="sb-primary"><button type="button" className="sb-row" data-command="chat.new" title="New chat" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button></div>
+    <div className="sb-scroll">
+      {activityOnly?<section className="sidebar-recent"><h2>Activity <span>{attention.length}</span></h2>{attention.map(row)}{!attention.length&&<p className="sb-empty">No chats need attention.</p>}</section>:<>
+        {pinnedChats.length>0&&<SidebarSection id="pinned" label="Pinned" count={pinnedChats.length} open={secOpen.pinned!==false} onToggle={()=>onToggleSec('pinned')}>{pinnedChats.map(row)}</SidebarSection>}
+        <SidebarSection id="projects" label="Projects" count={projects.length} open={secOpen.projects!==false} onToggle={()=>onToggleSec('projects')} actions={<><Menu label="Project organization" groups={[{label:'Sort projects',value:projectSort,onChange:setProjectSort,options:[['recent','Recently updated'],['name','Name']]}]}/><button type="button" className="tbtn" aria-label="New project" title="New project" onClick={onNewProject}><IcPlus size={15}/></button></>}>
+          {projectRows.map(project=><React.Fragment key={project.id}><ProjectRow proj={project} menuOpen={projectMenuId===project.id} chats={chats} onPin={()=>onProjectAction(project.id,'pin')} onEdit={()=>onProjectAction(project.id,'rename')} onNewChat={()=>onProjectNewChat(project.id)} onDropChat={id=>onMoveToProject(id,project.id)} renaming={projRenamingId===project.id} open={!!expandedProj[project.id]} onToggle={()=>onToggleProj(project.id)} onOpen={()=>onOpenProject(project.id)} onMenu={event=>onProjectMenu(project.id,event)} onRename={title=>onProjectRename(project.id,title)}/>{expandedProj[project.id]&&<div className="space-chat-list">{sorted.filter(chat=>chat.projectId===project.id).map(row)}</div>}</React.Fragment>)}
+          {!projects.length&&<p className="sb-empty">Create a project to group related chats.</p>}
         </SidebarSection>
-        <SidebarSection id="spaces" label="Spaces" count={spaces.length} open={secOpen.spaces} onToggle={() => onToggleSec('spaces')}>
-        {spaces.length === 0 && <div className="sb-empty">Spaces appear as chats collect.</div>}
-        {spaces.slice(0, 8).map(space => {
-          const open = expandedSpace === space.id;
-          const regionId = `sidebar-space-${space.id}`;
-          return (
-            <React.Fragment key={space.id}>
-              <button className={'sb-row space-row' + (open ? ' open' : '')} aria-expanded={open} aria-controls={regionId}
-                onClick={() => setExpandedSpace(open ? null : space.id)}>
-                <span className={'sec-chev' + (open ? '' : ' closed')} aria-hidden="true"><IcChevD size={12}/></span>
-                <span className="sb-ic"><FolderIcon open={open}/></span>
-                <span className="chat-title">{space.label}</span>
-                <span className="space-count">{space.count}</span>
-              </button>
-              <CollapsibleRegion open={open} id={regionId}>
-                <div className="space-chat-list">
-                  {chatsForSpace(space.id).map(c => (
-                    <ChatRow key={c.id} chat={c} nested showMeta active={view === 'chat' && c.id === activeChatId}
-                      renaming={renamingId === c.id}
-                      onOpen={() => onOpenChat(c.id)}
-                      onMenu={e => onChatMenu(c.id, e)}
-                      onRename={t => onRename(c.id, t)}/>
-                  ))}
-                </div>
-              </CollapsibleRegion>
-            </React.Fragment>
-          );
-        })}
-        </SidebarSection>
-        <SidebarSection id="smart-views" label="Smart views" count={smartViews.length} open={secOpen.smartViews} onToggle={() => onToggleSec('smartViews')}>
-        {smartViews.map(smart => (
-          <button key={smart.id} className="sb-row smart-row" onClick={() => onSmartView(smart)}>
-            <span className="sb-ic"><SmartViewIcon id={smart.id}/></span>
-            <span className="chat-title">{smart.label}</span>
-            <span className="space-count">{smart.count}</span>
-          </button>
-        ))}
-        </SidebarSection>
-        <SidebarSection id="projects" label="Projects" count={projects.length} open={secOpen.projects} onToggle={() => onToggleSec('projects')}>
-            <button className="sb-row" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus/></span>New project</button>
-            {projects.map(p => (
-              <React.Fragment key={p.id}>
-                <ProjectRow proj={p} renaming={projRenamingId === p.id} open={!!expandedProj[p.id]}
-                  onToggle={() => onToggleProj(p.id)}
-                  onOpen={() => onOpenProject(p.id)}
-                  onMenu={e => onProjectMenu(p.id, e)}
-                  onRename={t => onProjectRename(p.id, t)}/>
-                {!!expandedProj[p.id] && chats.filter(c => c.projectId === p.id && !c.archived).map(c => (
-                  <ChatRow key={c.id} chat={c} nested active={view === 'chat' && c.id === activeChatId}
-                    renaming={renamingId === c.id}
-                    onOpen={() => onOpenChat(c.id)}
-                    onMenu={e => onChatMenu(c.id, e)}
-                    onRename={t => onRename(c.id, t)}/>
-                ))}
-              </React.Fragment>
-            ))}
-        </SidebarSection>
-        </div>}
-      </div>
-      <div className="profile-row" role="button" tabIndex={0} aria-label="Open account menu" onClick={onProfile} onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); onProfile(e);}}}>
-        <div className="avatar">{initials(profile.displayName)}</div>
-        <div className="p-meta">
-          <div className="p-name">{profile.displayName}</div>
-          <div className="p-plan">{profile.plan}</div>
-        </div>
-        <span className="p-edit"><IcPenLine size={14}/></span>
-      </div>
+        <SidebarSection id="recents" label="Recents" open={secOpen.recents!==false} onToggle={()=>onToggleSec('recents')} actions={<><Menu label="Recent chat organization" groups={[{label:'Show chats',value:recentFilter,onChange:setRecentFilter,options:[['unassigned','Outside projects'],['all','All chats'],['attention','Needs attention']]},{label:'Sort chats',value:recentSort,onChange:setRecentSort,options:[['recent','Recently updated'],['name','Name']]}]}/><button type="button" className="tbtn" aria-label="New chat from Recents" title="New chat" data-command="chat.new" onClick={onNewChat}><IcPencilSq size={15}/></button></>}>{rows.slice(0,recentLimit).map(row)}{rows.length>recentLimit&&<button type="button" className="sb-row shell-show-more" onClick={()=>setRecentLimit(count=>count+20)}>Show more</button>}{!rows.length&&<p className="sb-empty">Your conversations will appear here.</p>}</SidebarSection>
+      </>}
     </div>
-  );
+  </aside></window.VellumUI.SidebarHoverProvider>;
 };
 
 const RailFly = ({btn, keepOpen, children}) => {
@@ -3744,12 +3638,12 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
 };
 
 /* Project menu */
-const ProjectMenu = ({pos, onAction, onClose}) => (
+const ProjectMenu = ({pos, project, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}} onClose={onClose}>
-    <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
-    <div className="ctx-hint">sharing is not in this preview</div>
-    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename project</div>
-    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete project</div>
+    <button type="button" className="ctx-item" onClick={()=>onAction('newchat')}><span className="sb-ic"><IcPencilSq size={14}/></span>New chat</button>
+    <button type="button" className="ctx-item" onClick={()=>onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{project?.pinned?'Unpin project':'Pin project'}</button>
+    <button type="button" className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename project</button>
+    <button type="button" className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Remove project</button><div className="ctx-hint">Chats stay in Recents.</div>
   </Popover>
 );
 
@@ -4236,6 +4130,11 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
     ...slashProjectItems('',projects),
   ],[apps,skills,agents,projects]);
   const references = React.useMemo(()=>composerRuntime?.referenceProviders({library,projects,chats,browserTabs,apps,skills,agents}) || [],[composerRuntime,library,projects,chats,browserTabs,apps,skills,agents]);
+  const referenceLogo = reference => {
+    if(!['plugin','app','mcp'].includes(reference.kind))return '';
+    const owner=apps.find(plugin=>String(plugin.id)===String(reference.owner_plugin_id || reference.id));
+    return connectorIconSource({id:reference.id,name:reference.label},{localOnly:true}) || (owner?connectorIconSource(owner,{localOnly:true}):'');
+  };
   const focusComposer = () => setTimeout(()=>taRef.current?.focus(),0);
   const stripSlash = () => {taRef.current?.replaceActiveToken('');focusComposer();};
   const enableSearch = () => {setSearchMode(true);stripSlash();taRef.current?.dismissSuggestions();};
@@ -4250,11 +4149,10 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
       if(item.run==='plugins')onOpenPlugins?.();
       return;
     }
-    if(item.kind==='skill'){taRef.current?.insertReference({kind:'skill',id:String(item.raw.id || item.raw.name),label:item.label});return;}
+    if(['plugin','app','mcp','skill'].includes(item.kind)){const reference=composerRuntime?.commandReference(item);if(reference)taRef.current?.insertReference(reference);return;}
     stripSlash();
     if(item.kind==='project')onOpenProject?.(item.raw.id);
     if(item.kind==='agent')onOpenAgent?.(item.raw.id);
-    if(['plugin','app','mcp'].includes(item.kind))onOpenPlugins?.(item.plugin || item.raw);
   };
   const send = () => {
     if (!['idle','error'].includes(voiceState) || dictationActive) return;
@@ -4312,7 +4210,7 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
         )}
         <div className="ta-wrap">
           <RichComposerEditor editorRef={taRef} value={text} onChange={setText} commands={commands} providers={references}
-            referenceIcon={reference=>['plugin','app','mcp'].includes(reference.kind)?connectorIconSource({id:reference.owner_plugin_id || reference.id,name:reference.label},{localOnly:true}):''}
+            referenceIcon={referenceLogo}
             onCommand={runSlashItem} onSubmit={send} onPasteFiles={prepareComposerFiles} preferred={drop}
             onFocus={()=>{if(animated)setGlow(true);}} onBlur={()=>setGlow(false)}/>
           {!text && (animated
@@ -4343,7 +4241,7 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
               }
               e.target.value = '';
             }}/>
-          <button className="cbtn" aria-label="Attach files" data-tip="Attach files" onClick={() => setPlusOpen(true)}><IcPlus/></button>
+          <button className="cbtn" data-command="files.add" aria-label="Attach files" data-tip="Attach files" onClick={() => setPlusOpen(true)}><IcPlus/></button>
           {searchMode && (
             <button className="search-pill" title="Turn off web search" onClick={() => setSearchMode(false)}>
               <span className="sp-globe"><IcGlobe size={14}/></span>
@@ -4388,7 +4286,7 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
           {dictationActive && dictationUi}
           {searchMode
             ? <button className={'model-pill' + (scopeOpen ? ' select-open' : '')} onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
-            : <button ref={modelTriggerRef} className={'model-pill' + (modelOpen ? ' select-open' : '')} aria-haspopup="dialog" aria-expanded={modelOpen} data-tip="Model and effort" onClick={() => setModelOpen(true)}><ModelLogo model={models.find(item=>item.id===model) || {id:model}}/><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
+            : <button ref={modelTriggerRef} className={'model-pill' + (modelOpen ? ' select-open' : '')} aria-haspopup="dialog" aria-expanded={modelOpen} data-command="model.open" data-tip="Model and effort" onClick={() => setModelOpen(true)}><ModelLogo model={models.find(item=>item.id===model) || {id:model}}/><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
           <button className={'cbtn' + (dictationActive ? ' mic-on' : '')} disabled={!API.voice?.createDictation || !['idle','error'].includes(voiceState) || ['connecting','processing'].includes(dictation.state)} aria-label={dictationActive ? 'Finish dictation' : 'Start dictation'} aria-pressed={dictationActive} title={dictationActive ? 'Finish dictation' : 'Dictate locally'} onClick={toggleDictation}><IcMic/></button>
           {!dictationActive && (voiceState === 'idle' || voiceState === 'error') && (busy && !text.trim()
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
@@ -5699,112 +5597,7 @@ const LibItemMenu = ({pos, onAction, onClose}) => (
   </Popover>
 );
 
-const LibraryView = ({library, setLibrary}) => {
-  const [q, setQ] = useState('');
-  const [tab, setTab] = useState('All');
-  const [mode, setMode] = useState('list');
-  const [newOpen, setNewOpen] = useState(false);
-  const [itemMenu, setItemMenu] = useState(null);   // {id, x, y}
-  const [renamingId, setRenamingId] = useState(null);
-  const [draft, setDraft] = useState('');
-  const fileRef = useRef(null);
-
-  const items = library.filter(it => {
-    if (tab === 'Images' && it.kind !== 'image') return false;
-    if (tab === 'Files' && it.kind === 'image') return false;
-    return it.name.toLowerCase().includes(q.toLowerCase());
-  });
-
-  const addUpload = f => {
-    setLibrary(lib => [{id: uid(), name: f.name, kind: kindOf(f.name), size: fmtSize(f.size), modified: 'Today'}, ...lib]);
-  };
-  const addNote = () => {
-    const id = uid();
-    setLibrary(lib => [{id, name: 'untitled note', kind: 'note', size: '0 KB', modified: 'Today'}, ...lib]);
-    setMode('list'); setTab('All'); setRenamingId(id); setDraft('untitled note');
-  };
-  const commitRename = id => {
-    if (draft.trim()) setLibrary(lib => lib.map(it => it.id === id ? {...it, name: draft.trim()} : it));
-    setRenamingId(null);
-  };
-  const menuAction = (id, action) => {
-    setItemMenu(null);
-    if (action === 'delete') setLibrary(lib => lib.filter(it => it.id !== id));
-    if (action === 'rename') {
-      const it = library.find(x => x.id === id);
-      setRenamingId(id); setDraft(it ? it.name : '');
-      setMode('list');
-    }
-  };
-
-  return (
-    <div className="page">
-      <div className="page-inner">
-        <div className="page-head">
-          <div className="page-title">Library</div>
-          <div className="lib-search">
-            <span className="sb-ic"><IcSearch size={13}/></span>
-            <input placeholder="Search library" value={q} onChange={e => setQ(e.target.value)}/>
-          </div>
-          <div style={{position: 'relative'}}>
-            <input ref={fileRef} type="file" style={{display: 'none'}}
-              onChange={e => { const f = e.target.files && e.target.files[0]; if (f) addUpload(f); e.target.value = ''; }}/>
-            <button className="new-btn" onClick={() => setNewOpen(true)}>New<IcChevD size={12}/></button>
-            {newOpen && (
-              <Popover className="ctx-menu" style={{position: 'absolute', right: 0, top: 38, left: 'auto'}} onClose={() => setNewOpen(false)}>
-                <div className="ctx-item" onClick={() => { setNewOpen(false); fileRef.current.click(); }}><span className="sb-ic"><IcUpload size={14}/></span>Upload</div>
-                <div className="ctx-item" onClick={() => { setNewOpen(false); addNote(); }}><span className="sb-ic"><IcNote size={14}/></span>Note</div>
-              </Popover>
-            )}
-          </div>
-        </div>
-        <div className="tab-row">
-          {['All', 'Images', 'Files'].map(t => (
-            <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t}</button>
-          ))}
-          <div className="tab-spacer"/>
-          <button className="icon-tgl" title="Filter ? not in this preview"><IcFilter size={15}/></button>
-          <button className={'icon-tgl' + (mode === 'grid' ? ' on' : '')} title="Grid view" onClick={() => setMode('grid')}><IcGrid size={15}/></button>
-          <button className={'icon-tgl' + (mode === 'list' ? ' on' : '')} title="List view" onClick={() => setMode('list')}><IcList size={15}/></button>
-        </div>
-        {mode === 'list' ? (
-          <div className="ltable">
-            <div className="lth"><span>Name</span><span>Modified â†“</span><span>Size</span><span/></div>
-            {items.map(it => (
-              <div key={it.id} className="ltr">
-                <div className="lt-name">
-                  <KindIcon kind={it.kind}/>
-                  {renamingId === it.id
-                    ? <input className="rename-input" autoFocus value={draft}
-                        onChange={e => setDraft(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') commitRename(it.id); if (e.key === 'Escape') setRenamingId(null); }}
-                        onBlur={() => commitRename(it.id)}/>
-                    : <span>{it.name}</span>}
-                </div>
-                <span className="lt-dim">{it.modified}</span>
-                <span className="lt-dim">{it.size}</span>
-                <button className="chat-dots" title="Options" onClick={e => setItemMenu({id: it.id, x: e.clientX, y: e.clientY})}><IcDots size={14}/></button>
-              </div>
-            ))}
-            {items.length === 0 && <div className="s-none">Nothing here.</div>}
-          </div>
-        ) : (
-          <div className="lgrid">
-            {items.map(it => (
-              <div key={it.id} className="ltile">
-                <KindIcon kind={it.kind}/>
-                <div className="t-name">{it.name}</div>
-                <div className="t-mod">{it.modified} ? {it.size}</div>
-              </div>
-            ))}
-            {items.length === 0 && <div className="s-none">Nothing here.</div>}
-          </div>
-        )}
-        {itemMenu && <LibItemMenu pos={itemMenu} onAction={a => menuAction(itemMenu.id, a)} onClose={() => setItemMenu(null)}/>}
-      </div>
-    </div>
-  );
-};
+const LibraryView = ({items, section, onSection, onUpdate, onUpload, onOpenChat, projects}) => <window.VellumUI.LibraryWorkspace projects={projects} items={items} section={section} onSection={onSection} onUpdate={onUpdate} onUpload={onUpload} onOpenChat={onOpenChat} Icon={KindIcon}/>;
 
 /* Projects */
 const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
@@ -5831,7 +5624,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
 );
 
 /* Project page */
-const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
+const ProjectPage = ({project, chats, onNewChat, model, setModel, models = MODELS, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
   const mine = chats.filter(c => c.projectId === project.id && !c.archived);
@@ -5843,10 +5636,7 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
           <span className="proj-name">{project.name}</span>
           {project.memory === 'project-only' && <span className="proj-mem">project-only memory</span>}
         </div>
-        <div className="proj-comp">
-          <Composer text={text} setText={setText} model={model} setModel={setModel} models={models}
-            onSend={onSend} busy={false} ph={'New chat in ' + project.name} drop="down" onViewImage={onViewImage} {...composerExtras}/>
-        </div>
+        <div className="proj-comp"><button type="button" className="btn project-new-chat" onClick={()=>onNewChat(project.id)}><IcPencilSq size={17}/>New chat</button></div>
         <div className="tab-row">
           {['Chats', 'Sources'].map(t => (
             <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t}</button>
@@ -6821,16 +6611,24 @@ const SpacePickerModal = ({chat, spaces, onSave, onAutomatic, onClose}) => {
 const CreateProjectModal = ({onCreate, onClose}) => {
   const [name, setName] = useState('');
   const [mem, setMem] = useState('default');
-  const [gear, setGear] = useState(false);
-  const create = () => { if (name.trim()) onCreate({name: name.trim(), memory: mem}); };
+  const [gear,setGear]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const submitting=useRef(false);
+  const create=async()=>{
+    if(submitting.current||!name.trim())return;
+    submitting.current=true;setBusy(true);setError('');
+    try{const receipt=await onCreate({name:name.trim(),memory:mem});if(receipt?.status&&receipt.status!=='applied')setError(receipt.message||'Project could not be created. Try again.');}
+    catch(failure){setError(failure.message||'Project could not be created. Try again.');}
+    finally{submitting.current=false;setBusy(false);}
+  };
+  const close=()=>{if(!submitting.current)onClose();};
   return (
     <React.Fragment>
-      <div className="backdrop dim" onClick={onClose}/>
-      <div className="modal" style={{width: 480}}>
+      <div className="backdrop dim" onClick={close}/>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Create project" aria-busy={busy} style={{width: 480}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 4, marginBottom: 18}}>
           <div className="m-title" style={{marginBottom: 0, flex: 1}}>Create project</div>
           <button className="tbtn" title="Project memory" onClick={() => setGear(g => !g)}><IcSettings size={15}/></button>
-          <button className="tbtn" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={15}/></button>
+          <button className="tbtn" title="Close" disabled={busy} onClick={close}><I d="M6 6l12 12M18 6L6 18" size={15}/></button>
         </div>
         {gear && (
           <div className="gear-pop">
@@ -6848,16 +6646,17 @@ const CreateProjectModal = ({onCreate, onClose}) => {
         )}
         <div className="m-field">
           <label>Project name</label>
-          <input placeholder="Copenhagen Trip" autoFocus value={name}
+          <input aria-label="Project name" maxLength={80} disabled={busy} placeholder="Copenhagen Trip" autoFocus value={name}
             onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') create(); }}/>
+            onKeyDown={e => { if(e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();e.stopPropagation();if(!e.repeat)create();} }}/>
         </div>
         <div className="hintcard">
           <span className="sb-ic"><IcSparkle size={14}/></span>
           Projects keep chats, files, and custom instructions in one place. Use them for ongoing work, or just to keep things tidy.
         </div>
+        {error&&<p className="project-create-error" role="alert">{error}</p>}
         <div className="m-actions">
-          <BorderGradientButton disabled={!name.trim()} onClick={create}>Create project</BorderGradientButton>
+          <BorderGradientButton disabled={busy||!name.trim()} onClick={create}>{busy?'Creating…':'Create project'}</BorderGradientButton>
         </div>
       </div>
     </React.Fragment>
@@ -7610,7 +7409,7 @@ const DockMusicMarquee = ({title, artists, playing, provider='spotify'}) => {
   </span>;
 };
 
-const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection, renderDock}) => {
+const SpotifyPlayer = ({musicNavigation,spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection, renderDock}) => {
   const connected = !!(spotify && spotify.connected);
   const [player, setPlayer] = useState(null);
   const [localState,setLocalState]=useState(null),[localEntries,setLocalEntries]=useState([]),[localError,setLocalError]=useState('');
@@ -7781,7 +7580,9 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
     }catch(err){setLocalError(err.message || 'Local playback is unavailable.');return false;}
     finally{commandRef.current=false;setBusy(false);setDockPosition(null);setDockVolume(null);}
   };
-  const page = musicPageTarget && ReactDOM.createPortal(<window.VellumUI.MusicPage initialProvider={dockLocal?'local':'spotify'} spotify={spotify} onReconnect={onReconnect} onRefreshConnection={onRefreshConnection} onCloseMusic={onCloseMusic} onSelectCollection={onSelectCollection}
+  const revealMusicPreview=()=>window.dispatchEvent(new Event('vellum:sidebar-preview-enter'));
+  const leaveMusicPreview=event=>window.dispatchEvent(new CustomEvent('vellum:sidebar-preview-leave',{detail:{relatedTarget:event.relatedTarget}}));
+  const page = musicPageTarget && ReactDOM.createPortal(<window.VellumUI.MusicPage navigationRequest={musicNavigation} onPreviewEnter={revealMusicPreview} onPreviewLeave={leaveMusicPreview} initialProvider={dockLocal?'local':'spotify'} spotify={spotify} onReconnect={onReconnect} onRefreshConnection={onRefreshConnection} onCloseMusic={onCloseMusic} onSelectCollection={onSelectCollection}
     music={{player,playback,upcoming,run,busy,error,refresh,enable:() => playbackRef.current?.enable()} }/>, musicPageTarget);
   const toggle = event => { event.stopPropagation(); dockRun({action:dockPlaying ? 'pause' : 'play'}); };
   const repeatNext = !dockPlayer || dockPlayer.repeat === 'off' ? 'context' : dockPlayer.repeat === 'context' ? 'track' : 'off';
@@ -7824,8 +7625,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({onTryPlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
-  const SHORTCUTS=shortcutGroups(dictationShortcuts);
+const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
@@ -8088,17 +7888,7 @@ const SettingsModal = ({onTryPlugin, pluginTarget, initialProvider, onAddPlugin,
           {tab === 'Shortcuts' && (
             <React.Fragment>
               <div className="set-h">Keyboard shortcuts</div>
-              {Object.keys(SHORTCUTS).map(grp => (
-                <div key={grp} className="sc-group">
-                  <div className="sc-grp-h">{grp}</div>
-                  {SHORTCUTS[grp].map((row, i) => (
-                    <div key={i} className="sc-row">
-                      <span className="sc-label">{row[0]}</span>
-                      <span className="sc-keys">{row[1].map((k, j) => <kbd key={j} className="kbd">{k}</kbd>)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
+              <window.VellumUI.ShortcutReference dictation={dictationShortcuts} numberPrimary={numberShortcuts} onNumberPrimary={number_shortcuts=>onDeviceSettings({number_shortcuts})}/>
               <div className="set-note">Press Ctrl + / anytime to bring this up.</div>
             </React.Fragment>
           )}
@@ -8770,7 +8560,7 @@ const NotFoundView = ({onBack}) => {
 };
 
 /* App */
-const SIDEBAR_SECTION_DEFAULTS = {now: true, spaces: true, smartViews: true, projects: true};
+const SIDEBAR_SECTION_DEFAULTS = {pinned:true,recents:true,now: true, spaces: true, smartViews: true, projects: true};
 const SIDEBAR_SECTION_STORAGE_KEY = 'vellum-sidebar-sections';
 
 const mergeConversationUpdate = (localChat, serverChat) => {
@@ -8874,6 +8664,7 @@ const App = () => {
       getConversation: id => conversationActionHandlersRef.current.getConversation && conversationActionHandlersRef.current.getConversation(id),
       upsertConversation: conversation => conversationActionHandlersRef.current.upsertConversation && conversationActionHandlersRef.current.upsertConversation(conversation),
       removeConversation: id => conversationActionHandlersRef.current.removeConversation && conversationActionHandlersRef.current.removeConversation(id),
+      updateProjects: rows => conversationActionHandlersRef.current.updateProjects?.(rows),
       navigate: navigation => conversationActionHandlersRef.current.navigate && conversationActionHandlersRef.current.navigate(navigation),
       openNativeWindow: target => conversationActionHandlersRef.current.openNativeWindow && conversationActionHandlersRef.current.openNativeWindow(target),
       sideEffectError: error => conversationActionHandlersRef.current.sideEffectError && conversationActionHandlersRef.current.sideEffectError(error),
@@ -8912,38 +8703,47 @@ const App = () => {
   const theme = workspaceLayout.surfaces.workspace.properties.theme;
   const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
   const [sidebarPeeking,setSidebarPeeking]=useState(false);
+  const [railPreview,setRailPreview]=useState(null);
+  const [pluginNavigation,setPluginNavigation]=useState(null),[musicNavigation,setMusicNavigation]=useState(null);
   const sidebarPeekTimer=useRef(null);
   const sidebarHoverSuppressed=useRef(false);
   const desktopSidebarHover=()=>window.matchMedia('(hover:hover) and (pointer:fine) and (min-width:761px)').matches;
-  const revealSidebar=()=>{
+  const dismissSidebarPreview=()=>{clearTimeout(sidebarPeekTimer.current);setSidebarPeeking(false);setRailPreview(null);};
+  const revealSidebar=()=>{clearTimeout(sidebarPeekTimer.current);};
+  const previewSidebar=kind=>{
     clearTimeout(sidebarPeekTimer.current);
-    if(!sidebarPinned && !sidebarHoverSuppressed.current && desktopSidebarHover())setSidebarPeeking(true);
+    if(!desktopSidebarHover()||settingsOpen||!['chat','library','apps','music'].includes(kind)){dismissSidebarPreview();return;}
+    const current=['apps','music'].includes(view)?view:view==='library'?'library':'chat';
+    setSidebarPeeking(['chat','library'].includes(kind)&&(!sidebarPinned||current!==kind));
+    setRailPreview(kind);
   };
+  useEffect(()=>{window.dispatchEvent(new CustomEvent('vellum:rail-preview',{detail:{kind:railPreview}}));window.dispatchEvent(new Event('vellum:shell-overlay'));},[railPreview]);
   const hideSidebarPeek=event=>{
     sidebarHoverSuppressed.current=false;
     clearTimeout(sidebarPeekTimer.current);
     // A portal profile menu is part of the temporary navigation hover region.
-    if(event?.relatedTarget?.closest?.('.main-sidebar-slot,[data-sidebar-overlay="true"]'))return;
+    if(event?.relatedTarget?.closest?.('.main-sidebar-slot,.rail-context-preview,[data-sidebar-preview="true"],[data-sidebar-overlay="true"],[data-rail-preview-trigger]'))return;
     sidebarPeekTimer.current=setTimeout(()=>{
-      setSidebarPeeking(false);
+      setSidebarPeeking(false);setRailPreview(null);
       if(!sidebarPinned)setMenu(current=>current?.type==='profile' && current.fromHoverSidebar?null:current);
     },160);
   };
   const mainSidebarVisible=sidebarPinned || sidebarPeeking;
+  useEffect(()=>{const enter=()=>clearTimeout(sidebarPeekTimer.current),leave=event=>hideSidebarPeek(event.detail);window.addEventListener('vellum:sidebar-preview-enter',enter);window.addEventListener('vellum:sidebar-preview-leave',leave);return()=>{window.removeEventListener('vellum:sidebar-preview-enter',enter);window.removeEventListener('vellum:sidebar-preview-leave',leave);};},[sidebarPinned]);
   useEffect(()=>{
     if(sidebarPinned){clearTimeout(sidebarPeekTimer.current);setSidebarPeeking(false);}
   },[sidebarPinned]);
   useEffect(()=>()=>clearTimeout(sidebarPeekTimer.current),[]);
   useEffect(()=>{
-    const close=event=>{if(event.key==='Escape')setSidebarPeeking(false);};
     const media=window.matchMedia('(hover:hover) and (pointer:fine) and (min-width:761px)');
     const reset=()=>setSidebarPeeking(false);
-    window.addEventListener('keydown',close);media.addEventListener('change',reset);
-    return()=>{window.removeEventListener('keydown',close);media.removeEventListener('change',reset);};
+    media.addEventListener('change',reset);
+    return()=>{media.removeEventListener('change',reset);};
   },[]);
   const mainSidebarTrigger=useRef(null),sidebarWasVisible=useRef(sidebarPinned);
   useEffect(()=>{if(sidebarWasVisible.current!==sidebarPinned)mainSidebarTrigger.current?.focus({preventScroll:true});sidebarWasVisible.current=sidebarPinned;},[sidebarPinned]);
   const settingsOpen = workspaceLayout.surfaces.settings.visible;
+
   const desktopWorkspace = window.VellumDesktop?.runtime === 'electron';
   const rightPanelVisible = workspaceLayout.surfaces['right-panel'].visible;
   const chatDetails = workspaceLayout.surfaces['chat-details'] || {visible:false,properties:{pinned:false}};
@@ -8988,6 +8788,8 @@ const App = () => {
   const setDockPosition = value => dispatchDeviceSettings({dock_position:value});
   const setDockLocked = value => dispatchDeviceSettings({dock_locked:!!value});
   const [view, setView] = useState(() => appViewFromLocation() || 'chat');
+  useEffect(()=>{dismissSidebarPreview();},[view,settingsOpen]);
+
   const browserPanelVisible = browserFeature && rightPanelVisible && workspaceLayout.surfaces['right-panel'].properties.content === 'browser' && !(desktopWorkspace && view === 'apps');
   useEffect(() => {
     const syncLocation = () => setView(current => appViewFromLocation() || (current === '404' ? 'chat' : current));
@@ -9016,8 +8818,14 @@ const App = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [chats, setChats] = useState([]);
   const [conversationLibrary, setConversationLibrary] = useState({spaces: [], smart_views: [], conversations: []});
-  const [library, setLibrary] = useState(SEED_LIBRARY);
+  const [library, setLibrary] = useState(()=>FEATURE_FLAGS.realConversations?[]:SEED_LIBRARY);
+  const [librarySection,setLibrarySection]=useState('all');
+  const libraryProjection=React.useMemo(()=>window.VellumUI.libraryItems(library,chats),[library,chats]);
+  const updateLibraryItems=(ids,patch)=>setLibrary(current=>{const updates=libraryProjection.filter(item=>ids.includes(item.id)).map(item=>({...item,...patch}));return [...current.filter(item=>!ids.includes(item.attachment?.digest?'chat-file:'+item.attachment.digest:item.id)),...updates];});
+  const uploadLibraryFiles=async files=>{const prepared=await window.VellumUI.Attachments.prepareFiles(files,[],API.appActions);setLibrary(current=>[...prepared.map(attachment=>({id:uid(),name:attachment.name,kind:attachment.kind||kindOf(attachment.name),size:attachment.size,modified:new Date().toISOString(),attachment:{...attachment,fresh:false}})),...current]);};
   const [projects, setProjects] = useState([]);
+  const [draftProjectId,setDraftProjectId]=useState(null);
+  const projectCreationRef=useRef(null);
   const accounts = React.useContext(window.VellumUI.Accounts.Context);
   const signedInAccount = accounts.state.accounts.find(account => account.id === accounts.state.active_account_id);
   const profile = signedInAccount ? {displayName:signedInAccount.display_name, username:signedInAccount.username, email:signedInAccount.email, plan:({google:'Google account', github:'GitHub account', email:'Email account'})[signedInAccount.provider]} : {...PROFILE_DEFAULT, ...deviceSettings.values.profile, plan:'Guest'};
@@ -9219,6 +9027,12 @@ const [slashSkills, setSlashSkills] = useState([]);
   const toastTimer = useRef(null);
   const libraryRefreshTimer = useRef(null);
   const shortcutRef = useRef(null);
+  const [commandsReady,setCommandsReady]=useState(()=>!!window.VellumCommands);
+  const [commandsRuntime,setCommandsRuntime]=useState(null);
+  const commandRuntimeRef=useRef(null),commandStateRef=useRef(null);
+  const [commandScope,setCommandScope]=useState(''),[surfaceFindOpen,setSurfaceFindOpen]=useState(false);
+  const surfaceFindQuery=useRef('');
+  useEffect(()=>{const ready=()=>setCommandsReady(true);window.addEventListener('vellum:commands-ready',ready);return()=>window.removeEventListener('vellum:commands-ready',ready);},[]);
 
   const refreshSpotify = async () => {
     try {
@@ -9350,6 +9164,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         API.runtimes.subagents().then(data=>{if(alive && Array.isArray(data?.subagents))setSubagents(data.subagents);}).catch(()=>{});
         });
         const organized=await API.conversations.library({includeMessages:false}).catch(()=>null);
+        if(Array.isArray(organized?.projects))setProjects(organized.projects);
         const conversationData=organized && Array.isArray(organized.conversations)?organized:await API.conversations.list().catch(()=>null);
         if(!alive)return;
         if(organized && Array.isArray(organized.conversations))setConversationLibrary(organized);
@@ -9425,6 +9240,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!FEATURE_FLAGS.realConversations) return null;
     try {
       const next = await API.conversations.library({includeMessages:false});
+      if(Array.isArray(next?.projects))setProjects(next.projects);
       if (next && Array.isArray(next.conversations)) {
         setConversationLibrary(next);
         setChats(current => mergeConversationRecords(current, next.conversations));
@@ -9441,21 +9257,19 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   useEffect(() => () => clearTimeout(libraryRefreshTimer.current), []);
 
-  useEffect(() => {
-    const onKey = e => {
-      if (e.defaultPrevented || e.target.closest?.('.browser-panel')) return;
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setSearchPreset(null); setSpacePickerChatId(null); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); dispatchSurfacePresentation('settings', {visible:false}, {notify:false}); setViewer(null); dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false}); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const applyNewChatNavigation = () => { const saved = readDefaultModel(); const nextModel = models.some(model => model.id === saved) ? saved : (models[0] ? models[0].id : ''); setView('chat'); setActiveChatId(null); setSelModel(nextModel); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const applyNewChatNavigation = (projectId=null) => { setDraftProjectId(projectId); const saved = readDefaultModel(); const nextModel = models.some(model => model.id === saved) ? saved : (models[0] ? models[0].id : ''); setView('chat'); setActiveChatId(null); setSelModel(nextModel); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
   const newChat = () => {
     navigationEpochRef.current += 1;
     applyNewChatNavigation();
     if (FEATURE_FLAGS.realConversations) return dispatchConversationAction('conversation.new', {}, {applyNavigation:false});
     return null;
+  };
+  const newProjectChat = projectId => {
+    navigationEpochRef.current+=1;
+    applyNewChatNavigation(projectId);
+    setSecOpen(value=>({...value,projects:true}));
+    setExpandedProj(value=>({...value,[projectId]:true}));
+    if(FEATURE_FLAGS.realConversations)return dispatchConversationAction('conversation.new',{project_id:projectId},{applyNavigation:false});
   };
   const startAutomationChat = async () => {
     let prompt = "I'd like to create a new automation — a scheduled reasoning task that Vellum runs on its own. Draft the instructions, propose a schedule and destination, confirm the plan with me, then create it with the cronjob tool.";
@@ -9479,6 +9293,9 @@ const [slashSkills, setSlashSkills] = useState([]);
     newChat();
   };
   const applyOpenChatNavigation = (id, messageId) => {
+    setDraftProjectId(null);
+    const projectId=chats.find(chat=>chat.id===id)?.projectId;
+    if(projectId){setSecOpen(value=>({...value,projects:true}));setExpandedProj(value=>({...value,[projectId]:true}));}
     navigationEpochRef.current += 1;
     const chat = chats.find(item => item.id === id);
     setView('chat'); setActiveChatId(id); setSelModel((chat && chat.model) || readDefaultModel());
@@ -9753,26 +9570,16 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (action === 'window') { dispatchConversationAction('conversation.window.open', {conversation_id:id}); return; }
     if (action === 'pin') {
       const chat = chats.find(c => c.id === id);
-      dispatchConversationAction(chat && chat.pinned ? 'conversation.unpin' : 'conversation.pin', {conversation_id:id});
-      return;
+      return dispatchConversationAction(chat && chat.pinned ? 'conversation.unpin' : 'conversation.pin', {conversation_id:id});
     }
     if (action === 'archive') {
-      dispatchConversationAction('conversation.archive', {conversation_id:id});
-      return;
+      return dispatchConversationAction('conversation.archive', {conversation_id:id});
     }
     if (action === 'delete') {
       dispatchConversationAction('conversation.delete', {conversation_id:id});
       return;
     }
-    setChats(cs => {
-      if (action === 'removeproj') return cs.map(c => c.id === id ? {...c, projectId: null} : c);
-      return cs;
-    });
-    if (FEATURE_FLAGS.realConversations) {
-      let request = null;
-      if (action === 'removeproj') request = API.conversations.patch(id, {projectId: null});
-      if (request) request.then(scheduleConversationLibraryRefresh).catch(() => {});
-    }
+    if(action==='removeproj')return dispatchConversationAction('conversation.project.set',{conversation_id:id,project_id:null});
   };
 
   const updateConversationOrganization = async (id, patch) => {
@@ -9797,32 +9604,35 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const newProject = () => { setMenu(null); setCreateOpen(true); };
   const openProject = id => { setActiveProjectId(id); setView('project'); setMenu(null); };
-  const moveToProject = (chatId, projId) => {
-    setChats(cs => cs.map(c => c.id === chatId ? {...c, projectId: projId} : c));
-    setExpandedProj(e => ({...e, [projId]: true}));
+  const moveToProject = async (chatId, projId) => {
+    if(!chats.some(chat=>chat.id===chatId)||typeof projId!=='string'||!projId)return;
+    const receipt=await dispatchConversationAction('conversation.project.set',{conversation_id:chatId,project_id:projId});
+    if(receipt?.status==='applied'){setExpandedProj(value=>({...value,[projId]:true}));setSecOpen(value=>({...value,projects:true}));}
     setMenu(null);
+    return receipt;
   };
-  const createProject = ({name, memory}) => {
-    const id = uid();
-    setProjects(ps => [{id, name, updated: 'Today', memory, sources: []}, ...ps]);
-    setExpandedProj(e => ({...e, [id]: true}));
-    setCreateOpen(false);
-    if (pendingMoveRef.current) {
-      moveToProject(pendingMoveRef.current, id);
-      pendingMoveRef.current = null;
-    } else {
-      openProject(id);
-    }
+  const createProject = async ({name,memory}) => {
+    if(projectCreationRef.current)return projectCreationRef.current;
+    const pending=(async()=>{
+      const receipt=await dispatchConversationAction('project.create',{name,memory});
+      if(receipt?.status!=='applied')return receipt;
+      const id=receipt.result?.project?.id;if(!id)return receipt;
+      setExpandedProj(value=>({...value,[id]:true}));setSecOpen(value=>({...value,projects:true}));setCreateOpen(false);
+      if(pendingMoveRef.current){await moveToProject(pendingMoveRef.current,id);pendingMoveRef.current=null;}
+      else newProjectChat(id);
+      return receipt;
+    })();
+    projectCreationRef.current=pending;
+    try{return await pending;}finally{if(projectCreationRef.current===pending)projectCreationRef.current=null;}
   };
   const projectMenuAction = (id, action) => {
     setMenu(null);
-    if (action === 'share') return;
-    if (action === 'rename') { setProjRenamingId(id); dispatchSidebarVisibility(true, {notify:false}); return; }
-    if (action === 'delete') {
-      setProjects(ps => ps.filter(p => p.id !== id));
-      setChats(cs => cs.map(c => c.projectId === id ? {...c, projectId: null} : c));
-      if (activeProjectId === id && view === 'project') setView('projects');
-    }
+    const project=projects.find(item=>item.id===id);
+    if(!project)return;
+    if(action==='newchat')return newProjectChat(id);
+    if(action==='pin')return dispatchConversationAction('project.update',{project_id:id,target_revision:project.revision,patch:{pinned:!project.pinned}});
+    if(action==='rename'){setProjRenamingId(id);dispatchSidebarVisibility(true,{notify:false});setSecOpen(value=>({...value,projects:true}));return;}
+    if(action==='delete')return dispatchConversationAction('project.remove',{project_id:id,target_revision:project.revision});
   };
   const forgetFact = id => setMemory(ms => ms.filter(m => m.id !== id));
   const restoreChat = id => {
@@ -9837,7 +9647,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const addSource = () => dispatchKnowledgeAction('composer.attachment.import', {source:'picker'});
   const renameProject = (id, name) => {
     setProjRenamingId(null);
-    if (name && name.trim()) setProjects(ps => ps.map(p => p.id === id ? {...p, name: name.trim()} : p));
+    if(name?.trim()){const project=projects.find(item=>item.id===id);return dispatchConversationAction('project.update',{project_id:id,target_revision:project?.revision,patch:{name:name.trim()}});}
   };
 
   const openProfileMenu = e => {
@@ -10283,7 +10093,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!chatId) {
       chatId = uid();
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
-      const record = {id: chatId, thread_id: chatId, model: turnModel, reasoning_mode:turnReasoningMode, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
+      const record = {id: chatId, thread_id: chatId, model: turnModel, reasoning_mode:turnReasoningMode, title, pinned: false, archived: false, projectId: opts.projectId === undefined ? draftProjectId : opts.projectId, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
       if (FEATURE_FLAGS.realConversations) saveConversation({...record, messages:[userMsg]});
       setDraftApps([]);
@@ -10346,6 +10156,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
   const getDesktopInvoke = () => window.VellumDesktop && window.VellumDesktop.invoke;
   conversationActionHandlersRef.current = {
+    updateProjects: rows=>{setProjects(rows);if(draftProjectId&&!rows.some(project=>project.id===draftProjectId))setDraftProjectId(null);if(view==='project'&&!rows.some(project=>project.id===activeProjectId)){setActiveProjectId(null);setView('projects');}},
     getConversation: id => chats.find(chat => chat.id === id) || null,
     upsertConversation: conversation => {
       if (conversation.id && conversation.thread_id) threadRef.current[conversation.id] = conversation.thread_id;
@@ -10361,7 +10172,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     navigate: navigation => {
       if (navigation && navigation.view === 'ledger') nav('ledger');
       else if (navigation && navigation.conversation_id) applyOpenChatNavigation(navigation.conversation_id);
-      else applyNewChatNavigation();
+      else applyNewChatNavigation(navigation?.project_id);
     },
     openNativeWindow: target => {
       const invoke = getDesktopInvoke();
@@ -10488,7 +10299,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       deviceSettingsRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
-      setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
+        setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
       if (receipt && receipt.result && receipt.result.petdex_patch) {
         const nextPetdex = window.VellumUI.PetdexActions.applyReceipt(petdexStateRef.current, receipt);
         petdexStateRef.current = nextPetdex;
@@ -10803,23 +10614,26 @@ const [slashSkills, setSlashSkills] = useState([]);
     const receipt=await API.browser.control({operation,...args},{invocation_conversation_id:activeChatId || ''});
     applyAppActionReceipt(receipt,{notify:false});await refreshBrowser();return receipt.status==='applied';
   };
-  const openBrowser = async ({mode='split',newTab=false,throwOnError=false}={}) => {
+  const openBrowser = async ({mode='split',newTab=false,initialUrl='',throwOnError=false}={}) => {
     try {
       const requestEpoch=++browserRequestEpoch.current;
       const status=await refreshBrowser();
       if(requestEpoch!==browserRequestEpoch.current)return null;
       if(!status.available)throw new Error(status.reason || 'The embedded browser is unavailable. Check Browser settings.');
+      if(desktopWorkspace && view==='apps')nav('chat');
       browserSuppressed.current=false;
-      const presentation=await dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser',layout:mode,active_item:''}},{notify:false,persistence:'session'});
-      if(presentation?.status!=='applied')throw new Error(presentation?.message || 'Workspace tabs could not be shown.');
+      const present=async()=>{const receipt=await dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser',layout:mode,active_item:''}},{notify:false,persistence:'session'});if(receipt?.status!=='applied')throw new Error(receipt?.message||'Workspace tabs could not be shown.');};
+      if(!initialUrl)await present();
       if(requestEpoch!==browserRequestEpoch.current)return null;
       if(!status.running){
         const receipt=await API.browser.control({operation:'open'},{invocation_conversation_id:activeChatId || ''});
         applyAppActionReceipt(receipt,{notify:false});
+        if(initialUrl){const navigated=await API.browser.control({operation:'navigate',url:initialUrl},{invocation_conversation_id:activeChatId || ''});if(navigated?.status!=='applied')throw new Error(navigated?.message||'The browser could not open that address.');applyAppActionReceipt(navigated,{notify:false});}
       }else if(newTab){
-        const applied=await commandWorkspaceBrowser('new_tab');
+        const applied=await commandWorkspaceBrowser('new_tab',initialUrl?{url:initialUrl}:{});
         if(!applied)throw new Error('A new browser tab could not be created.');
       }
+      if(initialUrl)await present();
       if(requestEpoch===browserRequestEpoch.current)return await refreshBrowser();
     }catch(error){if(throwOnError)throw error;pushToast(error.message);return null;}
   };
@@ -10834,6 +10648,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     openBrowser().then(status => status?.running ? API.browser.control({operation:'new_tab',url:link.href}) : null).then(refreshBrowser).catch(error => pushToast(error.message));
   };
   const hideBrowserPanel = () => {
+    browserPanelRef.current?.prepareHide();
     browserRequestEpoch.current += 1;
     browserSuppressed.current = true;
     browserSeenSession.current = browserState.session_id + ':' + (browserState.presentation_revision || 0);
@@ -10935,6 +10750,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (receipt) applyAppActionReceipt(receipt, {notify:false});
     return receipt;
   };
+  const dispatchDictationAction = async (actionId, arguments_) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {notify:false});
+    if (receipt) applyAppActionReceipt(receipt, {notify:false});
+    return receipt;
+  };
   const setConversationMemory = async enabled => {
     if (!activeChatId) { pushToast('Start a chat before changing its memory.'); return; }
     await dispatchConversationAction('memory.conversation.set', {enabled});
@@ -10945,11 +10765,6 @@ const [slashSkills, setSlashSkills] = useState([]);
       {provider, secret:apiKey},
       {conversationId:providerCredentialChatsRef.current[provider] || activeChatId},
     );
-    if (receipt) applyAppActionReceipt(receipt, {notify:false});
-    return receipt;
-  };
-  const dispatchDictationAction = async (actionId, arguments_) => {
-    const receipt = await dispatchConversationAction(actionId, arguments_, {notify:false});
     if (receipt) applyAppActionReceipt(receipt, {notify:false});
     return receipt;
   };
@@ -10970,32 +10785,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     else if (view === 'agent' && activeAgentId && activeConvo[activeAgentId]) { const cid = activeConvo[activeAgentId]; setAgentConvos(ac => ({...ac, [activeAgentId]: (ac[activeAgentId] || []).filter(c => c.id !== cid)})); agentNewConvo(); pushToast('Conversation deleted'); }
     else pushToast('No chat to delete');
   };
-  shortcutRef.current = e => {
-    const mod = e.ctrlKey || e.metaKey;
-    if (!mod || e.altKey) return;
-    const c = e.code;
-    if (e.shiftKey) {
-      if (c === 'KeyO') { e.preventDefault(); newChat(); }
-      else if (c === 'KeyH') { e.preventDefault(); newChat(); }
-      else if (c === 'KeyS') { e.preventDefault(); dispatchSidebarVisibility(!sidebarPinned, {learn:true}); }
-      else if (c === 'KeyI') { e.preventDefault(); setCustomInstrOpen(true); }
-      else if (c === 'KeyL') { e.preventDefault(); nav('library'); }
-      else if (c === 'KeyG') { e.preventDefault(); navigateFromControl('ledger'); }
-      else if (c === 'KeyK') { e.preventDefault(); nav('skills'); }
-      else if (c === 'KeyE') { e.preventDefault(); nav('memory'); }
-      else if (c === 'KeyM') { e.preventDefault(); window.dispatchEvent(new CustomEvent('vellum-composer', {detail: 'model'})); }
-      else if (c === 'Semicolon') { e.preventDefault(); copyLastCodeBlock(); }
-      else if (c === 'Backspace') { e.preventDefault(); deleteActiveChat(); }
-      return;
-    }
-    if (c === 'Comma') { e.preventDefault(); dispatchSurfacePresentation('settings', {visible:true}); }
-    else if (c === 'KeyK') { e.preventDefault(); openSearch(); }
-    else if (c === 'KeyU') { e.preventDefault(); window.dispatchEvent(new CustomEvent('vellum-composer', {detail: 'addfiles'})); }
-    else if (c === 'Slash') { e.preventDefault(); setShortcutsOpen(s => !s); }
-    else if (c === 'Period') { e.preventDefault(); setDevMode(d => !d); pushToast(devMode ? 'Dev mode off' : 'Dev mode on'); }
-    else if (c === 'BracketLeft') { e.preventDefault(); if (canBack) navGo(-1); }
-    else if (c === 'BracketRight') { e.preventDefault(); if (canFwd) navGo(1); }
-  };
+  shortcutRef.current = event => commandRuntimeRef.current?.dispatch(event);
 
   // per-chat app selection ? landing/new-chat and project composers draw on a draft pool
   const selTargetIsChat = view === 'chat' && !!activeChat;
@@ -11022,7 +10812,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (currentSel.includes(id)) toggleSel(id);
   };
   const tryPlugin=(plugin,text)=>{dispatchSurfacePresentation('settings',{visible:false},{notify:false});newChat();setPluginDraft({id:crypto.randomUUID(),text:text||`Use ${plugin.name} to help me.`});};
-  const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
+  const activeChatProject = projects.find(project=>project.id===(activeChat?.projectId || (!activeChat?draftProjectId:null))) || null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
   const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
@@ -11033,13 +10823,35 @@ const [slashSkills, setSlashSkills] = useState([]);
   const workspaceBrowserSelected=workspaceProperties.content==='browser';
   const workspaceBrowserVisible=workspacePanelVisible && workspaceBrowserSelected && browserFeature;
   const workspaceMode=workspaceLayout.surfaces['right-panel'].properties.layout==='full'?'full':'split';
+  const featureOwnsSidebar=['apps','music'].includes(view);
+  const mainSidebarContext=sidebarPeeking&&['chat','library'].includes(railPreview)?railPreview:view==='library'?'library':'chat';
+  const shellSidebarVisible=(!featureOwnsSidebar&&sidebarPinned)||sidebarPeeking;
+  const [musicSidebarVisible,setMusicSidebarVisible]=useState(true);
+  const contextualSidebarVisible=view==='apps'?workspaceLayout.surfaces['plugin-sidebar']?.visible!==false:view==='music'?musicSidebarVisible:sidebarPinned;
+  const toggleContextualSidebar=()=>{
+    if(settingsOpen)return;
+    if(view==='music'){window.dispatchEvent(new Event('vellum:music-sidebar-toggle'));return;}
+    if(view==='apps'){dispatchSurfacePresentation('plugin-sidebar',{visible:!contextualSidebarVisible},{notify:false});return;}
+    sidebarHoverSuppressed.current=sidebarPinned&&!!document.querySelector('.app-destination-rail:hover');setSidebarPeeking(false);dispatchSidebarVisibility(!sidebarPinned,{learn:true});
+  };
+  useEffect(()=>{
+    const listener=event=>setMusicSidebarVisible(!!event.detail?.visible);
+    window.addEventListener('vellum:music-sidebar-state',listener);return()=>window.removeEventListener('vellum:music-sidebar-state',listener);
+  },[]);
+  useEffect(()=>{
+    const publish=()=>window.dispatchEvent(new CustomEvent('vellum:sidebar-state',{detail:{visible:contextualSidebarVisible,context:view==='apps'?'Customize':view==='music'?'Music':view==='library'?'Library':'Conversations',disabled:settingsOpen}}));
+    const toggle=()=>toggleContextualSidebar();
+    window.addEventListener('vellum:sidebar-toggle',toggle);window.addEventListener('vellum:sidebar-ready',publish);publish();
+    return()=>{window.removeEventListener('vellum:sidebar-toggle',toggle);window.removeEventListener('vellum:sidebar-ready',publish);};
+  },[view,contextualSidebarVisible,settingsOpen,sidebarPinned]);
   const workspaceHasHeader=['chat','agent','project'].includes(view) || workspacePanelVisible;
   const workspaceConversation=view==='chat' && activeChat && activeChat.messages?.length ? activeChat : null;
   const workspaceDetailsVisible=(chatDetails.visible || legacyDetailsVisible) && (Boolean(workspaceConversation) || Boolean(activityMsg) && view==='agent');
-  const workspaceRouteKey=view+':'+(view==='chat'?(activeChatId||''):view==='agent'?(activeAgentId||''):'');
+  const workspaceRouteKey=view+':'+(view==='chat'?(activeChatId||''):view==='agent'?(activeAgentId||'')+':'+(activeConvo[activeAgentId]||''):view==='project'?(activeProjectId||''):'');
   const workspaceController=window.VellumUI.useWorkspaceController({
-    routeKey:workspaceRouteKey,visible:workspacePanelVisible,mode:workspaceMode,state:browserState,available:browserFeature,
-    openBrowser,hideBrowser:hideBrowserPanel,browserRef:browserPanelRef,selectTab:tabId=>commandWorkspaceBrowser('select_tab',{tab_id:tabId}),
+    routeKey:workspaceRouteKey,visible:workspaceBrowserVisible,mode:workspaceMode,state:browserState,available:browserFeature,
+    openBrowser,hideBrowser:hideBrowserPanel,browserRef:browserPanelRef,
+    selectTab:tab_id=>commandWorkspaceBrowser('select_tab',{tab_id}),
     setMode:layout=>dispatchSurfacePresentation('right-panel',{properties:{layout}},{notify:false,persistence:'session'})
   });
   const getWorkspacePresentation=()=>workspaceActionRuntimeRef.current.snapshot().surfaces['right-panel'];
@@ -11064,8 +10876,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   });
   const openWorkspace=(kind,mode='split',referenceId,replaceId)=>runWorkspace(async()=>{
     if(kind==='browser'){
-      await openBrowser({mode,newTab:true,throwOnError:true});
-      if(referenceId){const navigated=await commandWorkspaceBrowser('navigate',{url:API.browser.addressUrl(referenceId,browserState.preferences)});if(!navigated)throw new Error('The browser could not open that address.');}
+      await openBrowser({mode,newTab:true,initialUrl:referenceId?API.browser.addressUrl(referenceId,browserState.preferences):'',throwOnError:true});
       if(replaceId){const current=getWorkspacePresentation().properties;await setWorkspace({items:(current.items||[]).filter(item=>item.id!==replaceId),content:'browser',active_item:''});}
       return;
     }
@@ -11078,9 +10889,10 @@ const [slashSkills, setSlashSkills] = useState([]);
       if(items.length>=12)throw new Error('Close a workspace view before opening another.');
       let chat;
       if(kind==='chat'){
-        const receipt=await dispatchConversationAction('conversation.new',{create_record:true},{applyNavigation:false,notify:false});
-        if(receipt?.status!=='applied'||!receipt.result?.conversation?.id)throw new Error(receipt?.message||'The side chat could not be created.');
-        chat=receipt.result.conversation;
+        const receipt=await dispatchConversationAction('conversation.new',activeChatProject?{project_id:activeChatProject.id}:{},{applyNavigation:false,notify:false});
+        if(receipt?.status!=='applied')throw new Error(receipt?.message||'The side chat could not be created.');
+        chat=receipt.result?.conversation || {id:uid(),model:selModel,reasoning_mode:draftReasoningMode,title:'Side chat',pinned:false,archived:false,projectId:activeChatProject?.id||null,created:'Today',appIds:[],messages:[]};
+        setChats(previous=>previous.some(row=>row.id===chat.id)?previous:[chat,...previous]);
       }
       item={id:'view:'+crypto.randomUUID(),kind,reference_id:chat?.id||reference,title:kind==='launcher'?'New tab':kind==='chat'?'Side chat':kind==='terminal'?'Terminal':'Files and previews'};
       await setWorkspace({items:[...items,item],content:'workspace',active_item:item.id,layout:mode});
@@ -11116,6 +10928,94 @@ const [slashSkills, setSlashSkills] = useState([]);
     const items=(getWorkspacePresentation().properties.items||[]).map(row=>row.id===item.id?{...row,reference_id:id,title:(chat.title||'Side chat').slice(0,100)}:row);
     await setWorkspace({items});
   });
+  const updateSideSession=(chat,patch,action,args)=>{
+    if(!chat.messages.length){setChats(previous=>previous.map(row=>row.id===chat.id?{...row,...patch}:row));return;}
+    return dispatchConversationAction(action,args,{conversationId:chat.thread_id||chat.id,applyNavigation:false});
+  };
+  const commandContext=event=>{
+    const target=event?.target?.closest?event.target:document.activeElement;
+    const find=surfaceFindOpen||!!browserPanelRef.current?.isFinding();
+    const editing=!!target?.closest?.('input,textarea,[contenteditable="true"],.ProseMirror');
+    return {browser:workspaceBrowserVisible&&!!target?.closest?.('.browser-panel'),tabs:workspacePanelVisible&&workspaceTabs.length>0,sidebar:!settingsOpen,
+      chat:view==='chat'&&!!activeChat,chats:visibleChats(chats).length>0,attention:visibleChats(chats).some(chat=>['attention','error'].includes(window.VellumUI.chatStatus(chat)?.id)),
+      composer:!settingsOpen&&!!document.querySelector('[data-ui-reference="composer"]')?.getClientRects().length,desktop:!!window.VellumDesktop?.chrome?.zoom,
+      editable:editing,find,numberPrimary:deviceSettings.values.number_shortcuts==='chats'?'chats':'tabs',
+      overlay:!!(commandScope||settingsOpen||menu||searchOpen||shortcutsOpen||agentSettingsOpen||createOpen||editProfileOpen||customInstrOpen||viewer||spacePickerChatId)};
+  };
+  const visitSidebarChat=(offset,attention=false)=>{
+    const rows=visibleChats(chats).filter(chat=>!attention||['attention','error'].includes(window.VellumUI.chatStatus(chat)?.id));if(!rows.length)return;
+    const at=rows.findIndex(chat=>chat.id===activeChatId),next=rows[at<0?(offset>0?0:rows.length-1):(at+offset+rows.length)%rows.length];return openChat(next.id);
+  };
+  const selectNumber=(items,index,select)=>{const item=index===9?items.at(-1):items[index-1];if(item)return select(item);};
+  const cycleTab=offset=>{
+    const tabs=workspaceTabs;if(!tabs.length)return;
+    const at=Math.max(0,tabs.findIndex(tab=>tab.id===workspaceViews.activeId));return showWorkspaceItem(tabs[(at+offset+tabs.length)%tabs.length]);
+  };
+  const rootFind=(text,next=false,forward=true)=>{surfaceFindQuery.current=text;if(text)window.find(text,false,!forward,true);};
+  const dismissSurface=()=>{
+    if(commandScope){setCommandScope('');return;}
+    if(shortcutsOpen){setShortcutsOpen(false);return;}
+    if(menu){setMenu(null);return;}
+    if(searchOpen){setSearchOpen(false);setSearchPreset(null);return;}
+    const localPopup=[...document.querySelectorAll('[role="menu"],[role="listbox"]:not([aria-hidden="true"]),[data-composer-popup]')].some(node=>node.getClientRects().length>0);
+    if(localPopup)return false;
+    if(viewer){setViewer(null);return;}
+    if(spacePickerChatId){setSpacePickerChatId(null);return;}
+    if(editProfileOpen){setEditProfileOpen(false);return;}
+    if(agentSettingsOpen){setAgentSettingsOpen(false);return;}
+    if(customInstrOpen){setCustomInstrOpen(false);return;}
+    if(createOpen){setCreateOpen(false);return;}
+    if(settingsOpen){dispatchSurfacePresentation('settings',{visible:false},{notify:false});return;}
+    if(surfaceFindOpen){setSurfaceFindOpen(false);return;}
+    if(sidebarPeeking){setSidebarPeeking(false);return;}
+    if(renamingId||projRenamingId){setRenamingId(null);setProjRenamingId(null);return;}
+    if(workspacePanelVisible&&workspaceMode==='full')return workspaceViews.layout('split');
+    return false;
+  };
+  commandStateRef.current={context:commandContext,browserVisible:workspaceBrowserVisible,handlers:{
+    'app.home':()=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});navigationEpochRef.current+=1;applyNewChatNavigation();},
+    'chat.new':()=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});return newChat();},'commands.open':()=>setCommandScope(current=>current?'':'all'),
+    'settings.open':()=>dispatchSurfacePresentation('settings',{visible:true},{notify:false}),
+    'shortcuts.open':()=>setShortcutsOpen(current=>!current),'sidebar.toggle':toggleContextualSidebar,
+    'history.back':()=>{if(canBack)navGo(-1);},'history.forward':()=>{if(canFwd)navGo(1);},
+    'chat.rename':()=>chatMenuAction(activeChatId,'rename'),'chat.pin':()=>chatMenuAction(activeChatId,'pin'),
+    'chat.archive':()=>chatMenuAction(activeChatId,'archive'),'chat.delete':deleteActiveChat,
+    'chat.previous':()=>visitSidebarChat(-1),'chat.next':()=>visitSidebarChat(1),'chat.attention':()=>visitSidebarChat(1,true),
+    'chat.number':(_state,index)=>selectNumber(visibleChats(chats),index,chat=>openChat(chat.id)),
+    'project.picker':()=>setCommandScope('projects'),'library.open':()=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});nav('library');},'skills.open':()=>nav('skills'),
+    'memory.open':()=>nav('memory'),'analytics.open':()=>navigateFromControl('ledger'),'instructions.open':()=>setCustomInstrOpen(true),
+    'model.open':()=>window.dispatchEvent(new CustomEvent('vellum-composer',{detail:'model'})),
+    'files.add':()=>window.dispatchEvent(new CustomEvent('vellum-composer',{detail:'addfiles'})),
+    'code.copy':copyLastCodeBlock,'dev.toggle':()=>{setDevMode(value=>!value);pushToast(devMode?'Dev mode off':'Dev mode on');},
+    'browser.new':()=>workspaceBrowserVisible&&browserPanelRef.current?browserPanelRef.current.newTab():workspaceController.show('split',true),
+    'browser.close':()=>{const item=workspaceTabs.find(tab=>tab.id===workspaceViews.activeId);if(item)return closeWorkspaceItem(item);},
+    'window.close':()=>window.close(),
+    'browser.reopen':async()=>{if(!workspaceBrowserVisible)await workspaceController.show('split');await commandWorkspaceBrowser('reopen_tab');},
+    'browser.next':()=>cycleTab(1),'browser.previous':()=>cycleTab(-1),
+    'browser.number':(_state,index)=>selectNumber(workspaceTabs,index,showWorkspaceItem),
+    'browser.closeOthers':async()=>{for(const tab of browserState.tabs){if(tab.id!==browserState.active_tab_id)await commandWorkspaceBrowser('close_tab',{tab_id:tab.id});}},
+    'browser.address':()=>browserPanelRef.current?.focusAddress(),
+    'browser.back':()=>commandWorkspaceBrowser('back'),'browser.forward':()=>commandWorkspaceBrowser('forward'),
+    'surface.reload':state=>state.browser?commandWorkspaceBrowser('reload'):window.location.reload(),
+    'surface.forceReload':state=>state.browser?commandWorkspaceBrowser('reload',{ignore_cache:true}):window.location.reload(),
+    'find.open':state=>{if(state.browser)return browserPanelRef.current?.openFind();if(settingsOpen){document.querySelector('input[placeholder="Search settings"]')?.focus();return;}if(commandScope||menu||searchOpen)return false;setSurfaceFindOpen(true);},
+    'find.next':state=>state.browser?browserPanelRef.current?.findNext(true):rootFind(surfaceFindQuery.current,true,true),
+    'find.previous':state=>state.browser?browserPanelRef.current?.findNext(false):rootFind(surfaceFindQuery.current,true,false),
+    'workspace.tabs':()=>openWorkspace('launcher',workspaceMode),
+    'workspace.sideChat':()=>openWorkspace('chat','split'),
+    'workspace.layout':()=>workspaceViews.layout(workspaceMode==='full'?'split':'full'),
+    'zoom.in':()=>window.VellumDesktop.chrome.zoom('in'),'zoom.out':()=>window.VellumDesktop.chrome.zoom('out'),'zoom.reset':()=>window.VellumDesktop.chrome.zoom('reset'),
+    dismiss:dismissSurface
+  }};
+  useEffect(()=>{
+    if(!commandsReady)return;
+    const runtime=window.VellumCommands.createRuntime({context:event=>commandStateRef.current.context(event),handlers:()=>commandStateRef.current.handlers,onError:error=>pushToast(error.message||'This command could not finish.')});
+    commandRuntimeRef.current=runtime;window.VellumCommands.runtime=runtime;setCommandsRuntime(runtime);
+    const unsubscribe=window.VellumDesktop?.chrome?.subscribeCommands?.(id=>runtime.execute(id,{overlay:false,browser:commandStateRef.current.browserVisible}));
+    return()=>{unsubscribe?.();if(window.VellumCommands.runtime===runtime)delete window.VellumCommands.runtime;commandRuntimeRef.current=null;};
+  },[commandsReady]);
+  const nativeEnabled=commandsRuntime?.entries({overlay:false,browser:workspaceBrowserVisible}).map(entry=>entry.id).join('|')||'';
+  useEffect(()=>{if(nativeEnabled)window.VellumDesktop?.chrome?.setCommands?.(nativeEnabled.split('|')).catch(()=>{});},[nativeEnabled]);
   const detailsRoute=useRef(workspaceRouteKey);
   useEffect(()=>{
     if(detailsRoute.current!==workspaceRouteKey){
@@ -11137,39 +11037,41 @@ const [slashSkills, setSlashSkills] = useState([]);
         <AppBackground/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
-        <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} className={'body' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
-          {!sidebarPinned && <div className="main-sidebar-edge" aria-hidden="true" onMouseEnter={revealSidebar}/>}
-          <div className="main-sidebar-slot" id="main-sidebar" data-state={mainSidebarVisible?'open':'closed'} data-pinned={sidebarPinned} data-peeking={sidebarPeeking && !sidebarPinned} data-variant="inset" data-collapsible="offcanvas" onMouseEnter={revealSidebar} onMouseLeave={hideSidebarPeek} inert={!mainSidebarVisible?'':undefined} aria-hidden={!mainSidebarVisible}><Sidebar notificationState={notificationState} chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
+        <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} data-rail-preview={railPreview||''} className={'body app-shell' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
+          <window.VellumUI.NavigationRail view={view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
+
+          <div className="main-sidebar-slot" id="main-sidebar" data-shell-overlay={sidebarPeeking?'true':undefined} data-state={shellSidebarVisible?'open':'closed'} data-pinned={!featureOwnsSidebar&&sidebarPinned} data-peeking={sidebarPeeking&&(!sidebarPinned||featureOwnsSidebar)} data-variant="inset" data-collapsible="offcanvas" onPointerEnter={revealSidebar} onPointerLeave={hideSidebarPeek} inert={!shellSidebarVisible} aria-hidden={!shellSidebarVisible}>{mainSidebarContext==='library'?<window.VellumUI.LibrarySidebar section={librarySection} onSection={section=>{setLibrarySection(section);if(view!=='library'){dismissSidebarPreview();nav('library');}}} items={libraryProjection} projects={projects}/>:<Sidebar hoverEnabled={!settingsOpen&&shellSidebarVisible} notificationState={notificationState} chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
                 onTogglePin={() => {sidebarHoverSuppressed.current=sidebarPinned;setSidebarPeeking(false);dispatchSidebarVisibility(!sidebarPinned, {learn:true});}} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
                 onSmartView={openSearch}
                 onNav={nav} onOpenChat={openChat} onOpenAgent={openAgent} activeAgentId={activeAgentId}
-                onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
+                onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})} onChatAction={chatMenuAction}
                 onRename={renameChat} onProfile={openProfileMenu}
                 onNewProject={newProject}
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
-                onProjectRename={renameProject} onOpenProject={openProject}
-                />
-            {sidebarPinned && <window.VellumUI.SidebarResizeHandle value={sidebarWidth} onChange={width=>dispatchSurfacePresentation('sidebar',{properties:{width}},{notify:false}).then(receipt=>{if(receipt?.status!=='applied')pushToast('Sidebar width could not be saved.');return receipt;})}/>}
+                projectMenuId={menu?.type==='project'?menu.id:null} onProjectRename={renameProject} onOpenProject={openProject} onProjectNewChat={newProjectChat} onMoveToProject={moveToProject} onProjectAction={projectMenuAction}
+                />}
+            {sidebarPinned && !featureOwnsSidebar && <window.VellumUI.SidebarResizeHandle value={sidebarWidth} onChange={width=>dispatchSurfacePresentation('sidebar',{properties:{width}},{notify:false}).then(receipt=>{if(receipt?.status!=='applied')pushToast('Sidebar width could not be saved.');return receipt;})}/>}
           </div>
 
-          {sidebarPinned && <button type="button" className="main-sidebar-backdrop" aria-label="Close main sidebar" onClick={()=>dispatchSidebarVisibility(false,{learn:true})}/>}
+          {sidebarPinned && !featureOwnsSidebar && <button type="button" className="main-sidebar-backdrop" aria-label="Close main sidebar" onClick={()=>dispatchSidebarVisibility(false,{learn:true})}/>}
+          {railPreview&&railPreview!==view&&['apps','music'].includes(railPreview)&&<window.VellumUI.RailContextPreview kind={railPreview} apps={apps} Logo={ConnLogo} onEnter={revealSidebar} onLeave={hideSidebarPeek} onChoose={(kind,section,id)=>{dismissSidebarPreview();if(kind==='apps'){setPluginNavigation({v:section,p:id,nonce:Date.now()});nav('apps');}else{setMusicNavigation({screen:section,nonce:Date.now()});nav('music');}}}/>}
           <div className="workspace-content" data-toolbar={workspaceHasHeader} data-panel-open={workspacePanelVisible} data-layout={workspaceMode}>
           {workspaceHasHeader && <window.VellumUI.WorkspaceToolbar controller={workspaceController} workspace={workspaceViews}
-            sidebar={!sidebarPinned && <button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button>}
+
             title={workspaceConversation?.title || (view==='agent'?activeAgent?.name:'') || ''}
-            conversation={workspaceConversation} detailsOpen={workspaceDetailsVisible}
+            conversation={workspaceConversation} sidebarVisible={contextualSidebarVisible} project={view==='chat'?activeChatProject:null} onNewChat={newChat} onOpenProject={openProject} detailsOpen={workspaceDetailsVisible}
             onDetails={()=>{setActivityMsg(null);configureChatDetails({visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}}
             onShare={()=>activeChatId && dispatchConversationAction('conversation.share',{conversation_id:activeChatId})}
             onOptions={event=>setMenu({type:'chathead',x:event.currentTarget.getBoundingClientRect().right,y:event.currentTarget.getBoundingClientRect().bottom})}/>}
           <div className="workspace-panels">
           <window.VellumUI.BrowserSplitView active={workspacePanelVisible} mode={workspaceMode} onMotionChange={setWorkspaceMotion} value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}
-            onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={hideBrowserPanel}>
+            onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={workspaceController.hide}>
           <div className="main" data-variant="inset" data-main-sidebar={sidebarPinned?'open':'closed'}>
-            {!workspaceHasHeader && !sidebarPinned && <header className="workspace-sidebar-toolbar"><button style={sidebarPeeking?{visibility:'hidden'}:undefined} ref={mainSidebarTrigger} type="button" className="tbtn" aria-label="Show main sidebar" aria-expanded={false} aria-controls="main-sidebar" onClick={()=>dispatchSidebarVisibility(true,{learn:true})}><IcPanel size={18}/></button></header>}
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
 
+            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
+              onEditVoiceTranscript={(messageId, value) => updateTurn(activeChatId, messageId, m => ({...m, text:value, transcriptEdited:true}), true)}
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
               onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
@@ -11180,18 +11082,18 @@ const [slashSkills, setSlashSkills] = useState([]);
               onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
               composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
-            {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
+            {view === 'library' && <LibraryView projects={projects} items={libraryProjection} section={librarySection} onSection={setLibrarySection} onUpdate={updateLibraryItems} onUpload={uploadLibraryFiles} onOpenChat={openChat}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
               model={selModel} setModel={selectModel} models={models}
-              onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
-              onAddSource={addSource}
+              onNewChat={newProjectChat} onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
+              onAddSource={()=>{newProjectChat(activeProject.id);requestAnimationFrame(()=>requestAnimationFrame(addSource));}}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
               composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
-            {view === 'apps' && <BackendConnectorsView sidebarVisible={workspaceLayout.surfaces['plugin-sidebar']?.visible!==false} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
+            {view === 'apps' && <BackendConnectorsView sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={workspaceLayout.surfaces['plugin-sidebar']?.visible!==false} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
@@ -11203,22 +11105,26 @@ const [slashSkills, setSlashSkills] = useState([]);
           {(browserPanelVisible || browserState.running) && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
             hidden={!workspaceBrowserSelected} sharedTabs layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
             overlayVisible={notificationState.open || Boolean(toast?.notificationPing)}
-            suspended={Boolean(!workspaceBrowserVisible || workspaceMotion || workspaceDetailsVisible || settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
-            onHide={hideBrowserPanel} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
+            suspended={Boolean(!workspaceBrowserVisible || workspaceMotion || commandScope || settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
+            onHide={workspaceController.hide} onCloseTab={tabId=>closeWorkspaceItem({kind:'browser',reference_id:tabId})} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
               applyAppActionReceipt(receipt, {notify:false});
             }}/>}
             <window.VellumUI.WorkspaceContent items={workspaceItems} activeId={workspaceBrowserSelected?'':workspaceProperties.active_item} visible={workspacePanelVisible}
-              chats={chats} mainChatId={activeChatId} library={library} browserAvailable={browserFeature} terminalAvailable={workspaceTerminalAvailable} onOpenTool={(kind,referenceId,replaceId)=>openWorkspace(kind,workspaceMode,referenceId,replaceId)}
+              chats={chats} mainChatId={activeChatId} library={libraryProjection} browserAvailable={browserFeature} terminalAvailable={workspaceTerminalAvailable} onOpenTool={(kind,referenceId,replaceId)=>openWorkspace(kind,workspaceMode,referenceId,replaceId)}
               onSelectChat={selectSideConversation} onOpenMain={id=>{openChat(id);workspaceController.hide();}} onOpenFiles={id=>openWorkspace('files',workspaceMode,id)}
-              renderChat={chat=><ChatView key={chat.id} chat={chat} model={chat.model||selModel} setModel={id=>dispatchConversationAction('model.select',{model_id:id},{conversationId:chat.thread_id||chat.id,applyNavigation:false})} models={models}
+              renderChat={chat=><ChatView key={chat.id} chat={chat} model={chat.model||selModel} setModel={id=>updateSideSession(chat,{model:id},'model.select',{model_id:id})} models={models}
                 onSend={(text,attachments)=>sendMessage(text,attachments,{conversationId:chat.id,background:true})} onStop={()=>stopActiveTurn(chat.id)}
                 onRegen={messageId=>regenerate(messageId,chat.id)} onFork={messageId=>dispatchConversationAction('conversation.fork',{conversation_id:chat.id,through_message_id:messageId},{applyNavigation:false})}
                 onShare={()=>dispatchConversationAction('conversation.share',{conversation_id:chat.id},{applyNavigation:false})} onViewImage={setViewer}
                 onAnswerNow={messageId=>answerNow(messageId)} onOpenActivity={message=>{setActivityMsg(message);configureChatDetails({visible:true},{notify:false,persistence:'session'});}}
-                composerExtras={{library,projects,chats,apps,skills:slashSkills,agents:availableAgents,appSel:chat.appIds||[],onOpenLibrary:()=>nav('library'),onOpenProject:openProject,onOpenPlugins:()=>nav('apps'),presentation:composerPresentation,
-                  reasoningMode:chat.reasoning_mode||'',onReasoningChange:mode=>dispatchConversationAction('reasoning.set',{mode},{conversationId:chat.thread_id||chat.id,applyNavigation:false}),modelProvider:composerProvider,providerSources:composerSources,onProviderChange:selectComposerProvider}}/>}/>
+                onEditVoiceTranscript={(messageId,value)=>updateTurn(chat.id,messageId,m=>({...m,text:value,transcriptEdited:true}),true)}
+                composerExtras={{library,projects,chats,browserTabs:browserState.tabs||[],apps,skills:slashSkills,agents:availableAgents,appSel:chat.appIds||[],onOpenLibrary:()=>nav('library'),onOpenProject:openProject,onOpenPlugins:()=>nav('apps'),onOpenSkills:()=>nav('skills'),presentation:composerPresentation,
+                  onToggleSel:id=>setChats(previous=>previous.map(row=>{if(row.id!==chat.id)return row;const selected=row.appIds||[];return {...row,appIds:selected.includes(id)?selected.filter(value=>value!==id):[...selected,id]};})),onConnectApp:connectApp,onOpenAgent:openAgent,onAppActionReceipt:applyAppActionReceipt,
+                  voiceEnabled:deviceSettings.values.personalization.voice !== false,
+                  memoryEnabled:chat.store_to_memory!==false,onMemoryChange:enabled=>updateSideSession(chat,{store_to_memory:enabled},'memory.conversation.set',{enabled}),
+                  reasoningMode:chat.reasoning_mode||'',onReasoningChange:mode=>updateSideSession(chat,{reasoning_mode:mode},'reasoning.set',{reasoning_mode:mode}),modelProvider:composerProvider,providerSources:composerSources,onProviderChange:selectComposerProvider}}/>}/>
           </aside>}
           </window.VellumUI.BrowserSplitView>
           {workspaceDetailsVisible && <window.VellumUI.WorkspaceDetails chat={workspaceConversation} activity={activityMsg} pinned={!!chatDetails.properties.pinned}
@@ -11227,7 +11133,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           </div>
           </div>
         </div>
-        <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
+        <SpotifyPlayer musicNavigation={musicNavigation} spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
           compactVisible={view !== 'music'} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}
           renderDock={(music, musicOpen, onDismissMusic) => !settingsOpen && view !== 'music' && <GlobalDock side={dockSide} browserVisible={browserPanelVisible} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
             music={music} musicOpen={musicOpen} onDismissMusic={onDismissMusic} onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onOpenAgent={openAgent}
@@ -11250,7 +11156,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           cfg={agentCfg[activeAgentId] || {model:DEFAULT_MODEL, autonomy:'ask', tone:'', enabled:true, memory:true}}
           onClose={() => setAgentSettingsOpen(false)}
           onSave={c => { setAgentCfg(m => ({...m, [activeAgentId]: c})); setAgentSettingsOpen(false); }}/>}
-        {menu && menu.type === 'project' && <ProjectMenu pos={menu} onAction={a => projectMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
+        {menu && menu.type === 'project' && <ProjectMenu pos={menu} project={projects.find(project=>project.id===menu.id)} onAction={a => projectMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {searchOpen && <SearchOverlay chats={chats} initialPreset={searchPreset}
           onNewChat={() => { setSearchOpen(false); setSearchPreset(null); newChat(); }}
           onOpenChat={(id, messageId) => { setSearchOpen(false); setSearchPreset(null); openChat(id, messageId); }}
@@ -11266,7 +11172,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal onTryPlugin={tryPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }
@@ -11299,7 +11205,9 @@ const [slashSkills, setSlashSkills] = useState([]);
         {editProfileOpen && <EditProfileModal profile={profile}
           onSave={async p => { const receipt = await dispatchDeviceSettings({profile:p}); if (receipt?.status === 'applied') setEditProfileOpen(false); }}
           onClose={() => setEditProfileOpen(false)}/>}
-        {shortcutsOpen && <ShortcutsModal dictationShortcuts={dictationShortcuts} onClose={() => setShortcutsOpen(false)}/>}
+        {commandScope&&<window.VellumUI.CommandMenu runtime={commandsRuntime} chats={chats} projects={projects} scope={commandScope} onClose={()=>setCommandScope('')} onChat={id=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});openChat(id);}} onProject={id=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});openProject(id);}} onCommand={id=>requestAnimationFrame(()=>commandRuntimeRef.current?.execute(id,{overlay:false,browser:workspaceBrowserVisible}))}/>}
+        {surfaceFindOpen&&<window.VellumUI.SurfaceFind onFind={rootFind} onClose={()=>setSurfaceFindOpen(false)}/>}
+        {shortcutsOpen && <ShortcutsModal numberPrimary={deviceSettings.values.number_shortcuts||'tabs'} onNumberPrimary={number_shortcuts=>dispatchDeviceSettings({number_shortcuts})} dictationShortcuts={dictationShortcuts} onClose={() => setShortcutsOpen(false)}/>}
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={async v => { const receipt = await dispatchDeviceSettings({personalization:{custom:v}}); if (receipt?.status === 'applied') setCustomInstrOpen(false); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal
@@ -11319,7 +11227,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAction={dispatchKnowledgeAction}
           onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>
         }
-        <div hidden={settingsOpen}><AutomationNotificationCenter onAction={dispatchAutomationAction} onPing={pushToast} onStateChange={setNotificationState} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned && view!=='apps'}/></div>{toast && <div className={'toast'+(toast.notificationPing?' notification-ping'+(browserPanelVisible && view !== 'music'?' browser-notification-ping':''):'')+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true"><IcBell size={18}/></span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
+        <div hidden={settingsOpen}><AutomationNotificationCenter suspended={settingsOpen} onAction={dispatchAutomationAction} onPing={pushToast} onStateChange={setNotificationState} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned && view!=='apps'}/></div>{toast && <div className={'toast'+(toast.notificationPing?' notification-ping'+(browserPanelVisible && view !== 'music'?' browser-notification-ping':''):'')+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true"><IcBell size={18}/></span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
     </div>
     </window.VellumUI.ResponsePreferencesProvider>
@@ -11327,54 +11235,9 @@ const [slashSkills, setSlashSkills] = useState([]);
   );
 };
 
-const shortcutGroups = (dictationShortcuts={toggle_shortcut:'Ctrl+Shift+D'}) => ({
-  App: [
-    ['Go to Home', ['Ctrl', 'Shift', 'H']],
-    ['Open new chat', ['Ctrl', 'Shift', 'O']],
-    ['Show shortcuts', ['Ctrl', '/']],
-    ['Search chats', ['Ctrl', 'K']],
-    ['Open settings', ['Ctrl', ',']],
-    ['Go to Library', ['Ctrl', 'Shift', 'L']],
-    ['Open Analytics in Settings', ['Ctrl', 'Shift', 'G']],
-    ['Manage skills in Plugins', ['Ctrl', 'Shift', 'K']],
-    ['Go to Memory', ['Ctrl', 'Shift', 'E']],
-    ['Toggle dev mode', ['Ctrl', '.']],
-    ['Toggle sidebar', ['Ctrl', 'Shift', 'S']],
-    ['Set custom instructions', ['Ctrl', 'Shift', 'I']],
-    ['Copy last code block', ['Ctrl', 'Shift', ';']],
-    ['Delete chat', ['Ctrl', 'Shift', '\u232B']],
-  ],
-  Composer: [
-    ['Send message or stop answering', ['\u21B5']],
-    ['Select model', ['Ctrl', 'Shift', 'M']],
-    ['Toggle dictation', dictationShortcuts.toggle_shortcut ? dictationShortcuts.toggle_shortcut.split('+') : ['Off']],
-    ['Voice mode', ['Ctrl', 'Shift', 'V']],
-    ['Add photos & files', ['Ctrl', 'U']],
-  ],
-});
-const ShortcutsModal = ({onClose, dictationShortcuts}) => {
-  const SHORTCUTS=shortcutGroups(dictationShortcuts);
-  return (
-  <React.Fragment>
-    <div className="backdrop dim" onClick={onClose}/>
-    <div className="modal sc-modal">
-      <button className="set-close" title="Close (Esc)" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={16}/></button>
-      <div className="m-title" style={{marginBottom: 16}}>Keyboard shortcuts</div>
-      {Object.keys(SHORTCUTS).map(grp => (
-        <div key={grp} className="sc-group">
-          <div className="sc-grp-h">{grp}</div>
-          {SHORTCUTS[grp].map((row, i) => (
-            <div key={i} className="sc-row">
-              <span className="sc-label">{row[0]}</span>
-              <span className="sc-keys">{row[1].map((k, j) => <kbd key={j} className="kbd">{k}</kbd>)}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  </React.Fragment>
-);
-};
+const ShortcutsModal = ({onClose,dictationShortcuts,numberPrimary,onNumberPrimary}) => <>
+  <div className="backdrop dim" onClick={onClose}/><section className="modal sc-modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><button type="button" className="set-close" title="Close (Esc)" aria-label="Close shortcuts" onClick={onClose}><IcX size={16}/></button><h2 className="m-title">Keyboard shortcuts</h2><window.VellumUI.ShortcutReference dictation={dictationShortcuts} numberPrimary={numberPrimary} onNumberPrimary={onNumberPrimary}/></section>
+</>;
 const CustomInstructionsModal = ({value, onSave, onClose}) => {
   const [v, setV] = useState(value);
   return (
