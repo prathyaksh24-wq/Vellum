@@ -1,0 +1,37 @@
+import React,{act} from 'react';
+import {createRoot} from 'react-dom/client';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {afterEach,expect,test,vi} from 'vitest';
+const require=createRequire(import.meta.url);
+const html=readFileSync('../design/Velllum/uploads/Vellum Default Re-designed.html','utf8');
+const source=html.slice(html.indexOf('const DockTooltip ='),html.indexOf('/* closes on a document-level'));
+const original=globalThis.Uint8Array;let compiled;
+try{globalThis.Uint8Array=new TextEncoder().encode('').constructor;compiled=createRequire(require.resolve('vite'))('esbuild').transformSync(source,{loader:'jsx'}).code;}finally{globalThis.Uint8Array=original;}
+const icons=['IcPencilSq','IcSearch','IcLibrary','IcSettings','IcPin','IcCheck','I'];
+const Dock=Function('React','useState','useRef','useEffect',...icons,compiled+';return GlobalDock;')(React,React.useState,React.useRef,React.useEffect,...icons.map(()=>()=>null));
+let root,host;afterEach(async()=>{await act(async()=>root?.unmount());host?.remove();vi.unstubAllGlobals();});
+test('browser split confines the dock and hover activation to the measured chat pane',async()=>{
+  globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+  host=document.createElement('div');host.className='win';document.body.append(host);
+  host.innerHTML='<div class="workspace-split" data-split-mode="split"><main class="main"></main></div><div id="dock"></div>';
+  let width=520;const main=host.querySelector('.main');
+  host.getBoundingClientRect=()=>({left:0,top:0,width:1440,height:900});
+  main.getBoundingClientRect=()=>({left:100,top:0,width,height:900});
+  const observers=[];vi.stubGlobal('ResizeObserver',class{constructor(fn){observers.push(fn);}observe(){}disconnect(){}});
+  root=createRoot(host.querySelector('#dock'));
+  const render=browserVisible=>root.render(React.createElement(Dock,{side:'top',locked:false,browserVisible,agents:[],onLockedChange:vi.fn()}));
+  await act(async()=>render(true));
+  const layer=host.querySelector('.dock-layer');
+  expect(layer.style.left).toBe('100px');expect(layer.style.width).toBe('520px');
+  expect(layer.querySelector('.dock-reveal-zone')).toBeNull();
+  width=380;await act(async()=>observers.forEach(fn=>fn()));
+  expect(layer.style.width).toBe('380px');
+  await act(async()=>host.querySelector('[aria-label="Show dock"]').click());
+  expect(layer.classList.contains('open')).toBe(true);
+  await act(async()=>{host.querySelector('.workspace-split').dataset.splitMode='full';});
+  expect(layer.hidden).toBe(true);
+  await act(async()=>render(false));
+  expect(layer.hidden).toBe(false);expect(layer.style.width).toBe('');
+  expect(layer.querySelector('.dock-reveal-zone')).not.toBeNull();
+});

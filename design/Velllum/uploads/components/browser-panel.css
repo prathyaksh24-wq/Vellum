@@ -54,7 +54,7 @@
 .browser-downloads p{font-size:12px;color:var(--dim)}
 .browser-error{padding:10px 16px;display:flex;gap:16px;align-items:center;font-size:12px;line-height:1.5;background:var(--active);flex-shrink:0}
 .body.browser-active .sidebar{background:color-mix(in srgb,var(--bg) 92%,transparent)}
-.body.browser-active>.workspace-split>.main{background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
+ .body.browser-active .workspace-split>.main{background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
 .body.browser-active .msgs{padding:24px 24px 16px}
 .body.browser-active .msgs-inner{padding:0;max-width:none}
 .body.browser-active .landing{min-width:0;width:100%;box-sizing:border-box}
@@ -78,7 +78,7 @@
    excludes pinned sidebars; peeking/off-canvas navigation reserves no space. */
 .workspace-split{position:relative;display:flex;flex:1 1 0;min-width:0;min-height:0;overflow:clip;isolation:isolate}
 .workspace-split>.main{min-width:0;min-height:0}
-.body.browser-active>.workspace-split.browser-layout>.main[data-variant=inset]{margin:0;border:0;border-radius:0}
+ .body.browser-active .workspace-split.browser-layout>.main[data-variant=inset]{margin:0;border:0;border-radius:0}
 .workspace-split.browser-layout>.main,.workspace-split.browser-layout>.browser-panel{transition:flex-basis .16s ease-out,width .16s ease-out,transform .16s ease-out,opacity .16s ease-out}
 .workspace-split[data-split-mode=split]>.main{flex:0 0 var(--split-left-width);width:var(--split-left-width);min-width:0;max-width:none}
 .workspace-split[data-split-mode=split]>.browser-panel{position:relative;inset:auto;flex:0 0 var(--split-right-width);width:var(--split-right-width);min-width:0;max-width:none;z-index:10}
@@ -87,8 +87,6 @@
 .workspace-split[data-split-mode=drawer]>.browser-panel{position:absolute;inset:0 0 0 auto;flex:none;width:var(--split-right-width);min-width:0;max-width:100%;z-index:125;box-shadow:-12px 0 28px rgba(0,0,0,.2)}
 .workspace-split[data-split-mode=drawer]>.browser-splitter{display:none}
 .browser-drawer-backdrop{position:absolute;inset:0;border:0;padding:0;background:rgba(0,0,0,.25);z-index:120;cursor:default}
-.workspace-split:has(>.browser-expanded)>.main,.workspace-split:has(>.browser-expanded)>.browser-splitter,.workspace-split:has(>.browser-expanded)>.browser-drawer-backdrop{display:none}
-.workspace-split:has(>.browser-expanded)>.browser-expanded{position:relative;inset:auto;flex:1 1 0;width:100%;min-width:0;max-width:none;box-shadow:none}
 .workspace-split.browser-resizing>.main,.workspace-split.browser-resizing>.browser-panel,.workspace-split[data-split-sizing=container]>.main,.workspace-split[data-split-sizing=container]>.browser-panel{transition:none}
 @media(prefers-reduced-motion:reduce){.workspace-split.browser-layout>.main,.workspace-split.browser-layout>.browser-panel{transition:none}}
 @media(prefers-reduced-motion:reduce){.browser-more-arrow{transition:none}}

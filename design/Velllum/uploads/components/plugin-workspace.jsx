@@ -1083,6 +1083,7 @@
     return <Dlg close={close} label="Review change"><DH t="Review change" close={close} /><p className="notice">{pending.receipt.message}</p><div className="mdc"><span>Action</span><span>{pending.request.action_id}</span><span>Target</span><span>{plugins.find(p=>p.id===pending.request.arguments.plugin_id)?.name || pending.request.arguments.name || pending.request.arguments.repo || pending.request.arguments.operation}</span></div><div className="df"><button className="bs" disabled={busy} onClick={() => decide(false)}>Cancel</button><button className="bt" disabled={busy} onClick={() => decide(true)}>Confirm</button></div></Dlg>;
   }
   function Workspace({
+    sidebarPeeking=false, onPreviewEnter, onPreviewLeave, navigationTarget,
     sidebarVisible=true,
     onSidebarVisibility,
     SidebarIcon,
@@ -1183,6 +1184,7 @@
       if (next.v === 'settings' && mode === 'directory' && onManage) onManage(next);else if (next.v === 'directory' && mode !== 'directory' && onBrowse) onBrowse();else setR(next);
       scroll.current?.scrollTo?.(0, 0);
     };
+    useEffect(()=>{if(navigationTarget)go(navigationTarget);},[navigationTarget]);
     const sidebarToggleRef=useRef(null),sidebarHideRef=useRef(null),sidebarFocusPending=useRef(false);
     useEffect(()=>{if(sidebarFocusPending.current&&!busy){(sidebarVisible?sidebarHideRef:sidebarToggleRef).current?.focus();sidebarFocusPending.current=false;}},[sidebarVisible,busy]);
     const toggleSidebar=async()=>{
@@ -1302,7 +1304,7 @@
       renderDiscord,
       tryNow,
       loading: catalogState?.loading
-    }}><div className="vplug" data-ui-reference="plugins" data-sidebar-layout={mode} data-variant="inset" data-collapsible="offcanvas" data-sidebar-state={sidebarVisible?'open':'closed'}><div className="bd"><div className="ct">{mode === 'directory' && <aside id="vellum-plugin-sidebar" data-ui-reference="plugin-sidebar" className="pn" aria-label="Customize" inert={!sidebarVisible?'':undefined} aria-hidden={!sidebarVisible}><div className="pnh"><h2>Customize</h2>{onSidebarVisibility&&<button ref={sidebarHideRef} className="ib" aria-label="Hide plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="true" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}</div><ActionLink className={'ni2' + (r.v !== 'skills' ? ' on' : '')} onClick={() => go({
+    }}><div className="vplug" data-ui-reference="plugins" data-sidebar-layout={mode} data-variant="inset" data-collapsible="offcanvas" data-sidebar-state={sidebarVisible?'open':'closed'}><div className="bd"><div className="ct">{mode === 'directory' && <aside id="vellum-plugin-sidebar" data-ui-reference="plugin-sidebar" className="pn" aria-label="Plugins sidebar" data-shell-overlay={sidebarPeeking&&!sidebarVisible?'true':undefined} data-sidebar-preview={sidebarPeeking&&!sidebarVisible} onPointerEnter={onPreviewEnter} onPointerLeave={onPreviewLeave} inert={!sidebarVisible&&!sidebarPeeking} aria-hidden={!sidebarVisible&&!sidebarPeeking}><div className="pnh"><h2>Customize</h2>{onSidebarVisibility&&<button ref={sidebarHideRef} className="ib" aria-label="Hide plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="true" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}</div><ActionLink className={'ni2' + (r.v !== 'skills' ? ' on' : '')} onClick={() => go({
                 v: 'directory'
               })}><Ic n="plug" />Plugins</ActionLink><ActionLink className={'ni2' + (r.v === 'skills' ? ' on' : '')} onClick={() => go({
                 v: 'skills'

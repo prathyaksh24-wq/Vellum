@@ -174,6 +174,7 @@ class DedicatedBrowser(BrowserSettingsMixin):
         self.presentation_requested = True
         self.presentation_revision = 0
         self._pages: dict[str, Any] = {}
+        self._closed_tabs: list[tuple[str, str]] = []
         self._opening_background = False
         self._revision = 0
         self._refs: dict[str, Any] = {}
@@ -768,6 +769,13 @@ class DedicatedBrowser(BrowserSettingsMixin):
             self._invalidate(view_changed=False)
         return await self.status()
 
+    def _remember_closed_tab(self, page) -> None:
+        url = page.url
+        parsed = urlsplit(url)
+        if url and url != "about:blank" and parsed.scheme in {"http", "https"} and not parsed.username and not parsed.password:
+            self._closed_tabs.append((self._profile().id, url))
+            del self._closed_tabs[:-20]
+
     async def ui_control(self, request: BrowserControl) -> BrowserStatus:
         operation = request.operation
         if operation == "preferences":
@@ -792,7 +800,21 @@ class DedicatedBrowser(BrowserSettingsMixin):
                 self._invalidate()
             elif self.active_page is None:
                 self.active_page = await self.context.new_page()
+        elif operation == "reopen_tab":
+            identity = self._profile().id
+            index = next((index for index in range(len(self._closed_tabs)-1, -1, -1) if self._closed_tabs[index][0] == identity), None)
+            if index is None:
+                raise BrowserSessionError("There are no recently closed tabs in this profile.")
+            url = self._closed_tabs[index][1]
+            await self.open()
+            page = self.active_page if len(self._pages) == 1 and self.active_page is not None and self.active_page.url == "about:blank" else await self.context.new_page()
+            self.active_page = page
+            self._start_tab_load(page, navigation_url(url))
+            self._closed_tabs.pop(index)
+            self._invalidate()
         elif operation == "close":
+            for page in list(self._pages.values()):
+                self._remember_closed_tab(page)
             await self.close()
         elif operation in {"pause", "take_over", "resume"}:
             if operation == "resume" and not self._browser_preferences().agent_enabled:
@@ -868,15 +890,28 @@ class DedicatedBrowser(BrowserSettingsMixin):
                     self.active_page = page
                     self._invalidate()
                 else:
+                    self._remember_closed_tab(page)
                     if len(self._pages) == 1:
                         await self.close()
                     else:
                         await self._close_tab(page)
             elif page is None:
                 raise BrowserSessionError("Open a browser tab first.")
+            elif operation == "find":
+                if self._native is not None:
+                    await self._native.call("find", target_id=self.context.target_for_page(page), text=request.text, find_next=request.find_next, forward=request.forward)
+                elif request.text:
+                    await page.evaluate("([text, forward]) => window.find(text, false, !forward, true)", [request.text, request.forward])
             elif operation in {"back", "forward", "reload"}:
                 await self._cancel_tab_load(page)
-                await getattr(page, {"back":"go_back", "forward":"go_forward", "reload":"reload"}[operation])(wait_until="domcontentloaded")
+                if operation == "reload" and request.ignore_cache:
+                    session = await page.context.new_cdp_session(page)
+                    try:
+                        await session.send("Page.reload", {"ignoreCache": True})
+                    finally:
+                        await session.detach()
+                else:
+                    await getattr(page, {"back":"go_back", "forward":"go_forward", "reload":"reload"}[operation])(wait_until="domcontentloaded")
             elif operation == "click":
                 await page.mouse.click(request.x, request.y)
             elif operation == "type":

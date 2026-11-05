@@ -100,7 +100,7 @@ test('right-panel dismissal is immediate and survives an offline action API with
   expect(runtime.snapshot().surfaces['right-panel'].visible).toBe(true);
 });
 
-test.each(['browser','files'])('new windows restore %s content with browser hidden until explicitly requested', async content=> {
+test.each(['browser','workspace','files'])('new windows restore %s content with browser hidden until explicitly requested', async content=> {
   const AppActions = await loadRuntime();
   const storage = memoryStorage();
   const previous = AppActions.createWorkspaceLayoutRuntime({storage,client:{}});
@@ -109,11 +109,11 @@ test.each(['browser','files'])('new windows restore %s content with browser hidd
   const client = {dispatch:vi.fn(async(request,context)=>surfaceReceipt({reference:'right-panel',presentation:{visible:true,properties:{content:'browser'}},
     baseRevision:context.workspace_layout.revision,revision:context.workspace_layout.revision+1,persistence:'session'}))};
   const fresh = AppActions.createWorkspaceLayoutRuntime({storage,client});
-  expect(fresh.snapshot().surfaces['right-panel'].visible).toBe(content !== 'browser');
+  expect(fresh.snapshot().surfaces['right-panel'].visible).toBe(!['browser','workspace'].includes(content));
   expect(storage.setItem).toHaveBeenCalledTimes(writes);
   await fresh.dispatchSurface('right-panel',{visible:true,properties:{content:'browser'}},{persistence:'session'});
   expect(fresh.snapshot().surfaces['right-panel'].visible).toBe(true);
-  expect(AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot().surfaces['right-panel'].visible).toBe(content !== 'browser');
+  expect(AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot().surfaces['right-panel'].visible).toBe(!['browser','workspace'].includes(content));
 });
 
 describe("Workspace Layout App Action adapter", () => {

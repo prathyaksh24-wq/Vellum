@@ -368,7 +368,7 @@
     </section>;
   }
 
-  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings, suspended=false, overlayVisible=false, hidden=false, layoutMode='split', onLayoutModeChange, controllerRef, autoFocus=true,sharedTabs=false}) {
+  function BrowserPanel({state, onRefresh, onHide, onCloseTab, context, onReceipt, onSettings, suspended=false, overlayVisible=false, hidden=false, layoutMode='split', onLayoutModeChange, controllerRef, autoFocus=true,sharedTabs=false}) {
     const api = window.VellumApi.browser;
     const native = state.render_transport === 'native';
     const nativeBridge = window.VellumDesktop?.browser;
@@ -406,6 +406,8 @@
     const focusingBlankAddress = useRef(false);
     const closing = useRef(false);
     const started = useRef(false);
+    const [findOpen,setFindOpen]=useState(false);
+    const findQuery=useRef('');
     const current = useRef({state, frame});
     current.current = {state, frame, context, suspended};
     const active = state.tabs.find(tab => tab.active);
@@ -457,6 +459,7 @@
       command('close');
     };
     const closeTab = tabId => {
+      if(sharedTabs&&onCloseTab)return onCloseTab(tabId);
       if (current.current.state.tabs.length <= 1 && pendingTabs === 0) closeWindow();
       else command('close_tab', {tab_id:tabId});
     };
@@ -466,24 +469,8 @@
       focusAddress(true);
       command('new_tab').finally(() => setPendingTabs(count => Math.max(0,count - 1)));
     };
-    const shortcut = event => {
-      if (event.getModifierState?.('AltGraph')) return;
-      const key = event.key.toLowerCase();
-      const modifier = event.altKey || event.ctrlKey || event.metaKey;
-      let handled = true;
-      if (modifier && key === 'l') focusAddress();
-      else if (modifier && key === 't' && !event.shiftKey) newTab();
-      else if (modifier && key === 'w' && !event.shiftKey) closeTab(current.current.state.active_tab_id);
-      else if (event.altKey && key === 'arrowleft') command('back');
-      else if (event.altKey && key === 'arrowright') command('forward');
-      else if (key === 'f5' || (modifier && key === 'r')) command('reload');
-      else if (event.altKey && /^[1-9]$/.test(key)) {
-        const tabs = current.current.state.tabs;
-        const tab = key === '9' ? tabs[tabs.length-1] : tabs[Number(key)-1];
-        if (tab) command('select_tab', {tab_id:tab.id});
-      } else handled = false;
-      if (handled) { event.preventDefault(); event.stopPropagation(); }
-    };
+    useEffect(()=>{setFindOpen(false);findQuery.current='';},[state.active_tab_id]);
+    const shortcut = event => window.VellumCommands?.runtime?.dispatch(event,{browser:true,native:!home&&!!event.target?.closest?.('.browser-screen')});
     useEffect(() => {
       if (!editingAddress.current) setAddress(displayAddress(active?.url));
     }, [active?.url, active?.id, preferences.show_full_url]);
@@ -606,6 +593,7 @@
       return nativeBridge.subscribe(event=>{
         if(current.current.suspended)return;
         if (event.type==='take_over') { if (current.current.state.control==='agent') command('take_over'); return; }
+        if(event.type==='command'){window.VellumCommands?.runtime?.dispatch({...event.input,preventDefault(){},stopPropagation(){}},{native:true,browser:true});return;}
         if (event.type!=='shortcut') return;
         if (event.command==='address') focusAddress();
         else if (event.command==='new_tab') newTab();
@@ -665,7 +653,7 @@
           if (operation === 'hover' && (targetTab !== current.current.state.active_tab_id || arguments_.frame_id !== current.current.frame?.frame_id)) return false;
           if (input && targetTab !== current.current.state.active_tab_id) throw new Error('The active tab changed. Click the current page before typing.');
           let payload = {operation, ...arguments_};
-          if (!current.current.state.running && ['navigate','new_tab'].includes(operation)) {
+          if (!current.current.state.running && ['navigate','new_tab','reopen_tab'].includes(operation)) {
             const opened = await api.control({operation:'open'}, current.current.context);
             onReceipt?.(opened);
             const status = await onRefresh();
@@ -700,7 +688,9 @@
     }, [state.available,autoFocus,suspended]);
     useLayoutEffect(()=>{
       if(!controllerRef)return;
-      controllerRef.current={command,focusAddress};
+      controllerRef.current={command,focusAddress,newTab,closeTab,openFind:()=>setFindOpen(true),isFinding:()=>findOpen,findNext:forward=>command('find',{text:findQuery.current,find_next:true,forward}),prepareHide:()=>{
+        flushText();clearTimeout(hoverTimer.current);hoverPending.current=null;
+      }};
       return()=>{controllerRef.current=null;};
     });
     const sendHover = () => {
@@ -848,6 +838,7 @@
         </div>) : <p>No downloads in this session.</p>}
       </section>}
       {(error || viewError || active?.error) && <div className="browser-error" role="alert">{error || viewError || active.error}<button className="browser-link" onClick={() => onRefresh()}>Refresh</button></div>}
+      {findOpen&&<div className="browser-find-row"><window.VellumUI.SurfaceFind label="Find in browser page" onFind={(text,find_next,forward)=>{findQuery.current=text;command('find',{text,find_next,forward});}} onClose={()=>{setFindOpen(false);command('find',{text:''});}}/></div>}
       <div ref={screenRef} className={'browser-screen' + (manual ? ' manual' : '') + (home ? ' browser-screen-home' : '')} tabIndex={state.running && !home && !native ? 0 : -1} role="region" aria-label={home ? 'Browser homepage' : native ? 'Embedded browser page' : manual ? 'Browser page. Click to focus a field, then type. Tab leaves the preview.' : 'Live browser page. Click to take control.'}
         onPointerDown={click} onPointerMove={hover} onPointerLeave={() => {
           setLocalPointer(null);

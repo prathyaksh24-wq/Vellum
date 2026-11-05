@@ -6,6 +6,31 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Start with workspace panes hidden, restore split view from full view, and close only the selected workspace tab from browser controls or shortcuts. Open side-chat drafts through the existing conversation owner and reuse the main composer, connector, model and voice controls. Send launcher searches directly to the selected engine's results URL. Add user-directed local-drive folder browsing and bounded text/image previews through the trusted desktop bridge; keep chat attachments available separately.
+
+- Keep the Dynamic Island dock within the chat pane while the browser is open. Remove its broad edge-hover strip in browser view, follow split resizing, and hide it when the browser takes the full workspace so tab controls remain reachable.
+
+- Replace the workspace dropdown with a New tab content pane containing address/search and real Files/previews, Side chat, Terminal and Browser tools. Retain a shared content-tab strip in split view and include the current chat in full view. Keep chat options, the supplied summary glyph and New tab in the chat interface, remove the extra header band, animate panel entrances, and retain music controls while browsing. Extend the existing terminal owner with raw interactive input and native macOS/Linux PTYs and shell discovery; retain Windows PowerShell/CMD/available shells. Restore pointer interaction on overlay-header controls after removing the dropdown styling.
+
+- Prevent repeated project creation while a submission is pending, including rapid Enter presses and repeated callbacks. Give sidebar chat/project hover cards one shared owner, stable pointer traversal, keyboard dismissal and drag cleanup; prevent overlapping cards even when a chat appears in multiple sections. Restyle project details with name/pin, chat count and Edit project controls. Make project-name clicks toggle their chat list, place Options before creation controls, hide header shortcuts until a conversation has started with the sidebar hidden, and select Home/Library hover navigation by destination.
+
+- Reveal temporary conversation, Plugins and Music sidebars from their rail destinations instead of the left edge; keep pinned widths unchanged and render More above the workspace. Add independent section disclosure and organization menus, separate project controls, project hover details, and drag-and-drop chat assignment. Persist folders through the existing conversation writer and typed App Actions; preserve membership during message autosaves and keep chats when a confirmed folder removal completes. Project New chat uses the ordinary composer, with a folder icon and hover name in its header.
+- Bundle SN Pro upright/italic variable fonts for the entire Vellum interface, including chat, composer, Settings, Music, Plugins, Library and desktop menus. Keep code monospace and reader-selected fonts separate; remove remote UI-font requests and preserve theme colors.
+
+- Show bundled vendor logos for slash-menu plugin, app and MCP references and insert them into the input on Tab, Enter or selection instead of opening Plugins. Preserve package/component identity, return scoped pickers to their category list on Escape, and align connector text with the adjacent caret.
+
+- Share one context-aware command registry between web, desktop menus and the native browser. Add command/chat/project search, an accurate shortcut reference, configurable tab/chat number keys, closed-tab recovery, browser Find and cache-bypassing reload while retaining existing aliases and editor keys. Route browser controls through the existing session action and number preferences through device settings; disclose unsupported features.
+- Restore hidden-sidebar hover reveal on landing and chat, make Home return to the landing page, remove outer workspace and feature frames, use shared moving highlights in the rail More menu and Library dropdowns, and add morphing rail/shortcut tooltips. Label the Plugins destination correctly and use a nodes icon for Knowledge graph.
+
+- Show Pin/Unpin and Archive quick actions on conversation-row hover or keyboard focus. Reuse canonical conversation actions, keep title geometry stable, and retain the Options menu.
+
+- Coordinate the destination rail and contextual conversation, Library, Music and Customize sidebars. Use one sidebar command in the desktop title bar or web rail, retain a disabled Coding “Coming soon” mode, and add real chat status/hover details with shared icons and measured reduced-motion-aware title movement. Anchor notifications beside the bell, make menus opaque, and remove nested feature frames.
+- Redesign Library with responsive grid/list browsing, search/source filters, project folders, selection and file previews. Project existing chat attachments without changing their owner; disclose the existing session limit for uploads, Favorites and reversible Trash organization.
+
+- Move browser access from navigation to a context-aware workspace header with new tabs, retained Show/Hide tabs, and split/full presentation inside the app. Keep browser commands on the existing session owner, register independent responsive chat details with pinning, and guard delayed focus against route/tab/layout changes. Replace matching interface glyphs across chat, Settings, Music, Plugins, dropdowns and desktop navigation with locally bundled, MIT-licensed OpenAI public icons; retain provider artwork.
+
+
+
 - Removed the legacy standalone Coding mode, its workspace pages, session API/runtime, provider adapters, session-bound PR actions and SDK dependencies. Existing user data and worktrees remain on disk; future coding harness integration is separate work.
 
 ### Added

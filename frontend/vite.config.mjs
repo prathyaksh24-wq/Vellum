@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +22,13 @@ function copyStaticUiAssets() {
       cpSync(resolve(designUploadsRoot, 'assets/backgrounds'), resolve(here, 'ui-dist/assets/backgrounds'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/music'), resolve(here, 'ui-dist/assets/music'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/plugins'), resolve(here, 'ui-dist/assets/plugins'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/icons'), resolve(here, 'ui-dist/assets/icons'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/icons/openai'), resolve(here, 'ui-dist/assets/icons/openai'), { recursive: true });
+      // Vite emits hashed WOFF2 assets. Keep their redistribution license and
+      // source provenance in both web and desktop distributions as well.
+      mkdirSync(resolve(here, 'ui-dist/assets/fonts'), {recursive:true});
+      for (const name of ['LICENSE.SN-Pro.txt','SN-Pro.provenance.json']) {
+        cpSync(resolve(designUploadsRoot, 'assets/fonts', name), resolve(here, 'ui-dist/assets/fonts', name));
+      }
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
@@ -86,6 +92,12 @@ function serveDesignUploads() {
   };
 }
 
+function sharedCommands() {
+  return {name:'vellum-shared-commands',enforce:'pre',transform(code,id){
+    if(id.replaceAll('\\','/').split('?')[0].endsWith('/desktop/electron/commands.cjs'))return {code:code.replace('module.exports=','export default '),map:null};
+  }};
+}
+
 export default defineConfig({
   cacheDir: resolve(here, '.vite'),
   resolve: {alias: {
@@ -118,12 +130,12 @@ export default defineConfig({
     '@/lib/presence-gate': resolve(designUploadsRoot, 'components/attachment-upload-support.jsx'),
     '@/lib/utils': resolve(designUploadsRoot, 'components/attachment-upload-support.jsx'),
   }},
-  plugins: [react(), tailwindcss(), serveDesignUploads(), copyStaticUiAssets()],
+  plugins: [sharedCommands(), react(), tailwindcss(), serveDesignUploads(), copyStaticUiAssets()],
   root: designUploadsRoot,
   publicDir: false,
   server: {
     fs: {
-      allow: [here, designUploadsRoot],
+      allow: [here, designUploadsRoot, resolve(here, '../desktop/electron/commands.cjs')],
     },
   },
   test: {

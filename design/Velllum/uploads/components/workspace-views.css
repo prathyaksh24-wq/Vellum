@@ -1,4 +1,12 @@
 /* Workspace controls stay in the content surface. Only full view needs a tab row. */
+.workspace-file-workspace,.workspace-device-files{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden}
+.workspace-file-sources{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.workspace-file-sources button{border:0;border-radius:7px;padding:6px 10px;color:var(--dim);background:transparent;font:inherit;font-size:12px;cursor:pointer}
+.workspace-file-sources button[aria-pressed=true]{background:var(--active);color:var(--txt)}
+.workspace-file-location{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.workspace-file-location input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--input);color:var(--txt);padding:7px 9px;font:inherit;font-size:12px}
+.workspace-device-body{display:flex;flex:1;min-height:0;min-width:0}.workspace-device-body>.workspace-file-list{min-width:130px;max-width:45%;overflow:auto}
+.workspace-file-error{padding:8px 14px;margin:0;color:var(--txt);font-size:12px}.workspace-file-list>p{padding:10px;font-size:12px;color:var(--dim)}
 .workspace-content[data-toolbar=true]{overflow:clip}
 .workspace-content>.workspace-header{position:absolute;inset:6px 12px auto;min-height:32px;padding:0;pointer-events:none;gap:12px}
 .workspace-header button,.workspace-header input,.workspace-header .workspace-view-tabs,.workspace-header .workspace-control-error{pointer-events:auto}

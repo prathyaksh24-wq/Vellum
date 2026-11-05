@@ -4,7 +4,7 @@ import {EditorView} from 'prosemirror-view';
 import {keymap} from 'prosemirror-keymap';
 import {baseKeymap} from 'prosemirror-commands';
 import {history,undo,redo} from 'prosemirror-history';
-import {referenceUrl} from './composer-providers.js';
+import {referenceUrl,commandReference} from './composer-providers.js';
 
 const suggestionKey=new PluginKey('vellum-composer-suggestion');
 const kinds=new Set(['file','page','chat','project','browser_tab','plugin','app','mcp','skill','agent']);
@@ -77,7 +77,7 @@ function categorized(items,{scoped=false,preview=false}={}){
   return output.slice(0,100);
 }
 export function commandCandidates(token,commands){
-  const rows=commands.map(item=>{const [sectionId,section]=commandGroups[item.kind] || commandGroups.command;return {...item,type:'command',id:item.k||item.id||item.run,sectionId,section};});
+  const rows=commands.map(item=>{const [sectionId,section]=commandGroups[item.kind] || commandGroups.command,reference=commandReference(item);return {...item,reference,type:reference?'reference':'command',id:item.k||item.id||item.run,sectionId,section};});
   const colon=token.query.indexOf(':'),scope=colon>=0?token.query.slice(0,colon):'';
   const scoped=Object.values(commandGroups).some(([id])=>id===scope);
   const query=scoped?token.query.slice(colon+1):token.query;
@@ -222,7 +222,7 @@ export function composerComponent(React,ReactDOM){
           const ready=active && current.menu.key===active.key && !current.menu.loading;
           const items=ready?current.menu.items:active?.trigger==='/'?commandCandidates(active,current.commands):[];
           const index=ready?current.menu.index:0;
-          if(active && event.key==='Escape'){event.preventDefault();event.stopPropagation();dismiss();return true;}
+          if(active && event.key==='Escape'){            event.preventDefault();event.stopPropagation();            const scope=active.query.split(':')[0],scoped=active.query.includes(':') && (active.trigger==='@'?current.providers.some(provider=>provider.id===scope):Object.values(commandGroups).some(([id])=>id===scope));            if(scoped){let tr=view.state.tr.insertText(active.trigger,active.from,active.to);tr=tr.setSelection(TextSelection.create(tr.doc,active.from+1));view.dispatch(tr.scrollIntoView());}            else dismiss();            return true;          }
           if(active && items.length){
             if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();navigation.current='keyboard';setReveal(value=>value+1);setMenu(menu=>({...menu,key:active.key,items,index:Math.max(0,Math.min(items.length-1,(menu.key===active.key?menu.index:0)+(event.key==='ArrowDown'?1:-1))),loading:false,error:''}));return true;}
             if(!event.shiftKey && (event.key==='Tab'||event.key==='Enter')){event.preventDefault();select(items[index]);return true;}

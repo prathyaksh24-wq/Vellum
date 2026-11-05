@@ -1,0 +1,10 @@
+/* SN Pro by Supernotes, SIL Open Font License 1.1. Bundled for offline use. */
+@font-face{font-family:'SN Pro';src:url('../assets/fonts/SNPro-VariableRegular.woff2') format('woff2');font-style:normal;font-weight:200 900;font-display:swap}
+@font-face{font-family:'SN Pro';src:url('../assets/fonts/SNPro-VariableItalic.woff2') format('woff2');font-style:italic;font-weight:200 900;font-display:swap}
+:root{--font-ui:'SN Pro','Segoe UI','Nirmala UI',system-ui,sans-serif;--font-d:var(--font-ui);--font-body:var(--font-ui);--font-m:'Cascadia Mono',Consolas,'Liberation Mono',monospace;--font-mono:var(--font-m);--mono:var(--font-m);--type-control:14px;--type-prose:16px;--type-meta:12px;--type-heading:24px}
+body{font-family:var(--font-ui);font-size:var(--type-control);line-height:1.5;font-synthesis:none}
+button,input,textarea,select{font-family:inherit}
+.agent-response-content,.areply .msg-body{font-size:var(--type-prose);line-height:1.65;letter-spacing:normal}
+.composer-editor-host .ProseMirror{font-size:15px;line-height:1.5}
+.bubble{font-size:15px;line-height:1.55}
+:where(pre,code,kbd,.code-block){font-family:var(--font-m)}

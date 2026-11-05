@@ -3,6 +3,7 @@ const {workspaceURL} = require('./policy.cjs');
 const {createDesktopHost} = require('./host.cjs');
 const {serveUI} = require('./ui-server.cjs');
 const path = require('node:path');
+const CommandRegistry=require('./commands.cjs');
 const {createNativeBrowser,readDebuggerEndpoint} = require('./native-browser.cjs');
 const {initializeProtectedAudio} = require('./protected-audio.cjs');
 const {createBackendManager,launchSpec,UI_PORT} = require('./backend.cjs');
@@ -75,17 +76,19 @@ if (!app.requestSingleInstanceLock()) {
     if(quitting){await nativeBrowser.stop();return;}
     host = createDesktopHost(require('electron'), {workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady,protectedAudioReady});
     host.configurePermissions(session.fromPartition('persist:vellum-workspace'));
+    const commandItem=id=>({id:'command-'+id,label:CommandRegistry.definition(id).label,click:()=>{const win=BrowserWindow.getFocusedWindow();if(win&&!win.isDestroyed())win.webContents.send('vellum:app-command',id);}});
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       {id:'vellum', label: 'Vellum', submenu: [
         {label: 'Open Vellum', click: () => host.openWorkspace()},
+        commandItem('chat.new'),commandItem('commands.open'),commandItem('settings.open'),
         {label: 'Computer controls', click: () => host.openControls()},
         {label: 'Open startup logs', click: () => shell.openPath(path.join(workspaceRoot,'.api-runtime'))},
         {label: 'About Vellum', click: () => app.showAboutPanel()},
         {type: 'separator'}, {role: 'quit'},
       ]},
       {id:'edit', role: 'editMenu'},
-      {id:'view', role: 'viewMenu'},
-      {id:'window', role: 'windowMenu'},
+      {id:'view',label:'View',submenu:[commandItem('sidebar.toggle'),commandItem('workspace.tabs'),commandItem('workspace.layout'),{label:'Browser',submenu:['browser.new','browser.close','browser.reopen','browser.next','browser.previous','browser.closeOthers','browser.address','browser.back','browser.forward'].map(commandItem)},{type:'separator'},commandItem('surface.reload'),commandItem('surface.forceReload'),commandItem('find.open'),{type:'separator'},commandItem('zoom.in'),commandItem('zoom.out'),commandItem('zoom.reset'),commandItem('shortcuts.open'),{role:'toggleDevTools'}]},
+      {id:'window',label:'Window',submenu:[{role:'minimize'},{role:'close',accelerator:'Alt+F4'}]},
     ]));
     if(bundledWorkspace){
       tray=new Tray(path.join(app.getAppPath(),'assets/icon.ico'));

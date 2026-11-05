@@ -56,6 +56,14 @@ describe("served visual-control parity gate", () => {
     expect(validateParityInventory(inventory, sources).join("\n")).toContain("unreviewed served React source");
   });
 
+  test('cache version queries keep reviewed component identity without allowing unknown sources', () => {
+    const sources=servedSources(),path='design/Velllum/uploads/Vellum Default Re-designed.html';
+    sources[path]=sources[path].replace('src="components/v-select.jsx"','src="components/v-select.jsx?v=next#component"');
+    expect(validateParityInventory(inventory,sources).join('\n')).not.toContain('unreviewed served React source components/v-select.jsx');
+    sources[path]=sources[path].replace('src="components/v-select.jsx?v=next#component"','src="components/unreviewed.jsx?v=next"');
+    expect(validateParityInventory(inventory,sources).join('\n')).toContain('unreviewed served React source components/unreviewed.jsx?v=next');
+  });
+
   test("an extra inline React control script cannot bypass the gate", () => {
     const sources = servedSources();
     const path = "design/Velllum/uploads/Vellum Default Re-designed.html";

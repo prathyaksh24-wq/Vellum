@@ -1,5 +1,5 @@
 (function () {
-  const {useState, useEffect, useRef} = React;
+  const {useState, useEffect, useLayoutEffect, useRef} = React;
   function timestamp(value) {
     if (!value) return '—';
     const date = new Date(value);
@@ -45,12 +45,12 @@
       window.dispatchEvent(new CustomEvent('vellum:notifications-hover',{detail:{inside,trigger:event.currentTarget}}));
     };
     return <button type="button" className={(compact ? 'rail-btn' : 'sb-row')+' notification-trigger'} data-notification-trigger="" title="Notifications" aria-label={'Notifications'+(unread ? ', '+unread+' recent unread' : '')} aria-expanded={expanded} aria-controls="notification-panel" onClick={onClick} onPointerEnter={event=>hover(event,true)} onPointerLeave={event=>hover(event,false)}>
-      <span className="sb-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span>
+      <span className="sb-ic"><window.VellumUI.AppIcon name="Bell" size={18}/></span>
       {!compact && <span>Notifications</span>}
       {unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
     </button>;
   }
-  function AutomationNotificationCenter({onAction, onPing, onStateChange, browserVisible=false, sidebarPinned=false}) {
+  function AutomationNotificationCenter({onAction, onPing, onStateChange, browserVisible=false, sidebarPinned=false, suspended=false}) {
     const [snapshot,setSnapshot] = useState({items:[],recent_unread_count:0,total_count:0});
     const [history,setHistory] = useState({items:[],matched_count:0,has_more:false});
     const [mode,setMode] = useState('closed');
@@ -69,7 +69,7 @@
       },200);
     }
     function pinPreview() {clearHoverTimers();if(modeRef.current==='preview') {focusOnPin.current=false;setVisibility('pinned');}}
-    const [anchorLeft,setAnchorLeft] = useState(sidebarPinned ? 272 : 64);
+    const [anchor,setAnchor] = useState({left:64,top:12});
     const [view,setView] = useState('recent');
     const [query,setQuery] = useState('');
     const [offset,setOffset] = useState(0);
@@ -123,17 +123,22 @@
       document.addEventListener('visibilitychange',visibility);
       return () => {alive=false;unsubscribe?.();clearInterval(timer); window.removeEventListener('focus',focus); document.removeEventListener('visibilitychange',visibility);};
     },[]);
-    useEffect(() => {
+    useLayoutEffect(() => {
       if (!open) return;
       const place = () => {
-        const nav=trigger.current?.closest('.sidebar,.rail');
-        const frame=nav?.closest('.win');
-        setAnchorLeft(nav && frame ? nav.getBoundingClientRect().right-frame.getBoundingClientRect().left+12 : sidebarPinned ? 272 : 64);
+        const rect=trigger.current?.getBoundingClientRect(),panel=container.current?.querySelector('.notification-panel');
+        const margin=12,chrome=document.querySelector('.desktop-titlebar')?.getBoundingClientRect().bottom||0;
+        if(panel)panel.style.maxHeight=Math.max(100,window.innerHeight-chrome-2*margin)+'px';
+        const width=Math.min(390,window.innerWidth-2*margin),height=Math.min(panel?.offsetHeight||400,window.innerHeight-chrome-2*margin);
+        const left=Math.max(margin,Math.min((rect?.right||52)+10,window.innerWidth-width-margin));
+        const top=Math.max(chrome+margin,Math.min((rect?.bottom||chrome+margin)-height,window.innerHeight-height-margin));
+        setAnchor(current=>Math.abs(current.left-left)<.5&&Math.abs(current.top-top)<.5?current:{left,top});
       };
-      place(); window.addEventListener('resize',place);
-      return () => window.removeEventListener('resize',place);
+      const observer=new ResizeObserver(place);const panel=container.current?.querySelector('.notification-panel');if(panel)observer.observe(panel);if(trigger.current?.isConnected)observer.observe(trigger.current);
+      place();window.addEventListener('resize',place);
+      return()=>{observer.disconnect();window.removeEventListener('resize',place);};
     },[open,sidebarPinned]);
-    useEffect(() => {clearHoverTimers();setVisibility('closed');},[browserVisible]);
+    useEffect(() => {clearHoverTimers();setVisibility('closed');},[browserVisible,suspended]);
     useEffect(() => {
       const show = event => {
         clearHoverTimers();
@@ -201,7 +206,8 @@
     const items = view === 'history' ? history.items : recentItems;
     const groups = new Map(); items.forEach(item=>{const day=dayLabel(item.created_at);if (!groups.has(day)) groups.set(day,[]);groups.get(day).push(item);});
     if (!available && !open) return null;
-    return <div ref={container} className="automation-notifications" style={{left:anchorLeft}}>
+    if(suspended)return null;
+    return ReactDOM.createPortal(<div ref={container} className="automation-notifications" style={anchor}>
       {open && <section id="notification-panel" className="notification-panel" aria-label="Notifications" onPointerEnter={enterPreview} onPointerLeave={leavePreview} onPointerDownCapture={pinPreview} onFocusCapture={pinPreview}>
         <header><h2>Notifications</h2><button ref={closeButton} type="button" aria-label="Close notifications" onClick={close}>×</button></header>
         <div className="notification-views" role="group" aria-label="Notification views">
@@ -222,7 +228,7 @@
           {view==='recent' && snapshot.recent_unread_count > recentItems.length && <button type="button" onClick={()=>{setView('history');setOffset(0);}}>View all {snapshot.recent_unread_count} recent items in History</button>}
         </footer>
       </section>}
-    </div>;
+    </div>,document.body);
   }
   window.VellumAutomationNotifications = {AutomationRunHistory, AutomationNotificationCenter, NotificationTrigger};
 })();

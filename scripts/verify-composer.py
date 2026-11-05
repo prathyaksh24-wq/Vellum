@@ -139,11 +139,11 @@ import {composerComponent,referenceProviders,referenceAttachments} from '../../d
     integration+='\nconst '+','.join(icon+'=()=>null' for icon in icons)+';\n'
     integration+="const MODELS=[],AGENTS=[],TRENDING=[],COMPOSER_PLACEHOLDER='Message',API={voice:{}},AttachmentRuntime={actionEffect:()=>null},ModelLogo=()=>null,modelLabel=id=>id;\n"
     integration+=body+r'''
-window.integration={sends:[]};
+window.integration={sends:[],openedPlugins:[]};
 function Fixture(){const [text,setText]=useState('');integration.text=text;integration.setText=setText;
-return <Composer text={text} setText={setText} model="fake" setModel={()=>{}} models={[]} library={[]} projects={[]} apps={[{id:'linear',name:'Linear'}]} skills={[{id:'code-review',name:'Code Review'},...Array.from({length:12},(_,i)=>({id:'workflow-'+i,name:'Fixture workflow '+(i+1)}))]}
+return <Composer text={text} setText={setText} model="fake" setModel={()=>{}} models={[]} library={[]} projects={[]} apps={[{id:'linear',name:'Linear'},{id:'asana',name:'Asana',type:'connector',mcp_connectors:[{name:'asana-server',display_name:'Asana MCP'}]},{id:'opaque-owner',name:'Asana',source:'mcp_configuration',mcp_connectors:[{name:'opaque-server',display_name:'Work tracker'}]}]} skills={[{id:'code-review',name:'Code Review'},...Array.from({length:12},(_,i)=>({id:'workflow-'+i,name:'Fixture workflow '+(i+1)}))]}
 chats={[{id:'fixture-chat',title:'Fixture conversation'}]} memoryEnabled={true} onMemoryChange={()=>{throw Error('Memory control must be absent');}}
-onSend={(text,attachments,options)=>integration.sends.push({text,attachments,options})}/>;}
+onOpenPlugins={plugin=>integration.openedPlugins.push(plugin?.id || plugin?.name || 'manage')} onSend={(text,attachments,options)=>integration.sends.push({text,attachments,options})}/>;}
 createRoot(document.getElementById('root')).render(<Fixture/>);
 '''
     (OUT/'integration.jsx').write_text(integration,encoding='utf8')
@@ -205,6 +205,69 @@ def verify_contract():
     assert 'referenceAttachments(taRef.current?.getReferences()' in composer
     return 'typed references, URL safety, attachment compatibility, metadata envelope, memory button removal'
 
+async def verify_picker(context):
+    """Exercise the production Composer callbacks, not a replacement selector."""
+    page=await context.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+    css='\n'.join((ROOT/'design/Velllum/uploads/components'/name).read_text(encoding='utf-8') for name in ['composer-editor.css','agent-composer.css'])
+    await page.set_content('<base href="https://fixture.test/"><style>:root{--txt:#eee;--txt2:#eee;--dim:#aaa;--line2:#555;--active:#3a3a3a;--modal:#242424}body{margin:0;background:#171717;color:#eee;font:14px system-ui}.cpill{position:absolute;left:40px;bottom:40px;width:700px;border:1px solid #555;border-radius:20px;padding:16px}</style><style>'+css+'</style><div id="root"></div>')
+    await page.add_script_tag(content=(OUT/'integration.js').read_text(encoding='utf-8'))
+    editor=page.get_by_role('combobox',name='Message');await editor.wait_for()
+    report={}
+    async def draft(text):
+        await editor.focus();await editor.press('Control+A');await editor.press('Backspace');await editor.press_sequentially(text)
+        await page.wait_for_timeout(100)
+    for scope,kind,label in [('plugins','plugin','Asana'),('mcps','mcp','Asana MCP'),('apps','app','Asana')]:
+        await draft('/'+scope+':Asana')
+        option=page.get_by_role('option').filter(has=page.locator('strong',has_text=label)).first;await option.wait_for()
+        report[scope+'Logo']=await option.locator('img[src="assets/plugins/asana.svg"]').count()==1
+        opened=await page.evaluate('integration.openedPlugins.length')
+        await editor.press('Tab');await page.wait_for_timeout(80)
+        report[scope+'Inserted']=await page.locator('.composer-reference[data-reference-kind="'+kind+'"]').count()==1
+        report[scope+'NoNavigation']=await page.evaluate('integration.openedPlugins.length')==opened
+        if report[scope+'Inserted']:
+            count=await page.evaluate('integration.sends.length')
+            await page.get_by_role('button',name='Send',exact=True).click()
+            await page.wait_for_function('(count)=>integration.sends.length>count',arg=count)
+            reference=await page.evaluate('integration.sends.at(-1).attachments[0].reference')
+            report[scope+'Identity']=reference['kind']==kind and reference['owner_plugin_id']=='asana' and bool(reference['id'])
+            if kind=='mcp':report['mcpComponent']=reference['component_id']=='asana-server'
+        await draft('/'+scope+':Asana')
+        await page.get_by_role('option').filter(has=page.locator('strong',has_text=label)).first.click()
+        report[scope+'ClickInserted']=await page.locator('.composer-reference[data-reference-kind="'+kind+'"]').count()==1 and await page.evaluate('integration.openedPlugins.length')==opened
+    await draft('/mcps:Work')
+    opaque=page.get_by_role('option').filter(has=page.locator('strong',has_text='Work tracker')).first
+    await opaque.wait_for();report['mcpOwnerLogo']=await opaque.locator('img[src="assets/plugins/asana.svg"]').count()==1
+    await draft('/plugins')
+    await page.get_by_role('option').filter(has=page.locator('strong',has_text='Manage plugins')).first.click()
+    report['managePluginsStillNavigates']=await page.evaluate('integration.openedPlugins.at(-1)')=='manage'
+    await draft('Compare @')
+    await page.get_by_role('option').filter(has=page.locator('strong',has_text='Skills')).click()
+    await page.wait_for_function('integration.text==="Compare @skills:"')
+    await editor.press('Escape');await page.wait_for_timeout(80)
+    report['escapeReturnsToCategories']=await page.locator('[data-composer-popup]').count()==1 and await page.evaluate('integration.text')=='Compare @'
+    await draft('Compare @')
+    await page.get_by_role('option').filter(has=page.locator('strong',has_text='MCPs')).click()
+    await page.wait_for_function('integration.text==="Compare @mcps:"')
+    await editor.press('Escape');await page.wait_for_timeout(80)
+    report['escapeFromMcp']=await page.locator('[data-composer-popup]').count()==1 and await page.evaluate('integration.text')=='Compare @'
+    await editor.press('Escape');await page.wait_for_timeout(80)
+    report['escapeAtRootDismisses']=await page.locator('[data-composer-popup]').count()==0
+    await draft('/skills:')
+    await editor.press('Escape');await page.wait_for_timeout(80)
+    report['slashEscapeReturnsToRoot']=await page.locator('[data-composer-popup]').count()==1 and await page.evaluate('integration.text')=='/'
+    await draft('@apps:Asana')
+    await page.get_by_role('option').filter(has=page.locator('strong',has_text='Asana')).first.wait_for();await editor.press('Tab');await editor.press_sequentially('x')
+    report['caretGeometry']=await page.locator('.ProseMirror').evaluate('''node=>{const label=node.querySelector('.composer-reference>span');const text=document.createRange();text.selectNodeContents(label);const selection=getSelection().getRangeAt(0);return {labelTop:text.getBoundingClientRect().top,caretTop:selection.getBoundingClientRect().top}}''')
+    report['caretAligned']=abs(report['caretGeometry']['labelTop']-report['caretGeometry']['caretTop'])<1
+    await page.screenshot(path=str(OUT/('picker-before.png' if '--baseline' in sys.argv else 'picker-after.png')))
+    report['pageErrors']=errors
+    (OUT/'picker-results.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+    print(json.dumps(report,indent=2),flush=True)
+    failures=[key for key,value in report.items() if value is False]
+    assert not failures and not errors,failures or errors
+    await page.close()
+    return ['production slash plugin/app/MCP vendor logos and structured Tab selection without page navigation','scoped Escape returns to categories and root Escape dismisses without changing prefix','connector-label and adjacent text/caret share their baseline']
+
 async def run():
     from playwright.async_api import async_playwright
     results=[];errors=[]
@@ -216,8 +279,12 @@ async def run():
             async def fulfill(route):
                 await route.fulfill(path=str(ROOT/'design/Velllum/uploads/assets/plugins'/asset))
             return fulfill
-        for asset in ['linear.png','notion.png','producthunt.svg']:
+        for asset in ['linear.png','notion.png','producthunt.svg','asana.svg']:
             await context.route('https://fixture.test/assets/plugins/'+asset,asset_handler(asset))
+        if '--picker-only' in sys.argv:
+            results=await verify_picker(context)
+            await context.close();await browser.close()
+            return results
         page=await context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
         css=(ROOT/'design/Velllum/uploads/components/composer-editor.css').read_text()+'\n'+(ROOT/'design/Velllum/uploads/components/agent-composer.css').read_text()
         await page.set_content('<base href="https://fixture.test/"><style>:root{--txt:#ddd;--txt2:#eee;--dim:#aaa;--line2:#555;--active:#3a3a3a;--modal:#242424}body{margin:0;background:#171717;color:#eee;font:14px system-ui}.cpill{position:absolute;left:40px;bottom:40px;width:500px;border:1px solid #555;padding:16px}.composer-editor-host{overflow:hidden}</style><style>'+css+'</style><div id="root"></div>')
@@ -465,6 +532,7 @@ async def run():
         await page.wait_for_function('()=>integration.sends.length===4')
         assert await page.evaluate('integration.sends[3].options.forceWebSearch') is True
         results.append('production Composer callbacks: reference Send, clear, web mode and memory button absent')
+        results.extend(await verify_picker(context))
         await page.close()
         page=await context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
         await page.set_content('<style>body{background:#171717;color:#eee;font:14px system-ui}.li{display:flex;gap:12px;padding:14px}.pl{display:flex;gap:12px}.pl button{padding:10px}</style><div id="root"></div>')

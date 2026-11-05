@@ -143,6 +143,10 @@ CONVERSATION_PIN_ACTION_ID = "conversation.pin"
 CONVERSATION_UNPIN_ACTION_ID = "conversation.unpin"
 CONVERSATION_RENAME_ACTION_ID = "conversation.rename"
 CONVERSATION_SPACE_ACTION_ID = "conversation.space.set"
+CONVERSATION_PROJECT_ACTION_ID = "conversation.project.set"
+PROJECT_CREATE_ACTION_ID = "project.create"
+PROJECT_UPDATE_ACTION_ID = "project.update"
+PROJECT_REMOVE_ACTION_ID = "project.remove"
 CONVERSATION_ARCHIVE_ACTION_ID = "conversation.archive"
 CONVERSATION_RESTORE_ACTION_ID = "conversation.restore"
 CONVERSATION_DELETE_ACTION_ID = "conversation.delete"
@@ -1781,7 +1785,7 @@ class AppActionRuntime:
                 message=f"{request.action_id} version {request.action_version} is unavailable.",
             )
 
-        if request.action_id.startswith("conversation."):
+        if request.action_id.startswith("conversation.") or request.action_id in {PROJECT_CREATE_ACTION_ID, PROJECT_UPDATE_ACTION_ID, PROJECT_REMOVE_ACTION_ID}:
             return self._dispatch_conversation(request, context, definition)
         if request.action_id == ATTACHMENT_IMPORT_ACTION_ID:
             return self._dispatch_attachment(request, context, definition)
@@ -3343,6 +3347,15 @@ class AppActionRuntime:
         context: AppActionContext,
         definition: AppActionDefinition,
     ) -> ActionReceipt:
+        if request.action_id == PROJECT_REMOVE_ACTION_ID:
+            project = next((row for row in self._conversation_service().projects() if row['id'] == request.arguments.get('project_id')), None)
+            if project is None:
+                raise ConversationLifecycleError('PROJECT_NOT_FOUND', 'Project not found.')
+            expected = self._expected_target_revision(request.arguments)
+            if expected is not None and expected != project['revision']:
+                raise ConversationLifecycleError('STALE_ACTION_TARGET', 'The project changed. Refresh and try again.')
+            return self._domain_confirmation_receipt(request, context, definition, target_kind='conversation_project',
+                target_reference=project['id'], message='Remove ' + project['name'] + '? Its chats will be kept.', binding={'revision': project['revision']})
         conversation_id = self._conversation_target(request.arguments, context)
         conversation = self._conversation_service().get(conversation_id)
         revision = int(conversation.get("revision", 0))
@@ -3469,6 +3482,10 @@ class AppActionRuntime:
         if request.action_id in CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_settings_runtime(request, context, definition, confirmed=True)
+        if request.action_id == PROJECT_REMOVE_ACTION_ID:
+            self._receipt_store.remove_confirmation(token)
+            bound = request.model_copy(update={'arguments': {**request.arguments, 'target_revision': (record.binding or {})['revision']}})
+            return self._dispatch_conversation(bound, context, definition, confirmed=True)
         if request.action_id in BROWSER_SETTINGS_ACTIONS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_browser_settings(request, context, definition, confirmed=True)
@@ -3582,6 +3599,9 @@ class AppActionRuntime:
         self._register(CONVERSATION_UNPIN_ACTION_ID, "Unpin conversation", self._unpin_conversation)
         self._register(CONVERSATION_RENAME_ACTION_ID, "Rename conversation", self._rename_conversation)
         self._register(CONVERSATION_SPACE_ACTION_ID, "Change conversation Space", self._set_conversation_space)
+        self._register(CONVERSATION_PROJECT_ACTION_ID, "Move conversation to project", self._set_conversation_project)
+        for action_id in (PROJECT_CREATE_ACTION_ID, PROJECT_UPDATE_ACTION_ID, PROJECT_REMOVE_ACTION_ID):
+            self._register(action_id, "Manage conversation project", lambda payload, identity=action_id: self._change_project(identity, payload), access=CapabilityAccess.DESTRUCTIVE if action_id == PROJECT_REMOVE_ACTION_ID else CapabilityAccess.WRITE)
         self._register(CONVERSATION_ARCHIVE_ACTION_ID, "Archive conversation", self._archive_conversation)
         self._register(CONVERSATION_RESTORE_ACTION_ID, "Restore conversation", self._restore_conversation)
         self._register(CONVERSATION_FORK_ACTION_ID, "Fork conversation", self._fork_conversation)
@@ -3700,19 +3720,18 @@ class AppActionRuntime:
         )
 
     def _new_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if (payload.get("arguments") or {}).get("create_record") is True:
-            identity = f"chat_{uuid4().hex}"
-            mutation = self._conversation_service().save(identity, {"title": "Side chat", "messages": [], "thread_id": identity})
-            conversation = mutation["conversation"]
-            return {"changed": True, "target_kind": "conversation", "target_id": identity,
-                    "target_revision": conversation.get("revision", 0), "conversation": conversation,
-                    "message": "Side chat ready."}
+        project_id = (payload.get('arguments') or {}).get('project_id')
+        navigation = {"view": "chat", "conversation_id": None}
+        if project_id:
+            if not any(row['id'] == project_id for row in self._conversation_service().projects()):
+                raise ValueError('Project not found.')
+            navigation['project_id'] = project_id
         return {
             "changed": True,
             "target_kind": "conversation_navigation",
             "target_id": "new",
             "target_revision": 0,
-            "navigation": {"view": "chat", "conversation_id": None},
+            "navigation": navigation,
             "message": "New chat ready.",
         }
 
@@ -3897,6 +3916,41 @@ class AppActionRuntime:
             },
         }
         return result
+
+    def _change_project(self, action_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get('arguments') or {})
+        operation = action_id.split('.')[-1]
+        if operation == 'remove' and payload.get('confirm') is not True:
+            raise ValueError('Confirm removing this project first.')
+        patch = arguments.get('patch', {}) if operation == 'update' else arguments
+        if not isinstance(patch, dict) or (operation == 'update' and (not patch or set(patch) - {'name', 'pinned'})):
+            raise ValueError('Choose a project name or pin preference.')
+        if operation == 'create' or 'name' in patch:
+            if not isinstance(patch.get('name'), str) or not 1 <= len(' '.join(patch['name'].split())) <= 80:
+                raise ValueError('Project names must contain 1 to 80 characters.')
+        if 'pinned' in patch and not isinstance(patch['pinned'], bool):
+            raise ValueError('Project pinned must be true or false.')
+        result = self._conversation_service().change_project(operation, arguments)
+        return {**result, 'changed': True, 'target_kind': 'conversation_project',
+                'target_id': result['project']['id'], 'target_revision': result['project']['revision'],
+                'message': 'Project removed. Its chats were kept.' if operation == 'remove' else 'Project saved.'}
+
+    def _set_conversation_project(self, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get('arguments') or {})
+        context = AppActionContext.model_validate(payload.get('context'))
+        conversation_id = self._conversation_target(arguments, context)
+        if 'project_id' not in arguments:
+            raise ValueError('Choose a project or null to remove the assignment.')
+        project_id = arguments['project_id']
+        if project_id is not None and (not isinstance(project_id, str) or not any(row['id'] == project_id for row in self._conversation_service().projects())):
+            raise ValueError('Project not found.')
+        mutation = self._conversation_service().patch(conversation_id, {'projectId': project_id}, expected_revision=self._expected_target_revision(arguments))
+        conversation = mutation['conversation']
+        revision = int(conversation.get('revision', 0))
+        return {'changed': mutation['changed'], 'conversation': conversation, 'target_kind': 'conversation',
+                'target_id': conversation_id, 'target_revision': revision, 'message': 'Chat moved.' if project_id else 'Chat removed from project.',
+                '_undo_action_id': CONVERSATION_PROJECT_ACTION_ID,
+                '_undo_arguments': {'conversation_id': conversation_id, 'project_id': mutation['previous_conversation'].get('projectId'), 'target_revision': revision}}
 
     def _set_conversation_space(self, payload: dict[str, Any]) -> dict[str, Any]:
         arguments = dict(payload.get("arguments") or {})
@@ -4568,12 +4622,16 @@ class AppActionRuntime:
     def _conversation_definitions() -> list[AppActionDefinition]:
         reference = {"reference": {"type": "string"}}
         specs = [
-            (CONVERSATION_NEW_ACTION_ID, "Start a new chat", "Prepare an empty chat workspace.", False, True, "none", {"create_record": {"type": "boolean"}}),
+            (CONVERSATION_NEW_ACTION_ID, "Start a new chat", "Prepare an empty chat workspace.", False, True, "none", {"project_id": {"type": "string", "minLength": 1, "maxLength": 80}}),
             (CONVERSATION_OPEN_ACTION_ID, "Open a chat", "Open an existing conversation.", False, True, "none", {"conversation_id": {"type": "string"}, "reference": {"type": "string"}}),
             (CONVERSATION_PIN_ACTION_ID, "Pin a chat", "Pin a conversation in the sidebar.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_UNPIN_ACTION_ID, "Unpin a chat", "Remove a conversation from the pinned group.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_RENAME_ACTION_ID, "Rename a chat", "Change a conversation title.", True, False, "none", {"conversation_id": {"type": "string"}, "title": {"type": "string", "minLength": 1, "maxLength": 160}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_SPACE_ACTION_ID, "Change chat Space", "Move a conversation to a Space.", True, False, "none", {"conversation_id": {"type": "string"}, "assignment": {"enum": ["automatic", "manual"]}, "space_id": {"type": "string"}, "space_label": {"type": "string"}, "topic_id": {"type": "string"}, "topic_label": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
+            (CONVERSATION_PROJECT_ACTION_ID, 'Move chat to project', 'Assign a conversation to a folder without changing its messages or memory Space.', True, False, 'none', {'conversation_id': {'type': 'string'}, 'project_id': {'type': ['string', 'null'], 'maxLength': 80}, 'target_revision': {'type': 'integer'}, **reference}),
+            (PROJECT_CREATE_ACTION_ID, 'Create project', 'Create a conversation folder.', False, False, 'none', {'name': {'type': 'string', 'minLength': 1, 'maxLength': 80}, 'memory': {'enum': ['default', 'project-only']}}),
+            (PROJECT_UPDATE_ACTION_ID, 'Update project', 'Rename or pin a conversation folder.', False, False, 'none', {'project_id': {'type': 'string', 'maxLength': 80}, 'target_revision': {'type': 'integer'}, 'patch': {'type': 'object', 'minProperties': 1, 'additionalProperties': False, 'properties': {'name': {'type': 'string', 'minLength': 1, 'maxLength': 80}, 'pinned': {'type': 'boolean'}}}}),
+            (PROJECT_REMOVE_ACTION_ID, 'Remove project', 'Remove a conversation folder and retain its chats.', False, False, 'operation_bound', {'project_id': {'type': 'string', 'maxLength': 80}, 'target_revision': {'type': 'integer'}}),
             (CONVERSATION_ARCHIVE_ACTION_ID, "Archive a chat", "Move a conversation to the archive.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_RESTORE_ACTION_ID, "Restore a chat", "Restore an archived conversation.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_DELETE_ACTION_ID, "Delete a chat", "Permanently delete a conversation and its canonical runtime state.", False, True, "operation_bound", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
@@ -4588,10 +4646,10 @@ class AppActionRuntime:
                 owner="conversation-lifecycle",
                 title=title,
                 description=description,
-                scope="conversation",
+                scope="user" if action_id in {PROJECT_CREATE_ACTION_ID, PROJECT_UPDATE_ACTION_ID, PROJECT_REMOVE_ACTION_ID} else "conversation",
                 access_class=(
                     CapabilityAccess.DESTRUCTIVE.value
-                    if action_id == CONVERSATION_DELETE_ACTION_ID
+                    if action_id in {CONVERSATION_DELETE_ACTION_ID, PROJECT_REMOVE_ACTION_ID}
                     else CapabilityAccess.EXTERNAL_WRITE.value
                     if action_id == CONVERSATION_SHARE_ACTION_ID
                     else CapabilityAccess.WRITE.value

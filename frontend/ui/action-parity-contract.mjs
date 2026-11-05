@@ -23,6 +23,8 @@ export const MODULE_SOURCE_FILES = [
   "design/Velllum/uploads/workspace-entry.js",
   "frontend/ui/terminal/terminal-workspace.js",
   "frontend/ui/terminal/commands.js",
+  "design/Velllum/uploads/commands-entry.js",
+  "desktop/electron/commands.cjs",
   "design/Velllum/uploads/components/desktop-chrome.js",
   "design/Velllum/uploads/composer-entry.js",
   "design/Velllum/uploads/components/composer-editor.js",
@@ -47,6 +49,8 @@ export const MODULE_SOURCE_FILES = [
 ];
 export const SOURCE_FILES = [
   "design/Velllum/uploads/components/workspace-content.jsx",
+  "design/Velllum/uploads/components/command-menu.jsx",
+  "design/Velllum/uploads/components/navigation-shell.jsx",
   "design/Velllum/uploads/components/app-icons.js",
   "design/Velllum/uploads/components/workspace-controller.jsx",
   ...MODULE_SOURCE_FILES,
@@ -55,6 +59,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/zomato.jsx",
   "design/Velllum/uploads/components/district.jsx",
   "design/Velllum/uploads/components/plugin-workspace.jsx",
+
   "design/Velllum/uploads/Vellum Default Re-designed.html",
   "design/Velllum/uploads/components/v-select.jsx",
   "design/Velllum/uploads/components/accounts.jsx",
@@ -179,9 +184,10 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   const servedExternalSources = new Set();
   for (const path of SOURCE_FILES.filter(item => item.endsWith(".html"))) {
     for (const script of reactScripts(sources[path])) {
-      const source = script.getAttribute("src")?.split(/[?#]/,1)[0];
+      const source = script.getAttribute("src");
       if (!source) continue;
-      const referenced = resolve(root, "design/Velllum/uploads", source).replaceAll("\\", "/");
+      // Cache versions and fragments do not change which local component is served.
+      const referenced = resolve(root, "design/Velllum/uploads", source.split(/[?#]/)[0]).replaceAll("\\", "/");
       const expected = resolve(root, "design/Velllum/uploads").replaceAll("\\", "/") + "/";
       const relative = "design/Velllum/uploads/" + referenced.slice(expected.length);
       if (!referenced.startsWith(expected) || !SOURCE_FILES.includes(relative)) {
@@ -199,6 +205,8 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   const moduleLinks = [
     ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/workspace-entry.js"'],
     ['design/Velllum/uploads/workspace-entry.js', "from '../../../frontend/ui/terminal/terminal-workspace.js'"],
+    ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/commands-entry.js"'],
+    ['design/Velllum/uploads/commands-entry.js', "from '../../../desktop/electron/commands.cjs'"],
     ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/composer-entry.js"'],
     ['design/Velllum/uploads/composer-entry.js', "from './components/composer-editor.js'"],
     ['design/Velllum/uploads/composer-entry.js', "from './components/composer-providers.js'"],

@@ -102,6 +102,7 @@ _DEVICE_SETTING_KEYS = frozenset({
     "background",
     "accent",
     "dock_position",
+    "number_shortcuts",
     "dock_locked",
     "computer_use_preview",
     "personalization",
@@ -384,6 +385,10 @@ class SettingsRuntimeActionService:
             elif key in {"dock_locked", "computer_use_preview"}:
                 if not isinstance(value, bool):
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", f"{key} must be true or false")
+                normalized[key] = value
+            elif key == "number_shortcuts":
+                if not isinstance(value, str) or value not in {"tabs", "chats"}:
+                    raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose tabs or chats for number shortcuts.")
                 normalized[key] = value
             elif key == "dock_position":
                 position = str(value or "").strip().casefold()
@@ -962,6 +967,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
         'accent':{'type':'string'},
         'dock_position':{'type':'string','enum':['auto','top','right','bottom','left']},
+        'number_shortcuts':{'type':'string','enum':['tabs','chats']},
         'dock_locked':{'type':'boolean'}, 'computer_use_preview':{'type':'boolean'},
         'personalization':personalization_schema,
         'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','minLength':1,'maxLength':120}}},
@@ -985,6 +991,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "background": {"type": "string", "enum": [*BACKGROUND_IDS, "next", "previous"]},
                 "accent": {"type": "string"},
                 "dock_position": {"type": "string"},
+                "number_shortcuts": {"type":"string", "enum":["tabs","chats"]},
                 "dock_locked": {"type": "boolean"},
                 "computer_use_preview": {"type": "boolean"},
                 "personalization": personalization_schema,

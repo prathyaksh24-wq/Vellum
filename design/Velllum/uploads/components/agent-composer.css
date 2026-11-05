@@ -2,12 +2,12 @@
 .morphic-group{position:relative;isolation:isolate}
 .morphic-group>.hlb{position:absolute;left:0;top:0;border-radius:10px;background:var(--composer-row-bg,#262626);z-index:0;opacity:0;pointer-events:none;transition:transform .24s cubic-bezier(.2,.8,.2,1),width .24s cubic-bezier(.2,.8,.2,1),height .24s cubic-bezier(.2,.8,.2,1),opacity .15s}
 .morphic-group [data-shared-row]{position:relative;z-index:1}
-.morphic-tooltip{position:fixed;inset:auto;left:0;top:0;z-index:2147483000;pointer-events:none;background:var(--menu-solid,#1b1819);color:var(--txt2,#ECECEC);border:0;padding:0;margin:0;border-radius:10px;font:600 12.5px/1.5 Inter,var(--font-body,system-ui),sans-serif;opacity:0;overflow:visible;box-shadow:0 8px 24px rgba(0,0,0,.4);transition:transform .26s cubic-bezier(.2,.8,.2,1),width .26s cubic-bezier(.2,.8,.2,1),height .26s cubic-bezier(.2,.8,.2,1),opacity .15s}
+.morphic-tooltip{position:fixed;inset:auto;left:0;top:0;z-index:2147483000;pointer-events:none;background:var(--menu-solid,#1b1819);color:var(--txt2,#ECECEC);border:0;padding:0;margin:0;border-radius:10px;font:600 12.5px/1.5 var(--font-ui,system-ui,sans-serif);opacity:0;overflow:visible;box-shadow:0 8px 24px rgba(0,0,0,.4);transition:transform .26s cubic-bezier(.2,.8,.2,1),width .26s cubic-bezier(.2,.8,.2,1),height .26s cubic-bezier(.2,.8,.2,1),opacity .15s}
 .morphic-tooltip::backdrop{background:transparent;pointer-events:none}
 .morphic-tooltip.nt{transition:opacity .15s}
 .morphic-tooltip-copy{position:relative;width:max-content;max-width:calc(100vw - 16px);padding:7px 11px;display:flex;gap:8px;align-items:center;animation:morphic-tooltip-copy-in .22s ease-out}
 .morphic-tooltip-copy>span{white-space:normal;overflow-wrap:anywhere;max-width:360px}
-.morphic-tooltip kbd{flex:none;white-space:nowrap;background:var(--hover2,rgba(255,255,255,.08));border:0;color:var(--txt2,#ECECEC);border-radius:5px;padding:0 5px;font:400 11.5px/1.5 'JetBrains Mono',ui-monospace,monospace}
+.morphic-tooltip kbd{flex:none;white-space:nowrap;background:var(--hover2,rgba(255,255,255,.08));border:0;color:var(--txt2,#ECECEC);border-radius:5px;padding:0 5px;font:400 11.5px/1.5 var(--font-m,ui-monospace,monospace)}
 @keyframes morphic-tooltip-copy-in{from{opacity:0;transform:translateY(3px)}}
 
 .model-drop.agent-model-picker,.slash-menu.agent-slash-menu{--composer-row-bg:color-mix(in srgb,var(--txt2,#ECECEC) 8%,transparent);border:1px solid var(--line2,#262626);background:var(--menu-solid,#161616);background:rgb(from var(--menu-solid,#161616) r g b / 1);color:var(--txt2,#ECECEC);box-shadow:0 18px 40px rgba(0,0,0,.5);font-size:14px;animation:none}

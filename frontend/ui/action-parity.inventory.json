@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 942,
-      "sha256": "b135b4d9601bdf0b2e6ab0ea8105123f41996e3025f206bd6f9cf2ac1634c540"
+      "count": 978,
+      "sha256": "d303c7cd9220926c14122a033d289f5e2a684e729cfa29609e34392f6409e38a"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -26,8 +26,8 @@
       "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
-      "count": 68,
-      "sha256": "1ea92ea00c35a08aeb7bf9d7b7dc77d9dd8f39cfe97e6f263f02168ccb7b7d49"
+      "count": 70,
+      "sha256": "8fa90f6b512f8965c7f9705b983e09915afb0793a1bd14dcfd3d2f39d006321e"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
@@ -58,8 +58,8 @@
       "sha256": "43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"
     },
     "design/Velllum/uploads/components/music-page.jsx": {
-      "count": 107,
-      "sha256": "40baa682e2c015a69dd3b84bdbca43e08f3a6d22f4b1849b88a3283779db0901"
+      "count": 109,
+      "sha256": "e8fd725b337f44e001b6ec4a432c877a0109518e6f603cbae299b22eedd35267"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
       "count": 17,
@@ -146,8 +146,8 @@
       "sha256": "42e0e4cbd918d5eb8538c70fa2ca8a3167766bf6635a7e2e751ea359d1bde0d2"
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
-      "count": 130,
-      "sha256": "bbe46e5375292637436a0fc9eefa8e48a105e402811fe2fd2654b1afad154acd"
+      "count": 132,
+      "sha256": "8c32f1a4ac803d980f7d5dcd8bfb1fff4e75fb93d5081f50f93606f98747162f"
     },
     "design/Velllum/uploads/books-entry.js": {
       "count": 0,
@@ -246,8 +246,8 @@
       "sha256": "f362b8a7fbccbcd5bb0a3422e50bc88ca21b4961b8fbeeea270b03b5a7307f92"
     },
     "design/Velllum/uploads/components/desktop-chrome.js": {
-      "count": 5,
-      "sha256": "36f7ead259459a726edffc3ce47e486d69a0c43a92836682499515ed65032611"
+      "count": 6,
+      "sha256": "afefdae09f344a9c01436f9fe7118e9f175ff8aa60909a0365c438d52ece804d"
     },
     "design/Velllum/uploads/composer-entry.js": {
       "count": 0,
@@ -255,19 +255,19 @@
     },
     "design/Velllum/uploads/components/composer-editor.js": {
       "count": 19,
-      "sha256": "25fa555bbc1381df82017a0f628d174710f6b25238142be92202285cc717a927"
+      "sha256": "c8ecbd5574a0a90932424ec9c89ed7c60e71f60c5c6041a1ae17a59ac86416b4"
     },
     "design/Velllum/uploads/components/composer-providers.js": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/workspace-controller.jsx": {
-      "count": 18,
-      "sha256": "69ae82339db25f80d2c2a5452244f6dcb0586a45374d254b5b42aadc2a7e1ba6"
+      "count": 20,
+      "sha256": "052f0104066512e98e50b6d8c3cf887e23971df170b242b1b060d34b07ea76e6"
     },
     "design/Velllum/uploads/components/workspace-content.jsx": {
-      "count": 12,
-      "sha256": "60fc6a1c3c8f64081a842f84b4749f581f9db4d4dd4f9c96ef5710ca003251ef"
+      "count": 18,
+      "sha256": "a94335cc3088c00f55e557068bdb2e391a5d385dc88cc7c8613617a8c326471a"
     },
     "design/Velllum/uploads/workspace-entry.js": {
       "count": 0,
@@ -282,6 +282,22 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/app-icons.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/command-menu.jsx": {
+      "count": 12,
+      "sha256": "f22e86949597afa18b5545553aa344e136f9fda91573b5288161f96028b07263"
+    },
+    "design/Velllum/uploads/components/navigation-shell.jsx": {
+      "count": 70,
+      "sha256": "e581939fb30894fbf43cae9d7208eba352a97eb457a0ecaebc5cbec09f82a345"
+    },
+    "design/Velllum/uploads/commands-entry.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "desktop/electron/commands.cjs": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
@@ -2264,7 +2280,7 @@
       "actionId": "conversation.new",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "dispatchConversationAction('conversation.new',{create_record:true}"
+        "text": "dispatchConversationAction('conversation.new',activeChatProject"
       }
     },
     {
@@ -2274,6 +2290,60 @@
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "dispatchConversationAction('conversation.open',{conversation_id:id},{applyNavigation:false,notify:false})"
+      }
+    },
+    {
+      "surface": "Conversation folders",
+      "name": "create conversation folder",
+      "actionId": "project.create",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('project.create',{name,memory})"
+      }
+    },
+    {
+      "surface": "Conversation folders",
+      "name": "update conversation folder",
+      "actionId": "project.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('project.update',{project_id:id"
+      }
+    },
+    {
+      "surface": "Conversation folders",
+      "name": "remove folder while retaining chats",
+      "actionId": "project.remove",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('project.remove',{project_id:id"
+      }
+    },
+    {
+      "surface": "Conversation folders",
+      "name": "assign chat by drag or menu",
+      "actionId": "conversation.project.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.project.set',{conversation_id:chatId,project_id:projId})"
+      }
+    },
+    {
+      "surface": "Conversation folders",
+      "name": "ordinary project chat draft",
+      "actionId": "conversation.new",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.new',{project_id:projectId}"
+      }
+    },
+    {
+      "surface": "Conversation folders",
+      "name": "hover-card pin uses existing folder update",
+      "actionId": "project.update",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onPin={()=>onProjectAction(project.id,'pin')}"
       }
     }
   ],
@@ -2437,6 +2507,26 @@
     {
       "scope": "Workspace slide presence, tab keyboard focus, summary outline jumps, attachment/code selection and sandboxed local previews",
       "reason": "Transient display over existing conversation and attachment records. New tab opens a typed launcher content pane; its address form uses the existing browser navigation owner and its Tools choices replace that launcher through ui.surface.configure. Side chats retain the main conversation writer, stream queue and scoped model/reasoning controls. Preview selection executes no provider tool or model. Hiding retains live views; closing a shell view disposes its existing terminal owner."
+    },
+    {
+      "scope": "Contextual destination rail, mode disclosure, chat hover/status presentation and Library browsing geometry",
+      "reason": "Navigation reuses existing App routes and conversation/project actions. The Coding entry is disabled Coming soon and cannot enter an execution mode. Sidebar visibility uses the existing Workspace Layout or Music sidebar owner; native/title-bar events only carry presentation commands. Chat status is a projection of existing records; title movement, delayed hover cards, search, filtering, sorting, selection, focus, responsive placement and native guest occlusion are transient UI. Notifications retain the existing inbox and read actions. Library file preparation retains appActions.prepareAttachments; chat files remain conversation-owned and deletion removes their projection. Session collection organization retains its explicitly deferred legacy local owner; it does not change disk files, fetch cloud contents, grant connector access or persist a new store."
+    },
+    {
+      "scope": "Context-aware command dispatch, reference search, menu geometry and shortcut tooltips",
+      "reason": "The shared pure registry resolves identity and enablement; it adds no execution service or persistent store. Command handlers invoke existing conversation, workspace presentation, device setting and browser session App Actions. Palette queries, navigation, focus, Find selection, tooltip geometry, sidebar hover reveal and native application zoom are non-committing UI or local window presentation. Unsupported commands are disclosed without handlers. Saved number preference uses settings.device.update; reopening tabs, force reload and browser Find use browser.session.control with UI-only source validation. Closed URLs are bounded in process memory by existing browser profile and cleared by history cleanup."
+    },
+    {
+      "scope": "Destination-owned sidebar previews and project section presentation",
+      "reason": "Rail hover uses transient App state and existing plugin/music sidebars. Cross-route previews project the loaded catalog and navigate to the existing feature owner; hover does not authenticate, fetch provider content, pin navigation or save visibility. Project disclosure, sort/filter menus, hover details and keyboard focus are transient presentation. Drag-and-drop only transfers an existing conversation identity and invokes conversation.project.set; project mutations and removal confirmation use the canonical conversation writer and App Action runtime. The plugin handler set was reviewed including the pre-existing MCP app-detail navigation handlers; connection/install/skill writes retain their existing reviewed coordinators."
+    },
+    {
+      "scope": "Single interactive sidebar hover owner and guarded project submission",
+      "reason": "One transient provider controls project/chat hover cards, delayed opening, the pointer corridor, Escape, external focus, drag suppression and cleanup. Per-row identities prevent duplicate cards when one conversation appears in multiple sections. These are non-committing presentation controls. Project name clicks only change disclosure; Home/Library hover selects the corresponding existing sidebar projection. Header shortcuts depend on a started conversation and hidden sidebar. The modal and App coordinator coalesce concurrent create callbacks while using the existing project.create action. Pin and name editing retain project.update, and Recents New chat retains conversation.new. No project records are merged or deleted by this UI fix."
+    },
+    {
+      "scope": "Workspace session restoration, pane-specific close and side-chat drafts, local device file presentation",
+      "reason": "Workspace show/hide/full/split and retained tab selection use the existing ui.surface.configure owner. Side chat stages an ordinary draft after conversation.new and persists through the existing conversation send path; model/effort for unsent drafts stays local. Device folder listing and bounded previews use a read-only allowlisted desktop command restricted to the registered top-level workspace; no file mutation, agent ingestion or external transmission occurs. Location input, source tabs, preview selection and temporary errors are presentation only. Browser navigation and tab changes retain browser.session.control."
     }
   ],
   "deferred": [

@@ -22,7 +22,28 @@
     if(!chat)for(const item of library)if(item.attachment||item.content||item.text_content)add(item.attachment||{...item,text_content:item.text_content||item.content},'library:'+item.id);
     return rows;
   }
-  function WorkspaceFiles({chat,library}){
+  function DeviceFiles({visible}){
+    const [folder,setFolder]=useState(null),[address,setAddress]=useState(''),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+    const sequence=useRef(0),started=useRef(false);
+    const read=async(operation,path)=>{
+      const token=++sequence.current;setBusy(true);setError('');
+      try{const result=await window.VellumDesktop.invoke('local_files',{operation,...(path?{path}:{})});if(token!==sequence.current)return;if(operation==='list'){setFolder(result);setAddress(result.path);setFile(null);}else setFile(result);}
+      catch(failure){if(token===sequence.current)setError(failure.message==='Unknown desktop command.'?'Restart Vellum to enable local file browsing.':failure.message||'This location could not be opened.');}
+      finally{if(token===sequence.current)setBusy(false);}
+    };
+    useEffect(()=>{if(visible&&!started.current){started.current=true;read('list');}},[visible]);
+    useEffect(()=>()=>{sequence.current++;},[]);
+    return <section className="workspace-device-files" aria-label="Files on this device">
+      <form className="workspace-file-location" onSubmit={event=>{event.preventDefault();if(address.trim())read('list',address.trim());}}><button type="button" className="tbtn" aria-label="Parent folder" disabled={!folder?.parent||busy} onClick={()=>read('list',folder.parent)}><Icon name="ArrowUp" size={17}/></button><input aria-label="Folder path" placeholder="Local folder path" value={address} onChange={event=>setAddress(event.target.value)}/><button type="submit" className="tbtn" aria-label="Open folder" disabled={busy||!address.trim()}><Icon name="ArrowRight" size={17}/></button></form>
+      {error&&<p className="workspace-file-error" role="alert">{error}</p>}
+      <div className="workspace-device-body"><nav className="workspace-file-list" aria-label="Local folders and files">{busy&&<p role="status">Opening…</p>}{folder?.entries.map(entry=><button type="button" key={entry.path} title={entry.name} aria-current={file?.path===entry.path?'true':undefined} onClick={()=>read(entry.kind==='directory'?'list':'preview',entry.path)}><Icon name={entry.kind==='directory'?'Folder':'FileDocument'} size={16}/><span>{entry.name}</span></button>)}{folder&&!folder.entries.length&&<p>This folder is empty.</p>}{folder?.truncated&&<p>Showing the first 2,000 entries.</p>}</nav><div className="workspace-file-preview">{file?<><header><span>{file.name}</span></header>{file.kind==='image'?<img className="workspace-preview-image" src={file.data_url} alt={file.name}/>:file.kind==='text'?<pre tabIndex="0">{file.text}</pre>:<div className="workspace-empty"><p>{file.message}</p></div>}</>:<div className="workspace-empty"><Icon name="Folder" size={24}/><h3>On this device</h3><p>Choose a folder or file. Files stay on your laptop unless you attach them to a message.</p></div>}</div></div>
+    </section>;
+  }
+  function WorkspaceFiles({chat,library,visible}){
+    const desktop=window.VellumDesktop?.runtime==='electron', [device,setDevice]=useState(desktop);
+    return <section className="workspace-file-workspace"><header className="workspace-file-sources">{desktop&&<button type="button" aria-pressed={device} onClick={()=>setDevice(true)}>On this device</button>}<button type="button" aria-pressed={!device} onClick={()=>setDevice(false)}>Chat files</button></header>{device?<DeviceFiles visible={visible}/>:<ChatFiles chat={chat} library={library}/>}</section>;
+  }
+  function ChatFiles({chat,library}){
     const files=collectWorkspaceFiles(chat,library),[selected,setSelected]=useState(''),[source,setSource]=useState(false);
     const file=files.find(file=>file.id===selected)||files[0];
     useEffect(()=>setSource(false),[file?.id]);
@@ -82,7 +103,7 @@
     return <>{items.map(item=>{
       const active=item.id===activeId,chat=chats.find(chat=>chat.id===item.reference_id);
       return <div className="workspace-content-view" key={item.id} hidden={!active} inert={!active?'':undefined}>
-        {item.kind==='launcher'?<WorkspaceLauncher item={item} browserAvailable={browserAvailable} terminalAvailable={terminalAvailable} onOpenTool={onOpenTool}/>:item.kind==='terminal'?<WorkspaceTerminal visible={visible&&active}/>:item.kind==='files'?<WorkspaceFiles chat={chat} library={item.reference_id==='library'?library:[]}/>:<section className="workspace-side-chat" aria-label="Side chat">
+        {item.kind==='launcher'?<WorkspaceLauncher item={item} browserAvailable={browserAvailable} terminalAvailable={terminalAvailable} onOpenTool={onOpenTool}/>:item.kind==='terminal'?<WorkspaceTerminal visible={visible&&active}/>:item.kind==='files'?<WorkspaceFiles visible={visible&&active} chat={chat} library={item.reference_id==='library'?library:[]}/>:<section className="workspace-side-chat" aria-label="Side chat">
           <header className="workspace-side-chat-heading"><label><span className="sr-only">Side conversation</span><select aria-label="Side conversation" value={item.reference_id} onChange={event=>onSelectChat(item,event.target.value)}>{chats.filter(chat=>!chat.archived&&chat.id!==mainChatId).map(chat=><option key={chat.id} value={chat.id}>{chat.title||'New chat'}</option>)}</select></label><button type="button" className="tbtn" aria-label="Open conversation in main view" onClick={()=>onOpenMain(item.reference_id)}><Icon name="ExternalLink" size={16}/></button><button type="button" className="tbtn" aria-label="Files in side chat" onClick={()=>onOpenFiles(item.reference_id)}><Icon name="FileDocument" size={16}/></button></header>
           {chat&&chat.id!==mainChatId?renderChat(chat):<div className="workspace-empty"><p>{chat?'This conversation is already in the main view. Choose another chat.':'This conversation is no longer available.'}</p></div>}
         </section>}

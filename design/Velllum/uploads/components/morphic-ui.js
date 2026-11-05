@@ -35,13 +35,14 @@
   function MorphicTooltip() {
     window.React.useEffect(()=>{
       const panel=document.createElement('div');panel.id='vellum-morphic-tooltip';panel.className='morphic-tooltip nt';panel.role='tooltip';
-      panel.setAttribute('aria-hidden','true');panel.setAttribute('popover','manual');document.body.append(panel);
+      panel.setAttribute('aria-hidden','true');panel.setAttribute('data-shell-overlay','true');panel.setAttribute('popover','manual');document.body.append(panel);
       let current=null,hideTimer=0,frame=0,shown=false,lastText='',lastKey='',savedTitle=null;
       const media=window.matchMedia('(prefers-reduced-motion: reduce)');
       const titles=new WeakMap();
       const eligible=target=>{
         if(!(target instanceof Element))return null;
-        const el=target.closest('[data-tip],[data-tooltip]');
+        const el=target.closest('[data-tip],[data-tooltip],[data-command],button[title]');
+        if(el&&!el.matches('[data-tip],[data-tooltip],[data-command]')&&!el.closest('.app-destination-rail')&&!/(Ctrl|Alt|Shift|Meta|⌘)/.test(el.getAttribute('title')||''))return null;
         if(!el || el.closest('[inert],[aria-hidden="true"],[data-morphic-tooltip="off"],[data-slot="tooltip-trigger"]'))return null;
         const described=(el.getAttribute('aria-describedby') || '').split(/\s+/);
         if(described.some(id=>id!==panel.id && document.getElementById(id)?.getAttribute('role')==='tooltip'))return null;
@@ -58,7 +59,7 @@
       };
       const hide=(immediate=false)=>{
         clearTimeout(hideTimer);
-        const end=()=>{shown=false;panel.style.opacity='0';panel.setAttribute('aria-hidden','true');unlink();current=null;resize?.disconnect();
+        const end=()=>{shown=false;panel.style.opacity='0';panel.setAttribute('aria-hidden','true');window.dispatchEvent(new Event('vellum:shell-overlay'));unlink();current=null;resize?.disconnect();
           if(immediate){if(panel.matches(':popover-open'))panel.hidePopover();}
           else hideTimer=setTimeout(()=>{if(!shown && panel.matches(':popover-open'))panel.hidePopover();},150);
         };
@@ -71,7 +72,7 @@
         const width=Math.min(copy.offsetWidth,innerWidth-16),height=copy.offsetHeight;
         const x=Math.max(8,Math.min(innerWidth-width-8,rect.left+rect.width/2-width/2));
         let left=x,y=rect.top-height-10;
-        const side=current.getAttribute('data-tooltip-side');
+        const side=current.getAttribute('data-tooltip-side') || (current.closest('.app-destination-rail')?'right':'');
         if(side==='bottom')y=rect.bottom+10;
         else if(side==='left' || side==='right'){
           left=side==='left'?rect.left-width-10:rect.right+10;y=rect.top+(rect.height-height)/2;
@@ -83,7 +84,8 @@
       const resize=typeof ResizeObserver==='function'?new ResizeObserver(()=>{if(shown)position();}):null;
       const show=el=>{
         const text=label(el);if(!text)return;clearTimeout(hideTimer);
-        const key=el.getAttribute('data-k') || el.getAttribute('aria-keyshortcuts') || '';
+        const registered=window.VellumCommands?.definition(el.getAttribute('data-command'));
+        const key=registered?.keys?.[0]?window.VellumCommands.displayKey(registered.keys[0]):el.getAttribute('data-k') || el.getAttribute('aria-keyshortcuts') || '';
         if(current===el && shown && text===lastText && key===lastKey)return;
         const first=!shown;
         unlink();current=el;lastText=text;lastKey=key;
@@ -101,14 +103,14 @@
         panel.replaceChildren(copy);panel.classList.toggle('nt',first || media.matches);
         if(panel.showPopover && !panel.matches(':popover-open'))panel.showPopover();
         panel.setAttribute('aria-hidden','false');
-        position();shown=true;
+        position();shown=true;window.dispatchEvent(new Event('vellum:shell-overlay'));
         const ids=(el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);el.setAttribute('aria-describedby',[...new Set([...ids,panel.id])].join(' '));
         resize?.disconnect();resize?.observe(el);
         cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{if(shown)panel.style.opacity='1';});
       };
       const over=event=>{if(event.pointerType==='touch')return;const el=eligible(event.target);if(el)show(el);else if(current)hide();};
       const out=event=>{const next=eligible(event.relatedTarget);if(next===current)return;if(next)show(next);else if(current)hide();};
-      const focus=event=>{const el=eligible(event.target);if(el && event.target.matches(':focus-visible'))show(el);};
+      const focus=event=>{const el=eligible(event.target);if(el && event.target.matches(':focus-visible'))show(el);else if(current && !current.contains(event.target))hide(true);};
       const blur=event=>{if(!current?.contains(event.relatedTarget))hide();};
       const dismiss=()=>hide(true);
       const keydown=event=>{if(event.key==='Escape')dismiss();};

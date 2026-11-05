@@ -3234,7 +3234,7 @@ async def list_conversations() -> dict[str, Any]:
 @router.get("/conversations/library", response_model=ConversationLibraryResponse)
 async def conversation_library(include_messages: bool = True) -> ConversationLibraryResponse:
     projection = await asyncio.to_thread(
-        lambda: build_conversation_library(_read_ui_conversations(), include_messages=include_messages)
+        lambda: {**build_conversation_library(_read_ui_conversations(), include_messages=include_messages), 'projects': _conversation_lifecycle().projects()}
     )
     return ConversationLibraryResponse.model_validate(projection)
 
@@ -3278,7 +3278,7 @@ async def rebuild_conversation_library() -> ConversationLibraryResponse:
         conversations.append(record)
     projection = await asyncio.to_thread(build_conversation_library, conversations)
     await asyncio.to_thread(_write_ui_conversations, projection["conversations"])
-    return ConversationLibraryResponse.model_validate(projection)
+    return ConversationLibraryResponse.model_validate({**projection, "projects": _conversation_lifecycle().projects()})
 
 
 @router.get("/conversations/{conversation_id}")
