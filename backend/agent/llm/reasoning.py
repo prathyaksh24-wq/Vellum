@@ -7,7 +7,7 @@ routing adapters apply at the model seam. ``None`` means the standard
 interactive profile (unchanged behaviour).
 
 Applies to the reasoning chat agent, its sub-agents, and automations.
-The coding mode has its own narrower ``ReasoningEffort`` and is untouched.
+The legacy standalone coding mode has been removed.
 """
 
 from __future__ import annotations

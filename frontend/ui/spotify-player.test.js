@@ -41,7 +41,7 @@ async function renderPlayer(queue, sdk = false, options = {}) {
     compiled + '; return {Player:SpotifyPlayer,GlobalDock};')(React,useState,useRef,useEffect,api,{plugins,localMusic:options.localApi},() => null,() => '0:00',ReactDOM,[],...iconNames.map(() => () => null));
   const renderDock=(music,musicOpen,onDismissMusic) => React.createElement(GlobalDock, {
     side:options.dockSide || 'top',locked:false,view:'chat',agents:[],music,musicOpen,onDismissMusic,
-    onLockedChange:vi.fn(),onNewChat:vi.fn(),onSearch:vi.fn(),onNav:vi.fn(),onCoding:vi.fn(),onOpenAgent:vi.fn(),onSettings:vi.fn(),
+    onLockedChange:vi.fn(),onNewChat:vi.fn(),onSearch:vi.fn(),onNav:vi.fn(),onOpenAgent:vi.fn(),onSettings:vi.fn(),
     ...options.dockProps,
   });
   const props={spotify:{connected:true,web_playback_ready:sdk},renderDock,...options};

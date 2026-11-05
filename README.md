@@ -1,6 +1,6 @@
 # Vellum
 
-Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, an Electron desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, coding mode, computer-use foundations, and a Hermes-compatible skills system.
+Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, an Electron desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, computer-use foundations, and a Hermes-compatible skills system.
 
 ![CI](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/release.yml/badge.svg)
@@ -11,7 +11,7 @@ Vellum is a privacy-first, local-first personal agent workspace. It combines a F
 
 ## Current Status
 
-Vellum is a development-stage personal agent runtime. The current implementation is focused on making the core loops reliable: chat, memory, model routing, retrieval, skills, plugins, coding workflows, knowledge management, and local privacy boundaries.
+Vellum is a development-stage personal agent runtime. The current implementation is focused on making the core loops reliable: chat, memory, model routing, retrieval, skills, plugins, knowledge management, and local privacy boundaries.
 
 The repository currently has the alpha tag `v0.1.0-alpha.1`. It is a development milestone, not a production release.
 
@@ -35,11 +35,10 @@ The repository currently has the alpha tag `v0.1.0-alpha.1`. It is a development
 - Maintained Knowledge Wiki under `Vault/Knowledge`, separate from raw `Vault/Library` imports.
 - Hermes-compatible `SKILL.md` package system with approval-gated mutations, catalog rebuilds, duplicate checks, usage intelligence, curator support, and a Skills Hub surface.
 - Plugin surfaces for Spotify, memory, Agent Reach, portable plugins, and Hermes skills.
-- Coding-assistant mode backed by Codex and Claude adapters.
 - Computer-use routing, guarded sessions, native Windows drivers, and overlay support.
 - Voice STT/TTS modules using Moonshine and Kokoro when enabled.
 - MCP/tool integrations for filesystem, Apify, Playwright, GitHub, Obsidian, Context7, GitMCP, Context Mode, Tavily, Firecrawl, and web/search providers.
-- Test coverage across API contracts, memory, routing, skills, computer use, coding mode, plugins, Spotify, voice, and tool boundaries.
+- Test coverage across API contracts, memory, routing, skills, computer use, plugins, Spotify, voice, and tool boundaries.
 
 ## Experimental Or Incomplete Areas
 
@@ -63,7 +62,6 @@ backend/agent/memory/           Memory Orchestrator, Honcho, FTS5, sessions
 backend/agent/obsidian/         Vault IO, Knowledge Wiki, retention, exports
 backend/agent/skills/           Hermes skill packages, catalog, curator, hub
 backend/agent/tools/            Agent tools and capability registry
-backend/agent/coding/           Coding session service and adapters
 backend/agent/computer_use/     Guarded desktop/browser/computer-use runtime
 plugins/                        Portable connector and memory plugin packages
 Vault/                          Local Obsidian vault used by Vellum

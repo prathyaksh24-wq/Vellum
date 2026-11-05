@@ -179,42 +179,30 @@ async def test_observability_nlp_streams_a_navigation_receipt_without_calling_ag
 
 
 @pytest.mark.asyncio
-async def test_coding_workspace_nlp_streams_the_same_navigation_receipt_without_calling_agent(monkeypatch) -> None:
+async def test_retired_coding_navigation_stays_in_the_main_chat_stream(monkeypatch) -> None:
     monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
     monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
 
-    def execute(action_id, _arguments, _context, **_options):
-        assert action_id == "coding.workspace.open"
-        return {
-            "changed": True,
-            "navigation": {"kind": "coding_workspace", "url": "vellum-workspace.html"},
-            "_target_kind": "ui_surface",
-            "_target_id": "coding-workspace",
-            "_message": "Coding workspace opened.",
-        }
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime())
+    streamed_messages = []
 
-    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(coding_github_handler=execute))
+    async def agent_stream(**kwargs):
+        streamed_messages.append(kwargs["clean_message"])
+        yield 'event: response.created\ndata: {"thread_id":"chat-coding"}\n\n'
+        yield 'event: response.completed\ndata: {"response":{"thread_id":"chat-coding","output_text":"How can I help with your code?","tools":[],"sources":[]}}\n\n'
 
-    async def agent_must_not_run(**_kwargs):
-        raise AssertionError("a coding navigation action must not call the conversational model")
-        yield ""
-
-    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_stream)
     response = await api.chat_stream(api.ChatRequest(
         message="open coding workspace",
         thread_id="chat-coding",
     ))
     events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
-    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
-    completed = next(data["response"] for name, data in events if name == "response.completed")
 
-    assert receipt["status"] == "applied"
-    assert receipt["action_id"] == "coding.workspace.open"
-    assert receipt["result"]["navigation"] == {
-        "kind": "coding_workspace",
-        "url": "vellum-workspace.html",
-    }
-    assert completed["output_text"] == "Coding workspace opened."
+    assert streamed_messages == ["open coding workspace"]
+    assert all(not name.startswith("app.action.") for name, _data in events)
+    completed = next(data["response"] for name, data in events if name == "response.completed")
+    assert completed["thread_id"] == "chat-coding"
+    assert completed["output_text"] == "How can I help with your code?"
 
 
 @pytest.mark.asyncio

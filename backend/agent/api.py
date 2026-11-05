@@ -51,7 +51,6 @@ from agent.mcp.browser_api import router as browser_router
 from agent.mcp.playwright_tools import shutdown_async as browser_shutdown_async
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
 from agent.app_actions.automations import AutomationActionService
-from agent.app_actions.coding_github import CodingGitHubActionService
 from agent.app_actions.knowledge_sources import KnowledgeSourceActionService
 from agent.app_actions.models import ActionReceipt, AppActionContext, AppActionRequest
 from agent.app_actions.observability import ObservabilityActionService
@@ -75,8 +74,6 @@ from agent.app_actions.lifecycle_controls import (
     PluginSkillActionService,
     decode_skill_hub_result,
 )
-from agent.coding.api import create_coding_router
-from agent.coding.service import CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
 from agent.computer_use_runtime import computer_use_runtime
@@ -260,9 +257,6 @@ _DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")
 _DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SECONDS", "900")))
 _dreaming_lock = threading.Lock()
 terminal_session_manager = TerminalSessionManager()
-coding_service = CodingSessionService()
-_coding_github_actions = CodingGitHubActionService(coding_service=coding_service)
-_app_action_runtime.set_coding_github_handler(_coding_github_actions.execute)
 _automation_actions = AutomationActionService()
 _app_action_runtime.set_automation_handler(_automation_actions.execute)
 _knowledge_source_actions = KnowledgeSourceActionService()
@@ -3149,21 +3143,6 @@ def _embedding_health() -> dict[str, Any]:
         return {"ok": False, "provider": "sentence-transformers", "error": "unavailable"}
 
 
-def _coding_project_roots() -> list[Path]:
-    roots = {REPO_ROOT.resolve(), Path.cwd().resolve()}
-    try:
-        settings = get_settings()
-        roots.add(settings.obsidian_vault_path.resolve())
-    except Exception:
-        pass
-    try:
-        for session in coding_service.list_sessions():
-            roots.add(Path(session.cwd).expanduser().resolve())
-            if getattr(session, "source_cwd", ""):
-                roots.add(Path(session.source_cwd).expanduser().resolve())
-    except Exception:
-        pass
-    return sorted(roots, key=lambda path: str(path).casefold())
 
 
 @router.get("/health")
@@ -7325,12 +7304,6 @@ async def terminal_ws(websocket: WebSocket) -> None:
             await terminal_session_manager.terminate(session.id)
 
 
-router.include_router(
-    create_coding_router(
-        service_provider=lambda: coding_service,
-        project_roots_provider=lambda: _coding_project_roots(),
-    )
-)
 router.include_router(app_actions_router)
 router.include_router(account_router)
 router.include_router(browser_router)

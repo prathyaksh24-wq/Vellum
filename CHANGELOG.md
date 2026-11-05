@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Removed the legacy standalone Coding mode, its workspace pages, session API/runtime, provider adapters, session-bound PR actions and SDK dependencies. Existing user data and worktrees remain on disk; future coding harness integration is separate work.
+
 ### Added
 - Pane-based browser workspace with a New tab tool chooser, shared split/full tabs,
   file previews, independent side conversations, summary controls and embedded

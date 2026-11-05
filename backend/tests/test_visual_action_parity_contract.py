@@ -21,7 +21,6 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
         settings_runtime_handler=lambda *_args: {},
         lifecycle_control_handler=lambda *_args: {},
         observability_handler=lambda *_args: {},
-        coding_github_handler=lambda *_args: {},
         automation_handler=lambda *_args: {},
         knowledge_source_handler=lambda *_args: {},
     )

@@ -41,14 +41,6 @@ from agent.app_actions.automations import (
     AutomationActionError,
     automation_action_definitions,
 )
-from agent.app_actions.coding_github import (
-    CODING_GITHUB_ACTION_IDS,
-    CODING_WORKSPACE_OPEN_ACTION_ID,
-    GITHUB_PULL_REQUEST_CREATE_ACTION_ID,
-    GITHUB_PULL_REQUEST_OPEN_ACTION_ID,
-    CodingGitHubActionError,
-    coding_github_action_definitions,
-)
 from agent.app_actions.session_controls import (
     AGENT_SELECT_ACTION_ID,
     MEMORY_CONVERSATION_SET_ACTION_ID,
@@ -273,7 +265,6 @@ class AppActionRuntime:
         settings_runtime_handler: Callable[..., dict[str, Any]] | None = None,
         lifecycle_control_handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]] | None = None,
         observability_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
-        coding_github_handler: Callable[..., dict[str, Any]] | None = None,
         automation_handler: Callable[..., dict[str, Any]] | None = None,
         knowledge_source_handler: Callable[..., dict[str, Any]] | None = None,
         plugin_registry: PluginRegistry | None = None,
@@ -291,7 +282,6 @@ class AppActionRuntime:
         self._settings_runtime_handler = settings_runtime_handler
         self._lifecycle_control_handler = lifecycle_control_handler
         self._observability_handler = observability_handler
-        self._coding_github_handler = coding_github_handler
         self._automation_handler = automation_handler
         self._knowledge_source_handler = knowledge_source_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
@@ -311,7 +301,6 @@ class AppActionRuntime:
                 *self._conversation_definitions(),
                 *lifecycle_action_definitions(),
                 *observability_action_definitions(),
-                *coding_github_action_definitions(),
                 *automation_action_definitions(),
                 *knowledge_source_action_definitions(),
                 *petdex_action_definitions(),
@@ -378,17 +367,6 @@ class AppActionRuntime:
                 ),
                 access=CapabilityAccess(definition.access_class),
             )
-        for action_id in CODING_GITHUB_ACTION_IDS:
-            definition = self._definitions[action_id]
-            self._register(
-                action_id,
-                definition.title,
-                lambda payload, registered_action_id=action_id: self._invoke_coding_github(
-                    registered_action_id,
-                    payload,
-                ),
-                access=CapabilityAccess(definition.access_class),
-            )
         for action_id in AUTOMATION_ACTION_IDS:
             definition = self._definitions[action_id]
             self._register(
@@ -444,11 +422,6 @@ class AppActionRuntime:
     ) -> None:
         self._observability_handler = handler
 
-    def set_coding_github_handler(
-        self,
-        handler: Callable[..., dict[str, Any]],
-    ) -> None:
-        self._coding_github_handler = handler
 
     def set_automation_handler(
         self,
@@ -613,8 +586,6 @@ class AppActionRuntime:
         if definition.id in LIFECYCLE_CONTROL_ACTION_IDS and self._lifecycle_control_handler is None:
             return False
         if definition.id in OBSERVABILITY_ACTION_IDS and self._observability_handler is None:
-            return False
-        if definition.id in CODING_GITHUB_ACTION_IDS and self._coding_github_handler is None:
             return False
         if definition.id in AUTOMATION_ACTION_IDS and self._automation_handler is None:
             return False
@@ -1157,58 +1128,7 @@ class AppActionRuntime:
                 action_id=BOOK_COMPILE_ACTION_ID,
                 arguments={"reference": self._spoken_value(book_compile.group(1))},
             )
-        coding_workspace = re.fullmatch(
-            polite
-            + r"(?:open|show|go\s+to|switch\s+to)\s+(?:the\s+)?coding(?:\s+(?:workspace|room))?",
-            normalized,
-        )
-        if coding_workspace:
-            return AppActionRequest(action_id=CODING_WORKSPACE_OPEN_ACTION_ID)
 
-        coding_conversation = re.fullmatch(
-            polite
-            + r"(?:open|show|go\s+to)\s+(?:the\s+)?coding\s+(?:conversation|session)\s+(.+)",
-            submitted,
-            flags=re.IGNORECASE,
-        )
-        if coding_conversation:
-            reference = self._spoken_value(coding_conversation.group(1))
-            if reference:
-                return AppActionRequest(
-                    action_id=CODING_WORKSPACE_OPEN_ACTION_ID,
-                    arguments={"session": reference},
-                )
-
-        pull_request_read = re.fullmatch(
-            polite
-            + r"(open|inspect|show|view)\s+(?:(?:the\s+)?(?:github\s+)?(?:pull request|pr))\s+#?(\d+)"
-            + r"(?:\s+(?:in|from|on)\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+))?",
-            normalized,
-        )
-        if pull_request_read:
-            arguments: dict[str, Any] = {
-                "pull_number": int(pull_request_read.group(2)),
-                "open": pull_request_read.group(1) == "open",
-            }
-            if pull_request_read.group(3):
-                arguments["repository"] = pull_request_read.group(3)
-            return AppActionRequest(action_id=GITHUB_PULL_REQUEST_OPEN_ACTION_ID, arguments=arguments)
-
-        pull_request_create = re.fullmatch(
-            polite
-            + r"(create|draft|make)\s+(?:a\s+|the\s+)?(draft\s+)?(?:github\s+)?(?:pull request|pr)"
-            + r"(?:\s+(?:titled|called|named)\s+(.+))?",
-            submitted,
-            flags=re.IGNORECASE,
-        )
-        if pull_request_create:
-            arguments = {
-                "draft": pull_request_create.group(1).casefold() == "draft" or bool(pull_request_create.group(2))
-            }
-            title = self._spoken_value(pull_request_create.group(3) or "")
-            if title:
-                arguments["title"] = title
-            return AppActionRequest(action_id=GITHUB_PULL_REQUEST_CREATE_ACTION_ID, arguments=arguments)
 
         automation_create = re.fullmatch(
             polite
@@ -1924,10 +1844,6 @@ class AppActionRuntime:
             return self._dispatch_lifecycle_control(request, context, definition)
         if request.action_id in OBSERVABILITY_ACTION_IDS:
             return self._dispatch_observability(request, context, definition)
-        if request.action_id in CODING_GITHUB_ACTION_IDS:
-            if request.action_id == GITHUB_PULL_REQUEST_CREATE_ACTION_ID:
-                return self._coding_github_confirmation_receipt(request, context, definition)
-            return self._dispatch_coding_github(request, context, definition)
         if request.action_id in AUTOMATION_ACTION_IDS:
             if request.action_id in {AUTOMATION_RUN_ACTION_ID, AUTOMATION_REMOVE_ACTION_ID}:
                 return self._automation_confirmation_receipt(request, context, definition)
@@ -2739,157 +2655,6 @@ class AppActionRuntime:
             payload["context"],
         )
 
-    def _coding_github_confirmation_receipt(
-        self,
-        request: AppActionRequest,
-        context: AppActionContext,
-        definition: AppActionDefinition,
-    ) -> ActionReceipt:
-        if self._coding_github_handler is None:
-            return self._error_receipt(
-                request=request,
-                context=context,
-                status="unavailable",
-                access_class=definition.access_class,
-                error_code="CODING_GITHUB_UNAVAILABLE",
-                message="Coding and GitHub controls are unavailable.",
-            )
-        try:
-            result = self._coding_github_handler(
-                request.action_id,
-                dict(request.arguments),
-                context,
-                confirmed=False,
-                confirmation_binding=None,
-            )
-        except CodingGitHubActionError as exc:
-            return self._error_receipt(
-                request=request,
-                context=context,
-                status="unavailable" if exc.unavailable else "failed",
-                access_class=definition.access_class,
-                error_code=exc.code,
-                message=str(exc),
-                authorized=not exc.unavailable,
-            )
-
-        binding = result.pop("_confirmation_binding", None)
-        target_kind = str(result.pop("_target_kind", "github_repository"))
-        target_id = str(result.pop("_target_id", request.action_id))
-        message = str(result.pop("_message", "Confirm creating this pull request."))
-        if not isinstance(binding, dict) or not binding:
-            return self._error_receipt(
-                request=request,
-                context=context,
-                status="failed",
-                access_class=definition.access_class,
-                error_code="CONFIRMATION_BINDING_UNAVAILABLE",
-                message="Pull-request confirmation could not be prepared.",
-                authorized=True,
-            )
-        token = self._confirmation_token_factory()
-        expires_at = self._now() + _UNDO_TTL
-        self._receipt_store.put_confirmation(_ConfirmationRecord(
-            token=token,
-            action_id=request.action_id,
-            action_version=request.action_version,
-            arguments=dict(request.arguments),
-            target_kind=target_kind,
-            target_reference=target_id,
-            expected_revision=0,
-            expires_at=expires_at,
-            binding=dict(binding),
-        ))
-        return ActionReceipt(
-            receipt_id=self._receipt_id_factory(),
-            request_id=request.request_id,
-            action_id=request.action_id,
-            action_version=definition.version,
-            source=context.source,
-            status="confirmation_required",
-            authorization=self._authorization(
-                definition.access_class,
-                context,
-                allowed=True,
-                confirmation_required=True,
-            ),
-            target=ActionTarget(kind=target_kind, id=target_id),
-            result=result,
-            confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
-            message=message,
-            audit_label=f"{definition.audit_label}.confirmation_requested",
-            created_at=self._now(),
-        )
-
-    def _dispatch_coding_github(
-        self,
-        request: AppActionRequest,
-        context: AppActionContext,
-        definition: AppActionDefinition,
-        *,
-        confirmed: bool = False,
-        confirmation_binding: dict[str, Any] | None = None,
-    ) -> ActionReceipt:
-        if self._coding_github_handler is None:
-            return self._error_receipt(
-                request=request,
-                context=context,
-                status="unavailable",
-                access_class=definition.access_class,
-                error_code="CODING_GITHUB_UNAVAILABLE",
-                message="Coding and GitHub controls are unavailable.",
-            )
-        try:
-            result = self._registry.invoke(
-                request.action_id,
-                {
-                    "arguments": dict(request.arguments),
-                    "context": context,
-                    "confirmed": confirmed,
-                    "confirmation_binding": confirmation_binding,
-                    "confirm": confirmed,
-                },
-                agent_name=self._agent_name(context),
-            )
-        except ToolPermissionError as exc:
-            return self._error_receipt(
-                request=request,
-                context=context,
-                status="unavailable",
-                access_class=definition.access_class,
-                error_code="ACTION_NOT_AUTHORIZED",
-                message=str(exc),
-            )
-        except CodingGitHubActionError as exc:
-            return self._error_receipt(
-                request=request,
-                context=context,
-                status="unavailable" if exc.unavailable else "failed",
-                access_class=definition.access_class,
-                error_code=exc.code,
-                message=str(exc),
-                authorized=not exc.unavailable,
-            )
-        return self._domain_action_receipt(request, context, definition, result)
-
-    def _invoke_coding_github(
-        self,
-        action_id: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        if self._coding_github_handler is None:
-            raise CodingGitHubActionError(
-                "CODING_GITHUB_UNAVAILABLE",
-                "Coding and GitHub controls are unavailable.",
-                unavailable=True,
-            )
-        return self._coding_github_handler(
-            action_id,
-            dict(payload.get("arguments") or {}),
-            payload["context"],
-            confirmed=payload.get("confirmed") is True,
-            confirmation_binding=payload.get("confirmation_binding"),
-        )
 
     def _automation_confirmation_receipt(
         self,
@@ -3710,15 +3475,6 @@ class AppActionRuntime:
         if request.action_id in LIFECYCLE_CONTROL_ACTION_IDS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_lifecycle_control(request, context, definition, confirmed=True)
-        if request.action_id == GITHUB_PULL_REQUEST_CREATE_ACTION_ID:
-            self._receipt_store.remove_confirmation(token)
-            return self._dispatch_coding_github(
-                request,
-                context,
-                definition,
-                confirmed=True,
-                confirmation_binding=record.binding,
-            )
         if request.action_id in {AUTOMATION_RUN_ACTION_ID, AUTOMATION_REMOVE_ACTION_ID}:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_automation(

@@ -84,7 +84,6 @@
 <script src="components/response-progress.js"></script>
 <script src="components/agent-response.js?v=20261030-orbs"></script>
 <script src="components/app-action-runtime.js?v=20261021-streaming-v5"></script>
-<script src="components/coding-action-runtime.js"></script>
 <script src="components/observability-action-runtime.js"></script>
 <script src="components/petdex-action-runtime.js"></script>
 <script src="components/attachment-runtime.js"></script>
@@ -965,7 +964,7 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .app-row .a-nm{flex:1;font-size:13.5px;color:var(--txt2)}
 .app-act{font-size:12px;color:var(--dim);cursor:pointer;background:none;border:none;font-family:inherit;padding:2px 4px}
 .app-act:hover{color:var(--ember)}
-/* model picker (ported from vellum-workspace.html) */
+/* model picker */
 .model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
 .model-pill:hover{background:var(--hover);color:var(--txt)}
 .model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1410,7 +1409,6 @@ body{font-size:14px;font-family:var(--font-ui)}
 .rail-logo:hover .rail-dot{animation:icSpin .6s cubic-bezier(.34,1.56,.64,1)}
 .rail-btn[title="New chat"]:hover svg,.sb-row.new-row:hover .sb-ic svg{animation:icWiggle .55s ease}
 .rail-btn[title^="Search"]:hover svg{animation:icBob .5s ease}
-.rail-btn[title^="Coding"]:hover svg{animation:icBob .5s ease}
 .sec-chev svg{transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes icPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 @keyframes icWiggle{0%{transform:rotate(0)}25%{transform:rotate(-12deg) scale(1.1)}55%{transform:rotate(10deg) scale(1.1)}80%{transform:rotate(-5deg)}100%{transform:rotate(0)}}
@@ -3221,7 +3219,7 @@ const DockItem = ({children, onClick, active=false, ariaLabel, tooltip, tooltipS
 
 const DockSeparator = () => <span className="dock-separator" aria-hidden="true"/>;
 
-const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, browserVisible=false, agents = AGENTS, onNewChat, onSearch, onNav, onCoding, onOpenAgent, onSettings, music=null, musicOpen=false, onDismissMusic}) => {
+const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, browserVisible=false, agents = AGENTS, onNewChat, onSearch, onNav, onOpenAgent, onSettings, music=null, musicOpen=false, onDismissMusic}) => {
   const [near, setNear] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const closeTimer = useRef(null);
@@ -3284,7 +3282,6 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
           <DockItem ariaLabel="New chat" tooltip="New chat" tooltipSide={tooltipSide} active={view === 'chat'} onClick={() => run(onNewChat)}><IcPencilSq size={18}/></DockItem>
           <DockItem ariaLabel="Search chats" tooltip="Search" tooltipSide={tooltipSide} onClick={() => run(onSearch)}><IcSearch size={18}/></DockItem>
           <DockItem ariaLabel="Library" tooltip="Library" tooltipSide={tooltipSide} active={view === 'library'} onClick={() => run(() => onNav('library'))}><IcLibrary size={18}/></DockItem>
-          <DockItem ariaLabel="Coding" tooltip="Coding" tooltipSide={tooltipSide} onClick={() => run(onCoding)}><IcTerminal size={18}/></DockItem>
           <DockSeparator/>
           <span className="dock-tooltip-wrap">
             <DockItem ariaLabel="Agents" tooltip="Agents" tooltipSide={tooltipSide} active={view === 'agent' || agentsOpen} onClick={() => { onDismissMusic?.(); openDock(); setAgentsOpen(open => !open); }}><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={18}/></DockItem>
@@ -3346,8 +3343,8 @@ const SEED_CHATS = [
 ];
 
 const SEED_LIBRARY = [
-  { id: 'l1', name: 'vellum-workspace-upgraded.html', kind: 'code',  size: '197 KB',  modified: 'Monday' },
-  { id: 'l2', name: 'vellum-workspace.html',          kind: 'code',  size: '184 KB',  modified: 'Monday' },
+  { id: 'l1', name: 'project-notes.md', kind: 'text', size: '4 KB', modified: 'Monday' },
+  { id: 'l2', name: 'research-summary.md', kind: 'text', size: '8 KB', modified: 'Monday' },
   { id: 'l3', name: 'Corrected_Bank_Guarantee_Request.pdf', kind: 'pdf', size: '2.42 KB', modified: '03/06' },
   { id: 'l4', name: 'Bank_Instrument_Request_Letter.pdf',   kind: 'pdf', size: '295 KB',  modified: '03/06' },
   { id: 'l5', name: 'vellum_ui_patch.diff',           kind: 'diff',  size: '44.8 KB', modified: '02/06' },
@@ -3393,7 +3390,7 @@ const SEED_MEMORY = [
   { id: 'm7',  src: 'youtube',  cat: 'channels',  text: 'Subscribed to systems-thinking and woodworking channels.', when: '6d ago' },
   { id: 'm8',  src: 'books',    cat: 'reading',   text: 'Reads slowly, returns to ideas. Circling Meditations, book four.', when: '4h ago' },
   { id: 'm9',  src: 'books',    cat: 'shelf',     text: 'Stoics, a little fiction, almost no business books.', when: '1w ago' },
-  { id: 'm10', src: 'memory',   cat: 'context',   text: 'Building the Vellum desktop shell; coding belongs to the workspace.', when: '1d ago' },
+  { id: 'm10', src: 'memory',   cat: 'context',   text: 'Building the Vellum desktop shell.', when: '1d ago' },
   { id: 'm11', src: 'memory',   cat: 'identity',  text: 'Goes by Pratyakssh. Private account, local-first by choice.', when: '2w ago' },
   { id: 'm12', src: 'research', cat: 'method',    text: 'Wants sources cited inline and claims cross-checked first.', when: '2d ago' },
   { id: 'm13', src: 'sports',   cat: 'teams',     text: 'Follows one football side and the tennis majors. Scores, not punditry.', when: '3d ago' },
@@ -3768,8 +3765,8 @@ const REPLY_BUCKETS = [
     'Two notes in your library touch this. The nearer one is filed under on stillness. Read it once more before adding anything new.',
   ]},
   { test: /code|build|bug|app|feature|deploy|ship/i, variants: [
-    'Building belongs in the coding room ? that preview has the full bench. Briefly: "{q}" is one slice, not three. Cut it to the part that ships today.',
-    'The coding mode handles this better. For now: name the smallest change that makes "{q}" true, and do only that.',
+    'For "{q}", start with the smallest useful change and check its result before extending it.',
+    'Keep "{q}" focused: identify the affected behavior, make one change, and verify it.',
   ]},
   { test: /./, variants: [
     'On "{q}" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.',
@@ -8905,10 +8902,6 @@ const App = () => {
       }),
     });
   }
-  const codingActionRuntimeRef = useRef(null);
-  if (!codingActionRuntimeRef.current) {
-    codingActionRuntimeRef.current = window.VellumUI.CodingActions.createRuntime();
-  }
   const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
   useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
   const [deviceSettings, setDeviceSettings] = useState(() => deviceSettingsRuntimeRef.current.snapshot());
@@ -10422,7 +10415,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!receipt) return;
     // Navigation and layout changes already give direct visual feedback.
     // Keep failures and confirmations visible, including for learned rules.
-    const routineTransition = ['ui.sidebar.set', 'ui.surface.configure', 'ui.adaptive.apply', 'conversation.open', 'conversation.new', 'agent.select', 'observability.open', 'coding.workspace.open'].includes(receipt.action_id);
+    const routineTransition = ['ui.sidebar.set', 'ui.surface.configure', 'ui.adaptive.apply', 'conversation.open', 'conversation.new', 'agent.select', 'observability.open'].includes(receipt.action_id);
     if (routineTransition && ['applied', 'undone'].includes(receipt.status) && !receipt.confirmation) return;
     const notify = options.notify !== false;
     if (!notify) return;
@@ -10495,7 +10488,6 @@ const [slashSkills, setSlashSkills] = useState([]);
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       deviceSettingsRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
-      codingActionRuntimeRef.current.applyReceipt(receipt);
       setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
       if (receipt && receipt.result && receipt.result.petdex_patch) {
         const nextPetdex = window.VellumUI.PetdexActions.applyReceipt(petdexStateRef.current, receipt);
@@ -10636,11 +10628,6 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (receipt) {
       setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
     }
-    return receipt;
-  };
-  const dispatchCodingAction = async () => {
-    const receipt = await dispatchConversationAction('coding.workspace.open', {}, {conversationId:activeChatId});
-    if (receipt) codingActionRuntimeRef.current.applyReceipt(receipt);
     return receipt;
   };
   const navigateFromControl = targetView => targetView === 'ledger'
@@ -11243,7 +11230,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
           compactVisible={view !== 'music'} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}
           renderDock={(music, musicOpen, onDismissMusic) => !settingsOpen && view !== 'music' && <GlobalDock side={dockSide} browserVisible={browserPanelVisible} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
-            music={music} musicOpen={musicOpen} onDismissMusic={onDismissMusic} onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
+            music={music} musicOpen={musicOpen} onDismissMusic={onDismissMusic} onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onOpenAgent={openAgent}
             onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>} />
         {view !== 'music' && !petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}
         </React.Fragment>}

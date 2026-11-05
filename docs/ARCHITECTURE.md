@@ -6,7 +6,7 @@ This document is the high-level architecture guide for the current Vellum implem
 
 Vellum is a local-first agent workspace with four main layers:
 
-- Frontend and desktop surfaces for chat, tools, settings, skills, memory, plugins, terminal, coding, and workspace interaction.
+- Frontend and desktop surfaces for chat, tools, settings, skills, memory, plugins, terminal, and workspace interaction.
 - FastAPI backend exposing stable HTTP, streaming, and WebSocket contracts.
 - Agent runtime for model routing, LangGraph execution, tools, specialists, memory, skills, and guarded computer-use flows.
 - Local storage in the repository, Obsidian vault, SQLite databases, ChromaDB, Honcho/PostgreSQL, package directories, and audit logs.
@@ -27,7 +27,7 @@ Frontend view code should use adapter modules under `frontend/ui/api/` or the de
 
 ## Backend
 
-The backend entry point is `backend/agent/api.py`. It composes the FastAPI app and shared routes. Feature-owned HTTP adapters should live with their subsystem and expose an `APIRouter`; coding mode follows this boundary in `backend/agent/coding/api.py`.
+The backend entry point is `backend/agent/api.py`. It composes the FastAPI app and shared routes. Feature-owned HTTP adapters should live with their subsystem and expose an `APIRouter`.
 
 Important backend modules:
 
@@ -120,7 +120,7 @@ Supported integration areas include:
 - Context7 and GitMCP documentation lookup
 - Context Mode execution and retrieval
 - Tavily, Firecrawl, SerpAPI, DuckDuckGo, and web extraction helpers
-- X, YouTube, Sports, Spotify, terminal, coding, voice, and computer-use tools
+- X, YouTube, Sports, Spotify, terminal, voice, and computer-use tools
 
 Tool exposure is controlled through `ToolRegistry`. Main LangGraph tools are registered there and receive schema-preserving wrappers, so profile authorization and invocation observation share the same boundary as specialist capabilities. Mutating or destructive operations remain guarded by their feature-level configuration and policy.
 
@@ -165,9 +165,9 @@ See `docs/SKILLS_SYSTEM.md` and `docs/SKILLS_OPERATIONS.md`.
 
 Computer-use modules support guarded local workflows, browser/desktop routing, input guards, session state, screenshots, overlays, and native Windows driver components. These surfaces are still alpha and should remain explicit and observable.
 
-## Coding-Assistant Mode
+## Main Application Interface
 
-Coding mode is separate from default chat. It owns its HTTP adapter, session service, event model, storage, bounded workspace reads, and adapters for Codex and Claude under `backend/agent/coding/`. The root API injects the process-owned session service into that router. The frontend consumes coding-specific events rather than treating coding mode as a normal chat stream.
+The legacy standalone coding mode has been removed. The main chat remains the application interface; any future coding harness integration is separate work. Existing coding-session data is retained on disk without an active coding service or API.
 
 ## Canonical Writers
 

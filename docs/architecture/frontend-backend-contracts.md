@@ -215,3 +215,16 @@ select the configured local shell with a POSIX PTY. Direct shell input remains
 explicitly outside generic App Action parity, is user-operated, and is not an
 agent-command channel. Native platform execution and full interactive acceptance
 remain unverified; see `docs/verification/workspace-content-2026-11-03.md`.
+
+### Removal of standalone coding mode
+
+Vellum has one main chat/workspace interface. The standalone coding page, its
+`/api/coding/*` router, session engine, Codex/Claude adapters and session-bound
+PR actions have been removed. Their App Action IDs are absent from the catalog;
+old-client dispatch returns `unavailable`. No coding launch receipt handler is
+loaded by the main shell. Coding requests follow the ordinary main-chat path.
+
+The main GitHub connector and terminal retain their existing owners and
+permissions. Existing coding-session databases and user worktrees remain on disk
+and are not opened or migrated. Finishing the current Vellum workspace takes
+priority; selecting and integrating a future coding harness is separate work.

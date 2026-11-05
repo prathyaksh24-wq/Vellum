@@ -46,7 +46,7 @@ The natural-language prompt describing what the agent should do each time an Aut
 The set of model + reasoning choices for an Automation's runs (which model tier, which reasoning mode). Editable after creation.
 
 ### Reasoning mode
-A per-turn control (Codex-style) deciding how much inference effort the agent spends: `light`, `medium`, `high`, `extra high`, `max`, `ultra`. Applies to the **reasoning chat agent**, **sub-agents**, and **Automations**. Not present in Vellum today (the **coding** mode has a separate, narrower `ReasoningEffort` and is **out of scope** — do not modify the coding mode). This work adds the reasoning-mode control to the core reasoning/chat agent path.
+A per-turn control (Codex-style) deciding how much inference effort the agent spends: `light`, `medium`, `high`, `extra high`, `max`, `ultra`. Applies to the **reasoning chat agent**, **sub-agents**, and **Automations**. The legacy standalone coding mode has been removed; any future coding harness integration is separate work. This work adds the reasoning-mode control to the core reasoning/chat agent path.
 
 ### Model tier
 Which running model an Agent turn uses: **primary** (default), **fast** (cheap/summarising), or an explicit provider/model id. Automations can pin a tier or an exact model; unset means the global primary.

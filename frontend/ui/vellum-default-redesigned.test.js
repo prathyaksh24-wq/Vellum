@@ -90,7 +90,6 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain('<script src="api/app-actions.js"></script>');
     expect(html).toMatch(/<script src="components\/app-action-runtime\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="components/observability-action-runtime.js"></script>');
-    expect(html).toContain('<script src="components/coding-action-runtime.js"></script>');
     expect(html).toContain('<script src="components/attachment-runtime.js"></script>');
     expect(html).toContain('<script src="api/conversations.js"></script>');
     expect(html).toMatch(/<script src="api\/plugins\.js(?:\?[^\"]+)?"><\/script>/);
@@ -256,10 +255,12 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("onClick={() => setPaused");
   });
 
-  test("routes the visible coding control and NLP receipts through App Actions", () => {
-    expect(html).toContain("dispatchConversationAction('coding.workspace.open', {},");
-    expect(html).toContain("onCoding={dispatchCodingAction}");
-    expect(html).toContain("codingActionRuntimeRef.current.applyReceipt(receipt)");
+  test("keeps the main interface free of legacy coding launch controls", () => {
+    expect(html).not.toContain("coding.workspace.open");
+    expect(html).not.toContain("onCoding");
+    expect(html).not.toContain("coding room");
+    expect(html).not.toContain("The coding mode handles this better");
+    expect(html).not.toContain("coding-action-runtime.js");
     expect(html).not.toContain("window.location.assign('vellum-workspace.html')");
   });
 

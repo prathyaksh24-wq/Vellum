@@ -437,7 +437,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .app-row .a-nm{flex:1;font-size:13.5px;color:var(--txt2)}
 .app-act{font-size:12px;color:var(--dim);cursor:pointer;background:none;border:none;font-family:inherit;padding:2px 4px}
 .app-act:hover{color:var(--ember)}
-/* model picker (ported from vellum-workspace.html) */
+/* model picker */
 .model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
 .model-pill:hover{background:var(--hover);color:var(--txt)}
 .model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -720,7 +720,6 @@ body{font-size:14px}
 .rail-logo:hover .rail-dot{animation:icSpin .6s cubic-bezier(.34,1.56,.64,1)}
 .rail-btn[title="New chat"]:hover svg,.sb-row.new-row:hover .sb-ic svg{animation:icWiggle .55s ease}
 .rail-btn[title^="Search"]:hover svg{animation:icBob .5s ease}
-.rail-btn[title^="Coding"]:hover svg{animation:icBob .5s ease}
 .sec-chev svg{transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes icPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 @keyframes icWiggle{0%{transform:rotate(0)}25%{transform:rotate(-12deg) scale(1.1)}55%{transform:rotate(10deg) scale(1.1)}80%{transform:rotate(-5deg)}100%{transform:rotate(0)}}
@@ -1055,8 +1054,8 @@ const SEED_CHATS = [
 ];
 
 const SEED_LIBRARY = [
-  { id: 'l1', name: 'vellum-workspace-upgraded.html', kind: 'code',  size: '197 KB',  modified: 'Monday' },
-  { id: 'l2', name: 'vellum-workspace.html',          kind: 'code',  size: '184 KB',  modified: 'Monday' },
+  { id: 'l1', name: 'project-notes.md', kind: 'text', size: '4 KB', modified: 'Monday' },
+  { id: 'l2', name: 'research-summary.md', kind: 'text', size: '8 KB', modified: 'Monday' },
   { id: 'l3', name: 'Corrected_Bank_Guarantee_Request.pdf', kind: 'pdf', size: '2.42 KB', modified: '03/06' },
   { id: 'l4', name: 'Bank_Instrument_Request_Letter.pdf',   kind: 'pdf', size: '295 KB',  modified: '03/06' },
   { id: 'l5', name: 'vellum_ui_patch.diff',           kind: 'diff',  size: '44.8 KB', modified: '02/06' },
@@ -1100,7 +1099,7 @@ const SEED_MEMORY = [
   { id: 'm7',  src: 'youtube',  cat: 'channels',  text: 'Subscribed to systems-thinking and woodworking channels.', when: '6d ago' },
   { id: 'm8',  src: 'books',    cat: 'reading',   text: 'Reads slowly, returns to ideas. Circling Meditations, book four.', when: '4h ago' },
   { id: 'm9',  src: 'books',    cat: 'shelf',     text: 'Stoics, a little fiction, almost no business books.', when: '1w ago' },
-  { id: 'm10', src: 'memory',   cat: 'context',   text: 'Building the Vellum desktop shell; coding belongs to the workspace.', when: '1d ago' },
+  { id: 'm10', src: 'memory',   cat: 'context',   text: 'Building the Vellum desktop shell.', when: '1d ago' },
   { id: 'm11', src: 'memory',   cat: 'identity',  text: 'Goes by Pratyakssh. Private account, local-first by choice.', when: '2w ago' },
   { id: 'm12', src: 'research', cat: 'method',    text: 'Wants sources cited inline and claims cross-checked first.', when: '2d ago' },
   { id: 'm13', src: 'sports',   cat: 'teams',     text: 'Follows one football side and the tennis majors. Scores, not punditry.', when: '3d ago' },
@@ -1185,7 +1184,6 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
         <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat<span className="sb-kbd"><kbd>Ctrl ⇧ O</kbd></span></button>
         <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library<span className="sb-kbd"><kbd>Ctrl ⇧ L</kbd></span></button>
-        <button className="sb-row" title="Opens the coding workspace" onClick={() => window.location.assign('vellum-workspace.html')}><span className="sb-ic"><IcTerminal/></span>Coding</button>
         <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger<span className="sb-kbd"><kbd>Ctrl ⇧ G</kbd></span></button>
         <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills<span className="sb-kbd"><kbd>Ctrl ⇧ K</kbd></span></button>
         <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory<span className="sb-kbd"><kbd>Ctrl ⇧ E</kbd></span></button>
@@ -1321,7 +1319,6 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
         ))}
       </RailFly>
       <button className={'rail-btn' + (view === 'library' ? ' active' : '')} title="Library — Ctrl+Shift+L" onClick={() => onNav('library')}><IcLibrary size={17}/></button>
-      <button className="rail-btn" title="Coding — opens the workspace" onClick={() => window.location.assign('vellum-workspace.html')}><IcTerminal size={17}/></button>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger — Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills — Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSparkle size={17}/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory — Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
@@ -1378,8 +1375,8 @@ const REPLY_BUCKETS = [
     'Two notes in your library touch this. The nearer one is filed under on stillness. Read it once more before adding anything new.',
   ]},
   { test: /code|build|bug|app|feature|deploy|ship/i, variants: [
-    'Building belongs in the coding room — that preview has the full bench. Briefly: "{q}" is one slice, not three. Cut it to the part that ships today.',
-    'The coding mode handles this better. For now: name the smallest change that makes "{q}" true, and do only that.',
+    'For "{q}", start with the smallest useful change and check its result before extending it.',
+    'Keep "{q}" focused: identify the affected behavior, make one change, and verify it.',
   ]},
   { test: /./, variants: [
     'On "{q}" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.',
@@ -1451,7 +1448,7 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
 };
 const PLACEHOLDERS = ['Ask anything…', 'Search your library…', 'Draft something new…', 'Think out loud…', 'Plan the week…'];
 
-/* models — curated list ported from vellum-workspace.html */
+/* models — curated list */
 let MODELS = [
   { id: 'deepseek/deepseek-chat',         label: 'DeepSeek V4 Pro' },
   { id: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V4 Flash' },
