@@ -28,6 +28,8 @@
     accent: "default",
     dock_position: "auto",
     dock_locked: false,
+    preview_rail_position: "left",
+    preview_rail_visibility: "visible",
     computer_use_preview: false,
     profile: {},
     personalization: {

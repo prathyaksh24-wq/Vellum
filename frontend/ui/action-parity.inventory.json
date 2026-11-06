@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 978,
-      "sha256": "d303c7cd9220926c14122a033d289f5e2a684e729cfa29609e34392f6409e38a"
+      "count": 985,
+      "sha256": "53062c974268915107f94d4204aa181a8b7eda2834e9d3d79ea6c2a32ebba79e"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -26,12 +26,12 @@
       "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
-      "count": 70,
-      "sha256": "8fa90f6b512f8965c7f9705b983e09915afb0793a1bd14dcfd3d2f39d006321e"
+      "count": 79,
+      "sha256": "230a837ed0578e373a320a1aa72594e01c795d0b1bda5cd05c8dd4fa18dd2089"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
-      "sha256": "acd8b5f049e7c251c49af0a5429e4880a9229cbf349edeaf2197789824b98b0e"
+      "sha256": "478cd8bdcce3af5626b44cefe7a554bf08a632b4a1b1a0ed0b1b90153e36ffcb"
     },
     "design/Velllum/uploads/components/dictation-settings.jsx": {
       "count": 26,
@@ -222,8 +222,8 @@
       "sha256": "62932c41f79c678981dac1d561ecb71900d049246f484147866462f7cea3135e"
     },
     "design/Velllum/uploads/components/settings-overview.jsx": {
-      "count": 17,
-      "sha256": "1f015109cfb280db165ae23282515e48562d414581a27ef229ed3d356dc85b25"
+      "count": 19,
+      "sha256": "1c84944929027d5f4b100bb1b95c0e6ddeda057274b8aeb38a9f1838a1b1a9c4"
     },
     "design/Velllum/uploads/components/agent-response.js": {
       "count": 14,
@@ -262,12 +262,12 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/workspace-controller.jsx": {
-      "count": 20,
-      "sha256": "052f0104066512e98e50b6d8c3cf887e23971df170b242b1b060d34b07ea76e6"
+      "count": 23,
+      "sha256": "0500d784639013c5fe5b4eeb154f393b25b66ee837be7704463be475ab59ac15"
     },
     "design/Velllum/uploads/components/workspace-content.jsx": {
-      "count": 18,
-      "sha256": "a94335cc3088c00f55e557068bdb2e391a5d385dc88cc7c8613617a8c326471a"
+      "count": 14,
+      "sha256": "21254e8d3a250cb52aee13fa209603e8131b25ed05b00b606bcc9a8c1cd226d3"
     },
     "design/Velllum/uploads/workspace-entry.js": {
       "count": 0,
@@ -298,6 +298,10 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "desktop/electron/commands.cjs": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/workspace-resources.js": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
@@ -2280,7 +2284,7 @@
       "actionId": "conversation.new",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "dispatchConversationAction('conversation.new',activeChatProject"
+        "text": "dispatchConversationAction('conversation.new',{create_record:true"
       }
     },
     {
@@ -2289,7 +2293,7 @@
       "actionId": "conversation.open",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "dispatchConversationAction('conversation.open',{conversation_id:id},{applyNavigation:false,notify:false})"
+        "text": "dispatchConversationAction('conversation.open',{conversation_id:referenceId}"
       }
     },
     {
@@ -2344,6 +2348,42 @@
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "onPin={()=>onProjectAction(project.id,'pin')}"
+      }
+    },
+    {
+      "surface": "Browser",
+      "name": "capability-gated native find, zoom, print and download controls",
+      "actionId": "browser.session.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/browser-panel.jsx",
+        "text": "command('zoom',{zoom_factor"
+      }
+    },
+    {
+      "surface": "Conversations",
+      "name": "discard a temporary side chat when its tab closes",
+      "actionId": "conversation.delete",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "let receipt = await dispatchConversationAction('conversation.delete', {"
+      }
+    },
+    {
+      "surface": "Settings",
+      "name": "change preview rail position",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/settings-overview.jsx",
+        "text": "onDeviceSettings({preview_rail_position:position})"
+      }
+    },
+    {
+      "surface": "Settings",
+      "name": "change preview rail visibility",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/settings-overview.jsx",
+        "text": "onDeviceSettings({preview_rail_visibility:visibility})"
       }
     }
   ],
@@ -2527,6 +2567,10 @@
     {
       "scope": "Workspace session restoration, pane-specific close and side-chat drafts, local device file presentation",
       "reason": "Workspace show/hide/full/split and retained tab selection use the existing ui.surface.configure owner. Side chat stages an ordinary draft after conversation.new and persists through the existing conversation send path; model/effort for unsent drafts stays local. Device folder listing and bounded previews use a read-only allowlisted desktop command restricted to the registered top-level workspace; no file mutation, agent ingestion or external transmission occurs. Location input, source tabs, preview selection and temporary errors are presentation only. Browser navigation and tab changes retain browser.session.control."
+    },
+    {
+      "scope": "Conditional task summary, shared launcher descriptors, reference icons, suggested artifacts, and bounded local file previews",
+      "reason": "Summary and suggestions project real immutable conversation/resource records; section expansion, focus, selection and export are local presentation. Opening retained content uses Workspace Layout; browser actions retain browser.session.control; launcher tools use their registered owners. Desktop workspace_files is a trusted top-level read-only native bridge bounded to the selected workspace and a 2 MB preview. It cannot execute, write, attach files to a prompt, or read outside the workspace."
     }
   ],
   "deferred": [

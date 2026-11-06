@@ -12,6 +12,7 @@
 <script type="text/babel" data-presets="react" src="components/v-select.jsx"></script>
 <link rel="stylesheet" href="components/workspace-controller.css"/>
 <link rel="stylesheet" href="components/workspace-views.css"/>
+<script src="components/workspace-resources.js"></script>
 <script type="text/babel" data-presets="react" src="components/workspace-controller.jsx"></script>
 <script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/accounts.js"></script>
@@ -1077,25 +1078,37 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .act-btn.on{color:var(--ember)}
 .copied{font-size:11px;color:var(--dim);align-self:center;padding:0 6px}
 /* reusable vertical preview rail - shared by chats and sub-agent chats */
-.preview-rail{position:absolute;inset-block:0;right:4px;z-index:24;width:52px;display:flex;align-items:center;justify-content:flex-end;overflow:visible;isolation:isolate;pointer-events:none}
+.conversation-preview-anchor{position:absolute;inset:0;z-index:24;pointer-events:none;container-type:inline-size}
+.preview-rail{position:absolute;inset-block:0;left:4px;width:52px;display:flex;align-items:center;overflow:visible;isolation:isolate;pointer-events:none}
+.thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:56px}
+[data-preview-rail-position=right] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:24px;padding-right:56px}
+[data-preview-rail-visibility=hidden] .conversation-preview-anchor{display:none}
+[data-preview-rail-visibility=hidden] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-inline:24px}
+[data-preview-rail-position=right] .preview-rail{left:auto;right:4px;justify-content:flex-end}
+@media(hover:hover) and (pointer:fine){
+  [data-preview-rail-visibility=hover] .preview-rail-nav{opacity:0}
+  [data-preview-rail-visibility=hover] .preview-rail-nav:is(:hover,:focus-within){opacity:1}
+}
 .preview-rail-nav{position:relative;z-index:2;display:grid;align-content:safe center;width:48px;max-height:calc(100% - 24px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto}
 .preview-rail-nav::-webkit-scrollbar{display:none}
-.preview-rail-item{position:relative;display:flex;width:48px;height:20px;align-items:center;justify-content:flex-end;border:0;background:transparent;color:var(--dim2);padding:0 8px 0 0;cursor:pointer;outline:none}
+.preview-rail-item{position:relative;display:flex;width:48px;height:20px;align-items:center;border:0;background:transparent;color:var(--dim2);padding:0 0 0 8px;cursor:pointer;outline:none}
+[data-preview-rail-position=right] .preview-rail-item{justify-content:flex-end;padding:0 8px 0 0}
 .preview-rail-item:focus-visible{border-radius:7px;box-shadow:0 0 0 2px color-mix(in srgb,var(--ember) 62%,transparent),0 0 0 4px var(--bg)}
-.preview-rail-tick{display:block;width:38px;height:2px;border-radius:999px;background:currentColor;opacity:.72;transform:scaleX(var(--rail-scale,.25));transform-origin:right center;transition:transform .42s cubic-bezier(.22,1,.36,1),color .18s ease,opacity .18s ease,box-shadow .18s ease}
+.preview-rail-tick{display:block;width:38px;height:2px;border-radius:999px;background:currentColor;opacity:.72;transform:scaleX(var(--rail-scale,.25));transform-origin:left center;transition:transform .42s cubic-bezier(.22,1,.36,1),color .18s ease,opacity .18s ease,box-shadow .18s ease}
+[data-preview-rail-position=right] .preview-rail-tick{transform-origin:right center}
 .preview-rail-item.active{color:color-mix(in srgb,var(--ember) 68%,var(--dim))}
 .preview-rail-item.active .preview-rail-tick{opacity:1;box-shadow:0 0 10px color-mix(in srgb,var(--ember) 28%,transparent)}
 .preview-rail-item.displayed{color:var(--txt2)}
 .preview-rail-item.displayed .preview-rail-tick{opacity:1}
 .preview-rail-preview-layer{position:absolute;inset:0;z-index:5;pointer-events:none}
-.preview-rail-preview{position:absolute;right:56px;width:min(330px,calc(100vw - 110px));transform:translateY(-50%);animation:previewRailIn .2s cubic-bezier(.22,1,.36,1) both}
+.preview-rail-preview{position:absolute;left:56px;width:min(330px,calc(100cqw - 72px));transform:translateY(-50%);animation:previewRailIn .2s cubic-bezier(.22,1,.36,1) both;--preview-enter-x:-8px}
+[data-preview-rail-position=right] .preview-rail-preview{left:auto;right:56px;--preview-enter-x:8px}
 .preview-rail-card{overflow:hidden;border:1px solid var(--line2);border-radius:16px;background:color-mix(in srgb,var(--modal) 88%,transparent);box-shadow:0 22px 65px rgba(0,0,0,.46),inset 0 1px 0 rgba(255,255,255,.055);backdrop-filter:blur(24px) saturate(155%);-webkit-backdrop-filter:blur(24px) saturate(155%);padding:13px 14px}
 .preview-rail-card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--dim2);font-size:12px;letter-spacing:0;text-transform:none}
 .preview-rail-card-head::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--ember);box-shadow:0 0 9px var(--glow)}
 .preview-rail-card-label{color:var(--txt2);font-size:12.5px;font-weight:500;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .preview-rail-card-response{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-@keyframes previewRailIn{from{opacity:0;filter:blur(6px);transform:translate(8px,-50%) scale(.97)}to{opacity:1;filter:blur(0);transform:translate(0,-50%) scale(1)}}
-@media(max-width:760px){.preview-rail{right:0}.preview-rail-preview{right:49px;width:min(280px,calc(100vw - 78px))}.preview-rail-item{padding-right:5px}.preview-rail-tick{width:30px}}
+@keyframes previewRailIn{from{opacity:0;filter:blur(6px);transform:translate(var(--preview-enter-x),-50%) scale(.97)}to{opacity:1;filter:blur(0);transform:translate(0,-50%) scale(1)}}
 @media(prefers-reduced-motion:reduce){.preview-rail-tick{transition:none}.preview-rail-preview{animation:none}}
 /* popovers + overlays */
 .backdrop{position:fixed;inset:0;z-index:40}
@@ -2017,7 +2030,7 @@ body{font-size:14px;font-family:var(--font-ui)}
 @keyframes px-walk{from{background-position-x:0}to{background-position-x:calc((var(--px-frames) - 1) * -192px)}}
 .px-floater{position:fixed;z-index:40;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}.px-floater.dragging{cursor:grabbing}
 .px-floater .px-sprite-box{filter:drop-shadow(0 6px 18px rgba(0,0,0,.42))}
-.px-dot{position:absolute;top:-14px;right:0;width:16px;height:16px;border-radius:50%;background:var(--menu-solid,#1b1819);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:var(--dim);cursor:pointer;opacity:0;transition:opacity .18s}.px-floater:hover .px-dot{opacity:1}
+.px-dot{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:var(--menu-solid,#1b1819);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;color:var(--dim);cursor:pointer;opacity:0;transition:opacity .18s}.px-floater:hover .px-dot,.px-dot:focus-visible,.px-dot[aria-expanded=true]{opacity:1}
 .px-menu{position:absolute;bottom:calc(100% + 6px);right:0;background:var(--menu-solid,#1b1819);border:1px solid var(--line2);border-radius:10px;padding:4px;display:flex;flex-direction:column;gap:2px;min-width:128px;box-shadow:0 12px 34px rgba(0,0,0,.4);z-index:50}
 .px-menu button{background:none;border:none;color:var(--txt);font:inherit;font-size:11px;text-align:left;padding:6px 9px;border-radius:6px;cursor:pointer}.px-menu button:hover{background:var(--hover)}.px-menu button.on{color:var(--txt2)}
 .px-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
@@ -3327,8 +3340,9 @@ const clampMenuPosition = (pos, width = 220, height = 220) => {
   };
 };
 
+const isSideChat = chat => !!(chat?.temporary_side_chat || chat?.parent_conversation_id);
 const visibleChats = cs => {
-  const v = cs.filter(c => !c.archived && !c.projectId);
+  const v = cs.filter(c => !c.archived && !c.projectId && !isSideChat(c));
   return [...v.filter(c => c.pinned), ...v.filter(c => !c.pinned)];
 };
 
@@ -3528,7 +3542,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
   const [activityOnly,setActivityOnly]=useState(false),[recentLimit,setRecentLimit]=useState(16);
   const [projectSort,setProjectSort]=useState('recent'),[recentSort,setRecentSort]=useState('recent'),[recentFilter,setRecentFilter]=useState('unassigned');
   const sort=(a,b)=>recentSort==='name'?a.title.localeCompare(b.title):(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0);
-  const sorted=chats.filter(chat=>!chat.archived).slice().sort(sort),status=window.VellumUI.chatStatus;
+  const sorted=chats.filter(chat=>!chat.archived&&!isSideChat(chat)).sort(sort),status=window.VellumUI.chatStatus;
   const projectRows=projects.slice().sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(projectSort==='name'?a.name.localeCompare(b.name):(Date.parse(b.updated_at)||0)-(Date.parse(a.updated_at)||0)));
   const Menu=window.VellumUI.SidebarSectionMenu;
   const attention=sorted.filter(chat=>status(chat));
@@ -3583,11 +3597,11 @@ const RailFly = ({btn, keepOpen, children}) => {
 
 const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject, notificationState={unread:0,open:false}}) => {
   const recents = visibleChats(chats).slice(0, 10);
-  const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId);
+  const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId && !isSideChat(c));
   return (
     <div className="rail" data-ui-reference="sidebar">
       <div className="rail-scroll">
-      <button className="rail-btn" title="Expand sidebar ? Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
+      <button className="rail-btn" title="Expand sidebar · Ctrl+B" onClick={onExpand}><IcPanel size={17}/></button>
       <button type="button" className="rail-btn" title="New chat" aria-label="Vellum home" onClick={onNewChat}><IcPencilSq size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className="rail-btn" title="Recent chats"><IcChat size={17}/></button>}>
         <div className="fly-head">Recents</div>
@@ -4705,7 +4719,7 @@ const ConversationPreviewRail = ({messages}) => {
     setActiveId(id);
   };
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="conversation-preview-anchor">
       <PreviewRail items={userTurns} activeId={activeId} onActiveChange={jump}
         renderPreview={item => (
           <div className="preview-rail-card">
@@ -5430,14 +5444,14 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, sideChat=false}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
   const busy = msgs.some(m => m.streaming);
   useConversationFollow(endRef, msgs, chat?.id);
 
-  if (msgs.length === 0) {
+  if (msgs.length === 0 && !sideChat) {
     return (
       <div className="thread-wrap">
         <div className="landing">
@@ -5469,11 +5483,11 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
                 </div>
               )}
               <div className="bubble">{m.text}</div>
-              <div className="act-row" style={{justifyContent:'flex-end'}}><button className="act-btn" title="Fork chat from here" onClick={() => onFork(m.id)}><IcBranch size={14}/></button></div>
+              {onFork && <div className="act-row" style={{justifyContent:'flex-end'}}><button className="act-btn" title="Fork chat from here" onClick={() => onFork(m.id)}><IcBranch size={14}/></button></div>}
             </div>
           ) : (
             <div key={m.id} id={'m-' + m.id}>
-              <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onFork={() => onFork(m.id)} onShare={onShare} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
+              <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onFork={onFork ? () => onFork(m.id) : undefined} onShare={onShare} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
             </div>
           ))}
           <div ref={endRef}/>
@@ -7625,7 +7639,7 @@ const SpotifyPlayer = ({musicNavigation,spotify, dockSide='top', onReconnect, on
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
@@ -7751,7 +7765,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, pluginTarget, initi
           {tab === 'Accounts' && <window.VellumUI.Accounts.Settings/>}
           {tab === 'Voice' && <window.VellumUI.Dictation.Settings onAction={onDictationAction} onConfirm={onDictationConfirm} onCancel={onDictationCancel}/>}
           {tab === 'Responses' && <window.VellumUI.StreamingSettings preferences={streamingPreferences} onDeviceSettings={onDeviceSettings}/>}
-          {tab === 'General' && <window.VellumUI.SettingsOverview.General theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
+          {tab === 'General' && <window.VellumUI.SettingsOverview.General theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} previewRail={previewRail} onDeviceSettings={onDeviceSettings} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
           {tab === 'Appearance' && (
             <React.Fragment>
               <div className="set-h">Appearance</div>
@@ -8343,13 +8357,24 @@ const usePetActivity = (messages) => {
 const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed, active, onSwitch}) => {
   const drag = useRef(null);
   const [menu, setMenu] = useState(false);
+  const [loadedSprite, setLoadedSprite] = useState('');
   const [dragging, setDragging] = useState(false);
   const [previewPos, setPreviewPos] = useState(null);
+  const spriteUrl = record?.spritesheetUrl;
+  useEffect(() => {
+    setMenu(false);
+    setLoadedSprite('');
+    if (!spriteUrl) return;
+    const image = new Image();
+    image.onload = () => setLoadedSprite(spriteUrl);
+    image.src = spriteUrl;
+    return () => { image.onload = null; };
+  }, [spriteUrl]);
   const p = previewPos || pos || {};
   const placement = window.VellumUI.PetdexActions.positionStyle(p, {width:window.innerWidth, height:window.innerHeight});
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest('.px-menu')) return;
+    if (e.target.closest('button')) return;
     const rect = e.currentTarget.getBoundingClientRect();
     drag.current = {x: e.clientX, y: e.clientY, px: rect.left, py: rect.top, moved: false};
     setDragging(true);
@@ -8375,11 +8400,14 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
     if (moved && d.next) onPos(d.next);
     if (!moved) onJump();
   };
+  if (!spriteUrl || loadedSprite !== spriteUrl) return null;
   return (
     <div className={'px-floater' + (dragging ? ' dragging' : '')} style={placement}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-      onMouseEnter={() => setMenu(true)} onMouseLeave={() => setMenu(false)}>
+      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenu(false); }}
+      onKeyDown={event => { if (event.key === 'Escape') setMenu(false); }}>
       <PetSprite record={record} state={state} size={size}/>
+      <button type="button" className="px-dot" aria-label="Pet options" aria-expanded={menu} onClick={() => setMenu(open => !open)}>…</button>
       {menu && (
         <div className="px-menu">
           <button onClick={() => { setMenu(false); onHide(); }}>Hide pet</button>
@@ -8607,6 +8635,9 @@ const App = () => {
   const [workspaceMotion,setWorkspaceMotion]=useState(false);
   const [workspaceError,setWorkspaceError]=useState('');
   const workspaceOperations=useRef(Promise.resolve());
+  const [workspaceEnvironment,setWorkspaceEnvironment]=useState(null);
+  const [workspaceFileFocus,setWorkspaceFileFocus]=useState(null);
+  const directoryAvailable=!!window.VellumDesktop?.files?.read;
   const [browserState, setBrowserState] = useState({available:false, running:false, control:'closed', tabs:[], downloads:[]});
   const browserSeenSession = useRef(null);
   const browserSuppressed = useRef(false);
@@ -8785,6 +8816,10 @@ const App = () => {
   }, []);
   const dockPosition = deviceSettings.values.dock_position || 'auto';
   const dockLocked = !!deviceSettings.values.dock_locked;
+  const previewRail = {
+    position:deviceSettings.values.preview_rail_position,
+    visibility:deviceSettings.values.preview_rail_visibility,
+  };
   const setDockPosition = value => dispatchDeviceSettings({dock_position:value});
   const setDockLocked = value => dispatchDeviceSettings({dock_locked:!!value});
   const [view, setView] = useState(() => appViewFromLocation() || 'chat');
@@ -9658,6 +9693,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   const timers = useRef({});
   const turnCtl = useRef({});
   const turnQueueRef = useRef({});
+  const closingSideChats = useRef(new Set());
+  const sideChatSaves = useRef(new Map());
   const enqueueTurn = (queueKey, task) => {
     const previous = turnQueueRef.current[queueKey] || Promise.resolve();
     const queued = previous.catch(() => {}).then(task);
@@ -9673,11 +9710,19 @@ const [slashSkills, setSlashSkills] = useState([]);
   }, []);
 
   const saveConversation = conversation => {
-    if (!FEATURE_FLAGS.realConversations || !conversation) return;
-    return API.conversations.save(conversation).then(scheduleConversationLibraryRefresh).catch(err => {
+    if (!FEATURE_FLAGS.realConversations || !conversation || closingSideChats.current.has(conversation.id)) return;
+    const save = API.conversations.save(conversation).then(scheduleConversationLibraryRefresh).catch(err => {
       console.warn('conversation save failed', err);
       pushToast({message:"This chat couldn't be saved. Your messages are still visible here.", duration:6000});
     });
+    if (isSideChat(conversation)) {
+      const previous = sideChatSaves.current.get(conversation.id);
+      const pending = Promise.all([previous, save]).finally(() => {
+        if (sideChatSaves.current.get(conversation.id) === pending) sideChatSaves.current.delete(conversation.id);
+      });
+      sideChatSaves.current.set(conversation.id, pending);
+    }
+    return save;
   };
 
   const attachKnowledgeContext = async (page, forceNew) => {
@@ -10070,6 +10115,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
 
   const sendMessage = (text, attach, opts = {}) => {
+    if (closingSideChats.current.has(opts.conversationId)) return;
     if(!opts.background)navigationEpochRef.current += 1;
     let chatId = opts.forceNew ? null : (opts.conversationId || activeChatId);
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
@@ -10110,8 +10156,9 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
     if (FEATURE_FLAGS.realChat) {
       enqueueTurn('chat:' + chatId, () => {
+        if (closingSideChats.current.has(chatId)) return;
         updateTurn(chatId, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
-        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, playbackRequest, submittedText:text, reasoningMode:turnReasoningMode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
+        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, playbackRequest, submittedText:text, reasoningMode:turnReasoningMode, storeToMemory:!isSideChat(existingChat) && existingChat?.store_to_memory !== false}, turnModel);
       });
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
@@ -10126,7 +10173,7 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const regenerate = (msgId, conversationId = activeChatId) => {
     const chat = chats.find(c => c.id === conversationId);
-    if (!chat) return;
+    if (!chat || closingSideChats.current.has(chat.id)) return;
     const idx = chat.messages.findIndex(m => m.id === msgId);
     const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const old = chat.messages[idx];
@@ -10136,7 +10183,12 @@ const [slashSkills, setSlashSkills] = useState([]);
       ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity} : m)}
       : c));
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : [], {reasoningMode:chat.reasoning_mode, storeToMemory:chat.store_to_memory !== false}, chat.model || selModel);
+      const stream = () => {
+        if (closingSideChats.current.has(chat.id)) return;
+        return streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : [], {reasoningMode:chat.reasoning_mode, storeToMemory:!isSideChat(chat) && chat.store_to_memory !== false}, chat.model || selModel);
+      };
+      if (isSideChat(chat)) enqueueTurn('chat:' + chat.id, stream);
+      else stream();
     } else {
       streamReply(chat.id, msgId, {...act, answer: reply});
     }
@@ -10880,31 +10932,75 @@ const [slashSkills, setSlashSkills] = useState([]);
       if(replaceId){const current=getWorkspacePresentation().properties;await setWorkspace({items:(current.items||[]).filter(item=>item.id!==replaceId),content:'browser',active_item:''});}
       return;
     }
-    if(!['launcher','chat','files','terminal'].includes(kind))return;
+    if(!['launcher','chat','files','terminal','directory','integration'].includes(kind))return;
+    if(kind==='directory'&&!directoryAvailable)throw new Error('Workspace files require the desktop app.');
+    if(kind==='integration'&&!apps.some(app=>app.id===referenceId&&app.enabled&&app.installed))throw new Error('This plugin is no longer available.');
     if(kind==='terminal'&&!workspaceTerminalAvailable)throw new Error('Local terminal support is unavailable. Restart the updated backend.');
+    if(kind==='chat'&&referenceId&&!isSideChat(chats.find(chat=>chat.id===referenceId)))return;
     const properties=getWorkspacePresentation().properties,items=(properties.items||[]).filter(item=>item.id!==replaceId);
-    const reference=referenceId || (kind==='files'?(activeChatId||'library'):kind==='launcher'?'workspace':'');
-    let item=items.find(item=>item.kind===kind && (kind==='terminal'||kind==='files'&&item.reference_id===reference));
+    const reference=referenceId || (kind==='files'?(activeChatId||'library'):['launcher','directory'].includes(kind)?'workspace':'');
+    let item=items.find(item=>item.kind===kind && (kind==='terminal'||['files','directory','integration','chat'].includes(kind)&&reference&&item.reference_id===reference));
     if(!item){
       if(items.length>=12)throw new Error('Close a workspace view before opening another.');
       let chat;
       if(kind==='chat'){
-        const receipt=await dispatchConversationAction('conversation.new',activeChatProject?{project_id:activeChatProject.id}:{},{applyNavigation:false,notify:false});
-        if(receipt?.status!=='applied')throw new Error(receipt?.message||'The side chat could not be created.');
-        chat=receipt.result?.conversation || {id:uid(),model:selModel,reasoning_mode:draftReasoningMode,title:'Side chat',pinned:false,archived:false,projectId:activeChatProject?.id||null,created:'Today',appIds:[],messages:[]};
+        const receipt=referenceId
+          ? await dispatchConversationAction('conversation.open',{conversation_id:referenceId},{applyNavigation:false,notify:false})
+          : await dispatchConversationAction('conversation.new',{create_record:true,...(activeChatId?{parent_conversation_id:activeChatId}:{})},{applyNavigation:false,notify:false});
+        if(receipt?.status!=='applied'||!receipt.result?.conversation?.id)throw new Error(receipt?.message||'The side chat could not be created.');
+        chat=receipt.result.conversation;
         setChats(previous=>previous.some(row=>row.id===chat.id)?previous:[chat,...previous]);
       }
-      item={id:'view:'+crypto.randomUUID(),kind,reference_id:chat?.id||reference,title:kind==='launcher'?'New tab':kind==='chat'?'Side chat':kind==='terminal'?'Terminal':'Files and previews'};
-      await setWorkspace({items:[...items,item],content:'workspace',active_item:item.id,layout:mode});
+      item={id:'view:'+crypto.randomUUID(),kind,reference_id:chat?.id||reference,title:kind==='launcher'?'New tab':kind==='chat'?'Side chat':kind==='terminal'?'Terminal':kind==='directory'?'Workspace files':kind==='integration'?(apps.find(app=>app.id===reference)?.name||'Plugin'):'Files and previews'};
+      try {
+        await setWorkspace({items:[...items,item],content:'workspace',active_item:item.id,layout:mode});
+      } catch (error) {
+        if (chat && !referenceId) await discardSideChat(chat);
+        throw error;
+      }
     }else await setWorkspace({items,content:'workspace',active_item:item.id,layout:mode});
   });
+  const discardSideChat = async chat => {
+    if (!isSideChat(chat) || closingSideChats.current.has(chat.id)) return;
+    const {id} = chat;
+    closingSideChats.current.add(id);
+    try {
+      for (const [messageId, turn] of Object.entries(turnCtl.current)) {
+        if (turn.chatId !== id) continue;
+        turn.controller?.abort();
+        finishTurn(messageId);
+      }
+      await Promise.allSettled([turnQueueRef.current['chat:' + id], sideChatSaves.current.get(id)]);
+      const {conversation:latest} = await API.conversations.get(id);
+      if (!isSideChat(latest)) throw new Error('Only temporary side chats can be discarded from a tab.');
+      let receipt = await dispatchConversationAction('conversation.delete', {
+        conversation_id:id, target_revision:latest.revision,
+      }, {conversationId:id, applyNavigation:false, notify:false});
+      if (receipt?.status === 'confirmation_required') {
+        // Closing the temporary tab is the user's confirmation to discard it.
+        receipt = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:id});
+      }
+      if (receipt?.status !== 'applied' || !receipt.result?.deleted) {
+        throw new Error(receipt?.message || 'The side chat could not be discarded. Try closing it again.');
+      }
+      delete threadRef.current[id];
+    } catch (error) {
+      closingSideChats.current.delete(id);
+      throw error;
+    }
+  };
   const closeWorkspaceItem=item=>runWorkspace(async()=>{
     if(item.kind==='browser'){
       await commandWorkspaceBrowser(browserState.tabs.length===1?'close':'close_tab',browserState.tabs.length===1?{}:{tab_id:item.reference_id});
       const status=await refreshBrowser();
       if(status.tabs?.length)return;
     }else{
+      if (item.kind === 'chat') await discardSideChat(chats.find(chat => chat.id === item.reference_id));
       const properties=getWorkspacePresentation().properties,remaining=(properties.items||[]).filter(row=>row.id!==item.id);
+      if (properties.content === 'browser' && browserState.tabs.length) {
+        await setWorkspace({items:remaining, active_item:''}, getWorkspacePresentation().visible);
+        return;
+      }
       const active=properties.active_item===item.id?remaining[0]:remaining.find(row=>row.id===properties.active_item);
       if(active){await setWorkspace({items:remaining,active_item:active.id,content:'workspace'});return;}
       if(browserState.tabs.length){await setWorkspace({items:remaining,active_item:'',content:'browser'});return;}
@@ -10913,6 +11009,16 @@ const [slashSkills, setSlashSkills] = useState([]);
     const items=getWorkspacePresentation().properties.items||[];
     if(items.length)await setWorkspace({content:'workspace',active_item:items[0].id});else await hideBrowserPanel();
   });
+  const workspaceResources=window.VellumUI.taskResources(workspaceConversation,{chats,automations,browser:browserState,environment:workspaceEnvironment,sideChatIds:workspaceItems.filter(item=>item.kind==='chat').map(item=>item.reference_id)});
+  const openWorkspaceResource=(row,replaceId)=>{
+    if(row.kind==='url')return openWorkspace('browser',workspaceMode,row.url,replaceId);
+    if(row.kind==='file'){setWorkspaceFileFocus({chatId:activeChatId||'library',file:row.file});return openWorkspace('files',workspaceMode,activeChatId||'library',replaceId);}
+    if(row.kind==='chat')return openWorkspace('chat',workspaceMode,row.reference,replaceId);
+    if(row.kind==='directory')return openWorkspace('directory',workspaceMode,'workspace',replaceId);
+    if(row.kind==='automation'){nav('scheduled');return;}
+    if(row.messageId)document.getElementById('m-'+row.messageId)?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'});
+  };
+  const closeWorkspaceSummary=()=>{setActivityMsg(null);configureChatDetails({visible:false},{notify:false,persistence:'session'});requestAnimationFrame(()=>document.querySelector('.workspace-summary-toggle')?.focus({preventScroll:true}));};
   const workspaceTabs=[...(browserState.tabs||[]).map(tab=>({id:'browser:'+tab.id,kind:'browser',reference_id:tab.id,title:tab.title||'New tab'})),...workspaceItems.map(item=>item.kind==='chat'?{...item,title:chats.find(chat=>chat.id===item.reference_id)?.title||item.title}:item)];
   const workspaceViews={
     tabs:workspaceTabs,activeId:workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item,
@@ -10921,13 +11027,6 @@ const [slashSkills, setSlashSkills] = useState([]);
     reveal:()=>runWorkspace(()=>setWorkspace({},true)),
     layout:mode=>runWorkspace(()=>setWorkspace({layout:mode},true))
   };
-  const selectSideConversation=(item,id)=>runWorkspace(async()=>{
-    const chat=chats.find(chat=>chat.id===id);if(!chat)return;
-    const receipt=await dispatchConversationAction('conversation.open',{conversation_id:id},{applyNavigation:false,notify:false});
-    if(receipt?.status!=='applied')throw new Error(receipt?.message||'That conversation could not be opened.');
-    const items=(getWorkspacePresentation().properties.items||[]).map(row=>row.id===item.id?{...row,reference_id:id,title:(chat.title||'Side chat').slice(0,100)}:row);
-    await setWorkspace({items});
-  });
   const updateSideSession=(chat,patch,action,args)=>{
     if(!chat.messages.length){setChats(previous=>previous.map(row=>row.id===chat.id?{...row,...patch}:row));return;}
     return dispatchConversationAction(action,args,{conversationId:chat.thread_id||chat.id,applyNavigation:false});
@@ -11001,6 +11100,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     'find.open':state=>{if(state.browser)return browserPanelRef.current?.openFind();if(settingsOpen){document.querySelector('input[placeholder="Search settings"]')?.focus();return;}if(commandScope||menu||searchOpen)return false;setSurfaceFindOpen(true);},
     'find.next':state=>state.browser?browserPanelRef.current?.findNext(true):rootFind(surfaceFindQuery.current,true,true),
     'find.previous':state=>state.browser?browserPanelRef.current?.findNext(false):rootFind(surfaceFindQuery.current,true,false),
+    'workspace.summary':()=>{if(workspaceConversation){setActivityMsg(null);configureChatDetails({visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}},
     'workspace.tabs':()=>openWorkspace('launcher',workspaceMode),
     'workspace.sideChat':()=>openWorkspace('chat','split'),
     'workspace.layout':()=>workspaceViews.layout(workspaceMode==='full'?'split':'full'),
@@ -11026,7 +11126,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   return (
     <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:desktopWorkspace && settingsOpen}}>
     <window.VellumUI.ResponsePreferencesProvider value={deviceSettings.values.streaming}>
-    <div className="stage" data-ui-reference="workspace" onMouseMove={e => { if(desktopWorkspace)return;const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
+    <div className="stage" data-ui-reference="workspace" data-preview-rail-position={previewRail.position} data-preview-rail-visibility={previewRail.visibility} onMouseMove={e => { if(desktopWorkspace)return;const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
       <window.VellumUI.MorphicTooltip/>
       <div className="bg-orb orb1"></div>
@@ -11097,10 +11197,10 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{pluginDraft, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>
 
-          {(workspaceItems.length>0 || browserState.running || browserPanelVisible) && <aside className="workspace-side" aria-label="Workspace content">
+            {(workspaceItems.length>0 || browserState.running || browserPanelVisible) && <aside className="workspace-side" aria-label="Workspace content" data-side-chat={!workspaceBrowserSelected&&workspaceActiveItem?.kind==='chat'}>
             {workspaceMode!=='full'&&<window.VellumUI.WorkspacePaneTabs workspace={workspaceViews} controller={workspaceController}/>}
           {(browserPanelVisible || browserState.running) && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
             hidden={!workspaceBrowserSelected} sharedTabs layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
@@ -11112,24 +11212,24 @@ const [slashSkills, setSlashSkills] = useState([]);
               applyAppActionReceipt(receipt, {notify:false});
             }}/>}
             <window.VellumUI.WorkspaceContent items={workspaceItems} activeId={workspaceBrowserSelected?'':workspaceProperties.active_item} visible={workspacePanelVisible}
-              chats={chats} mainChatId={activeChatId} library={libraryProjection} browserAvailable={browserFeature} terminalAvailable={workspaceTerminalAvailable} onOpenTool={(kind,referenceId,replaceId)=>openWorkspace(kind,workspaceMode,referenceId,replaceId)}
-              onSelectChat={selectSideConversation} onOpenMain={id=>{openChat(id);workspaceController.hide();}} onOpenFiles={id=>openWorkspace('files',workspaceMode,id)}
-              renderChat={chat=><ChatView key={chat.id} chat={chat} model={chat.model||selModel} setModel={id=>updateSideSession(chat,{model:id},'model.select',{model_id:id})} models={models}
+              chats={chats} library={libraryProjection} browserAvailable={browserFeature} terminalAvailable={workspaceTerminalAvailable}
+              directoryAvailable={directoryAvailable} plugins={apps} catalogState={pluginCatalog} suggestions={workspaceResources.outputs} onOpenResource={openWorkspaceResource} onEnvironment={setWorkspaceEnvironment} fileFocus={workspaceFileFocus}
+              renderIntegration={item=><BackendConnectorsView key={item.reference_id} sidebarVisible={false} initialRoute={{v:'detail',p:item.reference_id}} apps={apps} catalogState={pluginCatalog} onRetry={refreshPlugins} onPluginState={(pluginId,enabled)=>dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}}/>}
+              onOpenTool={(kind,referenceId,replaceId)=>openWorkspace(kind,workspaceMode,referenceId,replaceId)}
+              renderChat={chat=><ChatView key={chat.id} sideChat chat={chat} model={chat.model||selModel} setModel={id=>updateSideSession(chat,{model:id},'model.select',{model_id:id})} models={models}
                 onSend={(text,attachments)=>sendMessage(text,attachments,{conversationId:chat.id,background:true})} onStop={()=>stopActiveTurn(chat.id)}
-                onRegen={messageId=>regenerate(messageId,chat.id)} onFork={messageId=>dispatchConversationAction('conversation.fork',{conversation_id:chat.id,through_message_id:messageId},{applyNavigation:false})}
-                onShare={()=>dispatchConversationAction('conversation.share',{conversation_id:chat.id},{applyNavigation:false})} onViewImage={setViewer}
+                onRegen={messageId=>regenerate(messageId,chat.id)} onViewImage={setViewer}
                 onAnswerNow={messageId=>answerNow(messageId)} onOpenActivity={message=>{setActivityMsg(message);configureChatDetails({visible:true},{notify:false,persistence:'session'});}}
                 onEditVoiceTranscript={(messageId,value)=>updateTurn(chat.id,messageId,m=>({...m,text:value,transcriptEdited:true}),true)}
                 composerExtras={{library,projects,chats,browserTabs:browserState.tabs||[],apps,skills:slashSkills,agents:availableAgents,appSel:chat.appIds||[],onOpenLibrary:()=>nav('library'),onOpenProject:openProject,onOpenPlugins:()=>nav('apps'),onOpenSkills:()=>nav('skills'),presentation:composerPresentation,
                   onToggleSel:id=>setChats(previous=>previous.map(row=>{if(row.id!==chat.id)return row;const selected=row.appIds||[];return {...row,appIds:selected.includes(id)?selected.filter(value=>value!==id):[...selected,id]};})),onConnectApp:connectApp,onOpenAgent:openAgent,onAppActionReceipt:applyAppActionReceipt,
                   voiceEnabled:deviceSettings.values.personalization.voice !== false,
-                  memoryEnabled:chat.store_to_memory!==false,onMemoryChange:enabled=>updateSideSession(chat,{store_to_memory:enabled},'memory.conversation.set',{enabled}),
                   reasoningMode:chat.reasoning_mode||'',onReasoningChange:mode=>updateSideSession(chat,{reasoning_mode:mode},'reasoning.set',{reasoning_mode:mode}),modelProvider:composerProvider,providerSources:composerSources,onProviderChange:selectComposerProvider}}/>}/>
           </aside>}
           </window.VellumUI.BrowserSplitView>
-          {workspaceDetailsVisible && <window.VellumUI.WorkspaceDetails chat={workspaceConversation} activity={activityMsg} pinned={!!chatDetails.properties.pinned}
+          {workspaceDetailsVisible && <window.VellumUI.WorkspaceDetails chat={workspaceConversation} activity={activityMsg} pinned={!!chatDetails.properties.pinned} resources={workspaceResources} onOpen={openWorkspaceResource} tabsVisible={workspacePanelVisible}
             onPin={()=>configureChatDetails({properties:{pinned:!chatDetails.properties.pinned}},{notify:false})}
-            onClose={()=>{setActivityMsg(null);configureChatDetails({visible:false},{notify:false,persistence:'session'});}} onViewImage={setViewer}/>}
+            onClose={closeWorkspaceSummary}/>}
           </div>
           </div>
         </div>
@@ -11172,7 +11272,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }

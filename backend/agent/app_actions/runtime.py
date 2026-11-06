@@ -3726,6 +3726,24 @@ class AppActionRuntime:
             if not any(row['id'] == project_id for row in self._conversation_service().projects()):
                 raise ValueError('Project not found.')
             navigation['project_id'] = project_id
+        if (payload.get("arguments") or {}).get("create_record") is True:
+            identity = f"chat_{uuid4().hex}"
+            parent = (payload.get("arguments") or {}).get("parent_conversation_id")
+            if parent:
+                parent = self._conversation_service().get(parent)["id"]
+            mutation = self._conversation_service().save(identity, {
+                "title": "Side chat",
+                "messages": [],
+                "thread_id": identity,
+                "parent_conversation_id": parent,
+                "projectId": project_id,
+                "temporary_side_chat": True,
+                "store_to_memory": False,
+            })
+            conversation = mutation["conversation"]
+            return {"changed": True, "target_kind": "conversation", "target_id": identity,
+                    "target_revision": conversation.get("revision", 0), "conversation": conversation,
+                    "message": "Side chat ready."}
         return {
             "changed": True,
             "target_kind": "conversation_navigation",
@@ -4622,7 +4640,7 @@ class AppActionRuntime:
     def _conversation_definitions() -> list[AppActionDefinition]:
         reference = {"reference": {"type": "string"}}
         specs = [
-            (CONVERSATION_NEW_ACTION_ID, "Start a new chat", "Prepare an empty chat workspace.", False, True, "none", {"project_id": {"type": "string", "minLength": 1, "maxLength": 80}}),
+            (CONVERSATION_NEW_ACTION_ID, "Start a new chat", "Prepare an empty chat workspace.", False, True, "none", {"project_id": {"type": "string", "minLength": 1, "maxLength": 80}, "create_record": {"type": "boolean"}, "parent_conversation_id": {"type": "string", "minLength": 1, "maxLength": 160}}),
             (CONVERSATION_OPEN_ACTION_ID, "Open a chat", "Open an existing conversation.", False, True, "none", {"conversation_id": {"type": "string"}, "reference": {"type": "string"}}),
             (CONVERSATION_PIN_ACTION_ID, "Pin a chat", "Pin a conversation in the sidebar.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_UNPIN_ACTION_ID, "Unpin a chat", "Remove a conversation from the pinned group.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),

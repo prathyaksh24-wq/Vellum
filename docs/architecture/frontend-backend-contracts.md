@@ -199,8 +199,8 @@ Workspace Layout remains the presentation owner: `ui.surface.configure` accepts
 right-panel `content` (`files`, `browser`, `workspace`), `layout` (`split`, `full`),
 `chat_ratio`, bounded `items` and `active_item`. Items are validated presentation
 references to launcher, chat, files or terminal owners, capped at twelve. The
-independent `chat-details` surface owns visibility and boolean `pinned`. It shows
-an existing summary or a labeled outline without generating/compacting history.
+independent `chat-details` surface owns visibility and boolean `pinned`. It projects
+structured task resources and reported progress without generating or compacting history.
 
 Browser tabs continue through `browser.session.control`. Side chats materialize
 a canonical record through `conversation.new` with `create_record:true`; without
@@ -228,3 +228,38 @@ The main GitHub connector and terminal retain their existing owners and
 permissions. Existing coding-session databases and user worktrees remain on disk
 and are not opened or migrated. Finishing the current Vellum workspace takes
 priority; selecting and integrating a future coding harness is separate work.
+
+
+### Task summaries and registered workspace tools
+
+`components/workspace-resources.js` projects immutable message records into
+progress, outputs, inputs, provenance/sources, side conversations, subagents,
+associated schedules, browser activity and available environment information.
+Absent data produces no section. Section expansion is transient UI state keyed
+by conversation/section; summary visibility and pinning retain the independent
+`chat-details` Workspace Layout surface. The 300px surface chooses an overlay,
+shift or gutter presentation by content width; tab visibility and native guest
+occlusion remain independent. The shortcut is Ctrl/Cmd+Shift+S.
+
+The same module supplies launcher descriptors for available browser, terminal,
+file, and side-chat tools. Suggested entries come from the conversation's
+artifacts or generated code. Side chats use the main composer and
+ConversationLifecycle with an optional validated `parent_conversation_id`.
+They stay out of the conversation sidebar. Closing their tab stops pending
+turns and discards the temporary record through `conversation.delete`.
+The device settings action saves preview-rail position and visibility.
+
+The desktop `workspace_files` command accepts only list/read and a bounded
+relative path. The existing host checks a registered trusted top-level workspace
+frame. Reads are scoped by realpath to the selected workspace; runtime/private
+paths, escaping links and previews over 2 MB are rejected. This is read-only
+presentation, not an agent filesystem tool or automatic prompt attachment.
+
+BrowserStatus reports native option capabilities and the actual zoom factor.
+BrowserControl exposes UI-only find/zoom/print, download acknowledgement and
+native pause/resume/cancel operations through `browser.session.control`.
+Electron's existing download owner supplies received/total bytes and paused
+state; the backend retains approval, save location, completion and persistence.
+A transfer without a known total is indeterminate. Failed/unacknowledged saved
+items drive attention. Approval-pending downloads cannot be resumed through
+ordinary transfer controls. Unsupported browser options are absent.

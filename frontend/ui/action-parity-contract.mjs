@@ -48,6 +48,7 @@ export const MODULE_SOURCE_FILES = [
   "design/Velllum/uploads/components/bookshelf/components/ui/textarea.tsx",
 ];
 export const SOURCE_FILES = [
+  "design/Velllum/uploads/components/workspace-resources.js",
   "design/Velllum/uploads/components/workspace-content.jsx",
   "design/Velllum/uploads/components/command-menu.jsx",
   "design/Velllum/uploads/components/navigation-shell.jsx",
@@ -203,6 +204,7 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   // The module-backed upload has the same handler review requirement as the
   // legacy Babel components. Lock its integration into the production entry.
   const moduleLinks = [
+    ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="components/workspace-resources.js"'],
     ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/workspace-entry.js"'],
     ['design/Velllum/uploads/workspace-entry.js', "from '../../../frontend/ui/terminal/terminal-workspace.js'"],
     ['design/Velllum/uploads/Vellum Default Re-designed.html', 'src="/commands-entry.js"'],

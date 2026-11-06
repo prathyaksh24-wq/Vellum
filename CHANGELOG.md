@@ -6,6 +6,12 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Move conversation previews to the left by default and add position and visibility settings. Put the default search engine at the top of Browser settings, remove Plugins and MCPs from the new-tab page, and show the summary shortcut once.
+
+- Keep the side chat composer at the bottom over the shared workspace background. Remove the conversation picker and extra controls, place the new-tab button beside the tabs, and discard temporary side chats when closed. Show pet actions only from a visible, loaded companion.
+
+- Add task summaries, workspace file previews, and browser controls for find, zoom, print, and download progress.
+
 - Start with workspace panes hidden, restore split view from full view, and close only the selected workspace tab from browser controls or shortcuts. Open side-chat drafts through the existing conversation owner and reuse the main composer, connector, model and voice controls. Send launcher searches directly to the selected engine's results URL. Add user-directed local-drive folder browsing and bounded text/image previews through the trusted desktop bridge; keep chat attachments available separately.
 
 - Keep the Dynamic Island dock within the chat pane while the browser is open. Remove its broad edge-hover strip in browser view, follow split resizing, and hide it when the browser takes the full workspace so tab controls remain reachable.

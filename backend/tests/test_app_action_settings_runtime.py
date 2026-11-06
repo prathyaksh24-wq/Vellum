@@ -332,7 +332,12 @@ def test_device_settings_return_revisioned_patch_for_client_owned_persistence() 
     receipt = runtime.dispatch(
         AppActionRequest(
             action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
-            arguments={"patch": {"accent": "blue-eclipse", "personalization": {"warm": "more"}}},
+            arguments={"patch": {
+                "accent": "blue-eclipse",
+                "personalization": {"warm": "more"},
+                "preview_rail_position": "right",
+                "preview_rail_visibility": "hover",
+            }},
         ),
         action_context,
     )
@@ -343,7 +348,12 @@ def test_device_settings_return_revisioned_patch_for_client_owned_persistence() 
         "version": 1,
         "base_revision": 4,
         "revision": 5,
-        "values": {"accent": "blue-eclipse", "personalization": {"warm": "more"}},
+        "values": {
+            "accent": "blue-eclipse",
+            "personalization": {"warm": "more"},
+            "preview_rail_position": "right",
+            "preview_rail_visibility": "hover",
+        },
     }
 
 

@@ -484,7 +484,7 @@ class DedicatedBrowser(BrowserSettingsMixin):
         return f"{self.session_id}:{self._page_id()}:{self._revision}"
 
     def _download(self, download) -> None:
-        identity = uuid4().hex
+        identity = getattr(download, "identity", None) or uuid4().hex
         name = re.split(r"[/\\]", download.suggested_filename)[-1]
         name = re.sub(r'[<>:"|?*\x00-\x1f]', "_", name).strip(" .")[:180] or "download"
         self._downloads[identity] = BrowserDownload(id=identity, name=name, state="downloading")
@@ -517,7 +517,7 @@ class DedicatedBrowser(BrowserSettingsMixin):
             self._downloads[identity] = BrowserDownload(id=identity, name=name, state="saved", size=path.stat().st_size)
         except Exception as exc:
             logger.debug("Browser download failed: %s", type(exc).__name__)
-            self._downloads[identity] = BrowserDownload(id=identity, name=name, state="failed")
+            self._downloads[identity] = BrowserDownload(id=identity, name=name, state="cancelled" if self._downloads[identity].state == "cancelled" else "failed")
         try:
             self._persist_downloads()
         except OSError:
@@ -660,7 +660,8 @@ class DedicatedBrowser(BrowserSettingsMixin):
                     loading=id(page) in self._tab_loads, error=self._tab_errors.get(id(page), "")))
                 if id(page) not in self._tab_loads:
                     self._remember_address(page.url, title)
-        return BrowserStatus(available=ready, reason=reason, running=self.context is not None,
+        native_tools = self._native is not None and self.active_page is not None
+        return BrowserStatus(available=ready, reason=reason, zoom_factor=getattr(self,"_zoom_factor",1), features={"find": self.active_page is not None, "zoom": native_tools, "print": native_tools, "download_controls": self._native is not None}, running=self.context is not None,
             render_transport='native' if self._native is not None else 'stream',
             browser_name='Chromium' if self._native is not None else 'Brave', native_target_id=native_target,
             presentation_requested=self.presentation_requested,
@@ -827,13 +828,40 @@ class DedicatedBrowser(BrowserSettingsMixin):
             if operation == "take_over":
                 # Ownership invalidates agent confirmations, not unchanged pixels.
                 self._invalidate(view_changed=False)
+        elif operation in {"pause_download", "resume_download", "cancel_download"}:
+            record = self._downloads.get(request.download_id)
+            if self._native is None or record is None or record.state not in {"downloading", "awaiting_approval"}:
+                raise BrowserSessionError("This download control is unavailable.")
+            if operation != "cancel_download" and record.state != "downloading":
+                raise BrowserSessionError("Review this download in Browser settings before resuming it.")
+            await self._native.call({"pause_download":"download_pause", "resume_download":"download_resume", "cancel_download":"download_cancel"}[operation], download_id=record.id)
+            if operation == "cancel_download":
+                record.state = "cancelled"
+            else:
+                record.paused = operation == "pause_download"
+            self._persist_downloads()
+        elif operation == "ack_downloads":
+            for record in self._downloads.values():
+                if not request.download_id or record.id == request.download_id:
+                    record.acknowledged = True
+            self._persist_downloads()
+        elif operation in {"zoom", "print"}:
+            if self._native is None or self.active_page is None:
+                raise BrowserSessionError("This browser control requires the desktop browser.")
+            await self._native.call('page_tool', target_id=self.context.target_for_page(self.active_page),
+                kind=operation, text=request.text, forward=request.forward, find_next=request.find_next,
+                factor=request.zoom_factor)
         elif operation == "show_download":
             path = self._paths.get(request.download_id)
             if path is None or not path.is_file():
                 raise BrowserSessionError("This download is no longer available.")
-            if os.name != "nt":
-                raise BrowserSessionError("Show in folder is currently supported on Windows.")
-            subprocess.Popen(["explorer.exe", "/select,", str(path)], creationflags=subprocess.CREATE_NO_WINDOW)
+            if self._native is not None:
+                await self._native.call('reveal_download', download_id=request.download_id, path=str(path))
+            elif os.name == "nt":
+                subprocess.Popen(["explorer.exe", "/select,", str(path)], creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                import sys
+                subprocess.Popen(["open", "-R", str(path)] if sys.platform == "darwin" else ["xdg-open", str(path.parent)])
         elif operation == "resize":
             page = self.active_page
             if page is None or not request.tab_id or request.tab_id != self._page_id():

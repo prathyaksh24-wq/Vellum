@@ -31,7 +31,7 @@ class WorkspaceContentTab(BaseModel):
     """Presentation references only; content stays with its existing owner."""
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9:_-]+$")
-    kind: Literal["launcher", "chat", "files", "terminal"]
+    kind: Literal["launcher", "chat", "files", "terminal", "directory", "integration"]
     reference_id: str = Field(default="", max_length=200)
     title: str = Field(min_length=1, max_length=100)
 
@@ -136,6 +136,8 @@ class DeviceSettingsValues(BaseModel):
     accent: str | None = None
     dock_position: str | None = None
     dock_locked: bool | None = None
+    preview_rail_position: Literal["left", "right"] = "left"
+    preview_rail_visibility: Literal["visible", "hover", "hidden"] = "visible"
     computer_use_preview: bool | None = None
     streaming: DeviceStreamingSettings = Field(default_factory=DeviceStreamingSettings)
     personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)

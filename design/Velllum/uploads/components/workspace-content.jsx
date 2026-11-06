@@ -1,7 +1,7 @@
 /* Views project existing attachment, conversation and terminal owners. */
 (function(){
   const {useEffect,useRef,useState}=React;
-  const Icon=props=><window.VellumUI.AppIcon {...props}/>;
+  const Icon=props=>React.createElement(window.VellumUI.WorkspaceIcon||window.VellumUI.AppIcon,props);
   const safeURL=value=>{
     if(!value)return '';
     try{const url=new URL(value,location.href);return ['http:','https:','blob:'].includes(url.protocol)||/^data:(?:image\/|application\/pdf[;,])/.test(value)?url.href:'';}catch{return '';}
@@ -22,39 +22,20 @@
     if(!chat)for(const item of library)if(item.attachment||item.content||item.text_content)add(item.attachment||{...item,text_content:item.text_content||item.content},'library:'+item.id);
     return rows;
   }
-  function DeviceFiles({visible}){
-    const [folder,setFolder]=useState(null),[address,setAddress]=useState(''),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
-    const sequence=useRef(0),started=useRef(false);
-    const read=async(operation,path)=>{
-      const token=++sequence.current;setBusy(true);setError('');
-      try{const result=await window.VellumDesktop.invoke('local_files',{operation,...(path?{path}:{})});if(token!==sequence.current)return;if(operation==='list'){setFolder(result);setAddress(result.path);setFile(null);}else setFile(result);}
-      catch(failure){if(token===sequence.current)setError(failure.message==='Unknown desktop command.'?'Restart Vellum to enable local file browsing.':failure.message||'This location could not be opened.');}
-      finally{if(token===sequence.current)setBusy(false);}
-    };
-    useEffect(()=>{if(visible&&!started.current){started.current=true;read('list');}},[visible]);
-    useEffect(()=>()=>{sequence.current++;},[]);
-    return <section className="workspace-device-files" aria-label="Files on this device">
-      <form className="workspace-file-location" onSubmit={event=>{event.preventDefault();if(address.trim())read('list',address.trim());}}><button type="button" className="tbtn" aria-label="Parent folder" disabled={!folder?.parent||busy} onClick={()=>read('list',folder.parent)}><Icon name="ArrowUp" size={17}/></button><input aria-label="Folder path" placeholder="Local folder path" value={address} onChange={event=>setAddress(event.target.value)}/><button type="submit" className="tbtn" aria-label="Open folder" disabled={busy||!address.trim()}><Icon name="ArrowRight" size={17}/></button></form>
-      {error&&<p className="workspace-file-error" role="alert">{error}</p>}
-      <div className="workspace-device-body"><nav className="workspace-file-list" aria-label="Local folders and files">{busy&&<p role="status">Opening…</p>}{folder?.entries.map(entry=><button type="button" key={entry.path} title={entry.name} aria-current={file?.path===entry.path?'true':undefined} onClick={()=>read(entry.kind==='directory'?'list':'preview',entry.path)}><Icon name={entry.kind==='directory'?'Folder':'FileDocument'} size={16}/><span>{entry.name}</span></button>)}{folder&&!folder.entries.length&&<p>This folder is empty.</p>}{folder?.truncated&&<p>Showing the first 2,000 entries.</p>}</nav><div className="workspace-file-preview">{file?<><header><span>{file.name}</span></header>{file.kind==='image'?<img className="workspace-preview-image" src={file.data_url} alt={file.name}/>:file.kind==='text'?<pre tabIndex="0">{file.text}</pre>:<div className="workspace-empty"><p>{file.message}</p></div>}</>:<div className="workspace-empty"><Icon name="Folder" size={24}/><h3>On this device</h3><p>Choose a folder or file. Files stay on your laptop unless you attach them to a message.</p></div>}</div></div>
-    </section>;
-  }
-  function WorkspaceFiles({chat,library,visible}){
-    const desktop=window.VellumDesktop?.runtime==='electron', [device,setDevice]=useState(desktop);
-    return <section className="workspace-file-workspace"><header className="workspace-file-sources">{desktop&&<button type="button" aria-pressed={device} onClick={()=>setDevice(true)}>On this device</button>}<button type="button" aria-pressed={!device} onClick={()=>setDevice(false)}>Chat files</button></header>{device?<DeviceFiles visible={visible}/>:<ChatFiles chat={chat} library={library}/>}</section>;
-  }
-  function ChatFiles({chat,library}){
-    const files=collectWorkspaceFiles(chat,library),[selected,setSelected]=useState(''),[source,setSource]=useState(false);
-    const file=files.find(file=>file.id===selected)||files[0];
+  function WorkspaceFiles({chat,library,selectedFile,records}){
+    const files=records||collectWorkspaceFiles(chat,library),[selected,setSelected]=useState(''),[source,setSource]=useState(false);
+    const file=files.find(file=>file.id===selected)||selectedFile||files[0];
+    useEffect(()=>{if(selectedFile)setSelected(selectedFile.id||'');},[selectedFile]);
     useEffect(()=>setSource(false),[file?.id]);
     const url=safeURL(file?.data_url||file?.url),mime=file?.mime_type||'',rawText=file?.text_content||file?.content||'';
     const text=typeof rawText==='string'?rawText:JSON.stringify(rawText,null,2);
     const image=mime.startsWith('image/')||file?.kind==='image'||/^data:image\//.test(url);
     const html=file?.language==='html'||mime==='text/html'||/\.html?$/i.test(file?.name||'');
     const pdf=mime==='application/pdf'||/\.pdf$/i.test(file?.name||'');
+    const downloadText=()=>{const href=URL.createObjectURL(new Blob([text],{type:mime||'text/plain'})),link=document.createElement('a');link.href=href;link.download=file.name;link.click();setTimeout(()=>URL.revokeObjectURL(href),0);};
     return <section className="workspace-files" aria-label="Files and previews">
       <nav className="workspace-file-list" aria-label="Available files">{files.length?files.map(item=><button type="button" key={item.id} aria-current={file?.id===item.id?'true':undefined} onClick={()=>setSelected(item.id)}><Icon name={item.kind==='image'?'FileImage':'FileDocument'} size={16}/><span>{item.name}</span></button>):<div className="workspace-empty"><Icon name="FileDocument" size={24}/><h3>No files yet</h3><p>Attachments and generated code from {chat?'this chat':'your library'} appear here.</p></div>}</nav>
-      {file&&<div className="workspace-file-preview"><header><span>{file.name}</span>{html&&text&&<button type="button" onClick={()=>setSource(!source)}>{source?'Preview':'Source'}</button>}{url&&<a href={url} download={file.name}>Download</a>}</header>
+      {file&&<div className="workspace-file-preview"><header><span>{file.name}</span>{html&&text&&<button type="button" onClick={()=>setSource(!source)}>{source?'Preview':'Source'}</button>}{url?<a href={url} download={file.name}>Download</a>:text&&<button type="button" onClick={downloadText}>Download</button>}</header>
         {image&&url?<img className="workspace-preview-image" src={url} alt={file.name}/>:html&&text&&!source?<iframe title={file.name+' preview'} sandbox="" referrerPolicy="no-referrer" srcDoc={text}/>:text?<pre tabIndex="0">{text}</pre>:pdf&&url?<iframe title={file.name+' preview'} sandbox="" referrerPolicy="no-referrer" src={url}/>:<div className="workspace-empty"><p>This file has no readable preview saved with it.</p>{url&&<a href={url} download={file.name}>Download file</a>}</div>}
       </div>}
     </section>;
@@ -86,26 +67,39 @@
     useEffect(()=>{if(visible&&state==='ready')requestAnimationFrame(()=>owner.current?.resize());},[visible,state]);
     return <section className="workspace-terminal" aria-label="Local terminal"><div className="workspace-terminal-mount" ref={mount}/>{state!=='ready'&&<div className="workspace-empty" role="status">{error||'Opening local shell…'}</div>}</section>;
   }
-  function WorkspaceLauncher({item,browserAvailable,terminalAvailable,onOpenTool}){
-    const [address,setAddress]=useState('');
-    const open=(kind,reference)=>onOpenTool(kind,reference,item.id);
-    return <section className="workspace-new-tab-page" aria-label="New tab">
-      {browserAvailable&&<form className="workspace-new-address" onSubmit={event=>{event.preventDefault();if(address.trim())open('browser',address.trim());}}><Icon name="Search" size={18}/><input aria-label="Search or enter a URL" placeholder="Search or enter a URL" value={address} onChange={event=>setAddress(event.target.value)}/><button type="submit" className="tbtn" aria-label="Open address" disabled={!address.trim()}><Icon name="ArrowRight" size={18}/></button></form>}
-      <div className="workspace-tool-section"><h2>Tools</h2><div className="workspace-tool-grid">
-        <button type="button" onClick={()=>open('files')}><Icon name="Folder" size={18}/><span>Files and previews</span></button>
-        {terminalAvailable&&<button type="button" onClick={()=>open('terminal')}><Icon name="Terminal" size={18}/><span>Terminal</span></button>}
-        <button type="button" onClick={()=>open('chat')}><Icon name="Chat" size={18}/><span>Side chat</span></button>
-        {browserAvailable&&<button type="button" onClick={()=>open('browser')}><Icon name="Globe" size={18}/><span>Browser</span></button>}
-      </div></div>
+  function WorkspaceDirectory({onEnvironment}){
+    const [path,setPath]=useState(''),[page,setPage]=useState(null),[file,setFile]=useState(null),[pending,setPending]=useState(true),[error,setError]=useState(''),[retry,setRetry]=useState(0),revision=useRef(0);
+    useEffect(()=>{
+      const token=++revision.current;setPending(true);setError('');setFile(null);
+      window.VellumDesktop.files.read({operation:'list',relativePath:path}).then(next=>{if(token===revision.current){setPage(next);onEnvironment?.({workspace_root:next.workspace_root});}},failure=>{if(token===revision.current)setError(failure.message||'The folder could not be read.');}).finally(()=>{if(token===revision.current)setPending(false);});
+      return()=>{revision.current++;};
+    },[path,retry]);
+    const read=async entry=>{if(entry.directory){setPath(entry.path);return;}const token=++revision.current;setPending(true);setError('');try{const next=await window.VellumDesktop.files.read({operation:'read',relativePath:entry.path});if(token===revision.current)setFile(next);}catch(failure){if(token===revision.current)setError(failure.message);}finally{if(token===revision.current)setPending(false);}};
+    const parent=()=>setPath(path.split(/[\\/]/).slice(0,-1).join('/'));
+    return <section className="workspace-directory" aria-label="Workspace files"><header><button type="button" className="tbtn" aria-label="Parent folder" disabled={!path} onClick={parent}><Icon name="ArrowLeft"/></button><span title={page?.workspace_root}>{path||page?.workspace_root||'Workspace'}</span><button type="button" className="tbtn" aria-label="Refresh folder" onClick={()=>setRetry(value=>value+1)}><Icon name="ArrowRotateCw"/></button></header>
+      {error&&<div className="workspace-file-error" role="alert">{error}<button type="button" onClick={()=>setRetry(value=>value+1)}>Retry folder</button></div>}
+      <div className="workspace-directory-columns"><nav aria-label="Workspace folder contents" aria-busy={pending}>{page?.entries.map(entry=><button type="button" key={entry.path} onClick={()=>read(entry)}><Icon name={entry.directory?'FolderOpen':'FileDocument'} size={17}/><span>{entry.name}</span></button>)}{pending&&<p role="status">Loading…</p>}{!pending&&!page?.entries.length&&<p>This folder is empty.</p>}{page?.truncated&&<p>Showing the first 500 entries.</p>}</nav>{file?<WorkspaceFiles records={[file]} selectedFile={file}/>:<div className="workspace-empty"><p>Select a file to preview it.</p></div>}</div>
     </section>;
   }
-  function WorkspaceContent({items,activeId,visible,chats,mainChatId,library,renderChat,onSelectChat,onOpenMain,onOpenFiles,browserAvailable,terminalAvailable,onOpenTool}){
+  function WorkspaceLauncher({item,browserAvailable,terminalAvailable,directoryAvailable,suggestions,onOpenTool,onOpenResource}){
+    const [address,setAddress]=useState('');
+    const open=(kind,reference)=>onOpenTool(kind,reference,item.id);
+    const tools=window.VellumUI.workspaceTools({browserAvailable,terminalAvailable,directoryAvailable,open});
+    const toolButton=tool=><button type="button" key={tool.id} onClick={tool.open}><Icon name={tool.kind==='chat'?'SideChat':tool.kind==='directory'?'Files':tool.icon} size={18}/><span>{tool.title}</span></button>;
+    return <section className="workspace-new-tab-page" aria-label="New tab">
+      {browserAvailable&&<form className="workspace-new-address" onSubmit={event=>{event.preventDefault();if(address.trim())open('browser',address.trim());}}><Icon name="Search" size={18}/><input aria-label="Search or enter a URL" placeholder="Search or enter a URL" value={address} onChange={event=>setAddress(event.target.value)}/><button type="submit" className="tbtn" aria-label="Open address" disabled={!address.trim()}><Icon name="ArrowRight" size={18}/></button></form>}
+      <div className="workspace-tool-section"><h2>Tools</h2><div className="workspace-tool-grid">{tools.map(toolButton)}</div></div>
+      {!!suggestions?.length&&<div className="workspace-tool-section"><h2>Suggested</h2><div className="workspace-suggestions">{suggestions.map(row=><button type="button" key={row.id} disabled={row.kind==='url'&&!browserAvailable} onClick={()=>onOpenResource(row,item.id)}><Icon name={row.icon} size={23}/><span>{row.label}</span>{row.meta&&<small>{row.meta}</small>}</button>)}</div></div>}
+    </section>;
+  }
+  function WorkspaceContent({items,activeId,visible,chats,library,renderChat,renderIntegration,browserAvailable,terminalAvailable,directoryAvailable,plugins=[],catalogState,suggestions,onOpenTool,onOpenResource,onEnvironment,fileFocus}){
     return <>{items.map(item=>{
       const active=item.id===activeId,chat=chats.find(chat=>chat.id===item.reference_id);
       return <div className="workspace-content-view" key={item.id} hidden={!active} inert={!active?'':undefined}>
-        {item.kind==='launcher'?<WorkspaceLauncher item={item} browserAvailable={browserAvailable} terminalAvailable={terminalAvailable} onOpenTool={onOpenTool}/>:item.kind==='terminal'?<WorkspaceTerminal visible={visible&&active}/>:item.kind==='files'?<WorkspaceFiles visible={visible&&active} chat={chat} library={item.reference_id==='library'?library:[]}/>:<section className="workspace-side-chat" aria-label="Side chat">
-          <header className="workspace-side-chat-heading"><label><span className="sr-only">Side conversation</span><select aria-label="Side conversation" value={item.reference_id} onChange={event=>onSelectChat(item,event.target.value)}>{chats.filter(chat=>!chat.archived&&chat.id!==mainChatId).map(chat=><option key={chat.id} value={chat.id}>{chat.title||'New chat'}</option>)}</select></label><button type="button" className="tbtn" aria-label="Open conversation in main view" onClick={()=>onOpenMain(item.reference_id)}><Icon name="ExternalLink" size={16}/></button><button type="button" className="tbtn" aria-label="Files in side chat" onClick={()=>onOpenFiles(item.reference_id)}><Icon name="FileDocument" size={16}/></button></header>
-          {chat&&chat.id!==mainChatId?renderChat(chat):<div className="workspace-empty"><p>{chat?'This conversation is already in the main view. Choose another chat.':'This conversation is no longer available.'}</p></div>}
+        {item.kind==='launcher'?<WorkspaceLauncher item={item} browserAvailable={browserAvailable} terminalAvailable={terminalAvailable} directoryAvailable={directoryAvailable} suggestions={suggestions} onOpenTool={onOpenTool} onOpenResource={onOpenResource}/>:item.kind==='directory'?(directoryAvailable?<WorkspaceDirectory onEnvironment={onEnvironment}/>:<div className="workspace-empty"><p>Workspace files are available in the desktop app.</p></div>):item.kind==='integration'?(plugins.some(plugin=>plugin.id===item.reference_id&&plugin.enabled&&plugin.installed)?renderIntegration(item):<div className="workspace-empty" role="status"><p>{catalogState?.loading?'Loading connected tools…':catalogState?.error||'This integration is no longer available.'}</p></div>):item.kind==='terminal'?<WorkspaceTerminal visible={visible&&active}/>:item.kind==='files'?<WorkspaceFiles chat={chat} library={item.reference_id==='library'?library:[]} selectedFile={fileFocus?.chatId===item.reference_id?fileFocus.file:null}/>:<section className="workspace-side-chat" aria-label="Side chat">
+          {chat&&(chat.temporary_side_chat||chat.parent_conversation_id)
+            ?renderChat(chat)
+            :<div className="workspace-empty"><p>Open a new side chat from the tab bar.</p></div>}
         </section>}
       </div>;
     })}</>;

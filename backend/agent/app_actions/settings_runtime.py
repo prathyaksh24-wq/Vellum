@@ -104,6 +104,8 @@ _DEVICE_SETTING_KEYS = frozenset({
     "dock_position",
     "number_shortcuts",
     "dock_locked",
+    "preview_rail_position",
+    "preview_rail_visibility",
     "computer_use_preview",
     "personalization",
     'profile',
@@ -395,6 +397,14 @@ class SettingsRuntimeActionService:
                 if position not in {"auto", "top", "right", "bottom", "left"}:
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Unsupported dock position.")
                 normalized[key] = position
+            elif key == "preview_rail_position":
+                if value not in ("left", "right"):
+                    raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose the left or right edge for the preview rail.")
+                normalized[key] = value
+            elif key == "preview_rail_visibility":
+                if value not in ("visible", "hover", "hidden"):
+                    raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose when the preview rail appears.")
+                normalized[key] = value
             elif key == "accent":
                 accent = str(value or "").strip().casefold()
                 if accent not in {
@@ -967,6 +977,8 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
         'accent':{'type':'string'},
         'dock_position':{'type':'string','enum':['auto','top','right','bottom','left']},
+        'preview_rail_position':{'type':'string','enum':['left','right']},
+        'preview_rail_visibility':{'type':'string','enum':['visible','hover','hidden']},
         'number_shortcuts':{'type':'string','enum':['tabs','chats']},
         'dock_locked':{'type':'boolean'}, 'computer_use_preview':{'type':'boolean'},
         'personalization':personalization_schema,
@@ -993,6 +1005,8 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "dock_position": {"type": "string"},
                 "number_shortcuts": {"type":"string", "enum":["tabs","chats"]},
                 "dock_locked": {"type": "boolean"},
+                "preview_rail_position": device_properties['preview_rail_position'],
+                "preview_rail_visibility": device_properties['preview_rail_visibility'],
                 "computer_use_preview": {"type": "boolean"},
                 "personalization": personalization_schema,
                 'profile': device_properties['profile'],
