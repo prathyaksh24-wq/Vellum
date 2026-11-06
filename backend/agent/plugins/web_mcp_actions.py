@@ -140,9 +140,11 @@ def deferred_tools(service_factory, operation_model, name_for_tool, *, adapter_f
         try:
             values = [item for item in service_factory().catalog() if query.casefold() in (item['name'] + ' ' + item['description']).casefold()]
             offset, limit = max(0, offset), max(1, min(limit, 50))
-            return json.dumps({'tools': [{key: item[key] for key in ('name', 'description', 'read_only')}
+            return json.dumps({'tools': [{'name':item['name'], 'description':item['description'][:240],
+                'read_only':item['read_only'], 'required':item['input_schema'].get('required', [])}
                 for item in values[offset:offset + limit]], 'total': len(values),
-                'next_offset': offset + limit if offset + limit < len(values) else None})
+                'next_offset': offset + limit if offset + limit < len(values) else None,
+                'next_step': 'Describe an exact returned tool name, then call '+provider.plugin_id+'_mcp_read(tool_name=<that name>, arguments=<matching object>) for a read. Do not invent tool names.'})
         except (ValueError, RuntimeError) as exc:
             return json.dumps({'ok': False, 'error': str(exc)})
 

@@ -282,6 +282,12 @@ class Settings(BaseSettings):
     honcho_base_url: str = Field(default="http://localhost:8001", alias="HONCHO_BASE_URL")
     honcho_app_id: str = Field(default="vellum", alias="HONCHO_APP_ID")
     honcho_user_id: str = Field(default="default", alias="HONCHO_USER_ID")
+    memory_extension_providers: str = Field(default="", alias="MEMORY_EXTENSION_PROVIDERS")
+    hindsight_memory_enabled: bool = Field(default=False, alias="HINDSIGHT_MEMORY_ENABLED")
+    hindsight_api_key: SecretStr = Field(default=SecretStr(""), alias="HINDSIGHT_API_KEY", repr=False)
+    hindsight_api_url: str = Field(default="https://api.hindsight.vectorize.io", alias="HINDSIGHT_API_URL")
+    hindsight_bank_id: str = Field(default="vellum", alias="HINDSIGHT_BANK_ID")
+    hindsight_budget: str = Field(default="mid", alias="HINDSIGHT_BUDGET")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
         alias="LOG_LEVEL",

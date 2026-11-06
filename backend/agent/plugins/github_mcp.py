@@ -93,39 +93,41 @@ class GitHubMcpAdapter:
         self.service = service or github_service()
         self.runtime = runtime or PluginMcpRuntime(get_plugin_registry())
 
+    @staticmethod
+    def _validate_arguments(operation):
+        if len(json.dumps(operation.arguments).encode()) > 128_000:
+            raise GitHubConnectionError("GitHub arguments exceed 128 KB. Use a smaller change.")
+        if _privacy_safe_arguments(operation.arguments) != operation.arguments:
+            raise GitHubConnectionError("GitHub arguments contain protected data. Use the owning credential controls.")
+
     def tool(self, operation):
         self.service.require()
+        self._validate_arguments(operation)
         tool = next((item for item in self.service.catalog() if item["name"] == operation.tool_name), None)
         if tool is None:
             raise GitHubConnectionError("This tool is not exposed by the connected GitHub MCP server. Refresh or search its catalog.")
-        if len(json.dumps(operation.arguments).encode()) > 128_000:
-            raise GitHubConnectionError("GitHub arguments exceed 128 KB. Use a smaller change.")
         try:
             Draft202012Validator(tool["input_schema"]).validate(operation.arguments)
         except ValidationError:
             raise GitHubConnectionError("Arguments do not match this GitHub tool's published schema. Describe the tool and preserve its required fields.") from None
-        clean = _privacy_safe_arguments(operation.arguments)
-        if clean != operation.arguments:
-            raise GitHubConnectionError("GitHub arguments contain protected data. Use the owning credential controls.")
         return tool
 
-    def _call(self, operation, data, approval_id=""):
-        plan = cli_operation(operation)
-        if plan:
-            result = _run(github_cli.run(*plan, token=data["access_token"], timeout=8))
-            if result is not None:
-                if result.startswith("GitHub CLI failed:"):
-                    raise GitHubConnectionError(result)
-                return result
-        return _run(self.runtime.call_tool("github", "github", operation.tool_name, operation.arguments,
-            approval_id=approval_id, credential_digest=data["revision"], structured=True))
-
     def read(self, operation):
-        tool = self.tool(operation)
-        if not tool["read_only"]:
-            raise GitHubConnectionError("This GitHub tool changes data. Use its reviewed change action.")
         with self.service.lock:
-            return self._call(operation, self.service.require())
+            data = self.service.require()
+            self._validate_arguments(operation)
+            operation_args = cli_operation(operation)
+            if operation_args and github_cli.request_plan(*operation_args)[0] == "GET":
+                # The bounded CLI planner validates known reads locally. The
+                # MCP catalog is only needed when the read falls back to MCP.
+                result = _run(github_cli.run(*operation_args, token=data["access_token"], timeout=8))
+                if result is not None:
+                    return _verified_result(result)
+            tool = self.tool(operation)
+            if not tool["read_only"]:
+                raise GitHubConnectionError("This GitHub tool changes data. Use its reviewed change action.")
+            return _verified_result(_run(self.runtime.call_tool("github", "github", operation.tool_name,
+                operation.arguments, credential_digest=data["revision"], structured=True)))
 
     def prepare(self, operation):
         tool = self.tool(operation)

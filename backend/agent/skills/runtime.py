@@ -10,7 +10,9 @@ from agent.skills.registry import SkillRegistry
 from agent.skills.configuration import SkillConfigStore
 
 
-SKILLS_PATH = Path(__file__).resolve().parents[3] / ".skills"
+from agent.config import REPO_ROOT
+
+SKILLS_PATH = REPO_ROOT / ".skills"
 CORE_TOOL_NAMES = {
     "append_to_note",
     "browser_action",
@@ -44,7 +46,6 @@ CORE_TOOL_NAMES = {
     "library_docs",
     "list_files",
     "memory_orchestrator",
-    "obsidian_api",
     "read_file",
     "repo_docs",
     "search_amazon",
@@ -73,6 +74,8 @@ _STOP_WORDS = {
     "to",
     "use",
     "with",
+    "can", "could", "would", "should", "do", "does", "did", "you", "your", "u",
+    "i", "me", "my", "we", "our", "what", "which", "who", "how", "help", "please",
 }
 
 
@@ -80,7 +83,8 @@ _STOP_WORDS = {
 def get_skill_registry() -> SkillRegistry:
     config = SkillConfigStore(SKILLS_PATH / "config.yaml")
     external_dirs = [Path(os.path.expandvars(os.path.expanduser(str(path)))) for path in config.get_option("external_dirs", []) or []]
-    plugin_skill_roots = get_plugin_registry().skill_roots()
+    with get_plugin_registry().read_snapshot():
+        plugin_skill_roots = get_plugin_registry().skill_roots()
     return SkillRegistry(
         local_root=SKILLS_PATH / "packages",
         external_dirs=external_dirs,
@@ -90,17 +94,22 @@ def get_skill_registry() -> SkillRegistry:
     )
 
 
-def build_skill_index_block(registry: SkillRegistry | None = None) -> str:
+def build_skill_index_block(
+    registry: SkillRegistry | None = None, *, category: str = "",
+    excluded_skills: set[str] | frozenset[str] = frozenset(),
+) -> str:
     active_registry = registry or get_skill_registry()
-    entries = active_registry.list_skills()
+    entries = [entry for entry in active_registry.list_skills()
+               if entry.name not in excluded_skills and (not category or entry.category == category)]
     if not entries:
         return ""
     lines = [
         "## Available Skills",
-        "Load a skill with skill_view only when its description matches the current task.",
+        "Use matching skill instructions for the current task; load the body or relative support files with skill_view on demand. Skills do not grant tools or permissions.",
     ]
     for entry in entries:
-        lines.append(f"- {entry.name} [{entry.category}]: {entry.description}")
+        description = " ".join(entry.description.split())
+        lines.append(f"- {entry.name} [{entry.category}]: {description[:200]}")
     return "\n".join(lines)
 
 
@@ -135,12 +144,16 @@ def build_skill_activation_block(
         if explicit_matches:
             score = 100 + sum(len(value.split()) for value in explicit_matches)
         else:
+            if vellum.trigger_only:
+                continue
             skill_tokens = (
                 set(_WORD.findall(package.metadata.name.casefold()))
                 | set(_WORD.findall(package.metadata.description.casefold()))
             ) - _STOP_WORDS
             overlap = query_tokens & skill_tokens
-            if not overlap:
+            # One generic description word must not preload a whole skill.
+            name_tokens = set(_WORD.findall(package.metadata.name.casefold())) - _STOP_WORDS
+            if not (overlap & name_tokens):
                 continue
             score = len(overlap)
 
@@ -154,8 +167,10 @@ def build_skill_activation_block(
         section = f"### {name}\n{body}"
         projected = "\n\n".join([*sections, section])
         if len(projected) > max_chars:
-            break
+            continue
         sections.append(section)
+        from agent.skills.usage_intelligence import record_current_activation
+        record_current_activation(name, source="prompt_activation")
     return "\n\n".join(sections) if len(sections) > 1 else ""
 
 

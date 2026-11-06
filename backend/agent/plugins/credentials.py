@@ -40,6 +40,7 @@ class KeyringRecordStore:
     def save(self, data):
         written, committed, pointer, root_update_attempted = [], False, None, False
         generation = secrets.token_urlsafe(24)
+        phase = 'serialize'
         try:
             # Parts have unique service names, so Windows keyring does not create
             # shadow copies of prior token blobs when its root entry is updated.
@@ -49,18 +50,22 @@ class KeyringRecordStore:
                 raise ValueError()
             old = self.keyring.get_password(self.credential_service, self.credential_account)
             for index, value in enumerate(values):
+                phase = 'encode_part'
                 service = self._part_service(generation, index)
                 part = json.dumps({"generation": generation, "value": value}, separators=(",", ":"))
                 # Escaping this envelope can expand backslashes from JSON values.
                 # The byte guard is authoritative for every platform backend.
                 if len(part.encode("utf-16-le")) > 2400:
                     raise ValueError()
+                phase = 'write_part'
                 self.keyring.set_password(service, self.credential_account, part)
                 written.append(service)
+                phase = 'verify_part'
                 if self.keyring.get_password(service, self.credential_account) != part:
                     raise ValueError()
             pointer = json.dumps({"storage": RECORD_FORMAT, "generation": generation, "parts": len(values)}, separators=(",", ":"))
             try:
+                phase = 'publish_pointer'
                 root_update_attempted = True
                 self.keyring.set_password(self.credential_service, self.credential_account, pointer)
             except Exception:
@@ -78,7 +83,7 @@ class KeyringRecordStore:
             except (ValueError, TypeError):
                 pass
         except Exception as exc:
-            logger.warning("Connector credential save failed: error_type=%s winerror=%s", type(exc).__name__, getattr(exc, "winerror", None))
+            logger.warning("Connector credential save failed: phase=%s error_type=%s winerror=%s", phase, type(exc).__name__, getattr(exc, "winerror", None))
             if not committed:
                 # Cleanup is best-effort; a locked OS store must never make us
                 # delete or replace the preceding verified connection.

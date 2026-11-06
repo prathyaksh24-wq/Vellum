@@ -637,4 +637,29 @@ def unwrap_bridge_call(name: str, tool_input: Any) -> tuple[str, Any]:
 
 
 def to_openai_defs(tools: list[StructuredTool]) -> list[dict[str, Any]]:
-    return [convert_to_openai_tool(tool) for tool in tools]
+    def compact_docs(node):
+        if not isinstance(node, dict):
+            return node
+        result={}
+        for key,value in node.items():
+            if key=='examples':
+                continue
+            if key=='description' and isinstance(value,str):
+                value=value[:240]
+            elif key in {'properties','patternProperties','$defs','definitions','dependentSchemas'} and isinstance(value,dict):
+                value={name:compact_docs(schema) for name,schema in value.items()}
+            elif key in {'allOf','anyOf','oneOf','prefixItems'} and isinstance(value,list):
+                value=[compact_docs(schema) for schema in value]
+            elif key in {'items','additionalProperties','unevaluatedProperties','contains','propertyNames','not','if','then','else'}:
+                value=compact_docs(value)
+            result[key]=value
+        return result
+    result=[]
+    for tool in tools:
+        definition=convert_to_openai_tool(tool)
+        # Keep every structural constraint and full server-side validation.
+        # Long vendor documentation belongs in on-demand references, not every
+        # model call containing the operation's argument schema.
+        definition['function']['parameters']=compact_docs(definition['function'].get('parameters', {}))
+        result.append(definition)
+    return result

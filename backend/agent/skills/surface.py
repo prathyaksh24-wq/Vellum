@@ -94,6 +94,10 @@ class SkillSurfaceService:
         if path:
             return {"name": name, "path": path, "content": self.parser.read_support_file(package.root, path)}
         provenance = HubLockFile(self.root).get(name) or {}
+        if not provenance and package.owner_plugin == "openai-system-skills":
+            declared = package.metadata.metadata.model_dump().get("provenance", {})
+            if isinstance(declared, dict):
+                provenance = declared
         metadata = package.metadata.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
         install_surfaces = skill_install_surfaces(
             name,

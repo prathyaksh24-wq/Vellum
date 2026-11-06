@@ -53,6 +53,7 @@ def memory_orchestrator_plugin_status(orchestrator: Any) -> PluginStatus:
             status="degraded",
             notes=" ".join(degraded) + f" Saved={saved_count}, pending={pending_count}, archived={archived_count}.",
             honcho_ready=honcho_ready,
+            extensions=getattr(orchestrator, "provider_extensions", None),
         )
 
     return _status(
@@ -60,6 +61,7 @@ def memory_orchestrator_plugin_status(orchestrator: Any) -> PluginStatus:
         status="ready",
         notes=f"Memory Orchestrator is ready. Saved={saved_count}, pending={pending_count}, archived={archived_count}.",
         honcho_ready=honcho_ready,
+        extensions=getattr(orchestrator, "provider_extensions", None),
     )
 
 
@@ -69,6 +71,7 @@ def _status(
     status: str,
     notes: str,
     honcho_ready: bool = False,
+    extensions: Any = None,
 ) -> PluginStatus:
     return PluginStatus(
         id="memory-orchestrator",
@@ -82,7 +85,7 @@ def _status(
         required=True,
         metadata={
             "providers": _provider_statuses(honcho_ready=honcho_ready),
-            "external_extensions": build_default_memory_provider_extensions().statuses(),
+            "external_extensions": (extensions or build_default_memory_provider_extensions()).statuses(),
         },
     )
 

@@ -35,6 +35,10 @@ class GitHubConnectionError(ValueError):
     pass
 
 
+class GitHubAuthorizationError(GitHubConnectionError):
+    pass
+
+
 def invalidate_tools():
     from agent.graph.agent import agent
     agent.invalidate()
@@ -81,6 +85,8 @@ class GitHubConnectionService:
         data = self.load()
         if not data.get("access_token"):
             raise GitHubConnectionError("Sign in with GitHub in Plugins first.")
+        if data.get("status") == "reauthorization_required":
+            raise GitHubAuthorizationError("GitHub rejected the saved authorization. Reconnect GitHub in Plugins.")
         return data
 
     def status(self):
@@ -93,16 +99,21 @@ class GitHubConnectionService:
             return GitHubConnectionStatus(**base, status="keyring_unavailable", message=str(exc))
         configured = bool(data.get("access_token"))
         connected = configured and enabled and data.get("status") == "ready" and 0 <= self.clock() - data.get("checked_epoch", 0) < 86400
+        needs_reconnect = configured and data.get("status") == "reauthorization_required"
         return GitHubConnectionStatus(**base, configured=configured, connected=connected,
-            status="disabled" if not enabled else "ready" if connected else "not_connected",
+            status="disabled" if not enabled else "ready" if connected else "reauthorization_required" if needs_reconnect else "not_connected",
             message="GitHub account and official MCP access verified. Compatible operations prefer the CLI; other tools use MCP." if connected else
-                "Enable GitHub to use its connection." if not enabled else "Sign in with GitHub to authorize the CLI and official MCP fallback.",
+                "Enable GitHub to use its connection." if not enabled else
+                "GitHub rejected the saved authorization. Reconnect GitHub in Plugins." if needs_reconnect else
+                "Sign in with GitHub to authorize the CLI and official MCP fallback.",
             account_name=data.get("account_name"), login=data.get("login"), verified_at=data.get("verified_at"),
             access=data.get("access", "read"), mcp_tool_count=data.get("mcp_tool_count", 0))
 
     def _json(self, method, url, **kwargs):
         try:
             response = self.request(method, url, timeout=25, follow_redirects=False, **kwargs)
+            if response.status_code == 401:
+                raise GitHubAuthorizationError("GitHub rejected the saved authorization. Reconnect GitHub in Plugins.")
             if response.status_code >= 300:
                 raise GitHubConnectionError("GitHub rejected this request. Check the account grant and organization access.")
             data = response.json()
@@ -145,7 +156,17 @@ class GitHubConnectionService:
         with self.lock:
             if not refresh and self.tools_revision == data.get("revision"):
                 return list(self.tools)
-        tools = self._catalog(data)
+        try:
+            tools = self._catalog(data)
+        except GitHubConnectionError:
+            # An MCP outage and a revoked grant need different recovery steps.
+            try:
+                self._saved_profile(data)
+            except GitHubAuthorizationError:
+                raise
+            except GitHubConnectionError:
+                pass
+            raise
         with self.lock:
             if self.require().get("revision") != data.get("revision"):
                 raise GitHubConnectionError("The GitHub connection changed. Refresh its tools.")
@@ -156,7 +177,7 @@ class GitHubConnectionService:
 
     def cached_tools(self):
         data = self.load()
-        return list(self.tools) if self.enabled() and data.get("revision") == self.tools_revision else []
+        return list(self.tools) if self.enabled() and data.get("status") != "reauthorization_required" and data.get("revision") == self.tools_revision else []
 
     def start(self, request: GitHubConnectionRequest):
         if not self.enabled():
@@ -261,9 +282,19 @@ class GitHubConnectionService:
             query += [("view", "apps"), ("github_oauth", flow_id)]
             return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
 
+    def _saved_profile(self, data):
+        try:
+            return self._json("GET", "https://api.github.com/user", headers={"Authorization": "Bearer " + data["access_token"], "Accept": "application/vnd.github+json"})
+        except GitHubAuthorizationError:
+            with self.lock:
+                current = self.load()
+                if current.get("revision") == data.get("revision"):
+                    self.save({**current, "status": "reauthorization_required"})
+            raise
+
     def verify(self):
         data = self.require()
-        profile = self._json("GET", "https://api.github.com/user", headers={"Authorization": "Bearer " + data["access_token"], "Accept": "application/vnd.github+json"})
+        profile = self._saved_profile(data)
         if str(profile.get("id")) != data["account_id"]:
             raise GitHubConnectionError("The GitHub account changed. Reconnect and review the intended account.")
         self.catalog(refresh=True)

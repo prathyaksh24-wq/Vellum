@@ -12,7 +12,10 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from agent.config import Settings
 
 
 class MemoryProviderExtension(Protocol):
@@ -84,7 +87,7 @@ class ConfiguredMemoryProviderExtension:
 
 
 class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
-    def __init__(self, client: Any | None = None) -> None:
+    def __init__(self, client: Any | None = None, *, settings: Settings | None = None) -> None:
         super().__init__(
             id="hindsight",
             name="Hindsight",
@@ -94,8 +97,21 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
             notes="Set HINDSIGHT_API_KEY and add hindsight to MEMORY_EXTENSION_PROVIDERS.",
         )
         self.client = client
-        self.bank_id = os.environ.get("HINDSIGHT_BANK_ID", "vellum")
-        self.budget = os.environ.get("HINDSIGHT_BUDGET", "mid")
+        self.settings = settings
+        self.bank_id = settings.hindsight_bank_id if settings else os.environ.get("HINDSIGHT_BANK_ID", "vellum")
+        self.budget = settings.hindsight_budget if settings else os.environ.get("HINDSIGHT_BUDGET", "mid")
+
+    def is_enabled(self) -> bool:
+        if self.settings is None:
+            return super().is_enabled()
+        return self.settings.hindsight_memory_enabled or "hindsight" in {
+            name.strip().casefold() for name in self.settings.memory_extension_providers.split(",")
+        }
+
+    def is_configured(self) -> bool:
+        if self.settings is None:
+            return super().is_configured()
+        return bool(self.settings.hindsight_api_key.get_secret_value().strip())
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
         client = self._client()
@@ -118,11 +134,20 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         content = f"User: {user_content.strip()}\nAssistant: {assistant_content.strip()}".strip()
         if not content:
             return
-        next_metadata = {"session_id": session_id, **(metadata or {})}
+        next_metadata = {
+            key: value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+            for key, value in {"session_id": session_id, **(metadata or {})}.items()
+        }
         if hasattr(client, "retain"):
             client.retain(self.bank_id, content, metadata=next_metadata)
         elif hasattr(client, "add"):
             client.add(self.bank_id, content, metadata=next_metadata)
+
+    def shutdown(self) -> None:
+        client, self.client = self.client, None
+        close = getattr(client, "close", None)
+        if callable(close):
+            close()
 
     def _client(self) -> Any | None:
         if self.client is not None:
@@ -131,8 +156,9 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
             from hindsight_client import Hindsight
         except Exception:
             return None
-        kwargs: dict[str, Any] = {"base_url": os.environ.get("HINDSIGHT_API_URL", "https://api.hindsight.vectorize.io")}
-        api_key = os.environ.get("HINDSIGHT_API_KEY", "").strip()
+        base_url = self.settings.hindsight_api_url if self.settings else os.environ.get("HINDSIGHT_API_URL", "https://api.hindsight.vectorize.io")
+        kwargs: dict[str, Any] = {"base_url": base_url}
+        api_key = (self.settings.hindsight_api_key.get_secret_value() if self.settings else os.environ.get("HINDSIGHT_API_KEY", "")).strip()
         if api_key:
             kwargs["api_key"] = api_key
         try:
@@ -342,10 +368,10 @@ class MemoryProviderExtensionManager:
                 continue
 
 
-def build_default_memory_provider_extensions() -> MemoryProviderExtensionManager:
+def build_default_memory_provider_extensions(*, settings: Settings | None = None) -> MemoryProviderExtensionManager:
     return MemoryProviderExtensionManager(
         [
-            HindsightProviderExtension(),
+            HindsightProviderExtension(settings=settings),
             SupermemoryProviderExtension(),
             HolographicProviderExtension(),
         ]

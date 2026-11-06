@@ -14,6 +14,7 @@ from agent.config import REPO_ROOT, get_settings
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
 from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+from agent.memory.provider_extensions import build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.knowledge.runtime import get_knowledge_core
 from agent.obsidian.wiki_runtime import get_knowledge_wiki
@@ -36,6 +37,7 @@ def build_memory_orchestrator() -> MemoryOrchestrator:
             sessions_db=sessions_db,
         ),
         store=SQLiteMemoryStore(sessions_db),
+        provider_extensions=build_default_memory_provider_extensions(settings=settings),
         honcho=HonchoMemory(
             base_url=settings.honcho_base_url,
             app_id=settings.honcho_app_id,

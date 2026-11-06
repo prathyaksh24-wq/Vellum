@@ -25,7 +25,7 @@ def test_mcp_health_returns_all_servers(client: TestClient) -> None:
     servers = {s["name"] for s in body["mcp_servers"]}
     assert servers == {
         "apify", "serpapi", "exa", "brave", "playwright", "github",
-        "obsidian", "context7", "gitmcp", "context_mode",
+        "context7", "gitmcp", "context_mode",
         "tavily", "firecrawl", "slack", "airtable", "notion", "supabase", "district", "zomato", "swiggy", "vercel", "clickup", "asana", "hubspot",
     }
     slack = next(entry for entry in body["mcp_servers"] if entry["name"] == "slack")

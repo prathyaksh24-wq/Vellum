@@ -1,7 +1,7 @@
 const {createHash} = require('node:crypto');
 
 const ENTRY = '/design-uploads/Vellum%20Default%20Re-designed.html';
-const COMMANDS = new Set(['backend_health', 'workspace_ready', 'protected_audio_ready', 'open_vellum_window', 'open_conversation_window', 'set_overlay', 'skill_file','local_files']);
+const COMMANDS = new Set(['backend_health', 'workspace_ready', 'protected_audio_ready', 'open_vellum_window', 'open_conversation_window', 'set_overlay', 'skill_file','local_files', 'open_plugin_oauth']);
 
 function workspaceURL(base = 'http://127.0.0.1:5173') {
   const url = new URL(base);
@@ -35,7 +35,8 @@ function validateCommand(command, args) {
   if (!COMMANDS.has(command)) throw new Error('Unknown desktop command.');
   if (args === undefined) args = {};
   if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid desktop arguments.');
-  const keys = command === 'open_conversation_window' ? ['conversationId'] : command === 'set_overlay' ? ['enabled'] : command === 'skill_file' ? ['name','operation'] : command==='local_files'?['operation','path']:[];
+  const keys = command === 'open_plugin_oauth' ? ['url'] : command === 'open_conversation_window' ? ['conversationId'] : command === 'set_overlay' ? ['enabled'] : command === 'skill_file' ? ['name','operation'] : command==='local_files'?['operation','path']:[];
+  if(command==='open_plugin_oauth' && (typeof args.url!=='string'||args.url.length>1024))throw new Error('Choose a valid local plugin sign-in flow.');
   if (Object.keys(args).some(key => !keys.includes(key))) throw new Error('Unexpected desktop argument.');
   if (command === 'set_overlay' && typeof args.enabled !== 'boolean') throw new Error('Expected an overlay state.');
   if (command === 'open_conversation_window') conversationTarget('http://127.0.0.1/', args.conversationId);
