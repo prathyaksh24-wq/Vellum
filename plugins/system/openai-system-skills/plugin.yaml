@@ -1,0 +1,14 @@
+id: openai-system-skills
+name: OpenAI System Skills
+type: bundle
+category: Developer Tools
+version: 1.0.0
+description: OpenAI image generation, skill creation, skill installation and plugin
+  creation workflows adapted to Vellum. Excludes openai-docs.
+default_enabled: true
+capabilities:
+- Skills
+- image.generate
+provides_tools: [image_generate]
+provenance:
+  source_id: https://github.com/openai/skills/tree/49f948faa9258a0c61caceaf225e179651397431/skills/.system

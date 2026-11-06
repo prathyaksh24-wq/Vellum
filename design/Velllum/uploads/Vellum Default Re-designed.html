@@ -3992,8 +3992,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange}) => {
-  useEffect(()=>{if(pluginDraft?.text)setText(pluginDraft.text);},[pluginDraft?.id]);
+const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange}) => {
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
@@ -4124,6 +4123,13 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
     return () => window.removeEventListener('vellum:attachment-action', onAttachmentAction);
   }, []);
   const [composerRuntime,setComposerRuntime] = useState(()=>window.VellumComposer);
+  useEffect(()=>{
+    if(!pluginDraft || !composerRuntime)return;
+    const frame=requestAnimationFrame(()=>{
+      if(taRef.current?.loadDraft(pluginDraft.text || '',pluginDraft.reference?[pluginDraft.reference]:[]))onPluginDraftConsumed?.(pluginDraft.id);
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[pluginDraft?.id,composerRuntime]);
   useEffect(()=>{const ready=()=>setComposerRuntime(window.VellumComposer);window.addEventListener('vellum:composer-ready',ready);ready();return()=>window.removeEventListener('vellum:composer-ready',ready);},[]);
   const commands = React.useMemo(()=>[
     ...buildReasoningSlashItems({q:'',apps,skills,agents}).flatMap(section=>section.items),
@@ -4255,33 +4261,6 @@ const Composer = ({pluginDraft, text, setText, model, setModel, models = MODELS,
             onOpenLibrary={() => { setPlusOpen(false); setLibOpen(true); }}
             onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
             onClose={() => setPlusOpen(false)}/>}
-          {apps && (() => {
-            const onApps = apps.filter(a => appSel.includes(a.id));
-            return (
-              <React.Fragment>
-                {onApps.length === 1 && (() => {
-                  const a = onApps[0];
-                  const Ic = APP_ICONS[a.id] || IcGrid;
-                  return (
-                    <button className="app-chip" title={a.name}
-                      onClick={() => a.id === 'github' ? setGhOpen(true) : setPickOpen(true)}>
-                      <span className="sb-ic" title="Disconnect" onClick={e => { e.stopPropagation(); onToggleSel(a.id); }}><IcXCircle size={14}/></span>
-                      <span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/>
-                    </button>
-                  );
-                })()}
-                {onApps.length > 1 && (
-                  <button className="app-chip" title="Selected apps" onClick={() => setPickOpen(true)}>
-                    <span className="sb-ic"><IcGrid size={14}/></span>{onApps.length} apps<IcChevD size={11}/>
-                  </button>
-                )}
-                {appsOpen && <AppsDrop apps={apps} sel={appSel} drop={drop} onToggle={onToggleSel} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
-                {pickOpen && onApps.length > 0 && <AppsPicker apps={onApps} drop={drop} onToggle={onToggleSel}
-                  onGitHub={() => { setPickOpen(false); setGhOpen(true); }} onClose={() => setPickOpen(false)}/>}
-                {ghOpen && <GitHubPanel drop={drop} onClose={() => setGhOpen(false)}/>}
-              </React.Fragment>
-            );
-          })()}
           <div className="cspace"/>
           {dictationActive && dictationUi}
           {searchMode
@@ -6334,7 +6313,6 @@ const MCP_SOURCES = [
     { id:'stripe', name:'Stripe', category:'Data', authType:'API key', install:'npm', pkg:'@smithery/stripe', trust:'community', description:'Read charges, customers, and invoices from Stripe.', tools:['list_charges','get_customer','list_invoices'] },
   ]}),
   makeRegistryAdapter({ id:'glama', label:'Glama', color:'#8abf9a', catalog:[
-    { id:'obsidian', name:'Obsidian', category:'Productivity', authType:'None', install:'local', cmd:'npx obsidian-mcp /vault', trust:'community', description:'Search and edit notes in a local Obsidian vault.', tools:['search_notes','read_note','append_note'] },
     { id:'todoist', name:'Todoist', category:'Productivity', authType:'API key', install:'npm', pkg:'@glama/todoist', trust:'community', description:'Manage tasks and projects in Todoist.', tools:['list_tasks','create_task','complete_task'] },
     { id:'memory', name:'Memory', category:'Other', authType:'None', install:'npm', pkg:'@glama/memory', trust:'community', description:'Persistent knowledge-graph memory across sessions.', tools:['store','recall','search_graph'] },
     { id:'youtube', name:'YouTube Transcript', category:'Web', authType:'None', install:'npm', pkg:'@glama/youtube-transcript', trust:'unverified', description:'Fetch transcripts and metadata for YouTube videos.', tools:['get_transcript','get_metadata'] },
@@ -9259,6 +9237,7 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const applyNewChatNavigation = (projectId=null) => { setDraftProjectId(projectId); const saved = readDefaultModel(); const nextModel = models.some(model => model.id === saved) ? saved : (models[0] ? models[0].id : ''); setView('chat'); setActiveChatId(null); setSelModel(nextModel); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
   const newChat = () => {
+    setPluginDraft(null);
     navigationEpochRef.current += 1;
     applyNewChatNavigation();
     if (FEATURE_FLAGS.realConversations) return dispatchConversationAction('conversation.new', {}, {applyNavigation:false});
@@ -9309,8 +9288,10 @@ const [slashSkills, setSlashSkills] = useState([]);
       applyOpenChatNavigation(id, messageId);
       return null;
     }
-    return dispatchConversationAction('conversation.open', {conversation_id:id}).then(receipt => {
-      if (receipt && receipt.status === 'applied' && messageId) {
+    applyOpenChatNavigation(id, messageId);
+    const epoch=navigationEpochRef.current;
+    return dispatchConversationAction('conversation.open', {conversation_id:id}, {applyNavigation:false,notify:false}).then(receipt => {
+      if (receipt && receipt.status === 'applied' && messageId && epoch===navigationEpochRef.current) {
         setTimeout(() => scrollToConversationMessage(messageId), 80);
       }
       return receipt;
@@ -10317,7 +10298,6 @@ const [slashSkills, setSlashSkills] = useState([]);
         const plugin = receipt.result.plugin;
         setApps(current => current.map(item => item.id === plugin.id ? {...item, enabled:plugin.enabled, status:plugin.enabled===false?'disabled':item.status==='disabled'?'not_checked':item.status} : item));
         setFeeds(current => current.map(feed => feed.pluginId === plugin.id ? {...feed, on:plugin.enabled !== false} : feed));
-        refreshPlugins();
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'book.import' && receipt.result && receipt.result.client_effect && receipt.result.client_effect.type === 'book.import.picker.open') {
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum-composer', {detail:'addfiles'})), 0);
@@ -10811,7 +10791,15 @@ const [slashSkills, setSlashSkills] = useState([]);
   const disconnectApp = id => {
     if (currentSel.includes(id)) toggleSel(id);
   };
-  const tryPlugin=(plugin,text)=>{dispatchSurfacePresentation('settings',{visible:false},{notify:false});newChat();setPluginDraft({id:crypto.randomUUID(),text:text||`Use ${plugin.name} to help me.`});};
+  const consumePluginDraft=id=>setPluginDraft(current=>current?.id===id?null:current);
+  const tryPlugin=(plugin,text)=>{
+    const reference=window.VellumComposer?.commandReference({kind:'plugin',raw:plugin,label:plugin.name});
+    if(!reference){pushToast('The composer is still loading. Please try again.');return;}
+    dispatchSurfacePresentation('settings',{visible:false},{notify:false});
+    newChat();
+    setDraftApps([]);
+    setPluginDraft({id:crypto.randomUUID(),text:text || '',reference});
+  };
   const activeChatProject = projects.find(project=>project.id===(activeChat?.projectId || (!activeChat?draftProjectId:null))) || null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
   const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
@@ -11081,7 +11069,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={null}
               onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+              composerExtras={{pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'library' && <LibraryView projects={projects} items={libraryProjection} section={librarySection} onSection={setLibrarySection} onUpdate={updateLibraryItems} onUpload={uploadLibraryFiles} onOpenChat={openChat}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}

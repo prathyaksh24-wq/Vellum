@@ -1,9 +1,9 @@
+import {loadPublicIcons} from './public-icons-fixture.js';
 import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
-import {loadPublicIcons} from './public-icons-fixture.js';
 
 const require=createRequire(import.meta.url),base='../design/Velllum/uploads/components/';
 const original=globalThis.Uint8Array;
@@ -24,7 +24,7 @@ afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreA
 
 test('settings projects installed plugins and protects required controls',async()=>{await render();expect(host.querySelector('[aria-label="Enable Linear"]')).toBeTruthy();expect(host.querySelector('[aria-label="Enable Demo"]')).toBeNull();expect(host.querySelector('[aria-label="Enable Core"]').disabled).toBe(true);expect(host.textContent).not.toContain('pr@example.com');});
 test('enablement follows applied receipts and failed changes keep their state',async()=>{await render();await click(host.querySelector('[aria-label="Enable Linear"]'));expect(onState).toHaveBeenCalledWith('linear',false);expect(host.querySelector('[aria-label="Enable Linear"]').getAttribute('aria-checked')).toBe('false');onState.mockResolvedValue({status:'failed',message:'Provider busy'});await click(host.querySelector('[aria-label="Enable Linear"]'));expect(host.querySelector('[role="alert"]').textContent).toContain('Provider busy');expect(host.querySelector('[aria-label="Enable Linear"]').getAttribute('aria-checked')).toBe('false');});
-test('directory searches actual catalog and offers installation for uninstalled plugins',async()=>{await render({mode:'directory'});expect(host.querySelector('[aria-label="Customize"]')).toBeTruthy();expect(host.querySelector('[aria-label="Install Demo"]')).toBeTruthy();await fill(host.querySelector('input[type="search"]'),'no match');expect(host.querySelectorAll('.r')).toHaveLength(0);expect(host.textContent).toContain('No plugins match this search');});
+test('directory searches actual catalog and offers installation for uninstalled plugins',async()=>{await render({mode:'directory'});expect(host.querySelector('[aria-label="Plugins sidebar"]')).toBeTruthy();expect(host.querySelector('[aria-label="Install Demo"]')).toBeTruthy();await fill(host.querySelector('input[type="search"]'),'no match');expect(host.querySelectorAll('.r')).toHaveLength(0);expect(host.textContent).toContain('No plugins match this search');});
 test('MCP creation requires a backend review and never pretends connection success',async()=>{await render();await click(host.querySelector('.addb'));await click(button('Add MCP server'));await fill(host.querySelector('input[placeholder="Custom Tool"]'),'Demo tools');await fill(host.querySelector('input[aria-label="Server URL"]'),'https://example.com/mcp');await click(host.querySelector('input[type="checkbox"]'));await click(button('Create as a plugin'));expect(onAdd).toHaveBeenCalledWith('plugin.add',{kind:'mcp',name:'Demo tools',description:'',transport:'http',url:'https://example.com/mcp'});expect(onConfirm).not.toHaveBeenCalled();expect(host.querySelector('[aria-label="Review change"]')).toBeTruthy();await click(button('Confirm'));expect(onConfirm).toHaveBeenCalledOnce();});
 test('SKILL.md reader displays the actual backend file',async()=>{window.VellumApi.plugins.skillsCatalog.mockResolvedValue({items:[{name:'real-skill',description:'Actual description',is_external:true}],next_cursor:null});await render({initialRoute:{v:'settings',tab:'skills'}});await click(host.querySelector('.sr2'));expect(window.VellumApi.plugins.skillDetail).toHaveBeenCalledWith('real-skill',expect.anything());expect(host.querySelector('.md').textContent).toContain('# Actual source');expect(host.querySelector('[aria-label="Enable real-skill"]').disabled).toBe(true);});
 test('uninstall is a reviewed registry operation and cannot delete source files directly',async()=>{await render({initialRoute:{v:'settings',p:'linear'}});await click(button('Uninstall'));expect(host.querySelector('[aria-label="Uninstall Linear"]')).toBeTruthy();await click([...host.querySelectorAll('[aria-label="Uninstall Linear"] button')].find(b=>b.textContent==='Uninstall'));expect(onAdd).toHaveBeenCalledWith('plugin.uninstall',{plugin_id:'linear'});expect(onConfirm).toHaveBeenCalledOnce();});
@@ -47,10 +47,10 @@ test('plugin sidebar hide and show are driven by the applied visibility owner',a
   function Owner(){const [visible,setVisible]=React.useState(true);return React.createElement(window.VellumUI.PluginWorkspace,{apps:items,mode:'directory',sidebarVisible:visible,onSidebarVisibility:async next=>{visibility(next);setVisible(next);return {status:'applied'};}});}
   await act(async()=>root.render(React.createElement(Owner)));
   await click(host.querySelector('[aria-label="Hide plugin sidebar"]'));
-  expect(host.querySelector('[aria-label="Customize"]').getAttribute('aria-hidden')).toBe('true');
+  expect(host.querySelector('[aria-label="Plugins sidebar"]').getAttribute('aria-hidden')).toBe('true');
   expect(visibility).toHaveBeenLastCalledWith(false);
   await click(host.querySelector('[aria-label="Show plugin sidebar"]'));
-  expect(host.querySelector('[aria-label="Customize"]')).toBeTruthy();
+  expect(host.querySelector('[aria-label="Plugins sidebar"]')).toBeTruthy();
   expect(visibility).toHaveBeenLastCalledWith(true);
   expect(onState).not.toHaveBeenCalled();
 });
@@ -149,4 +149,45 @@ test('YouTube plugin shows the known Google grant deadline without claiming a pe
   await render({initialRoute:{v:'settings',p:'youtube'}});
   expect(host.textContent).toContain('Google access expires');
   expect(button('Manage Google connection')).toBeTruthy();
+});
+
+test('Try now and whole example rows hand the plugin and draft to the composer',async()=>{
+  const onTry=vi.fn();
+  await render({mode:'directory',initialRoute:{v:'detail',p:'linear'},onTry});
+  await click(button('Try now'));
+  expect(onTry).toHaveBeenCalledWith(expect.objectContaining({id:'linear'}),undefined);
+  const example=host.querySelector('button.pr');
+  expect(example).toBeTruthy();
+  expect(example.querySelector('button')).toBeNull();
+  await click(example);
+  expect(onTry).toHaveBeenLastCalledWith(expect.objectContaining({id:'linear'}),expect.any(String));
+});
+
+test.each(['swiggy','github'])('saved %s authorization can be reconnected from plugin settings',async id=>{
+  const connect=vi.fn(),run=vi.fn();
+  items=[{id,name:id,enabled:true,installed:true,manageable:true}];
+  const owner=id==='swiggy'?'SwiggyConnection':'GitHubConnection';
+  window.VellumUI[owner]=({render})=>render({status:{configured:true,connected:false},connect,run});
+  await render({initialRoute:{v:'settings',p:id}});
+  await click(button('Reconnect'));
+  expect(connect).toHaveBeenCalledOnce();
+  expect(run).not.toHaveBeenCalled();
+});
+
+test('plugin switch responds immediately and unlocks after the receipt without waiting for catalog refresh',async()=>{
+  let finish;
+  onState.mockImplementation((id,enabled)=>new Promise(resolve=>{finish=()=>resolve({status:'applied',result:{plugin:{id,enabled}}});}));
+  const refresh=vi.fn(()=>new Promise(()=>{}));
+  await render({onRetry:refresh});
+  const toggle=host.querySelector('[aria-label="Enable Linear"]');
+  await click(toggle);
+  expect(toggle.getAttribute('aria-busy')).toBe('true');
+  expect(toggle.classList.contains('on')).toBe(false);
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
+  expect(toggle.disabled).toBe(true);
+  await act(async()=>finish());
+  expect(toggle.getAttribute('aria-busy')).toBe('false');
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  expect(toggle.disabled).toBe(false);
+  expect(refresh).toHaveBeenCalledOnce();
 });

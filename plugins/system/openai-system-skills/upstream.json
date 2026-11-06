@@ -1,0 +1,125 @@
+{
+  "repository": "https://github.com/openai/skills",
+  "commit": "49f948faa9258a0c61caceaf225e179651397431",
+  "excluded": [
+    "openai-docs"
+  ],
+  "adaptation": "SKILL.md entrypoints adapted to Vellum; upstream text/scripts and individual license notices preserved. Codex display assets/agents omitted.",
+  "files": [
+    {
+      "source_path": "skills/.system/skill-creator/LICENSE.txt",
+      "bundled_path": "skills/skill-creator/LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "source_path": "skills/.system/skill-creator/SKILL.md",
+      "bundled_path": "skills/skill-creator/references/upstream-skill.md",
+      "sha256": "a17383bfb1448637ac1f757ad891ddb9676fa30b0eff620200f0e1cbc0cc0d50"
+    },
+    {
+      "source_path": "skills/.system/skill-creator/references/openai_yaml.md",
+      "bundled_path": "skills/skill-creator/references/openai_yaml.md",
+      "sha256": "9fb5928b7f4a746fdb39df503ebbd7a659d5e64b47f85a60626aa1a03fd76b17"
+    },
+    {
+      "source_path": "skills/.system/skill-creator/scripts/generate_openai_yaml.py",
+      "bundled_path": "skills/skill-creator/scripts/generate_openai_yaml.py",
+      "sha256": "b8f6be33a9d72dd7a8da02e7a9fffea23dc79e94862e6dd6358b57a8899d8f73"
+    },
+    {
+      "source_path": "skills/.system/skill-creator/scripts/init_skill.py",
+      "bundled_path": "skills/skill-creator/scripts/init_skill.py",
+      "sha256": "bcb8982d3f033a094f2f1be43123ac8537e2562d25d8ba4d8ef2196ae514d96d"
+    },
+    {
+      "source_path": "skills/.system/skill-creator/scripts/quick_validate.py",
+      "bundled_path": "skills/skill-creator/scripts/quick_validate.py",
+      "sha256": "6cc9dc3199c935916cf6f73fcbbbb0e3bb1b58c8f5109fefa499978908164f51"
+    },
+    {
+      "source_path": "skills/.system/skill-installer/LICENSE.txt",
+      "bundled_path": "skills/skill-installer/LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "source_path": "skills/.system/skill-installer/SKILL.md",
+      "bundled_path": "skills/skill-installer/references/upstream-skill.md",
+      "sha256": "83b31cffb2552a923f4152f0338bea548274accc5489d151a95bced8e7bcfb74"
+    },
+    {
+      "source_path": "skills/.system/skill-installer/scripts/github_utils.py",
+      "bundled_path": "skills/skill-installer/scripts/github_utils.py",
+      "sha256": "61c1bbe2ae217433b4b6f9f09f21aca4df52c12598068343ade719f706e4859b"
+    },
+    {
+      "source_path": "skills/.system/skill-installer/scripts/install-skill-from-github.py",
+      "bundled_path": "skills/skill-installer/scripts/install-skill-from-github.py",
+      "sha256": "0fbbd36e8ea294442c0bd48d6f610a2e8656216bfef5c322f1dcf448ef2f09f1"
+    },
+    {
+      "source_path": "skills/.system/skill-installer/scripts/list-skills.py",
+      "bundled_path": "skills/skill-installer/scripts/list-skills.py",
+      "sha256": "e4e1f78ca3d045827f2a05cfd99fae57cc7c1a1bfeba8704029108834debff35"
+    },
+    {
+      "source_path": "skills/.system/plugin-creator/LICENSE.txt",
+      "bundled_path": "skills/plugin-creator/LICENSE.txt",
+      "sha256": "b87a529a13d5294f97bb847936a82f39e4f8adae2425a3a5fb5f1a7b75d43e6a"
+    },
+    {
+      "source_path": "skills/.system/plugin-creator/SKILL.md",
+      "bundled_path": "skills/plugin-creator/references/upstream-skill.md",
+      "sha256": "3b43cb214f458a1ae13e1b93a69e493241d8e12c5a474afe8ae81ae0507aa216"
+    },
+    {
+      "source_path": "skills/.system/plugin-creator/references/plugin-json-spec.md",
+      "bundled_path": "skills/plugin-creator/references/plugin-json-spec.md",
+      "sha256": "5d7223255decc44fcb93f3aa80bb17afc1469b2d3c339d65d9473c5c0c54fcdd"
+    },
+    {
+      "source_path": "skills/.system/plugin-creator/scripts/create_basic_plugin.py",
+      "bundled_path": "skills/plugin-creator/scripts/create_basic_plugin.py",
+      "sha256": "63ce72d2854c07a42382115c471cfcd42a743be3b84f398fa2d4cdb2fca13362"
+    },
+    {
+      "source_path": "skills/.system/imagegen/LICENSE.txt",
+      "bundled_path": "skills/imagegen/LICENSE.txt",
+      "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9"
+    },
+    {
+      "source_path": "skills/.system/imagegen/SKILL.md",
+      "bundled_path": "skills/imagegen/references/upstream-skill.md",
+      "sha256": "826d05b806d51fa81cd650f1c0854b0a1f7fbccd1b152c588ded1797a2e7218f"
+    },
+    {
+      "source_path": "skills/.system/imagegen/references/cli.md",
+      "bundled_path": "skills/imagegen/references/cli.md",
+      "sha256": "4d471758fb136146a51848fb9cdea0c7e03dac834a426307b0b66290e850ce46"
+    },
+    {
+      "source_path": "skills/.system/imagegen/references/codex-network.md",
+      "bundled_path": "skills/imagegen/references/codex-network.md",
+      "sha256": "dd6e85cb3da3589cab0f65be15b2c8f9d19633d9490f0a4b0fef5fd243d0464c"
+    },
+    {
+      "source_path": "skills/.system/imagegen/references/image-api.md",
+      "bundled_path": "skills/imagegen/references/image-api.md",
+      "sha256": "005d8db53d05223dda473f255b3576b95dff239d6dfbf544a454110e98aa87b5"
+    },
+    {
+      "source_path": "skills/.system/imagegen/references/prompting.md",
+      "bundled_path": "skills/imagegen/references/prompting.md",
+      "sha256": "e547ff9fe8e0de8e844c70a550e0b66e0f72323307e5acd0e562678f10eb0db2"
+    },
+    {
+      "source_path": "skills/.system/imagegen/references/sample-prompts.md",
+      "bundled_path": "skills/imagegen/references/sample-prompts.md",
+      "sha256": "82b0e14db9eace50fca0a4e728b535ded0f3661893538e6b15b18a9a82b71d5b"
+    },
+    {
+      "source_path": "skills/.system/imagegen/scripts/image_gen.py",
+      "bundled_path": "skills/imagegen/scripts/image_gen.py",
+      "sha256": "eaffd8fe4cde5722d748cc35729a03438d6b8fda5e84edd46ea1ce521d41f58b"
+    }
+  ]
+}

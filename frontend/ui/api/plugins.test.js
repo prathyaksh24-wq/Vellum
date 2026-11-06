@@ -13,6 +13,24 @@ async function loadPluginsApi(fetchImpl) {
 }
 
 describe("Vellum plugins API adapter", () => {
+  test('desktop OAuth uses the native bridge after async setup and propagates launch errors',async()=>{
+    const api=await loadPluginsApi(vi.fn());
+    window.VellumApi.client.backendBase=()=> 'http://127.0.0.1:8000';
+    const invoke=vi.fn().mockResolvedValue({opened:true});
+    window.VellumDesktop={runtime:'electron',invoke};
+    const popup=vi.spyOn(window,'open');
+    try{
+      const flow='a'.repeat(43);
+      await api.openOAuthFlow('github',flow);
+      expect(invoke).toHaveBeenCalledWith('open_plugin_oauth',{url:'http://127.0.0.1:8000/api/plugins/github/oauth/open?flow_id='+flow});
+      expect(popup).not.toHaveBeenCalled();
+      invoke.mockRejectedValue(new Error('Browser unavailable'));
+      await expect(api.openOAuthFlow('swiggy',flow)).rejects.toThrow('Browser unavailable');
+      invoke.mockClear();
+      await expect(api.openOAuthFlow('../github',flow)).rejects.toThrow('Invalid');
+      expect(invoke).not.toHaveBeenCalled();
+    }finally{delete window.VellumDesktop;}
+  });
   test('artwork requests batch exact IDs and reuse pending and completed metadata',async()=>{
     vi.useFakeTimers();
     try{

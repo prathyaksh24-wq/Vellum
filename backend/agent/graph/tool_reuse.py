@@ -34,7 +34,7 @@ def reusable_result(message: ToolMessage, *, delegation: bool = False) -> bool:
     except (ValueError, TypeError):
         return not delegation
     if isinstance(value, dict) and (value.get('error') or value.get('ok') is False or
-            value.get('status') in ('error', 'failed', 'blocked', 'unavailable')):
+            value.get('status') in {'error', 'failed', 'blocked', 'unavailable'}):
         return False
     return not _has_action(value) and (not delegation or isinstance(value, dict) and value.get('status') == 'answered')
 
@@ -48,7 +48,7 @@ def repeated_read_batch(state: dict) -> bool:
     return bool(results) and all(m.additional_kwargs.get('vellum_reused_read') for m in results)
 
 
-def reuse_tool_node(tools):
+def reuse_tool_node(tools, *, before_call=None):
     node = ToolNode(tools)
     by_name = {tool.name: tool for tool in tools}
 
@@ -88,6 +88,11 @@ def reuse_tool_node(tools):
         batch_read = all(is_read(call) for call in requested)
         pending, reused, aliases, first = [], {}, {}, {}
         for call in requested:
+            error = before_call(state, call) if before_call else None
+            if error:
+                reused[call['id']] = ToolMessage(content=json.dumps({'ok': False, 'error': error}),
+                    tool_call_id=call['id'], name=call['name'], status='error')
+                continue
             identity = key(call)
             if batch_read and identity in cache:
                 reused[call['id']] = cache[identity]
@@ -108,8 +113,15 @@ def reuse_tool_node(tools):
             if call['id'] in reused:
                 old = reused[call['id']]
                 outputs[call['id']] = old.model_copy(update={'id': None, 'name': call['name'],
-                    'tool_call_id': call['id'], 'additional_kwargs': {**old.additional_kwargs, 'vellum_reused_read': True}})
-        return {'messages': [outputs[call['id']] for call in requested]}
+                    'tool_call_id': call['id'], 'additional_kwargs': {**old.additional_kwargs,
+                        **({'vellum_reused_read': True} if old.status != 'error' else {})}})
+        messages=[]
+        for call in requested:
+            message=outputs[call['id']]
+            if is_read(call) and reusable_result(message):
+                message=message.model_copy(update={'additional_kwargs':{**message.additional_kwargs,'vellum_read_only':True}})
+            messages.append(message)
+        return {'messages': messages}
 
     def invoke(state, config):
         requested, subset, reused, aliases = plan(state)

@@ -148,6 +148,20 @@ def test_hindsight_provider_prefetch_and_sync_with_client(monkeypatch):
     assert calls[0][2]["session_id"] == "t1"
 
 
+def test_hindsight_uses_workspace_settings_without_process_environment(tmp_path, monkeypatch):
+    from agent.config import Settings
+
+    for key in ("MEMORY_EXTENSION_PROVIDERS", "HINDSIGHT_API_KEY", "HINDSIGHT_MEMORY_ENABLED", "HINDSIGHT_BANK_ID"):
+        monkeypatch.delenv(key, raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("MEMORY_EXTENSION_PROVIDERS=hindsight\nHINDSIGHT_API_KEY=fixture-only\nHINDSIGHT_BANK_ID=fixture-bank\n", encoding="utf-8")
+    settings = Settings(_env_file=env_file)
+    manager = build_default_memory_provider_extensions(settings=settings)
+    assert manager.active_provider_ids() == ["hindsight"]
+    assert next(p for p in manager.providers if p.id == "hindsight").bank_id == "fixture-bank"
+    assert "fixture-only" not in str(manager.statuses())
+
+
 def test_supermemory_provider_prefetch_and_sync_with_client(monkeypatch):
     calls = []
 

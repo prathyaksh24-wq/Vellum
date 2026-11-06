@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from copy import deepcopy
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from agent.contracts.conversations import ConversationProject
 
 _PATH_LOCKS: dict[str, RLock] = {}
 _PATH_LOCKS_GUARD = Lock()
+_READ_SNAPSHOTS: OrderedDict[str, tuple[tuple[int, int, int], dict[str, Any]]] = OrderedDict()
+_READ_SNAPSHOTS_LOCK = RLock()
 
 
 def _path_lock(path: Path) -> RLock:
@@ -64,25 +67,40 @@ class ConversationLifecycle:
         self._conversation_id_factory = conversation_id_factory or (lambda: f"chat_{uuid4().hex}")
         self._lock = _path_lock(self.path)
 
+    def _read_payload(self) -> dict[str, Any]:
+        """Private, file-versioned read cache; the JSON writer remains authoritative."""
+        key = str(self.path.resolve(strict=False)).casefold()
+        try:
+            stat = self.path.stat()
+            signature = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+            with _READ_SNAPSHOTS_LOCK:
+                cached = _READ_SNAPSHOTS.get(key)
+            if cached and cached[0] == signature:
+                return cached[1]
+            payload = json.loads(self.path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return {}
+        payload = {'conversations': payload} if isinstance(payload, list) else payload
+        if not isinstance(payload, dict):
+            return {}
+        with _READ_SNAPSHOTS_LOCK:
+            _READ_SNAPSHOTS[key] = (signature, payload)
+            _READ_SNAPSHOTS.move_to_end(key)
+            while len(_READ_SNAPSHOTS) > 4:
+                _READ_SNAPSHOTS.popitem(last=False)
+        return payload
+
     def list(self) -> list[dict[str, Any]]:
         with self._lock:
-            try:
-                payload = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                return []
-            conversations = payload.get("conversations") if isinstance(payload, dict) else payload
+            conversations = self._read_payload().get('conversations', [])
             if not isinstance(conversations, list):
                 return []
-            return [self._normalize_loaded(item) for item in conversations if isinstance(item, dict)]
+            return [self._normalize_loaded(deepcopy(item)) for item in conversations if isinstance(item, dict)]
 
     def projects(self) -> list[dict[str, Any]]:
         """Conversation folders share the conversation writer, not vault projects."""
         with self._lock:
-            try:
-                payload = json.loads(self.path.read_text(encoding='utf-8'))
-            except (OSError, ValueError):
-                return []
-            rows = payload.get('projects', []) if isinstance(payload, dict) else []
+            rows = self._read_payload().get('projects', [])
             if not isinstance(rows, list):
                 return []
             result = []
@@ -147,12 +165,12 @@ class ConversationLifecycle:
 
     def get(self, conversation_id: str) -> dict[str, Any]:
         clean_id = str(conversation_id or "").strip()
-        for conversation in self.list():
-            if clean_id in {
-                str(conversation.get("id") or ""),
-                str(conversation.get("thread_id") or ""),
-            }:
-                return conversation
+        with self._lock:
+            for conversation in self._read_payload().get('conversations', []):
+                if isinstance(conversation, dict) and clean_id in {
+                    str(conversation.get("id") or ""), str(conversation.get("thread_id") or ""),
+                }:
+                    return self._normalize_loaded(deepcopy(conversation))
         raise ConversationLifecycleError("CONVERSATION_NOT_FOUND", "Conversation not found.")
 
     def resolve(self, reference: str) -> dict[str, Any]:
@@ -442,12 +460,7 @@ class ConversationLifecycle:
 
     def _write(self, conversations: list[dict[str, Any]], *, projects: list[dict[str, Any]] | None = None) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            payload = json.loads(self.path.read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            payload = {}
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = dict(self._read_payload())
         payload['conversations'] = conversations
         if projects is not None:
             payload['projects'] = projects
@@ -468,6 +481,8 @@ class ConversationLifecycle:
                         raise
                     sleep(.025 * (2 ** attempt))
         finally:
+            with _READ_SNAPSHOTS_LOCK:
+                _READ_SNAPSHOTS.pop(str(self.path.resolve(strict=False)).casefold(), None)
             with suppress(OSError):
                 temporary.unlink(missing_ok=True)
 

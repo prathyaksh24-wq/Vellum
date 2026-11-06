@@ -178,6 +178,15 @@ export function composerComponent(React,ReactDOM){
     }
     useImperativeHandle(editorRef,()=>({
       focus:()=>viewRef.current?.focus(),dom:()=>viewRef.current?.dom,
+      loadDraft:(text,references=[])=>{
+        const view=viewRef.current;if(!view)return false;
+        const nodes=references.map(referenceAttrs).filter(Boolean).flatMap(attrs=>[schema.nodes.reference.create(attrs),schema.text(' ')]);
+        textDocument(text).firstChild.forEach(node=>nodes.push(node));
+        const doc=schema.node('doc',null,[schema.node('paragraph',null,nodes)]);
+        let tr=view.state.tr.replaceWith(0,view.state.doc.content.size,doc.content);
+        tr=tr.setSelection(TextSelection.atEnd(tr.doc));
+        view.dispatch(tr.setMeta(suggestionKey,{dismiss:true}).scrollIntoView());view.focus();return true;
+      },
       replaceActiveToken:text=>replaceToken(text),insertReference:reference=>replaceToken('',reference),dismissSuggestions:dismiss,
       getReferences:()=>{const rows=new Map();viewRef.current?.state.doc.descendants(node=>{if(node.type.name==='reference')rows.set(node.attrs.kind+':'+node.attrs.id,{...node.attrs});});return [...rows.values()];},
       setSelection:(from,to=from)=>{const view=viewRef.current;if(view){view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,documentPosition(view.state.doc,from),documentPosition(view.state.doc,to))));view.focus();}},

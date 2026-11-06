@@ -1,5 +1,13 @@
 (function () {
   var client = window.VellumApi.client;
+  function openOAuthFlow(provider,flowId) {
+    if(!/^[a-z]+$/.test(provider)||!/^[A-Za-z0-9_-]{20,100}$/.test(flowId||''))return Promise.reject(new Error('Invalid plugin sign-in flow.'));
+    var url=client.backendBase()+'/api/plugins/'+provider+'/oauth/open?flow_id='+encodeURIComponent(flowId);
+    if(window.VellumDesktop?.runtime==='electron')return window.VellumDesktop.invoke('open_plugin_oauth',{url:url}).then(()=>null);
+    var popup=window.open(url,'vellum-'+provider+'-oauth','popup,width=680,height=780');
+    if(!popup)return Promise.reject(new Error('Your browser blocked sign-in. Use Continue to sign in.'));
+    return Promise.resolve(popup);
+  }
   var playbackCommand;
   var artworkCache=new Map(),artworkQueue=new Map(),artworkTimer,artworkRequests=0;
   function flushArtwork() {
@@ -50,6 +58,7 @@
     return promise;
   }
   window.VellumApi.plugins = {
+    openOAuthFlow: openOAuthFlow,
     connectorTools: (pluginId, connector) => client.request('/api/plugins/mcp/connectors/'+encodeURIComponent(pluginId)+'/'+encodeURIComponent(connector)+'/tools', {cache:'no-store'}),
     navigateToGoogle: flow => {
       var target = new URL(flow.authorization_url);

@@ -16,7 +16,6 @@ from agent.mcp import (
     firecrawl_tools,
     github_tools,
     gitmcp_tools,
-    obsidian_tools,
     playwright_tools,
     tavily_tools,
 )
@@ -44,8 +43,6 @@ SERVER_RUNNERS: dict[str, ToolFn] = {
     "apify_amazon": apify_tools.run_tool_async,
     "apify": apify_tools.run_tool_async,
     "github": github_tools.run_tool_async,
-    "obsidian": obsidian_tools.run_tool_async,
-    "obsidian_api": obsidian_tools.run_tool_async,
     "context7": context7_tools.run_tool_async,
     "library_docs": context7_tools.run_tool_async,
     "gitmcp": gitmcp_tools.run_tool_async,

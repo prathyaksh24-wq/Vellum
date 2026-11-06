@@ -15,7 +15,7 @@ def test_mcp_service_registers_existing_context7_and_project_tools():
     assert "context7.fetch_docs" in registry.names()
     assert "context_mode.fetch_and_index" in registry.names()
     assert "github.read_issue" in registry.names()
-    assert "obsidian.search_notes" in registry.names()
+    assert "obsidian.search_notes" not in registry.names()
     assert "web_research.search" in registry.names()
     assert "web_research.answer" in registry.names()
     assert "web_extract.fetch" in registry.names()

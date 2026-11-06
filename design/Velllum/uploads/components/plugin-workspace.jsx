@@ -66,10 +66,14 @@
     onChange,
     label,
     disabled
-  }) => <button className={'sw' + (value ? ' on' : '')} role="switch" aria-checked={!!value} aria-label={label} disabled={disabled} onClick={e => {
-    e.stopPropagation();
-    onChange(!value);
-  }}><i /></button>;
+  }) => {
+    const [pending,setPending]=useState(null),{setError}=useX();
+    return <button type="button" className={'sw' + ((pending ?? value) ? ' on' : '')} role="switch" aria-checked={!!value} aria-busy={pending!==null} aria-label={label} title={pending!==null?'Saving…':undefined} disabled={disabled || pending!==null} onClick={async e => {
+      e.stopPropagation();
+      const next=!value;setPending(next);
+      try{await onChange(next);}catch(error){setError(error.message||'This change could not be saved.');}finally{setPending(null);}
+    }}><i /></button>;
+  };
   const Search = ({
     q,
     setQ,
@@ -417,7 +421,8 @@
     c,
     p
   }) {
-    return <>{c.status?.configured && !c.status.connected && !c.error && <p className="notice" role="status">{c.status.message}</p>}{c.error && <p className="error" role="alert">{c.error}</p>}{c.flow && <p className="notice" role="status">{c.flow.message || 'Waiting for authorization…'}{c.flow.status === 'pending' && c.continueSignIn && <button className="bs" disabled={c.busy} onClick={c.continueSignIn}>Continue to {p.name}</button>}{c.flow.status === 'pending' && c.run && <button className="bs" disabled={c.busy} onClick={() => c.cancelSignIn ? c.cancelSignIn() : c.run(p.id + '.connection.oauth.cancel', {
+    const {setError}=useX();
+    return <>{c.status?.configured && !c.status.connected && !c.error && <p className="notice" role="status">{c.status.message}</p>}{c.error && <p className="error" role="alert">{c.error}</p>}{c.flow && <p className="notice" role="status">{c.flow.message || 'Waiting for authorization…'}{c.flow.status === 'pending' && <button className="bs" disabled={c.busy} onClick={() => c.continueSignIn ? c.continueSignIn() : window.VellumApi.plugins.openOAuthFlow(p.id,c.flow.flow_id).catch(e=>setError(e.message))}>Continue to {p.name}</button>}{c.flow.status === 'pending' && c.run && <button className="bs" disabled={c.busy} onClick={() => c.cancelSignIn ? c.cancelSignIn() : c.run(p.id + '.connection.oauth.cancel', {
           flow_id: c.flow.flow_id
         })}>Cancel sign-in</button>}</p>}{c.pending && <div className="ds" role="group" aria-label="Review connection change"><h3>Review connection change</h3><p>{c.pending.receipt?.message || 'Review this change before applying it.'}</p><div className="df"><button className="bs" disabled={c.busy} onClick={() => c.decide(false)}>Cancel</button><button className="bt" disabled={c.busy} onClick={() => c.decide(true)}>Confirm</button></div></div>}</>;
   }
@@ -449,7 +454,7 @@
       } = useX(),
       connected = c.status?.connected,
       account = c.status?.email || c.status?.account_name || c.status?.workspace_name || 'Authorized account',
-      connect = () => c.status?.configured && !c.status?.connected && !c.status?.reconnect_required && c.run ? c.run((p.id.startsWith('app-') ? 'producthunt' : p.id) + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+      connect = () => c.choose ? c.choose() : c.connect?.();
     if(c.youtube)return <section className="ds" aria-label="YouTube Google connection"><h2 className="h2s">YouTube Google connection</h2>
       <p className="notice">{c.status?.channel_title || (c.busy?'Checking connection…':'Read-only YouTube access')}</p>
       {c.status?.authorization_required ? <p className="error" role="alert">Reconnect with Google to resume upload notifications. Saved uploads and creator choices are retained.</p> : c.status?.connected && <p className="notice">Google connection ready.</p>}
@@ -482,9 +487,9 @@
         marginTop: 28
       }}><div className="li" style={{
           minHeight: 64
-        }}><span className="gr">{p.name}</span><button className="cb" disabled={p.enabled === false || c.busy || !!c.pending || c.flow?.status === 'pending' || c.unsupported || !c.connect && !c.choose} onClick={connect}>{c.busy ? 'Connecting…' : c.status?.reconnect_required ? 'Sign in with '+p.name : c.status?.configured && c.run ? 'Verify connection' : 'Connect'}</button></div></div>}{p.id === 'swiggy' && c.status?.services && <div className="ds">{c.status.services.map(s => <div className="ln" key={s.id}><span className="gr">{s.name}</span><Sw label={s.name} value={s.enabled} disabled={c.busy} onChange={v => c.run('swiggy.connection.configure', {
+        }}><span className="gr">{p.name}</span><button className="cb" disabled={p.enabled === false || c.busy || !!c.pending || c.flow?.status === 'pending' || c.unsupported || !c.connect && !c.choose} onClick={connect}>{c.busy ? 'Connecting…' : c.status?.configured ? 'Reconnect' : 'Connect'}</button></div></div>}{p.id === 'swiggy' && c.status?.services && <div className="ds">{c.status.services.map(s => <div className="ln" key={s.id}><span className="gr">{s.name}</span><Sw label={s.name} value={s.enabled} disabled={c.busy} onChange={v => c.run('swiggy.connection.configure', {
             services: c.status.services.filter(x => x.id === s.id ? v : x.enabled).map(x => x.id)
-          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
+          })} /></div>)}</div>}{c.unsupported && <p className="notice">{p.notes || 'Managed by its source installation.'}</p>}<Feedback p={p} c={c} />{c.open && <GoogleChooser p={p} c={c} />}</>;
   }
   function Detail({
     p,
@@ -530,7 +535,7 @@
               }} items={items} />}<button className="bt" onClick={() => tryNow(p)}><Ic n="chat" s={14} />Try now</button></> : <button className="bt" onClick={() => setDlg({
               t: 'install',
               p
-            })}><Ic n="plus" s={14} />Install plugin</button>}</div></div><p className="sub">{p.description}</p></div>}{!settings && p.id==='youtube' && <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c}/>}</Connection>}{settings ? <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c} />}</Connection> : <><div className="hero">{(A.prompts[brand(p)] || [p.description, p.notes || 'Use the connected account’s available tools.', meta.integration || p.category || 'Explore this plugin']).map((t, i) => <div className="pr" key={i}><Tile p={p} sz={20} i={16} r={4} /><p><b>{p.name}</b> {t}</p><button className="ar" aria-label="Try this prompt" onClick={() => tryNow(p, t)}><Ic n="fwd" s={14} /></button></div>)}</div><p className="ds0">{p.notes || p.description}</p><h2 className="sc">Apps <span>{appItems.length}</span></h2>{appItems.map(a => <div className="sr" role="button" tabIndex={0} key={a.id || a.name} onClick={() => setDlg({
+            })}><Ic n="plus" s={14} />Install plugin</button>}</div></div><p className="sub">{p.description}</p></div>}{!settings && p.id==='youtube' && <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c}/>}</Connection>}{settings ? <Connection key={p.id} p={p}>{c => <Accounts p={p} c={c} />}</Connection> : <><div className="hero">{(A.prompts[brand(p)] || [p.description, p.notes || 'Use the connected account’s available tools.', meta.integration || p.category || 'Explore this plugin']).map((t, i) => <button type="button" className="pr" key={i} onClick={() => tryNow(p, t)} aria-label={`Try ${p.name}: ${t}`}><Tile p={p} sz={20} i={16} r={4} /><span className="pr-text"><b>{p.name}</b> {t}</span><span className="ar" aria-hidden="true"><Ic n="fwd" s={14} /></span></button>)}</div><p className="ds0">{p.notes || p.description}</p><h2 className="sc">Apps <span>{appItems.length}</span></h2>{appItems.map(a => <div className="sr" role="button" tabIndex={0} key={a.id || a.name} onClick={() => setDlg({
           t: 'app',
           p,
           app: a
@@ -920,13 +925,13 @@
           }}>Continue</button></div></> : <Connection p={p}>{c => {
           const connected = !!c.status?.connected,
             provider = p.id.startsWith('app-') ? 'producthunt' : p.id,
-            connect = () => c.status?.configured && !connected && !c.status?.reconnect_required && c.run ? c.run(provider + '.connection.verify') : c.choose ? c.choose() : c.connect?.();
+            connect = () => c.choose ? c.choose() : c.connect?.();
           if(c.anonymous||c.bot||c.apiKey)return <><Accounts p={p} c={c}/>{(c.anonymous||c.apiKey)&&<PublishedTools p={p} c={c}/>}<div className="df"><button className="bs" onClick={close}>Close</button>{!install&&<button className="bs rd" disabled={!canRemove} onClick={()=>setDlg({t:'uninstall',p})}>Uninstall</button>}{install&&<button className="bt" disabled={!connected} onClick={close}>Done</button>}</div></>;
           return <><Setup c={c} p={p} />{install ? <p style={{
               color: 'var(--dim,#BDBDBD)',
               lineHeight: 1.8
             }}>Sign in so Vellum can act on your {p.name} workspace. You can disconnect anytime in settings.</p> : <>
-          <div className="ds"><h3>Connection</h3><div className="ln"><div className="gr"><b>{connected ? 'Workspace connected' : 'Not connected'}</b><span>{connected ? c.status.email || c.status.account_name || 'Vellum can use the authorized workspace.' : 'Connect your account to use its tools.'}</span></div><button className="bs" disabled={c.busy || p.enabled === false || !c.connect && !c.choose || !!c.pending} onClick={connect}>{c.status?.reconnect_required ? 'Sign in with '+p.name : c.status?.configured && !connected && c.run ? 'Verify connection' : 'Reconnect'}</button><button className="bs" disabled={!connected || c.busy || !!c.pending} onClick={() => c.disconnect ? c.disconnect() : c.run?.(provider + '.connection.disconnect')}>Disconnect</button></div></div>
+          <div className="ds"><h3>Connection</h3><div className="ln"><div className="gr"><b>{connected ? 'Workspace connected' : 'Not connected'}</b><span>{connected ? c.status.email || c.status.account_name || 'Vellum can use the authorized workspace.' : 'Connect your account to use its tools.'}</span></div><button className="bs" disabled={c.busy || p.enabled === false || !c.connect && !c.choose || !!c.pending || c.flow?.status === 'pending'} onClick={connect}>{c.status?.configured || connected ? 'Reconnect' : 'Sign in with '+p.name}</button><button className="bs" disabled={!connected || c.busy || !!c.pending} onClick={() => c.disconnect ? c.disconnect() : c.run?.(provider + '.connection.disconnect')}>Disconnect</button></div></div>
           <div className="ds"><h3>Permissions</h3><div className="ln"><div className="gr">Read your {p.name} content</div><span className="tg">Read</span><Sw value={connected} label="Read" disabled onChange={() => {}} /></div><div className="ln"><div className="gr">Create and update items</div><span className="tg">Write</span><Sw value={connected && c.status?.auth_type === 'oauth'} label="Write" disabled onChange={() => {}} /></div><div className="ln"><div className="gr">Delete items</div><span className="pill mute">Provider permissions</span></div></div>
           {(p.skills || []).length > 0 && <div className="ds"><h3>Included</h3>{p.skills.map(s => <div className="ln" key={s.id || s.name}><Ic n="cubeo" /><div className="gr"><b>{name(s)}</b><span>Skill</span></div><Sw value={s.enabled !== false} label={name(s)} disabled={s.read_only || s.owner_plugin || busy} onChange={v => skillAction(v ? 'restore' : 'archive', s)} /></div>)}</div>}
         </>}
@@ -1201,7 +1206,7 @@
       try {
         const receipt = await onPluginState(p.id, value);
         if (receipt?.status !== 'applied') throw Error(receipt?.message || 'Plugin state was not saved.');
-        await onRetry?.();
+        Promise.resolve(onRetry?.()).catch(() => {});
         return true;
       } catch (e) {
         setError(e.message);

@@ -22,6 +22,30 @@ from agent.app_actions.models import AppActionContext, AppActionRequest
 from agent.conversations.lifecycle import ConversationLifecycle
 
 
+def test_cached_conversation_reads_are_isolated_and_notice_external_writes(tmp_path,monkeypatch):
+    import json
+    path=tmp_path/'conversations.json'
+    lifecycle=ConversationLifecycle(path=path)
+    lifecycle.save('one',{'title':'Before','messages':[{'id':'m1','role':'user','text':'hello'}]})
+    calls=[]
+    original=Path.read_text
+    def read(target,*args,**kwargs):
+        if target==path:calls.append(target)
+        return original(target,*args,**kwargs)
+    monkeypatch.setattr(Path,'read_text',read)
+    record=lifecycle.get('one');record['messages'].clear()
+    lifecycle.list()[0]['title']='Caller mutation'
+    assert lifecycle.get('one')['messages']
+    assert lifecycle.get('one')['title']=='Before'
+    assert len(calls)==1
+    payload=json.loads(original(path));payload['conversations'][0]['title']='Externally updated title'
+    path.write_text(json.dumps(payload),encoding='utf-8')
+    assert lifecycle.get('one')['title']=='Externally updated title'
+    assert len(calls)==2
+    lifecycle.save('one',{'title':'Canonical update','messages':[]})
+    assert lifecycle.get('one')['title']=='Canonical update'
+
+
 @pytest.mark.parametrize('blocked_attempts', [2, 6])
 def test_conversation_save_retries_transient_windows_replace_lock(tmp_path, monkeypatch, blocked_attempts):
     target=tmp_path/'conversations.json'
