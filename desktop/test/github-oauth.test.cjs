@@ -4,7 +4,7 @@ const {EventEmitter}=require('node:events');
 const {createDesktopHost}=require('../electron/host.cjs');
 const {workspaceURL}=require('../electron/policy.cjs');
 
-function fixture({openExternal}={}){
+function fixture({openExternal,onWorkspaceClose}={}){
   const instances=[],prompts=[],external=[],workspace=workspaceURL();let invoke;
   class Window extends EventEmitter{
     constructor(options){
@@ -25,12 +25,21 @@ function fixture({openExternal}={}){
   }
   const host=createDesktopHost({BrowserWindow:Window,ipcMain:{handle(channel,fn){if(channel==='vellum:desktop')invoke=fn;}},screen:{},
     dialog:{showMessageBox(_window,options){prompts.push(options);return Promise.resolve({response:0});}},shell:{openExternal(url){external.push(url);return openExternal?openExternal(url):Promise.resolve();}}},
-    {workspace,showWindows:false});
+    {workspace,showWindows:false,onWorkspaceClose});
   const owner=host.openWorkspace();
   return {host,owner,instances,prompts,external,workspace,invoke:(command,args)=>invoke({sender:owner.webContents,senderFrame:owner.webContents.mainFrame},command,args)};
 }
 
-for(const provider of ['github','linear','slack','airtable','notion','firecrawl','apify','exa','tavily','supabase','district','zomato','swiggy','vercel','clickup','asana','hubspot'])test(provider+' OAuth opens the system browser without embedded auth content',async()=>{
+test('closing the workspace invokes its lifecycle owner after removing the window',()=>{
+  let closed=0;
+  const f=fixture({onWorkspaceClose:()=>{closed++;assert.equal(f.host.windows.has('workspace'),false);}});
+  f.host.openControls().close();
+  assert.equal(closed,0);
+  f.owner.close();
+  assert.equal(closed,1);
+});
+
+for(const provider of ['youtube','github','linear','slack','airtable','notion','firecrawl','apify','exa','tavily','supabase','district','zomato','swiggy','vercel','clickup','asana','hubspot'])test(provider+' OAuth opens the system browser without embedded auth content',async()=>{
   const f=fixture();
   const url='http://127.0.0.1:8000/api/plugins/'+provider+'/oauth/open?flow_id='+'a'.repeat(43);
   assert.deepEqual(f.owner.openHandler({url}),{action:'deny'});

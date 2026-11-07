@@ -7,7 +7,7 @@ import secrets
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from agent.contracts.youtube_history import YouTubeHistoryStatus
 from agent.contracts.youtube_tracking import CreatorTrackingSnapshot
@@ -94,6 +94,7 @@ class YouTubeOAuthStartResponse(BaseModel):
     authorization_url: str
     redirect_uri: str
     scopes: list[str]
+    open_url: str = ''
 
 
 class YouTubeSyncRequest(BaseModel):
@@ -116,6 +117,22 @@ async def start_youtube_oauth() -> YouTubeOAuthStartResponse:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.get('/oauth/open')
+def youtube_oauth_open(flow_id: str = Query(min_length=20,max_length=100)):
+    try:
+        flow=youtube_store().pending_flow(flow_id)
+        url=youtube_authorization_url(client_id=get_settings().youtube_oauth_client_id,
+            redirect_uri=str(flow['redirect_uri']),state=flow_id,code_challenge=str(flow['code_challenge']))
+    except (YouTubeAuthError,KeyError):
+        raise HTTPException(410,detail='Start this YouTube connection again from Vellum.') from None
+    return RedirectResponse(url,status_code=303,headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer'})
+
+
+@router.get('/oauth/status')
+def youtube_oauth_status(flow_id: str = Query(min_length=20,max_length=100)):
+    return {'status':youtube_store().flow_status(flow_id)}
+
+
 @router.get("/oauth/callback")
 async def youtube_oauth_callback(
     code: str = "",
@@ -123,22 +140,35 @@ async def youtube_oauth_callback(
     error: str = "",
 ) -> HTMLResponse:
     if error:
+        try:
+            store=youtube_store()
+            store.consume_flow(state)
+            store.save_oauth_result(state,'failed')
+        except YouTubeAuthError:
+            pass
         return _callback_page(False, "YouTube authorization was not completed.", status_code=400)
     if not code:
         return _callback_page(False, "No authorization code was returned.", status_code=400)
+    validated=False
     try:
         store = youtube_store()
         flow = store.consume_flow(state)
+        validated=True
         client = youtube_client(store=store)
-        await asyncio.to_thread(
-            client.exchange_code,
+        exchange_arguments = dict(
             code=code,
             redirect_uri=str(flow["redirect_uri"]),
             code_verifier=str(flow["code_verifier"]),
         )
+        if flow.get('music'):
+            exchange_arguments['music'] = True
+        await asyncio.to_thread(client.exchange_code,**exchange_arguments)
         profile = await asyncio.to_thread(client.get_my_channel)
         await asyncio.to_thread(store.save_profile, profile)
+        await asyncio.to_thread(store.save_oauth_result,state,'complete')
     except (YouTubeAuthError, YouTubeAPIError):
+        if validated:
+            await asyncio.to_thread(store.save_oauth_result,state,'failed')
         return _callback_page(False, "YouTube connection failed. Start the connection again from Vellum.", status_code=400)
     from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
     try:

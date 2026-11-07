@@ -32,6 +32,15 @@ class FakeStore:
     def save_profile(self, profile: dict) -> None:
         self.profile = dict(profile)
 
+    def save_oauth_result(self,state,status):
+        self.result={'state':state,'status':status}
+
+    def pending_flow(self,state):
+        return {'redirect_uri':youtube_api.YOUTUBE_REDIRECT_URI,'code_challenge':'challenge-value'}
+
+    def flow_status(self,state):
+        return getattr(self,'result',{}).get('status','pending')
+
 
 class FakeYouTubeClient:
     def __init__(self) -> None:
@@ -71,6 +80,21 @@ def test_youtube_oauth_start_uses_backend_credentials_without_exposing_secret(mo
     assert response.json()["scopes"] == ["https://www.googleapis.com/auth/youtube.readonly"]
     assert "secret" not in response.text.casefold()
     assert store.flow["code_verifier"] == "verifier-value"
+
+
+def test_youtube_signin_entry_redirects_only_from_a_pending_local_flow(monkeypatch):
+    store=FakeStore()
+    monkeypatch.setattr(youtube_api,'youtube_store',lambda:store)
+    monkeypatch.setattr(youtube_api,'get_settings',lambda:type('Settings',(),{'youtube_oauth_client_id':'client-id'})())
+    monkeypatch.setattr(youtube_api,'youtube_authorization_url',lambda **kwargs:'https://accounts.google.com/oauth?state='+kwargs['state'])
+    client=build_client()
+    flow_id='a'*43
+    response=client.get('/api/plugins/youtube/oauth/open',params={'flow_id':flow_id},follow_redirects=False)
+    assert response.status_code==303
+    assert response.headers['location'].startswith('https://accounts.google.com/')
+    assert client.get('/api/plugins/youtube/oauth/status',params={'flow_id':flow_id}).json()['status']=='pending'
+    store.save_oauth_result(flow_id,'complete')
+    assert client.get('/api/plugins/youtube/oauth/status',params={'flow_id':flow_id}).json()['status']=='complete'
 
 
 def test_youtube_oauth_callback_saves_channel_profile(monkeypatch) -> None:

@@ -5,7 +5,7 @@ const {conversationTarget, trustedWorkspace, validateCommand} = require('./polic
 const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 const {createLocalFiles}=require('./local-files.cjs');
 
-function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'})}) {
+function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = () => Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'}), onWorkspaceClose = () => {}}) {
   const {BrowserWindow, ipcMain, screen, dialog, shell} = electron;
   const windows = new Map();
   const providerAuthSessions = new Map();
@@ -20,7 +20,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     try {
       const target = new URL(value), api = new URL(backend);
       const flowId = target.searchParams.get('flow_id');
-      const provider = /^\/api\/plugins\/(github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|district|zomato|swiggy|vercel|clickup|asana|hubspot)\/oauth\/open$/.exec(target.pathname)?.[1];
+      const provider = /^\/api\/plugins\/(youtube|github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|district|zomato|swiggy|vercel|clickup|asana|hubspot)\/oauth\/open$/.exec(target.pathname)?.[1];
       return target.origin === api.origin && ['127.0.0.1','localhost'].includes(target.hostname) &&
         !target.username && !target.password && !target.hash && provider && target.searchParams.getAll('flow_id').length===1 &&
         [...target.searchParams.keys()].every(key=>key==='flow_id') && /^[A-Za-z0-9_-]{20,100}$/.test(flowId || '') ? {provider,flowId} : null;
@@ -90,7 +90,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
     windows.set(key, win);
     let closing = false;
     win.once('close', () => { closing = true; nativeBrowser?.unmount(win); });
-    win.on('closed', () => windows.delete(key));
+    win.on('closed', () => {windows.delete(key);if(key==='workspace')onWorkspaceClose();});
     win.webContents.on('will-navigate', (event, target) => {
       if (!(key === 'overlay' ? target === overlayURL : trusted(target))) event.preventDefault();
     });
@@ -165,7 +165,7 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
         return localFiles(args);
       }
       case 'workspace_ready': {
-        const state=await workspaceReady;
+        const state=await (typeof workspaceReady==='function'?workspaceReady():workspaceReady);
         return {ready:true,reused:state.reused};
       }
       case 'protected_audio_ready': return await protectedAudioReady;

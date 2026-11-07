@@ -135,9 +135,67 @@ def test_invalid_or_protected_files_do_not_enter_library(library,name,content):
     assert not library.snapshot().collections and not list(library.staging.iterdir())
 
 
-def test_download_has_explicit_rights_argument():
-    with pytest.raises(ValidationError):MusicDownloadRequest(entry_ids=['song'])
+def test_download_supports_current_and_older_clients():
+    MusicDownloadRequest(entry_ids=['song'])
+    MusicImportRequest(url='https://www.youtube.com/watch?v=abcdefghijk',download_mp3=True)
+    MusicDownloadRequest(entry_ids=['song'],permission_confirmed=True)
     with pytest.raises(ValidationError):MusicDownloadRequest(entry_ids=['song'],permission_confirmed=False)
+
+
+@pytest.mark.parametrize(('provider', 'url'), [
+    ('youtube', 'https://music.youtube.com/watch?v=abcdefghijk'),
+    ('spotify', 'https://open.spotify.com/playlist/' + 'A'*22),
+    ('apple_music', 'https://music.apple.com/us/playlist/example/pl.123'),
+])
+def test_link_mp3_waits_for_explicit_import_and_preserves_name(tmp_path, monkeypatch, provider, url):
+    from agent.music_library import ffmpeg_path
+    from mutagen.id3 import ID3
+
+    if not ffmpeg_path():
+        pytest.skip('Optional FFmpeg encoder is unavailable')
+    recording = 'https://www.youtube.com/watch?v=abcdefghijk'
+    entry = MusicSourceEntry(title='A song', artist='An artist', album='An album', duration_ms=1000,
+                             provider=provider, source_id='abcdefghijk', source_url=url)
+    sources = MusicSources()
+    monkeypatch.setattr(sources, 'resolve', lambda _: ('My playlist', [entry], 'complete', ''))
+    monkeypatch.setattr(sources, 'discover', lambda _: [
+        entry.model_copy(update={'provider':'youtube', 'source_url':recording}),
+        entry.model_copy(update={'title':'A song (Live)', 'source_url':'https://www.youtube.com/watch?v=zzzzzzzzzzz'}),
+    ])
+    library = MusicLibrary(tmp_path/'music', sources=sources, start_worker=False)
+    monkeypatch.setattr(library, 'require_mp3_tools', lambda: None)
+
+    def download(source, folder, cancel, *, on_output):
+        assert source == recording
+        on_output(b'vellum-bytes:25:100')
+        job = library.snapshot().jobs[0]
+        assert job.stage == 'downloading' and job.progress == 25
+        path = folder/'audio.wav'
+        path.write_bytes(wav_bytes())
+        # Minimal PNG marker is enough for the existing embedded cover reader.
+        (folder/'audio.png').write_bytes(b'\x89PNG\r\n\x1a\n' + b'fixture')
+        return path
+
+    monkeypatch.setattr(sources, 'download', download)
+    receipt = library.import_playlist(MusicImportRequest(url=url, download_mp3=True, permission_confirmed=True))
+    state = library.snapshot()
+    draft = state.pending_imports[0]
+    assert not state.collections and draft.name == 'My playlist'
+    with pytest.raises(MusicLibraryError, match='downloads to finish'):
+        library.finish_import(receipt['collection_id'])
+    assert library.process_next()
+    state = library.snapshot()
+    assert state.jobs[0].status == 'complete' and state.pending_imports[0].entries[0].available
+    assert library.artwork_path(draft.entries[0].id).is_file()
+    with pytest.raises(MusicLibraryError):
+        library.asset_path(draft.entries[0].id)
+    library.import_playlist(MusicImportRequest(pending_import_id=draft.id))
+    state = library.snapshot()
+    assert not state.pending_imports and state.collections[0].name == 'My playlist'
+    imported_entry = state.collections[0].entries[0]
+    path = library.asset_path(imported_entry.id)
+    assert path.suffix == '.mp3' and imported_entry.audio_source == recording
+    assert imported_entry.artwork_url and str(ID3(path)['TIT2']) == 'A song'
 
 
 def test_jobs_are_idempotent_while_active_and_become_audio_only_after_validation(library):
@@ -264,12 +322,220 @@ def test_tool_never_uses_ambient_config_cookies_or_shell(monkeypatch,tmp_path):
     assert not seen['kwargs'].get('shell')
 
 
+def test_single_audio_download_does_not_use_abort_after_one_flag(tmp_path):
+    class SingleSong(MusicSources):
+        def run_tool(self, args, **kwargs):
+            assert '--no-playlist' in args
+            assert '--max-downloads' not in args
+            (tmp_path/'audio.wav').write_bytes(wav_bytes())
+    result = SingleSong().download('https://www.youtube.com/watch?v=abcdefghijk',tmp_path,Event())
+    assert result.read_bytes() == wav_bytes()
+
+
+def test_youtube_artwork_is_available_before_audio_is_downloaded(library):
+    entry = playlist(library)[0]
+    assert library.snapshot().collections[0].entries[0].artwork_url == 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg'
+
+
+def test_link_conversion_automatically_imports_after_every_song_is_ready(tmp_path,monkeypatch):
+    from agent.music_library import ffmpeg_path
+    if not ffmpeg_path():pytest.skip('Optional encoder unavailable')
+    sources=MusicSources()
+    entry=MusicSourceEntry(title='Song',provider='youtube',source_id='abcdefghijk',source_url='https://www.youtube.com/watch?v=abcdefghijk')
+    monkeypatch.setattr(sources,'resolve',lambda url:('Playlist',[entry,entry],'complete',''))
+    def download(url,directory,cancel,**kwargs):
+        path=directory/'audio.wav'
+        path.write_bytes(wav_bytes())
+        return path
+    monkeypatch.setattr(sources,'download',download)
+    library=MusicLibrary(tmp_path/'music',sources=sources,start_worker=False)
+    library.import_playlist(MusicImportRequest(url=entry.source_url,download_mp3=True,auto_import=True))
+    assert library.process_next()
+    assert len(library.snapshot().pending_imports)==1
+    assert library.process_next()
+    state=library.snapshot()
+    assert not state.pending_imports and len(state.collections)==1
+    assert all(entry.available for entry in state.collections[0].entries)
+
+
+@pytest.mark.parametrize(('suffix','codec'),[('.aiff','pcm_s16be'),('.wma','wmav2'),('.m4a','alac')])
+def test_extra_import_formats_are_normalized_for_browser_playback(tmp_path,library,suffix,codec):
+    import subprocess
+    from agent.music_library import ffmpeg_path
+    encoder=ffmpeg_path()
+    if not encoder:pytest.skip('Optional encoder unavailable')
+    wav=tmp_path/'input.wav'
+    wav.write_bytes(wav_bytes())
+    source=tmp_path/('Clip'+suffix)
+    subprocess.run([encoder,'-nostdin','-hide_banner','-loglevel','error','-i',str(wav),'-c:a',codec,str(source)],check=True)
+    identity=library.import_file(library.stage_file(source.name,source.read_bytes()))['entry_id']
+    assert library.asset_path(identity).suffix=='.flac'
+    assert library.snapshot().collections[0].entries[0].available
+    assert source.is_file()
+
+
+@pytest.mark.parametrize(('url','provider','kind'),[
+    ('https://music.amazon.in/albums/B012345678','amazon_music','album'),
+    ('https://music.amazon.com/albums/B012345678?trackAsin=B987654321','amazon_music','track'),
+    ('https://www.jiosaavn.com/song/leja-re/OQsEfQFVUXk','jiosaavn','track'),
+    ('https://soundcloud.com/artist/sets/playlist','soundcloud','playlist'),
+    ('https://artist.bandcamp.com/album/record','bandcamp','album'),
+])
+def test_named_music_provider_links_are_recognized(url,provider,kind):
+    assert source_link(url)[:2]==(provider,kind)
+
+
+def test_download_workers_run_three_songs_concurrently_without_duplicate_jobs(tmp_path):
+    from threading import Lock
+    sources=Sources()
+    release,three_started=Event(),Event()
+    lock=Lock()
+    active,maximum,calls=0,0,0
+    def download(url,directory,cancel):
+        nonlocal active,maximum,calls
+        with lock:
+            active+=1
+            calls+=1
+            maximum=max(maximum,active)
+            if active==3:three_started.set()
+        release.wait(5)
+        with lock:active-=1
+        path=directory/'audio.wav'
+        path.write_bytes(wav_bytes())
+        return path
+    sources.download=download
+    library=MusicLibrary(tmp_path/'music',sources=sources,start_worker=False)
+    try:
+        library.import_playlist(MusicImportRequest(entries=[
+            MusicSourceEntry(title=f'Song {index}',provider='youtube',source_id='abcdefghijk',source_url='https://www.youtube.com/watch?v=abcdefghijk') for index in range(5)]))
+        entries=library.snapshot().collections[0].entries
+        library.enqueue([entry.id for entry in entries])
+        library._start_worker=True
+        library._ensure_worker()
+        assert three_started.wait(3)
+        release.set()
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            if all(job.status=='complete' for job in library.snapshot().jobs):break
+            time.sleep(.02)
+        assert len(library.snapshot().jobs)==5
+        assert all(job.status=='complete' for job in library.snapshot().jobs)
+        assert calls==5 and maximum==3
+    finally:
+        release.set()
+        library.close()
+    assert all(not thread.is_alive() for thread in library._threads)
+
+
+def test_refresh_adds_new_occurrences_and_preserves_downloaded_audio(library):
+    first,second=playlist(library)
+    library.import_file(library.stage_file('song.wav',wav_bytes()),first.id)
+    group=library.snapshot().collections[0]
+    file=library.asset_path(first.id)
+    original=library.sources.resolve(group.source_url)
+    library.sources.resolve=lambda url:(original[0],original[1]+[original[1][0]],'complete','Refreshed source')
+    assert library.refresh_playlist(group.id)['added']==1
+    updated=library.snapshot().collections[0]
+    assert len(updated.entries)==3
+    assert [entry.id for entry in updated.entries[:2]]==[first.id,second.id]
+    assert library.asset_path(first.id)==file and file.is_file()
+    assert library.refresh_playlist(group.id)['added']==0
+
+
+def test_incomplete_youtube_mix_explains_the_exposed_count(monkeypatch):
+    from unittest.mock import Mock
+    from agent.plugins import youtube_runtime
+    client=Mock()
+    client._api_get.side_effect=[
+        {'items':[]},
+        {'items':[{'snippet':{'title':'Song','resourceId':{'videoId':'abcdefghijk'}}}],'pageInfo':{'totalResults':0}},
+    ]
+    monkeypatch.setattr('agent.plugins.registry.get_plugin_registry',lambda:Mock(is_enabled=lambda name:True))
+    monkeypatch.setattr(youtube_runtime,'youtube_status',lambda:{'connected':True})
+    monkeypatch.setattr(youtube_runtime,'youtube_client',lambda:client)
+    result=MusicSources().youtube_playlist('https://www.youtube.com/playlist?list=RDTMAKabcdefghijk')
+    assert len(result[1])==1 and result[2]=='partial'
+    assert '1 songs' in result[3] and 'Personalized mixes' in result[3]
+
+
+def test_music_import_reads_all_65_tracks_from_the_public_music_api(monkeypatch):
+    from unittest.mock import Mock
+    client=Mock()
+    client.get_playlist.return_value={'title':'Archive Mix','trackCount':65,'tracks':[
+        {'videoId':f'{index:011d}','title':f'Song {index}','artists':[{'name':'Artist'}]} for index in range(65)]}
+    sources=MusicSources()
+    monkeypatch.setattr('ytmusicapi.YTMusic',lambda:client)
+    title,entries,completeness,note=sources.resolve('https://music.youtube.com/playlist?list=RDTMAKabcdefghijk')
+    assert title=='Archive Mix' and len(entries)==65 and completeness=='complete'
+    client.get_playlist.assert_called_once_with('RDTMAKabcdefghijk',limit=5000)
+
+
+def test_music_mix_cannot_silently_import_a_partial_data_api_snapshot(monkeypatch):
+    sources=MusicSources()
+    monkeypatch.setattr(sources,'music_playlist',lambda url:None)
+    monkeypatch.setattr(sources,'youtube_playlist',lambda url:('Archive Mix',[], 'partial','26 songs'))
+    monkeypatch.setattr(sources,'run_tool',lambda *args,**kwargs:(_ for _ in ()).throw(MusicLibraryError('Source unavailable')))
+    assert sources.resolve('https://music.youtube.com/playlist?list=RDTMAKabcdefghijk')[2]=='partial'
+
+
+def test_music_reader_rejects_a_truncated_response_instead_of_claiming_completion(monkeypatch):
+    from unittest.mock import Mock
+    sources=MusicSources()
+    client=Mock()
+    client.get_playlist.return_value={'title':'Mix','trackCount':65,'tracks':[{'videoId':'abcdefghijk','title':'One song'}]}
+    monkeypatch.setattr('ytmusicapi.YTMusic',lambda:client)
+    assert sources.music_playlist('https://music.youtube.com/playlist?list=RDTMAKabcdefghijk') is None
+
+
+def test_removal_keeps_shared_audio_and_preserves_the_current_queue_item(library):
+    first,second = playlist(library)
+    for entry in (first,second):
+        library.import_file(library.stage_file('song.wav',wav_bytes()),entry.id)
+    library.playback(LocalPlaybackRequest(action='play',entry_ids=[first.id,second.id],position=1))
+    library.playback(LocalPlaybackRequest(action='seek',seconds=0.5))
+    shared = library.asset_path(first.id)
+    library.remove(entry_id=first.id)
+    state = library.snapshot().player
+    assert state.queue == [second.id] and state.index == 0 and state.seconds == 0.5
+    assert shared.is_file()
+    assert library.asset_path(second.id) == shared
+    library.remove(collection_id=library.snapshot().collections[0].id)
+    assert not library.snapshot().collections
+    assert not shared.exists()
+    assert not library.snapshot().player.queue
+    assert not library.snapshot().player.playing
+
+
+def test_removing_an_active_download_prevents_audio_from_being_committed(library):
+    entries = playlist(library)
+    library.enqueue([entries[0].id])
+    library.sources.during = lambda: library.remove(entry_id=entries[0].id)
+    assert library.process_next()
+    assert not library.snapshot().jobs
+    assert len(library.snapshot().collections[0].entries) == 1
+    assert not list(library.assets.iterdir())
+    assert not list(library.staging.iterdir())
+
+
+def test_remove_is_typed_idempotent_and_uses_the_existing_action_owner(tmp_path,library):
+    plugins=PluginRegistry(Path(__file__).parents[2]/'plugins',state_path=tmp_path/'plugins.json')
+    runtime=AppActionRuntime(plugin_registry=plugins)
+    runtime.register_plugin_contribution(local_music_contribution(lambda:library))
+    identity=imported(library)
+    request=AppActionRequest(action_id='local_music.remove',arguments={'entry_id':identity})
+    assert runtime.dispatch(request,AppActionContext(source='ui')).status == 'applied'
+    assert not library.snapshot().collections[0].entries
+    assert library.remove(entry_id=identity)['changed'] is False
+    with pytest.raises(MusicLibraryError):
+        library.remove()
+
+
 @pytest.mark.parametrize('failure',['access','unavailable','auth'])
 def test_spotify_import_uses_same_public_fallback_without_hiding_auth_failure(monkeypatch,failure):
     from unittest.mock import Mock
     from plugins.connectors.spotify.errors import SpotifyAccessDenied,SpotifyResourceUnavailable,SpotifyAuthError
     from agent.plugins import spotify_runtime
-    from agent.plugins.spotify_runtime import spotify_public_playlist as public_playlist
+    from plugins.connectors.spotify import public_playlist
     client=Mock();client.request.side_effect=[{'name':'My playlist'}, {'access':SpotifyAccessDenied,'unavailable':SpotifyResourceUnavailable,'auth':SpotifyAuthError}[failure]('Denied')]
     monkeypatch.setattr('agent.plugins.registry.get_plugin_registry',lambda:Mock(is_enabled=lambda name:True))
     monkeypatch.setattr(spotify_runtime,'spotify_client',lambda:client)

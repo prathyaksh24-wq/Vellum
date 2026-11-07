@@ -1733,6 +1733,9 @@ async def lifespan(app: FastAPI):
         if close is not None:
             await close()
         await close_voice_session()
+        from agent.music_library import get_music_library
+        if get_music_library.cache_info().currsize:
+            await asyncio.to_thread(get_music_library().close)
         await browser_shutdown_async()
         if _memory_orchestrator.provider_extensions is not None:
             await asyncio.to_thread(_memory_orchestrator.provider_extensions.shutdown)

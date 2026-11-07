@@ -54,11 +54,15 @@ locations. No browser profile is copied or deleted. Electron maintains a
 separate workspace session, so device settings in a regular Brave/WebView2
 profile are not automatically imported. The regular web UI remains supported.
 
-Closing the packaged app's last window leaves Vellum in the system tray, with
-its backend and automation scheduler running. Open it again from the tray or
-launch the app again. **Quit Vellum** gracefully stops a backend this app started;
-it never terminates a backend that was already running independently. The
-development launcher continues to reuse the separately started services.
+Closing the main workspace quits Vellum, stops its development watcher, and
+gracefully shuts down the backend it started, including music downloads.
+Minimizing keeps the workspace and background tasks running.
+
+`scripts/start-desktop.ps1` and `npm run dev` build the current desktop UI and
+watch workspace source changes. Successful UI builds reload the workspace window
+on port 5184. Backend edits restart an API owned by Electron, and changes to
+Electron shell code or assets relaunch the app. Quit any separately started
+Vellum API before starting desktop development if you want API auto-reload.
 
 ## Verification
 

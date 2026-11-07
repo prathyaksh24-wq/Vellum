@@ -104,7 +104,7 @@ class YouTubeClient:
         self.timeout_seconds = timeout_seconds
         self.clock = clock
 
-    def exchange_code(self, *, code: str, redirect_uri: str, code_verifier: str) -> dict[str, Any]:
+    def exchange_code(self, *, code: str, redirect_uri: str, code_verifier: str, music: bool = False) -> dict[str, Any]:
         if not self.client_id or not code or not redirect_uri or not code_verifier:
             raise YouTubeAuthError("YouTube token exchange configuration is incomplete")
         payload = {
@@ -118,7 +118,10 @@ class YouTubeClient:
             payload["client_secret"] = self.client_secret
         tokens = self._request_json("POST", TOKEN_URL, data=payload, auth_error=True)
         granted_scopes = set(str(tokens.get("scope") or "").split())
-        if not set(DEFAULT_SCOPES).issubset(granted_scopes):
+        music_granted = 'https://www.googleapis.com/auth/youtube' in granted_scopes
+        if music and not music_granted:
+            raise YouTubeAuthError('YouTube Music account permission was not granted')
+        if not music_granted and not set(DEFAULT_SCOPES).issubset(granted_scopes):
             raise YouTubeAuthError("YouTube read-only permission was not granted")
         tokens["expires_at"] = self.clock() + max(0, int(tokens.get("expires_in") or 0))
         return self.store.save_tokens(tokens)

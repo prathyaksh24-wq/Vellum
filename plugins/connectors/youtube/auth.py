@@ -142,7 +142,7 @@ class YouTubeAuthStore:
     def save_flow(self, payload: dict[str, Any]) -> None:
         self._atomic_write(self.flow_path, payload)
 
-    def consume_flow(self, state: str, *, max_age_seconds: int = 600) -> dict[str, Any]:
+    def pending_flow(self, state: str, *, max_age_seconds: int = 600) -> dict[str, Any]:
         if not self.flow_path.exists():
             raise YouTubeAuthError("YouTube authorization state is missing")
         flow = self._read_json(self.flow_path, "YouTube authorization state is unreadable")
@@ -152,8 +152,27 @@ class YouTubeAuthStore:
             raise YouTubeAuthError("YouTube authorization state expired")
         if not state or not secrets.compare_digest(str(flow.get("state") or ""), state):
             raise YouTubeAuthError("YouTube authorization state did not match")
+        return flow
+
+    def consume_flow(self, state: str, *, max_age_seconds: int = 600) -> dict[str, Any]:
+        flow=self.pending_flow(state,max_age_seconds=max_age_seconds)
         self.flow_path.unlink(missing_ok=True)
         return flow
+
+    def save_oauth_result(self, state: str, status: str) -> None:
+        metadata=self.load_metadata()
+        metadata.update(oauth_state_hash=hashlib.sha256(state.encode()).hexdigest(),oauth_status=status,oauth_finished_at=time.time())
+        self._atomic_write(self.metadata_path,metadata)
+
+    def flow_status(self, state: str) -> str:
+        metadata=self.load_metadata()
+        if metadata.get('oauth_state_hash')==hashlib.sha256(state.encode()).hexdigest() and time.time()-metadata.get('oauth_finished_at',0)<600:
+            return str(metadata.get('oauth_status') or 'expired')
+        try:
+            self.pending_flow(state)
+            return 'pending'
+        except YouTubeAuthError:
+            return 'expired'
 
     def clear(self) -> None:
         try:

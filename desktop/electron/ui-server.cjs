@@ -8,11 +8,11 @@ const types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
   '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf'};
 
-async function serveUI(root, port = 5173) {
-  const absolute = path.resolve(root);
+async function serveUI(root, port = 5173, currentRoot = () => root) {
   const server = http.createServer(async (req, res) => {
     if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
     try {
+      const absolute = path.resolve(currentRoot());
       let route = decodeURIComponent((req.url || '/').split('?')[0]);
       if (route.startsWith('/design-uploads/')) route = route.slice('/design-uploads'.length);
       if (route === '/') route = '/Vellum Default Re-designed.html';

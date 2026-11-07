@@ -91,11 +91,13 @@ Typical Windows startup:
 
 This starts the local Honcho stack, the API through `scripts/start-api.ps1`, then the Vite UI. Use `-SkipHoncho` only when intentionally running with SQLite/FTS5 fallback memory.
 
-Desktop startup uses the same services and opens the workspace in Electron:
+Desktop development opens Electron with automatic source reload:
 
 ```powershell
 .\scripts\start-desktop.ps1
 ```
+
+UI edits rebuild and reload the workspace; backend edits restart an API owned by Electron. Desktop shell edits relaunch it. Closing the main window quits the app and its owned backend; minimize it to keep tasks running.
 
 Rust and Microsoft C++ Build Tools are not required for the desktop shell.
 See [Desktop development and packaging](docs/desktop.md) for checks and the

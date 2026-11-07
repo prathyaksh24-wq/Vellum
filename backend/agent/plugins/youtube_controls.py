@@ -84,15 +84,18 @@ class YouTubeControlService:
             "code_verifier": verifier,
             "redirect_uri": YOUTUBE_REDIRECT_URI,
             "created_at": time.time(),
+            "code_challenge": challenge,
         })
-        url = self._authorization_url_provider(
+        authorization_args = dict(
             client_id=settings.youtube_oauth_client_id,
             redirect_uri=YOUTUBE_REDIRECT_URI,
             state=state,
             code_challenge=challenge,
         )
+        url = self._authorization_url_provider(**authorization_args)
         return {
             "authorization_url": url,
+            "open_url": "http://127.0.0.1:8000/api/plugins/youtube/oauth/open?flow_id="+state,
             "redirect_uri": YOUTUBE_REDIRECT_URI,
             "scopes": ["https://www.googleapis.com/auth/youtube.readonly"],
         }

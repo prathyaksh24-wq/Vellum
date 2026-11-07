@@ -62,12 +62,12 @@
 <script type="text/babel" data-presets="react" src="components/browser-settings.jsx"></script>
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js?v=20261029-shared-select6"></script>
-<script src="api/local-music.js?v=20261029-shared-select6"></script>
+<script src="api/local-music.js?v=20261107-mp3"></script>
 <script src="components/local-music-playback.js"></script>
-<script type="text/babel" data-presets="react" src="components/local-music.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/local-music.jsx?v=20261107-mp3"></script>
 <script src="components/spotify-playback.js"></script>
-<link rel="stylesheet" href="components/music-page.css?v=20261030-vellum-polish"/>
-<script type="text/babel" data-presets="react" src="components/music-page.jsx?v=20261030-vellum-polish"></script>
+<link rel="stylesheet" href="components/music-page.css?v=20261107-mp3"/>
+<script type="text/babel" data-presets="react" src="components/music-page.jsx?v=20261107-mp3"></script>
 <script src="api/automations.js"></script>
 <link rel="stylesheet" href="components/automation-notifications.css"/>
 <script type="text/babel" data-presets="react" src="components/automation-notifications.jsx"></script>
@@ -5110,7 +5110,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOp
     try {
       const receipt = await onAction('youtube.connection.start', {}, {suppressClientEffect:true});
       if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'Could not start YouTube authorization.');
-      const authorizationUrl = receipt.result && receipt.result.connection && receipt.result.connection.authorization_url;
+      const authorizationUrl = receipt.result && receipt.result.connection && (receipt.result.connection.open_url || receipt.result.connection.authorization_url);
       if (!authorizationUrl) throw new Error('YouTube authorization URL is unavailable.');
       if (popup) popup.location.href = authorizationUrl;
       else window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
@@ -8765,7 +8765,16 @@ const App = () => {
   const dockLocked = !!deviceSettings.values.dock_locked;
   const setDockPosition = value => dispatchDeviceSettings({dock_position:value});
   const setDockLocked = value => dispatchDeviceSettings({dock_locked:!!value});
-  const [view, setView] = useState(() => appViewFromLocation() || 'chat');
+  const [view, setView] = useState(() =>
+    appViewFromLocation() || (window.history.state?.vellumMusicView ? 'music' : 'chat'));
+  React.useLayoutEffect(() => {
+    const state = window.history.state;
+    const musicView = view === 'music';
+    if (musicView === Boolean(state?.vellumMusicView)) return;
+    const next = {...state, vellumMusicView:musicView};
+    if (!musicView) delete next.vellumMusicProvider;
+    window.history.replaceState(next, '');
+  }, [view]);
   useEffect(()=>{dismissSidebarPreview();},[view,settingsOpen]);
 
   const browserPanelVisible = browserFeature && rightPanelVisible && workspaceLayout.surfaces['right-panel'].properties.content === 'browser' && !(desktopWorkspace && view === 'apps');
@@ -9151,12 +9160,12 @@ const [slashSkills, setSlashSkills] = useState([]);
           conversationData.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
           try {
             const requestedChatId = new URLSearchParams(window.location.search).get('conversation_id');
-            if (navigationEpochRef.current !== startupNavigationEpoch) {
-              // A user started or opened a chat while startup data was loading.
+            if (navigationEpochRef.current !== startupNavigationEpoch || window.history.state?.vellumMusicView) {
+              // Startup must respect navigation and a restored Music view.
             } else if (requestedChatId && conversationData.conversations.some(c => c.id === requestedChatId)) {
               // Explicit deep links load that chat; ordinary reloads stay home.
               const opened=await API.conversations.get(requestedChatId);
-              if(alive && navigationEpochRef.current===startupNavigationEpoch && opened?.conversation) {
+              if(alive && navigationEpochRef.current===startupNavigationEpoch && !window.history.state?.vellumMusicView && opened?.conversation) {
                 setChats(current=>current.map(chat=>chat.id===requestedChatId?{...opened.conversation,history_loaded:true}:chat));
                 setView('chat');setActiveChatId(requestedChatId);
               }
@@ -9310,6 +9319,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       return;
     }
     const next = APP_VIEW_IDS.has(v) ? v : '404';
+    if (next === 'music') navigationEpochRef.current += 1;
     if (next === '404') {
       try {
         const url = new URL(window.location.href);
@@ -10360,7 +10370,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:memory-changed')), 0);
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'youtube.connection.start' && options.suppressClientEffect !== true) {
-        const url = receipt.result && receipt.result.connection && receipt.result.connection.authorization_url;
+        const url = receipt.result && receipt.result.connection && (receipt.result.connection.open_url || receipt.result.connection.authorization_url);
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'youtube.connection.disconnect') {
