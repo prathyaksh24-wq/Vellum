@@ -51,7 +51,9 @@ describe('quiet workspace transitions', () => {
     const conversation = {id:'save-test',messages:[{role:'user',text:'hide sidebar'}]};
     const save = vi.fn(async () => {throw new Error('file locked');});
     const notify = vi.fn(), refresh = vi.fn(), warn = vi.fn();
-    const handler = new Function('FEATURE_FLAGS','API','scheduleConversationLibraryRefresh','pushToast','console',`return (${code});`)({realConversations:true},{conversations:{save}},refresh,notify,{warn});
+    const handler = new Function('FEATURE_FLAGS','API','scheduleConversationLibraryRefresh','pushToast','console','closingSideChats','sideChatSaves','isSideChat',`return (${code});`)(
+      {realConversations:true},{conversations:{save}},refresh,notify,{warn},
+      {current:new Set()},{current:new Map()},()=>false);
     await handler(conversation);
     expect(save).toHaveBeenCalledWith(conversation);
     expect(conversation.messages[0].text).toBe('hide sidebar');

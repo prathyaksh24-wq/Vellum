@@ -6,7 +6,7 @@ const commands=Object.freeze([
   command('commands.open','Search commands and chats','App',['Ctrl+K','Ctrl+Shift+P'],{allowOverlay:true,editingKeys:['Ctrl+K'],nativeKeys:['Ctrl+Shift+P']}),
   command('settings.open','Open Settings','App',['Ctrl+Comma']),
   command('shortcuts.open','Keyboard shortcuts','App',['Ctrl+Slash'],{allowOverlay:true}),
-  command('sidebar.toggle','Toggle sidebar','Navigation',['Ctrl+B'],{requires:'sidebar',editingKeys:['Ctrl+B']}),
+  command('sidebar.toggle','Toggle sidebar','Navigation',['Ctrl+B'],{requires:'sidebar',editingKeys:['Ctrl+B'],nativeKeys:[]}),
   command('history.back','Back in app history','Navigation',['Ctrl+BracketLeft'],{native:false,editingKeys:['Ctrl+BracketLeft']}),
   command('history.forward','Forward in app history','Navigation',['Ctrl+BracketRight'],{native:false,editingKeys:['Ctrl+BracketRight']}),
   command('chat.rename','Rename chat','Chats',['Ctrl+Alt+R'],{requires:'chat'}),

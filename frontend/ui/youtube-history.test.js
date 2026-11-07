@@ -118,8 +118,8 @@ test.each([false,true])('sidebar opens explicitly and a dismissal cancels a pend
   let resolveStatus;
   const refresh = vi.fn().mockImplementationOnce(()=>new Promise(resolve=>{resolveStatus=resolve;})).mockResolvedValue({running:true});
   const control = vi.fn(async()=>({status:'applied'})), present = vi.fn(async()=>({status:'applied'})), epoch = {current:0};
-  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast','applyAppActionReceipt','commandWorkspaceBrowser',
-    "return async ({mode='split',newTab=false,throwOnError=false}={})=>{" + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn(),vi.fn(),vi.fn());
+  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast','applyAppActionReceipt','commandWorkspaceBrowser','desktopWorkspace','view','nav',
+    "return async ({mode='split',newTab=false,initialUrl='',throwOnError=false}={})=>{" + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn(),vi.fn(),vi.fn(),false,'chat',vi.fn());
   const pending = open();
   expect(present).not.toHaveBeenCalled();
   if (cancelled) epoch.current += 1;

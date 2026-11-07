@@ -458,13 +458,26 @@ def test_incomplete_youtube_mix_explains_the_exposed_count(monkeypatch):
     assert '1 songs' in result[3] and 'Personalized mixes' in result[3]
 
 
-def test_music_import_reads_all_65_tracks_from_the_public_music_api(monkeypatch):
+@pytest.fixture
+def public_music_client(monkeypatch):
+    import sys
+    from importlib.machinery import ModuleSpec
+    from types import ModuleType
     from unittest.mock import Mock
-    client=Mock()
+
+    client = Mock()
+    module = ModuleType("ytmusicapi")
+    module.__spec__ = ModuleSpec("ytmusicapi", loader=None)
+    module.YTMusic = Mock(return_value=client)
+    monkeypatch.setitem(sys.modules, "ytmusicapi", module)
+    return client
+
+
+def test_music_import_reads_all_65_tracks_from_the_public_music_api(public_music_client):
+    client=public_music_client
     client.get_playlist.return_value={'title':'Archive Mix','trackCount':65,'tracks':[
         {'videoId':f'{index:011d}','title':f'Song {index}','artists':[{'name':'Artist'}]} for index in range(65)]}
     sources=MusicSources()
-    monkeypatch.setattr('ytmusicapi.YTMusic',lambda:client)
     title,entries,completeness,note=sources.resolve('https://music.youtube.com/playlist?list=RDTMAKabcdefghijk')
     assert title=='Archive Mix' and len(entries)==65 and completeness=='complete'
     client.get_playlist.assert_called_once_with('RDTMAKabcdefghijk',limit=5000)
@@ -478,12 +491,10 @@ def test_music_mix_cannot_silently_import_a_partial_data_api_snapshot(monkeypatc
     assert sources.resolve('https://music.youtube.com/playlist?list=RDTMAKabcdefghijk')[2]=='partial'
 
 
-def test_music_reader_rejects_a_truncated_response_instead_of_claiming_completion(monkeypatch):
-    from unittest.mock import Mock
+def test_music_reader_rejects_a_truncated_response_instead_of_claiming_completion(public_music_client):
     sources=MusicSources()
-    client=Mock()
+    client=public_music_client
     client.get_playlist.return_value={'title':'Mix','trackCount':65,'tracks':[{'videoId':'abcdefghijk','title':'One song'}]}
-    monkeypatch.setattr('ytmusicapi.YTMusic',lambda:client)
     assert sources.music_playlist('https://music.youtube.com/playlist?list=RDTMAKabcdefghijk') is None
 
 
@@ -535,7 +546,7 @@ def test_spotify_import_uses_same_public_fallback_without_hiding_auth_failure(mo
     from unittest.mock import Mock
     from plugins.connectors.spotify.errors import SpotifyAccessDenied,SpotifyResourceUnavailable,SpotifyAuthError
     from agent.plugins import spotify_runtime
-    from plugins.connectors.spotify import public_playlist
+    public_playlist = spotify_runtime.spotify_public_playlist
     client=Mock();client.request.side_effect=[{'name':'My playlist'}, {'access':SpotifyAccessDenied,'unavailable':SpotifyResourceUnavailable,'auth':SpotifyAuthError}[failure]('Denied')]
     monkeypatch.setattr('agent.plugins.registry.get_plugin_registry',lambda:Mock(is_enabled=lambda name:True))
     monkeypatch.setattr(spotify_runtime,'spotify_client',lambda:client)

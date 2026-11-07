@@ -164,7 +164,7 @@ def test_user_closing_last_tab_ends_owned_session(monkeypatch):
     async def check():
         browser = DedicatedBrowser()
         browser.context = object()
-        browser._pages = {'only':object()}
+        browser._pages = {'only':SimpleNamespace(url='https://example.com/')}
         closed = []
         async def close():
             closed.append(True)
