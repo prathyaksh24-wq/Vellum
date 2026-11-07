@@ -26,6 +26,7 @@ try {
 let host,root,Center,History,Trigger,onAction,onPing,notifications,snapshot;
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-11T02:00:00Z')); globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal('ResizeObserver',class {observe() {} disconnect() {}});
   host=document.createElement('div'); document.body.append(host); root=createRoot(host);
   snapshot={items:[],unread_count:0}; notifications=vi.fn(async () => snapshot);
   window.VellumApi={plugins:{capabilities:vi.fn(async () => ({features:{automation_notifications:{enabled:true}}}))},automations:{notifications}};
@@ -34,7 +35,7 @@ beforeEach(() => {
   ({AutomationNotificationCenter:Center,AutomationRunHistory:History,NotificationTrigger:Trigger}=window.VellumAutomationNotifications);
   onAction=vi.fn(async () => ({status:'applied'})); onPing=vi.fn();
 });
-afterEach(async () => {await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.restoreAllMocks();});
+afterEach(async () => {await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals();});
 function Harness(props) {
   const [state,setState]=React.useState({unread:0,open:false});
   return React.createElement(React.Fragment,null,
