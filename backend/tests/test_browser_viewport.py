@@ -402,7 +402,8 @@ def test_browser_stream_origin(origin, expected):
 
 
 def test_stream_rejects_remote_origins_and_never_dispatches_input(monkeypatch):
-    from fastapi import FastAPI
+    from threading import Event
+    from fastapi import FastAPI, WebSocket
     from fastapi.testclient import TestClient
     from starlette.websockets import WebSocketDisconnect
     from agent.contracts.browser import BrowserFrame
@@ -414,13 +415,26 @@ def test_stream_rejects_remote_origins_and_never_dispatches_input(monkeypatch):
             data_url='data:image/jpeg;base64,Zml4dHVyZQ==')
     monkeypatch.setattr(browser_api,'browser_session',frame)
     app = FastAPI()
-    app.include_router(browser_api.router,prefix='/api')
+    stream_finished = Event()
+
+    @app.websocket('/api/browser/stream')
+    async def stream(socket: WebSocket):
+        try:
+            await browser_api.stream(socket)
+        finally:
+            stream_finished.set()
+
     with TestClient(app) as client:
         with pytest.raises(WebSocketDisconnect) as rejected:
             with client.websocket_connect('/api/browser/stream',headers={'origin':'https://evil.example'}):
                 pass
         assert rejected.value.code == 1008 and calls == []
+        stream_finished.clear()
         with client.websocket_connect('/api/browser/stream',headers={'origin':'http://localhost:5173'}) as socket:
             assert socket.receive_json()['tab_id'] == 'tab'
             socket.send_text('{"operation":"type","text":"ignored"}')
+            socket.close()
+            # TestClient cancels its ASGI task on context exit. Let the real
+            # disconnect path finish first, and fail if it leaks stream tasks.
+            assert stream_finished.wait(timeout=2), 'Browser stream did not stop after disconnect'
         assert calls and set(calls) == {'frame'}
