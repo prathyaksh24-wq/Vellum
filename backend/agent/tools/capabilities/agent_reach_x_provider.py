@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextvars import ContextVar
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -91,15 +91,16 @@ class AgentReachXProvider:
         self.runner = runner or subprocess.run
         self.sleeper = sleeper or time.sleep
 
-    def status(self) -> PluginStatus:
+    def status(self, *, probe: bool = True) -> PluginStatus:
         twitter_env = self._twitter_subprocess_env()
-        with self._CLI_LOCK:
+        with self._CLI_LOCK if probe else nullcontext():
             return agent_reach_plugin_status(
                 agent_reach_bin=self.agent_reach_bin,
                 twitter_cli_bin=self.twitter_cli_bin,
                 timeout_seconds=min(self.timeout_seconds, 8.0),
                 twitter_env=twitter_env,
                 trust_configured_credentials=True,
+                probe=probe,
             )
 
     def health(self, *, probe_search: bool = False) -> dict[str, Any]:

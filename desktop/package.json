@@ -8,7 +8,7 @@
   "author": "Vellum",
   "engines": {"node": ">=22.12.0"},
   "scripts": {
-    "dev": "node scripts/start.cjs .",
+    "dev": "node scripts/start.cjs --watch .",
     "start": "node scripts/start.cjs .",
     "build": "node scripts/build-ui.cjs",
     "build:backend": "node scripts/build-backend.cjs",

@@ -110,6 +110,40 @@ def test_read_path_cannot_execute_provider_writes(service):
         adapter.read(GitHubMcpOperation(tool_name="issue_write", arguments={"method": "create", "owner": "org", "repo": "repo", "title": "Title"}))
 
 
+def test_supported_cli_read_does_not_depend_on_mcp_catalog(service, monkeypatch):
+    from agent.plugins import github_mcp
+
+    def unavailable(*args, **kwargs):
+        raise AssertionError('A successful CLI read should not load the MCP catalog')
+
+    async def cli(action, arguments, **kwargs):
+        assert action == 'get_pull_request'
+        assert arguments == {'owner': 'org', 'repo': 'repo', 'pull_number': 7}
+        return '{"number":7,"state":"open"}'
+
+    monkeypatch.setattr(service, 'catalog', unavailable)
+    monkeypatch.setattr(github_mcp.github_cli, 'run', cli)
+    operation = GitHubMcpOperation(tool_name='pull_request_read',
+        arguments={'method': 'get', 'owner': 'org', 'repo': 'repo', 'pullNumber': 7})
+    assert GitHubMcpAdapter(service, SimpleNamespace()).read(operation) == '{"number":7,"state":"open"}'
+
+
+def test_failed_mcp_catalog_reports_a_confirmed_revoked_grant(service, monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise GitHubConnectionError('MCP unavailable')
+
+    monkeypatch.setattr(service, '_catalog', unavailable)
+    monkeypatch.setattr(service, 'request', lambda *args, **kwargs: SimpleNamespace(status_code=401))
+    with pytest.raises(GitHubConnectionError, match='Reconnect GitHub'):
+        service.catalog(refresh=True)
+    status = service.status()
+    assert status.configured and not status.connected
+    assert status.status == 'reauthorization_required'
+    assert service.load()['revision'] == 'generation-one'
+    with pytest.raises(GitHubConnectionError, match='Reconnect GitHub'):
+        service.require()
+
+
 def test_ambiguous_cli_write_never_reaches_mcp(service, tmp_path, monkeypatch):
     from agent.mcp.plugin_approvals import PluginMcpApprovalStore
     from agent.plugins import github_mcp

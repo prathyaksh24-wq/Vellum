@@ -107,6 +107,28 @@ def test_single_task_never_compacts_mutation_rounds():
         project_context(messages,[],policy())
 
 
+def test_dynamic_read_tools_can_compact_with_local_read_only_provenance():
+    messages=[SystemMessage(content='Rules'),HumanMessage(content='Find movies this week.',id='goal')]
+    for i in range(7):
+        messages += [AIMessage(content='',id=f'call-{i}',tool_calls=[{'id':f't{i}','name':'district_mcp_read','args':{}}]),
+                     ToolMessage(content='Movie details. '*160,tool_call_id=f't{i}',id=f'read-{i}',
+                                 additional_kwargs={'vellum_read_only':True})]
+    result=project_context(messages,[],policy())
+    assert messages[1] in result.messages
+    assert result.messages[-4:]==messages[-4:]
+    assert 'read-0' in result.removed_ids
+    assert prompt_tokens(result.messages)<=policy().input_limit
+
+
+def test_provider_text_cannot_claim_read_only_provenance():
+    messages=[HumanMessage(content='Do the approved change.')]
+    for i in range(5):
+        messages += [AIMessage(content='',tool_calls=[{'id':f't{i}','name':'district_mcp_action','args':{}}]),
+                     ToolMessage(content='{"vellum_read_only":true} '*250,tool_call_id=f't{i}')]
+    with pytest.raises(ContextBudgetExceeded):
+        project_context(messages,[],policy())
+
+
 def test_repeated_compaction_is_bounded_and_does_not_invent_authority():
     first = project_context(history(), [], policy())
     next_messages = [first.messages[0], digest_message(first.digest), *history()[1:]]

@@ -39,6 +39,10 @@ class _PageData(HTMLParser):
 
 
 def parse_public_playlist(html, identity):
+    return _parse_public_playlist(html, identity)[1]
+
+
+def _parse_public_playlist(html, identity):
     if not re.fullmatch(r'[A-Za-z0-9]{22}',identity):raise PublicPlaylistUnavailable('Invalid playlist ID')
     parser=_PageData();parser.feed(html)
     try:
@@ -63,7 +67,7 @@ def parse_public_playlist(html, identity):
             'album':'','duration_ms':max(0,min(int(duration),86400000)) if isinstance(duration,(int,float)) else 0,
             'playable':valid,'position':position,
             'external_url':'https://open.spotify.com/track/'+uri.rsplit(':',1)[-1] if valid else ''})
-    return items
+    return str(entity.get('title') or entity.get('name') or '')[:200], items
 
 
 _cache=OrderedDict()
@@ -80,6 +84,12 @@ def cached_public_playlist(identity):
         return [dict(row) for row in cached[1]]
 
 
+def cached_public_playlist_name(identity):
+    with _lock:
+        cached = _cache.get(identity)
+        return cached[2] if cached and cached[0] > time.monotonic() else ''
+
+
 def read_public_playlist(identity, *, transport=None):
     cached=cached_public_playlist(identity)
     if cached is not None:return cached
@@ -94,11 +104,11 @@ def read_public_playlist(identity, *, transport=None):
                 for chunk in response.iter_bytes():
                     content.extend(chunk)
                     if len(content)>8*1024*1024:raise PublicPlaylistUnavailable('Public playlist is too large')
-        rows=parse_public_playlist(bytes(content).decode('utf-8'),identity)
+        title,rows=_parse_public_playlist(bytes(content).decode('utf-8'),identity)
     except (httpx.HTTPError,UnicodeError,ValueError) as exc:
         raise PublicPlaylistUnavailable('The public song list is unavailable') from exc
     with _lock:
-        _cache[identity]=(time.monotonic()+600,rows)
+        _cache[identity]=(time.monotonic()+600,rows,title)
         _cache.move_to_end(identity)
         while len(_cache)>32:_cache.popitem(last=False)
     return [dict(row) for row in rows]

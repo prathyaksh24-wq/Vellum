@@ -33,6 +33,7 @@ from agent.plugins.spotify_runtime import portable_agent_tools
 from agent.skills import (
     SkillRegistry,
     build_skill_activation_block,
+    build_skill_index_block,
     get_skill_registry,
 )
 from agent.tools.tool_search import (
@@ -82,10 +83,9 @@ from agent.tools.library_docs import library_docs
 from agent.tools.llm_routing import llm_routing
 from agent.tools.knowledge_wiki import knowledge_wiki
 from agent.tools.memory_orchestrator import memory_orchestrator
-from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
-from agent.tools.plugin_mcp import plugin_mcp
+from agent.tools.plugin_mcp import plugin_mcp, plugins_list, plugin_route_names
 from agent.tools.product_hunt import product_hunt
 from agent.tools.google_workspace import google_api_describe, published_google_tools, google_workspace_read
 from agent.tools.skill_bundles import skill_bundles
@@ -247,8 +247,12 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
         memory_block = ""
 
     skill_activation = ""
+    system_skill_index = ""
     try:
         specialist_skills = get_agent_catalog().specialist_skill_ids()
+        system_skill_index = build_skill_index_block(
+            _prompt_skill_registry, excluded_skills=specialist_skills,
+        )
         skill_activation = build_skill_activation_block(
             _latest_user_query(state),
             _prompt_skill_registry,
@@ -282,6 +286,20 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
     if active_model.tool_calling_compatibility == "unsupported":
         runtime_text += " The selected model advertises no tool support; do not claim tool access for this turn."
     sections = [VELLUM_SYSTEM_PROMPT, runtime_text]
+    selected_plugins, _ = plugin_route_names(_latest_user_query(state), state.get('messages', []), set())
+    if selected_plugins:
+        sections.append('## Requested integrations\n'
+            'The current request names or selects these registered plugins: ' +
+            json.dumps([{'id': row['id'], 'name': row['name'], 'enabled': row['enabled'],
+                         'installed': row.get('installed', True),
+                         'connectors': [str(c.get('name') or c.get('id') or '') for c in row.get('mcp_connectors', [])]}
+                        for row in selected_plugins]) +
+            '\nUse their available catalog/read tools first. Use plugins_list for local connection state and tool_search for other tools. '
+            'A hidden schema or absent specialist does not mean the integration is absent. If connection or provider tools fail, '
+            'report the observed failure; ask before substituting web search for the explicitly requested integration. '
+            'Selection does not grant permissions or approve writes. Summarize the observed result in plain language unless the user requests a structured format.')
+        if any(row['id'] == 'github' for row in selected_plugins):
+            sections.append('For common GitHub reads such as a known pull request, issue, commit, or file, call github_read directly. Use github_mcp_catalog and github_mcp_describe for operations outside that tool.')
     from agent.plugins.google_workspace import google_connection_context
     try:
         google_context = google_connection_context()
@@ -322,6 +340,8 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
         sections.append(specialist_directory)
     if skill_activation:
         sections.append(skill_activation)
+    if system_skill_index:
+        sections.append(system_skill_index)
     evidence = []
     if identity or memory_block:
         evidence.append(
@@ -456,7 +476,6 @@ def core_tool_registry() -> ToolRegistry:
         "browser_action",
         "github_write",
         "git_action",
-        "obsidian_api",
         "llm_routing",
         "knowledge_wiki",
         "memory_orchestrator",
@@ -513,7 +532,6 @@ def core_tool_registry() -> ToolRegistry:
         github_read,
         github_write,
         git_action,
-        obsidian_api,
         library_docs,
         llm_routing,
         knowledge_wiki,
@@ -528,6 +546,7 @@ def core_tool_registry() -> ToolRegistry:
         skill_hub,
         repo_docs,
         plugin_mcp,
+        plugins_list,
         product_hunt,
         google_workspace_read,
         google_api_describe,
@@ -543,6 +562,10 @@ def core_tool_registry() -> ToolRegistry:
     # BrowserAgent owns browser tools; the main model reaches it through delegation.
     tools = [tool for tool in tools if not tool.name.startswith("browser_")]
     from agent.plugins.registry import get_plugin_registry
+    if get_plugin_registry().is_enabled('openai-system-skills'):
+        from agent.tools.images import image_generate
+        tools.append(image_generate)
+        write_tool_names.add('image_generate')
     if not get_plugin_registry().is_enabled('gitmcp'):
         tools = [tool for tool in tools if tool.name != 'repo_docs']
     for tool in tools:
@@ -668,7 +691,7 @@ def _runtime_tools_snapshot() -> tuple[list[StructuredTool], set[str]]:
     # Spotify's raw tools and skill belong to MusicAgent. Preserve other portables.
     portables = [tool for tool in portable_agent_tools() if not tool.name.startswith("spotify_")]
     tools = [*core_tools(), *portables]
-    directly_visible = {"search_my_notes", "conversation_history", "web_search", "delegate_to_agent", "app_action", "google_workspace_read"}
+    directly_visible = {"search_my_notes", "conversation_history", "web_search", "delegate_to_agent", "app_action", "google_workspace_read", "plugins_list", "skills_list"}
     deferred_names = {tool.name for tool in tools if tool.name not in directly_visible}
     return tools, deferred_names
 
@@ -837,7 +860,10 @@ def _build_agent_runtime(
         catalog = build_deferred_catalog(tool_defs, deferred_names, _source_labels_for(deferred_names))
         runtime_tools = [*runtime_tools, *build_bridge_tools(tools, catalog)]
         def tool_defs_for_state(state):
-            return activate_discovered_tool_defs(assembled.tool_defs, catalog, state.get("messages", []), source_limits={"google":2,"gmail":2})
+            visible = activate_discovered_tool_defs(assembled.tool_defs, catalog, state.get("messages", []), source_limits={"google":2,"gmail":2})
+            _, seeded = plugin_route_names(_latest_user_query(state), state.get('messages', []), {entry.name for entry in catalog})
+            present = {item['function']['name'] for item in visible}
+            return [*visible, *(entry.tool_def for entry in catalog if entry.name in seeded and entry.name not in present)]
         def model_for_state(state):
             return llm.bind_tools(tool_defs_for_state(state))
     graph = StateGraph(AgentState)
@@ -849,7 +875,9 @@ def _build_agent_runtime(
     graph.add_edge("context", "agent")
     if runtime_tools:
         from agent.graph.tool_reuse import reuse_tool_node, repeated_read_batch
-        graph.add_node("tools", reuse_tool_node(runtime_tools))
+        from agent.tools.plugin_mcp import explicit_plugin_web_error
+        graph.add_node("tools", reuse_tool_node(runtime_tools, before_call=lambda state, call:
+            explicit_plugin_web_error(_latest_user_query(state), state.get('messages', []), call)))
         graph.add_node('final_answer', _make_model_node(llm, runtime_model=runtime_model, final_answer=True))
         graph.add_edge('final_answer', END)
         graph.add_conditional_edges("agent", tools_condition)

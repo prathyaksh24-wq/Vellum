@@ -36,6 +36,8 @@ def read(operation: GitHubMcpOperation):
     from agent.plugins.github_mcp import GitHubMcpAdapter
     try:
         return GitHubMcpResult(tool_name=operation.tool_name, result=GitHubMcpAdapter().read(operation))
+    except GitHubConnectionError as exc:
+        raise HTTPException(400, str(exc)) from None
     except Exception:
         raise HTTPException(400, "GitHub could not complete this read. Verify the connection and tool arguments.") from None
 

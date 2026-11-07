@@ -14,6 +14,11 @@ function configureRuntime({root = path.resolve(__dirname, '../..'), env = proces
 
 if (require.main === module) {
   configureRuntime();
+  if (process.argv[2] === '--watch') {
+    process.argv.splice(2, 1);
+    process.env.VELLUM_DESKTOP_DEV_NODE = process.execPath;
+    process.env.VELLUM_DESKTOP_BUNDLED_UI = '1';
+  }
   require('electron/cli.js');
 }
 

@@ -12,6 +12,17 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 - Add task summaries, workspace file previews, and browser controls for find, zoom, print, and download progress.
 
+- Download three local songs concurrently, show artwork and progress before playlist import, add linked-playlist refresh, and organize Local Music into a playlist library and dedicated song view. Closing the desktop workspace now quits the app and its owned download workers.
+- Convert pasted music links and automatically add finished MP3s to the library. Read public YouTube Music playlists through ytmusicapi, reject shortened personalized-mix downloads, add public catalog adapters, and normalize additional local audio formats. YouTube account sign-in opens in the system browser and returns focus to Vellum.
+- Fix YouTube downloads incorrectly failing after audio was saved, stack the MP3 link form within its card, remove the download checkbox, and add local playlist and song removal controls.
+- Reload the desktop development app after source edits. Rebuild the workspace UI in the background and restart the desktop-owned API when backend code changes. Keep Music and its selected provider open after a page reload.
+- Rename Local Music and add an in-app MP3 download queue for Spotify, Apple Music, and YouTube Music links. Show per-song progress, retain playlist names, and import completed audio on confirmation.
+
+- Remove the Obsidian connector from the plugin and MCP catalogs. Use Vellum's configured Agent-Reach runtime for plugin availability and load the existing Hindsight settings from the selected workspace.
+- Show reconnect controls for saved plugin accounts and launch desktop OAuth directly in the default browser. Plugin switches show pending changes immediately and release after the save receipt while the catalog refreshes in the background.
+- Keep plugin references inline in the composer, prioritize explicitly selected tools over unrelated specialist routing, and reduce context pressure from tool schemas and completed reads. Switch chats from the local view while the backend records navigation.
+- Add four OpenAI system skills adapted to Vellum (excluding openai-docs), on-demand skill discovery and tracked activation. Connect optional image generation/editing to the existing OpenAI key through an operation-bound review.
+
 - Start with workspace panes hidden, restore split view from full view, and close only the selected workspace tab from browser controls or shortcuts. Open side-chat drafts through the existing conversation owner and reuse the main composer, connector, model and voice controls. Send launcher searches directly to the selected engine's results URL. Add user-directed local-drive folder browsing and bounded text/image previews through the trusted desktop bridge; keep chat attachments available separately.
 
 - Keep the Dynamic Island dock within the chat pane while the browser is open. Remove its broad edge-hover strip in browser view, follow split resizing, and hide it when the browser takes the full workspace so tab controls remain reachable.

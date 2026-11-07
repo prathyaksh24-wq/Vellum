@@ -3,9 +3,11 @@ param([switch]$SkipHoncho)
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-# Reuse the existing service owners. Nothing is stopped or replaced here.
-& (Join-Path $PSScriptRoot 'start.ps1') -SkipHoncho:$SkipHoncho
-if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Vellum services did not start.' }
+# Electron owns the development API so it can restart it after code edits.
+if (-not $SkipHoncho) {
+  & (Join-Path $PSScriptRoot 'start-honcho.ps1')
+  if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Vellum memory services did not start.' }
+}
 
 Push-Location (Join-Path $Root 'desktop')
 try {

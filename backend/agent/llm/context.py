@@ -279,7 +279,11 @@ def project_context(messages: Sequence[Any], tools: Sequence[Any], budget: Conte
             calls = list(getattr(block[0], "tool_calls", []) or [])
             expected = {call.get("id") for call in calls}
             returned = {getattr(m, "tool_call_id", None) for m in block if _role(m) == "tool"}
-            if not expected or None in expected or expected != returned or any(call.get("name") not in _READ_TOOLS for call in calls):
+            locally_verified_read = all(
+                getattr(message, 'additional_kwargs', {}).get('vellum_read_only') is True
+                for message in block if _role(message) == 'tool')
+            if (not expected or None in expected or expected != returned or
+                    (any(call.get("name") not in _READ_TOOLS for call in calls) and not locally_verified_read)):
                 continue
             removed.extend(block)
             dropped.update(range(start, end))

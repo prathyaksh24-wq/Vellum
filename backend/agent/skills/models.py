@@ -48,6 +48,7 @@ class VellumMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     trigger: list[str] = Field(default_factory=list)
+    trigger_only: bool = False
     negative_trigger: list[str] = Field(default_factory=list)
     confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
     route_to_agent: str | None = None

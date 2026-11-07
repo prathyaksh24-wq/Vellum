@@ -287,6 +287,8 @@ _app_action_runtime.register_plugin_contribution(firecrawl_contribution())
 _app_action_runtime.register_plugin_contribution(google_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 _app_action_runtime.register_plugin_contribution(local_music_contribution())
+from agent.plugins.image_controls import image_contribution
+_app_action_runtime.register_plugin_contribution(image_contribution())
 
 
 class _ThreadTurnCoordinator:
@@ -1731,7 +1733,12 @@ async def lifespan(app: FastAPI):
         if close is not None:
             await close()
         await close_voice_session()
+        from agent.music_library import get_music_library
+        if get_music_library.cache_info().currsize:
+            await asyncio.to_thread(get_music_library().close)
         await browser_shutdown_async()
+        if _memory_orchestrator.provider_extensions is not None:
+            await asyncio.to_thread(_memory_orchestrator.provider_extensions.shutdown)
 
 
 app = FastAPI(title="Personal Agent API", version="0.1.0", lifespan=lifespan)
@@ -2776,12 +2783,13 @@ async def _run_agent_scoped(
         bool(attached_context["context"]) and not _requests_fresh_public_data(effective_message, active_thread_id)
     )
     explanatory_followup = _is_explanation_followup(clean_message)
-    live_result = None if memory_recall_intent or explanatory_followup else await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
+    main_plugin_route = _main_plugin_request(effective_message, attachments)
+    live_result = None if memory_recall_intent or explanatory_followup or main_plugin_route else await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
     delegated_tools: list[str] = []
     delegated_sources: list[Source] = []
     agent_input_message = _with_attached_conversation_context(effective_message, attached_context)
     from agent.agents.music import MusicAgent
-    if MusicAgent.public_research_request(effective_message) and not (live_result and live_result.handled):
+    if not main_plugin_route and MusicAgent.public_research_request(effective_message) and not (live_result and live_result.handled):
         agent_input_message = _with_forced_web_search_context(agent_input_message)
         evidence, records, research_tools = await _prefetch_artist_metric_evidence(clean_message)
         if evidence:
@@ -4641,6 +4649,15 @@ async def _prefetch_artist_metric_evidence(message: str) -> tuple[str, list[dict
     return context, sources, research_tools
 
 
+def _main_plugin_request(message: str, attachments: list[ChatAttachment] | None) -> bool:
+    """Explicit provider tools take precedence over broad specialist keywords."""
+    from agent.tools.plugin_mcp import requested_plugins
+    references=[item.reference.model_dump() for item in attachments or [] if item.reference]
+    return any((item.get('tools') or item.get('mcp_connectors'))
+               and item['id'] not in {'spotify','local_music','youtube'}
+               for item in requested_plugins(message,references=references))
+
+
 def _agent_content_with_attachments(message: str, attachments: list[ChatAttachment] | None) -> str | list[dict[str, Any]]:
     attachment_parts: list[dict[str, Any]] = []
     for attachment in attachments or []:
@@ -4962,7 +4979,8 @@ async def _stream_agent_turn_scoped(
     explanatory_followup = _is_explanation_followup(clean_message)
     early_parts = []
     live_result = None
-    if not memory_recall_intent and not explanatory_followup:
+    main_plugin_route = _main_plugin_request(effective_message, attachments)
+    if not memory_recall_intent and not explanatory_followup and not main_plugin_route:
         planner = getattr(_live_dispatcher, "_independent_tasks", None)
         if callable(planner) and planner(effective_message, active_thread_id):
             queue = asyncio.Queue()
@@ -5003,7 +5021,7 @@ async def _stream_agent_turn_scoped(
     subagent_item: dict[str, Any] | None = None
     agent_input_message = _with_attached_conversation_context(effective_message, attached_context)
     from agent.agents.music import MusicAgent
-    if MusicAgent.public_research_request(effective_message) and not (live_result and live_result.handled):
+    if not main_plugin_route and MusicAgent.public_research_request(effective_message) and not (live_result and live_result.handled):
         query = MusicAgent.public_research_query(clean_message)
         if query:
             search_item_id = _stream_id('item')
@@ -6784,7 +6802,8 @@ def _probe_mcp_server(entry: dict[str, Any]) -> dict[str, Any]:
     name = str(entry.get("name") or "")
     endpoint = str(entry.get("endpoint") or "")
     if name in {"playwright", "context_mode"}:
-        command = endpoint.split(" ", 1)[0]
+        settings = get_settings()
+        command = settings.playwright_mcp_command if name == "playwright" else settings.context_mode_mcp_command
         available = bool(shutil.which(command))
         return {
             "reachable": available,
@@ -6889,10 +6908,10 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         notes="GitHub CLI first; official MCP fallback uses the account connected in Plugins. Changes require review.",
     ))
     servers.append(_entry(
-        "obsidian",
-        configured=bool(settings.obsidian_api_key),
-        url_or_cmd=settings.obsidian_mcp_url,
-        notes=f"Writes: {settings.obsidian_mcp_allow_writes}, deletes: {settings.obsidian_mcp_allow_destructive}, commands: {settings.obsidian_mcp_allow_commands}.",
+        "slack",
+        configured=slack_plugin_status()["configured"],
+        url_or_cmd="https://mcp.slack.com/mcp",
+        notes="Official Slack MCP. Uses the user and workspace connected in Plugins; changes require review.",
     ))
     servers.append(_entry(
         "airtable",
@@ -6905,12 +6924,6 @@ def _mcp_server_configuration(probe: bool = False) -> list[dict[str, Any]]:
         configured=notion_plugin_status()["configured"],
         url_or_cmd="https://mcp.notion.com/mcp",
         notes="Official Notion MCP. Uses the resources selected during OAuth; changes require review.",
-    ))
-    servers.append(_entry(
-        "slack",
-        configured=slack_plugin_status()["configured"],
-        url_or_cmd="https://mcp.slack.com/mcp",
-        notes="Official Slack MCP. Uses the user and workspace connected in Plugins; changes require review.",
     ))
     servers.append(_entry(
         "context7",
@@ -6975,39 +6988,10 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _plugin_catalog_snapshot(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    from agent.mcp.gitmcp_tools import plugin_status as gitmcp_status
-    runtime_statuses = [
-        gitmcp_status(),
-        memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
-        agent_reach_plugin_status(probe=False).model_dump(),
-        portable_spotify_status(),
-        portable_discord_status(),
-        portable_google_calendar_status(),
-        product_hunt_plugin_status(),
-        linear_plugin_status(),
-        github_plugin_status(),
-        slack_plugin_status(),
-        airtable_plugin_status(),
-        notion_plugin_status(),
-        apify_plugin_status(),
-        serpapi_plugin_status(),
-        keyed_mcp_status('brave'),
-        keyed_mcp_status('context7'),
-        asana_plugin_status(),
-        hubspot_plugin_status(),
-        clickup_plugin_status(),
-        swiggy_plugin_status(),
-        zomato_plugin_status(),
-        district_plugin_status(),
-        vercel_plugin_status(),
-        supabase_plugin_status(),
-        exa_plugin_status(),
-        tavily_plugin_status(),
-        firecrawl_plugin_status(),
-        *google_plugin_statuses(),
-    ]
+    from agent.plugins.catalog import runtime_statuses
+    statuses = runtime_statuses(memory_orchestrator=_memory_orchestrator)
     plugins = _plugin_registry().catalog(
-        runtime_statuses=runtime_statuses,
+        runtime_statuses=statuses,
         mcp_servers=servers,
     )
     try:

@@ -12,7 +12,7 @@ const button=text=>[...host.querySelectorAll('button')].find(item=>item.textCont
 const setInput=async(selector,value)=>act(async()=>{
   const node=host.querySelector(selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(node,value);node.dispatchEvent(new Event('input',{bubbles:true}));
 });
-function Harness({view='home'}){
+function Harness({view='playlist'}){
   const local=window.VellumUI.useLocalMusic({active:true});
   return React.createElement(React.Fragment,null,
     React.createElement('input',{type:'file',ref:local.audioInput,onChange:local.files,'aria-label':'Audio file'}),
@@ -22,9 +22,9 @@ function Harness({view='home'}){
 }
 beforeEach(()=>{
   globalThis.IS_REACT_ACT_ENVIRONMENT=true;
-  state={collections:[{id:'playlist',name:'Road Trip',completeness:'unknown',note:'Public snapshot',entries:[{id:'missing',title:'Song without audio',artist:'Artist',provider:'spotify',source_url:'https://open.spotify.com/track/AAAAAAAAAAAAAAAAAAAAAA',available:false},{id:'ready',title:'Owned song',artist:'Artist',provider:'local',available:true}]}],jobs:[],player:{revision:0,queue:[],observed:{}},downloader_available:true};
+  state={collections:[{id:'playlist',name:'Road Trip',completeness:'unknown',note:'Public snapshot',entries:[{id:'missing',title:'Song without audio',artist:'Artist',provider:'spotify',source_url:'https://open.spotify.com/track/AAAAAAAAAAAAAAAAAAAAAA',available:false},{id:'ready',title:'Owned song',artist:'Artist',provider:'local',available:true}]}],jobs:[],player:{revision:0,queue:[],observed:{}},downloader_available:true,mp3_available:true};
   api={library:vi.fn(async()=>state),action:vi.fn(async()=>({status:'applied',message:'Updated',result:{collection_id:'playlist'}})),upload:vi.fn(async()=>({status:'applied',message:'Audio added'})),exportUrl:id=>'http://127.0.0.1/export/'+id};
-  window.VellumApi={localMusic:api,appActions:{catalog:vi.fn(async()=>({actions:['file','playlist','playback'].map(name=>({id:'local_music.'+name}))}))}};
+  window.VellumApi={localMusic:api,appActions:{catalog:vi.fn(async()=>({actions:['file','playlist','playback','download','job','remove','refresh'].map(name=>({id:'local_music.'+name}))}))}};
   window.VellumLocalMusicPlayback={start:vi.fn(()=>({wake:vi.fn()})),subscribe:vi.fn(()=>()=>{})};
   new Function('React',compiled)(React);host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
@@ -32,40 +32,100 @@ afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreA
 async function render(view){await act(async()=>root.render(React.createElement(Harness,{view})));}
 
 test('local library distinguishes references from audio and plays only ready entries',async()=>{
-  await render();expect(host.textContent).toContain('1 of 2 songs matched');expect(host.querySelector('[aria-label="Play local Song without audio"]').disabled).toBe(true);
-  await act(async()=>button('Play available songs').click());expect(api.action).toHaveBeenCalledWith('playback',{action:'play',entry_ids:['ready'],position:0});
+  await render();expect(host.textContent).toContain('2 songs · 1 ready');expect(host.querySelector('[aria-label="Play local Song without audio"]').disabled).toBe(true);
+  await act(async()=>button('Play playlist').click());expect(api.action).toHaveBeenCalledWith('playback',{action:'play',entry_ids:['ready'],position:0});
 });
-test('match screen preserves unknown completeness and missing-song actions',async()=>{
-  await render('import');expect(host.textContent).toContain('Playlist completeness: unknown');expect(host.textContent).toContain('1 of 2');
-  expect(host.querySelector('[aria-label="Import audio for Song without audio"]')).toBeTruthy();expect(api.action).not.toHaveBeenCalled();
+test('downloads show measured progress and stay staged until explicit import',async()=>{
+  state.collections=[];
+  state.pending_imports=[{id:'draft',name:'Road Trip',completeness:'complete',entries:[
+    {id:'song',title:'A song',artist:'An artist',provider:'youtube',available:false},
+  ]}];
+  state.jobs=[{id:'job',entry_id:'song',status:'running',stage:'downloading',progress:42}];
+  await render('import');
+  expect(host.textContent).toContain('Road Trip');
+  expect(host.textContent).toContain('Downloading 42%');
+  expect(host.querySelector('progress').value).toBe(42);
+  expect(button('Import playlist').disabled).toBe(true);
+  expect(api.action).not.toHaveBeenCalled();
+  state.jobs[0]={id:'job',entry_id:'song',status:'running',stage:'converting',progress:75};
+  await render('import');
+  expect(host.textContent).toContain('Converting to MP3 75%');
+  state.jobs[0].status='complete';
+  state.pending_imports[0].entries[0].available=true;
+  await render('import');
+  expect(button('Import playlist').disabled).toBe(false);
+  await act(async()=>button('Import playlist').click());
+  expect(api.action).toHaveBeenCalledWith('playlist',{pending_import_id:'draft'});
 });
-test('playlist import uses the typed metadata action without acquiring audio',async()=>{
-  await render('import');await setInput('#mw-playlist-link','https://open.spotify.com/playlist/AAAAAAAAAAAAAAAAAAAAAA');
+test.each([
+  'https://open.spotify.com/playlist/AAAAAAAAAAAAAAAAAAAAAA',
+  'https://music.apple.com/us/album/example/123',
+  'https://music.youtube.com/watch?v=abcdefghijk',
+])('pasted link queues MP3s through the typed playlist action (%s)',async url=>{
+  await render('add');
+  await setInput('#mw-playlist-link',url);
+  expect(button('Convert to MP3').disabled).toBe(false);
+  expect(host.querySelector('input[type="checkbox"]')).toBeNull();
   await act(async()=>host.querySelector('.mw-import-source').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
-  expect(api.action).toHaveBeenCalledWith('playlist',{url:'https://open.spotify.com/playlist/AAAAAAAAAAAAAAAAAAAAAA'});expect(api.upload).not.toHaveBeenCalled();
+  expect(api.action).toHaveBeenCalledWith('playlist',{url,download_mp3:true,auto_import:true});
+  expect(api.upload).not.toHaveBeenCalled();
 });
-test('adding a file to a missing occurrence retains the exact selected entry',async()=>{
-  await render('import');await act(async()=>host.querySelector('[aria-label="Import audio for Song without audio"]').click());
-  const file=new File(['audio'],'owned.wav',{type:'audio/wav'}),node=host.querySelector('[aria-label="Audio file"]');
-  Object.defineProperty(node,'files',{value:[file],configurable:true});
-  await act(async()=>node.dispatchEvent(new Event('change',{bubbles:true})));
-  expect(api.upload).toHaveBeenCalledWith(file,'missing');expect(api.action).not.toHaveBeenCalled();
+test('an existing reference-only playlist can queue missing audio',async()=>{
+  await render('import');
+  await act(async()=>button('Download missing MP3s').click());
+  expect(api.action).toHaveBeenCalledWith('download',{collection_id:'playlist'});
 });
-test('disabled plugin has unavailable controls and does not start the audio owner',async()=>{
-  window.VellumApi.appActions.catalog.mockResolvedValue({actions:[]});await render('add');
-  expect(button('Choose files').disabled).toBe(true);expect(button('Import list').disabled).toBe(true);expect(window.VellumLocalMusicPlayback.start).not.toHaveBeenCalled();
+test('disabled plugin leaves local import unavailable',async()=>{
+  window.VellumApi.appActions.catalog.mockResolvedValue({actions:[]});
+  await render('add');
+  expect(button('Choose files').disabled).toBe(true);
+  expect(button('Choose playlist file').disabled).toBe(true);
+  expect(window.VellumLocalMusicPlayback.start).not.toHaveBeenCalled();
 });
 test('failed action shows its receipt without claiming success',async()=>{
-  api.action.mockResolvedValue({status:'failed',message:'Source unavailable'});await render();await act(async()=>button('Play available songs').click());
+  api.action.mockResolvedValue({status:'failed',message:'Source unavailable'});await render();await act(async()=>button('Play playlist').click());
   expect(host.querySelector('[role=alert]').textContent).toBe('Source unavailable');expect(host.textContent).not.toContain('Updated');
 });
-test('streaming-service links import metadata and never become downloads',async()=>{
-  const open=vi.spyOn(window,'open').mockImplementation(()=>null);await render('add');await setInput('[aria-label="Link"]','https://music.apple.com/us/album/example/123');
-  await act(async()=>host.querySelector('.mw-add-card form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
-  expect(open).not.toHaveBeenCalled();expect(api.action).toHaveBeenCalledWith('playlist',{url:'https://music.apple.com/us/album/example/123'});expect(host.textContent).not.toContain('Download');
+
+test('songs and playlists have removal controls through the registered action',async()=>{
+  await render();
+  await act(async()=>host.querySelector('[aria-label="Remove Owned song from playlist"]').click());
+  expect(api.action).toHaveBeenLastCalledWith('remove',{entry_id:'ready'});
+  await act(async()=>host.querySelector('summary').click());
+  await act(async()=>button('Remove playlist').click());
+  expect(api.action).toHaveBeenLastCalledWith('remove',{collection_id:'playlist'});
 });
-test('unimplemented direct audio shows an honest state instead of adding a fake song',async()=>{
-  await render('add');await setInput('[aria-label="Link"]','https://example.test/owned.mp3');
-  await act(async()=>host.querySelector('.mw-add-card form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
-  expect(host.querySelector('[role=alert]').textContent).toContain('not connected yet');expect(api.action).not.toHaveBeenCalled();
+
+test('staged downloads can be removed while their jobs are running',async()=>{
+  state.pending_imports=[{id:'draft',name:'A download',entries:[{id:'downloading',title:'Downloading song',provider:'youtube',available:false}]}];
+  state.jobs=[{id:'job',entry_id:'downloading',status:'running',stage:'downloading'}];
+  await render('import');
+  await act(async()=>host.querySelector('summary').click());
+  await act(async()=>button('Remove playlist').click());
+  expect(api.action).toHaveBeenLastCalledWith('remove',{collection_id:'draft'});
+});
+
+test('home lists playlists vertically and moves destructive actions into their menu',async()=>{
+  await render('home');
+  expect(host.querySelector('.mw-library-list')).toBeTruthy();
+  expect(host.querySelectorAll('.mw-library-open')).toHaveLength(1);
+  expect(host.querySelectorAll('.mw-local-song')).toHaveLength(0);
+  expect(host.querySelector('details').open).toBe(false);
+});
+
+test('the Add music page provides a direct return to the library',async()=>{
+  await render('add');
+  expect(host.querySelector('.mw-add-back').textContent).toContain('Back to your music');
+});
+
+test('the paste-link flow starts conversion and automatic import without OAuth',async()=>{
+  window.VellumApi.appActions.dispatch=vi.fn();
+  vi.spyOn(window,'open').mockReturnValue(null);
+  await render('add');
+  const url='https://music.youtube.com/playlist?list=PLabcdefghijk';
+  await setInput('#mw-playlist-link',url);
+  await act(async()=>host.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(api.action).toHaveBeenCalledWith('playlist',{url,download_mp3:true,auto_import:true});
+  expect(window.open).not.toHaveBeenCalled();
+  expect(window.VellumApi.appActions.dispatch).not.toHaveBeenCalled();
 });

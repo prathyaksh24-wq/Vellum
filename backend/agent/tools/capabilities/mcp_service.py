@@ -70,16 +70,6 @@ class McpCapabilityService:
         )
         registry.register(
             CapabilityRecord(
-                name="obsidian.search_notes",
-                namespace="obsidian",
-                access=CapabilityAccess.READ,
-                allowed_agents=frozenset({"MemoryAgent", "ResearchAgent", "VellumAgent"}),
-                stream_label="Searched Obsidian notes",
-                adapter=self.obsidian_search_notes,
-            )
-        )
-        registry.register(
-            CapabilityRecord(
                 name="web_research.search",
                 namespace="web_research",
                 access=CapabilityAccess.READ,
@@ -163,11 +153,6 @@ class McpCapabilityService:
         params = dict(payload)
         params["action"] = "create_issue"
         return self._call("github", params, "github.write_issue")
-
-    def obsidian_search_notes(self, payload: dict[str, Any]) -> dict[str, Any]:
-        params = dict(payload)
-        params["action"] = "search"
-        return self._call("obsidian", params, "obsidian.search_notes")
 
     def web_research_search(self, payload: dict[str, Any]) -> dict[str, Any]:
         params = dict(payload)

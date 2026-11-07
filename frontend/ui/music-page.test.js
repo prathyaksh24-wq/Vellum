@@ -7,12 +7,13 @@ import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 const require=createRequire(import.meta.url),rootPath=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
-const original=globalThis.Uint8Array;let pageCode,localCode,selectCode,morphicCode;
+const original=globalThis.Uint8Array;let pageCode,localCode,selectCode;
+const sharedRows=readFileSync(resolve(rootPath,'design/Velllum/uploads/components/morphic-ui.js'),'utf8');
 try{
   globalThis.Uint8Array=new TextEncoder().encode('').constructor;
   const esbuild=createRequire(require.resolve('vite'))('esbuild');
   const compile=name=>esbuild.transformSync(readFileSync(resolve(rootPath,'design/Velllum/uploads/components/'+name),'utf8'),{loader:'jsx'}).code;
-  morphicCode=compile('morphic-ui.js');pageCode=compile('music-page.jsx');localCode=compile('local-music.jsx');selectCode=compile('v-select.jsx');
+  pageCode=compile('music-page.jsx');localCode=compile('local-music.jsx');selectCode=compile('v-select.jsx');
 }finally{globalThis.Uint8Array=original;}
 let root,host,api,music,Player,props,localState;
 const song=(id,name)=>({id,uri:'spotify:track:'+id,name,kind:'track',artists:['Artist'],artwork_url:'https://images.example/'+id,playable:true,duration_ms:180000});
@@ -20,7 +21,14 @@ const playlist=(id,name)=>({id,uri:'spotify:playlist:'+id,name,kind:'playlist',a
 const album=(id,name)=>({...playlist(id,name),kind:'album',uri:'spotify:album:'+id,artists:['Artist']});
 const textButton=text=>[...host.querySelectorAll('button')].find(node=>node.textContent===text);
 const click=async label=>act(async()=>host.querySelector('[aria-label="'+label+'"]').click());
-const press=async text=>act(async()=>{const provider={Spotify:'spotify','Apple Music':'apple','Local files':'local'}[text],trigger=host.querySelector('[aria-label="Music provider"]');if(provider && trigger){trigger.click();[...host.querySelectorAll('#music-provider-list [role="option"]')].find(node=>node.querySelector('.v-select-option-copy > span')?.textContent===text).click();}else textButton(text).click();});
+const press=async text=>{
+  const provider=['Spotify','Apple Music','Local Music'].includes(text);
+  const trigger=host.querySelector('[aria-label="Music provider"]');
+  if(provider && trigger){
+    await act(async()=>trigger.click());
+    await act(async()=>[...host.querySelectorAll('#music-provider-list [role="option"]')].find(node=>node.textContent.trim().startsWith(text)).click());
+  }else await act(async()=>textButton(text).click());
+};
 const navigate=async text=>act(async()=>[...host.querySelectorAll('.mw-nav button')].find(node=>node.textContent===text).click());
 const input=async(label,value)=>act(async()=>{
   const node=host.querySelector('[aria-label="'+label+'"]');
@@ -41,7 +49,7 @@ async function editablePlaylist(){
 }
 beforeEach(()=>{
   globalThis.IS_REACT_ACT_ENVIRONMENT=true;
-  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+  vi.stubGlobal('matchMedia', vi.fn(query => ({media:query,matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
   api={
     capabilities:vi.fn(async()=>({features:{spotify:{enabled:true,endpoints:{browse:'browse',search:'search'}}}})),
@@ -55,7 +63,7 @@ beforeEach(()=>{
   window.VellumApi={plugins:api,localMusic:{library:vi.fn(async()=>localState),action:vi.fn(async()=>({status:'applied',message:'Imported song list',result:{collection_id:'saved'}})),upload:vi.fn(),exportUrl:id=>'http://127.0.0.1/export/'+id},
     appActions:{dispatch:vi.fn(async()=>({status:'applied',message:'Playlist links added'})),catalog:vi.fn(async()=>({actions:[{id:'spotify.playlist.edit'},{id:'spotify.playlists.link'},...['playlist','file','playback'].map(name=>({id:'local_music.'+name}))]}))}};
   window.VellumLocalMusicPlayback={start:vi.fn(()=>({wake:vi.fn()})),subscribe:vi.fn(()=>()=>{})};
-  window.React=React;window.VellumUI={};loadPublicIcons(React);new Function('React',morphicCode)(React);new Function('React',selectCode)(React);new Function('React',localCode)(React);new Function('React',pageCode)(React);Player=window.VellumUI.MusicPage;
+  window.VellumUI={};window.React=React;loadPublicIcons(React);new Function(sharedRows)();new Function('React',selectCode)(React);new Function('React',localCode)(React);new Function('React',pageCode)(React);Player=window.VellumUI.MusicPage;
   music={player:{track:song('Ride','Ride'),artists:['Artist'],is_playing:true,duration_ms:180000,progress_ms:84000,device:{volume_percent:25}},playback:{ready:true},upcoming:[],busy:false,error:'',run:vi.fn(async()=>true),refresh:vi.fn(),enable:vi.fn()};
   props={spotify:{connected:true,product:'premium',account_name:'Listener',web_playback_ready:true},onReconnect:vi.fn(),onCloseMusic:vi.fn(),onRefreshConnection:vi.fn(),onAskMusic:vi.fn()};
 });
@@ -65,6 +73,19 @@ test('handoff home has the music sidebar, real album grid and single bottom play
   await render();expect(host.querySelector('.mw-sidebar')).toBeTruthy();expect(host.querySelectorAll('.mw-player')).toHaveLength(1);
   expect([...host.querySelectorAll('.mw-home-albums .mw-cover-grid b')].map(node=>node.textContent)).toEqual(['Night Drive','Glass Harbor']);
   expect(host.querySelector('.music-record')).toBeNull();expect(host.querySelector('canvas')).toBeNull();
+});
+test('reload restores the selected provider while the Music view is active',async()=>{
+  const previous=window.history.state;
+  window.history.replaceState({vellumMusicView:true},'');
+  try {
+    await render();
+    await press('Local Music');
+    await act(async()=>root.render(null));
+    await render();
+    expect(host.querySelector('[aria-label="Music provider"]').textContent).toContain('Local Music');
+  } finally {
+    window.history.replaceState(previous,'');
+  }
 });
 test('Apple changes the accent and shows its future integration without exposing Spotify data',async()=>{
   await render();await press('Apple Music');
@@ -177,14 +198,28 @@ test('queue selection starts at the selected upcoming position',async()=>{
   expect(music.run).toHaveBeenCalledWith({action:'play',uris:['spotify:track:Two','spotify:track:Three']});
 });
 test('local first run shows the three handoff choices and no empty player bar',async()=>{
-  await render();await press('Local files');expect(host.textContent).toContain('Add your music');expect(host.querySelectorAll('.mw-add-card')).toHaveLength(3);
+  await render();await press('Local Music');expect(host.textContent).toContain('Add your music');expect(host.querySelectorAll('.mw-add-card')).toHaveLength(3);
   expect(host.querySelector('.mw-player')).toBeNull();expect(host.textContent).not.toContain('Download missing YouTube');
 });
 test('returning local users see their library and missing audio stays unplayable',async()=>{
   localState.collections=[{id:'owned',name:'My playlist',entries:[{id:'one',title:'Owned song',artist:'Artist',available:true},{id:'missing',title:'Missing song',available:false}]}];
-  await render();await press('Local files');expect(host.textContent).toContain('Your music');expect(host.textContent).toContain('1 of 2 songs matched');
-  expect(host.querySelector('[aria-label="Play local Missing song"]').disabled).toBe(true);await press('Play available songs');
+  await render();await press('Local Music');expect(host.textContent).toContain('Your music');expect(host.textContent).toContain('2 songs · 1 ready');
+  await act(async()=>host.querySelector('[aria-label="Open local playlist My playlist"]').click());
+  expect(host.querySelector('[aria-label="Play local Missing song"]').disabled).toBe(true);await press('Play playlist');
   expect(window.VellumApi.localMusic.action).toHaveBeenCalledWith('playback',{action:'play',entry_ids:['one'],position:0});
+});
+
+test('download activity stays visible on Add music and Settings and opens the queue',async()=>{
+  localState.pending_imports=[{id:'draft',name:'Downloads',completeness:'complete',entries:[{id:'one',title:'One',provider:'youtube',available:false}]}];
+  localState.jobs=[{id:'job',entry_id:'one',status:'running',stage:'converting',progress:42}];
+  await render();await press('Local Music');
+  await navigate('Add music');
+  expect(host.querySelector('[aria-label="View music download progress"]').textContent).toContain('1 active');
+  await navigate('Settings');
+  expect(host.querySelector('[aria-label="View music download progress"]')).toBeTruthy();
+  await click('View music download progress');
+  expect(host.querySelector('.mw-download-rows')).toBeTruthy();
+  expect(host.textContent).toContain('Converting to MP3 42%');
 });
 test('settings changes only music accents while preserving host background',async()=>{
   await render();await navigate('Settings');await click('Match my service');
@@ -194,7 +229,7 @@ test('settings changes only music accents while preserving host background',asyn
 });
 test('subscription-lapsed state offers metadata preservation without playing',async()=>{
   props.spotify.product='free';await render();expect(host.textContent).toContain('Your Spotify subscription ended');
-  expect(host.querySelector('[aria-label="Play music"]').disabled).toBe(true);await press('Save playlists to Local');expect(host.textContent).toContain('Audio is never copied');
+  expect(host.querySelector('[aria-label="Play music"]').disabled).toBe(true);await press('Save playlists to Local Music');expect(host.textContent).toContain('prepare MP3s');
 });
 test('Sources uses existing Spotify connection and keeps Apple integration deferred',async()=>{
   await render();await navigate('Sources');expect(host.textContent).toContain('Integration coming later.');
@@ -282,10 +317,12 @@ test('home offers saved playlists and more than five saved albums',async()=>{
 
 test('accepted file imports open Imported files instead of leaving the add screen visible',async()=>{
   window.VellumApi.localMusic.upload.mockImplementation(async()=>{localState.collections=[{id:'imports',name:'Imported files',entries:[{id:'owned',title:'My WAV song',artist:'Me',available:true}]}];return {status:'applied',message:'Audio added',result:{entry_id:'owned'}};});
-  await render();await press('Local files');await navigate('Add music');
+  await render();await press('Local Music');await navigate('Add music');
   const node=host.querySelector('[aria-label="Choose local audio files"]');Object.defineProperty(node,'files',{value:[new File(['audio'],'song.wav',{type:'audio/wav'})],configurable:true});
   await act(async()=>node.dispatchEvent(new Event('change',{bubbles:true})));
-  expect(host.querySelector('.mw-local-library')?.textContent).toContain('My WAV song');expect(host.querySelector('.mw-add-page')).toBeNull();
+  expect(host.querySelector('.mw-local-library')?.textContent).toContain('Imported files');expect(host.querySelector('.mw-add-page')).toBeNull();
+  await act(async()=>host.querySelector('[aria-label="Open local playlist Imported files"]').click());
+  expect(host.querySelector('.mw-local-library').textContent).toContain('My WAV song');
 });
 
 
@@ -299,7 +336,7 @@ test('playlist artwork warms before offscreen rows intersect',async()=>{
 
 test('outer navigation is retained and its Music image has bounded icon dimensions',()=>{
   const html=readFileSync(resolve(rootPath,'design/Velllum/uploads/Vellum Default Re-designed.html'),'utf8');
-  expect(html).toContain('className="main-sidebar-slot"');expect(html).toContain('data-collapsible="offcanvas"');expect(html).toContain('data-pinned={sidebarPinned}');
+  expect(html).toContain('id="main-sidebar"');expect(html).toContain('<window.VellumUI.NavigationRail view={view}');
   const style=document.createElement('style');style.textContent=readFileSync(resolve(rootPath,'design/Velllum/uploads/components/music-page.css'),'utf8');document.head.append(style);
   const icon=document.createElement('img');icon.className='music-nav-icon';host.append(icon);
   try{expect(getComputedStyle(icon).width).toBe('18px');expect(getComputedStyle(icon).height).toBe('18px');}finally{style.remove();}
@@ -322,7 +359,8 @@ test('search suggests songs and artists while typing without submitting or playi
 test('local song rows and player show the supplied embedded cover',async()=>{
   localState.collections=[{id:'imports',name:'Imported files',entries:[{id:'owned',title:'My song',artist:'Me',available:true,artwork_url:'https://images.example/embedded.png'}]}];
   localState.player.observed={entry_id:'owned'};
-  await render();await press('Local files');
+  await render();await press('Local Music');
+  await act(async()=>host.querySelector('[aria-label="Open local playlist Imported files"]').click());
   expect(host.querySelector('.mw-local-song img')?.src).toBe('https://images.example/embedded.png');
   expect(host.querySelector('.mw-player-info img')?.src).toBe('https://images.example/embedded.png');
 });
@@ -358,7 +396,7 @@ test('late suggestions never replace a newer query or survive clearing search',a
 test('local references without covers use track numbers without image lookups',async()=>{
   const id='Z'.repeat(22);api.spotifyTrackArtwork=vi.fn(async()=>({id,artwork_url:'https://images.example/reference.png'}));
   localState.collections=[{id:'list',name:'Imported list',entries:[{id:'reference',title:'Reference song',provider:'spotify',source_id:id,available:false}]}];
-  await render();await press('Local files');expect(api.spotifyTrackArtwork).not.toHaveBeenCalled();expect(host.querySelector('.mw-song-index')?.textContent).toBe('1');expect(host.querySelector('.mw-local-song .music-artwork-empty')).toBeNull();
+  await render();await press('Local Music');await act(async()=>host.querySelector('[aria-label="Open local playlist Imported list"]').click());expect(api.spotifyTrackArtwork).not.toHaveBeenCalled();expect(host.querySelector('.mw-song-index')?.textContent).toBe('1');expect(host.querySelector('.mw-local-song .music-artwork-empty')).toBeNull();
 });
 
 
@@ -369,8 +407,8 @@ test('the Home search field suggests during typing without Enter or route change
 
 test('provider dropdown switches source and music sidebar can hide and reopen independently',async()=>{
   await render();const select=host.querySelector('[aria-label="Music provider"]');expect(select.closest('.mw-provider-control')).toBeTruthy();
-  await press('Local files');
+  await press('Local Music');
   expect(host.textContent).toContain('Add your music');
   await click('Hide music sidebar');expect(host.querySelector('.mw-sidebar').getAttribute('aria-hidden')).toBe('true');expect(host.querySelector('[aria-label="Show music sidebar"]')).toBeTruthy();
-  await click('Show music sidebar');expect(host.querySelector('[aria-label="Music provider"]').textContent).toContain('Local files');expect(props.onCloseMusic).not.toHaveBeenCalled();
+  await click('Show music sidebar');expect(host.querySelector('[aria-label="Music provider"]').textContent).toContain('Local Music');expect(props.onCloseMusic).not.toHaveBeenCalled();
 });

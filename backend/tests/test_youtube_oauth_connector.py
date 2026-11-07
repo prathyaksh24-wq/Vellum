@@ -154,6 +154,16 @@ def test_youtube_auth_url_uses_readonly_scope_and_pkce() -> None:
     assert query["state"] == ["state-value"]
 
 
+def test_youtube_code_exchange_accepts_the_full_music_grant(tmp_path: Path) -> None:
+    module=youtube_module()
+    store=module.auth.YouTubeAuthStore(tmp_path,keyring_backend=FakeKeyring())
+    client=module.client.YouTubeClient(client_id='client',client_secret='secret',store=store,
+        request_backend=lambda *args,**kwargs:FakeResponse({'access_token':'music-access','refresh_token':'music-refresh',
+            'expires_in':3600,'scope':'https://www.googleapis.com/auth/youtube'}))
+    client.exchange_code(code='code',redirect_uri='http://127.0.0.1:8000',code_verifier='verifier')
+    assert store.load_metadata()['scope']=='https://www.googleapis.com/auth/youtube'
+
+
 def test_youtube_auth_store_keeps_tokens_out_of_runtime_files(tmp_path: Path) -> None:
     module = youtube_module()
     keyring = FakeKeyring()

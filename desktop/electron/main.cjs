@@ -9,10 +9,12 @@ const {initializeProtectedAudio} = require('./protected-audio.cjs');
 const {createBackendManager,launchSpec,UI_PORT} = require('./backend.cjs');
 const {selectWorkspace} = require('./workspace.cjs');
 const {claimDesktopWorkspace} = require('./workspace-lock.cjs');
+const {createDevBundle, watchDevelopment} = require('./dev-reload.cjs');
 
 app.setName('Vellum');
 // Review the prepared desktop UI without installing or replacing an app.
 const bundledWorkspace=app.isPackaged || process.env.VELLUM_DESKTOP_BUNDLED_UI==='1';
+const devNode = app.isPackaged ? null : process.env.VELLUM_DESKTOP_DEV_NODE;
 require('./workspace-profile.cjs').configureWorkspaceProfile(app,{directory:process.env.VELLUM_DESKTOP_PROFILE});
 app.setAppUserModelId('local.vellum.desktop');
 app.enableSandbox();
@@ -28,6 +30,10 @@ if (!app.requestSingleInstanceLock()) {
   let workspaceLock;
   let tray;
   let startup;
+  let devBundle;
+  let initialBuild;
+  let stopWatching;
+  let relaunch = false;
   let booting = true;
   let quitting = false;
   const launchedAt=performance.now();
@@ -58,8 +64,17 @@ if (!app.requestSingleInstanceLock()) {
     startup.on('close',()=>{if(booting&&!quitting)app.quit();});
     const opening='<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>Opening Vellum</title><style>body{background:#14181e;color:#eee;font:15px system-ui;padding:24px}h1{font-size:22px;margin:0 0 12px}p{color:#abb3bd}</style><h1>Vellum</h1><p>Opening your workspace…</p>';
     await startup.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(opening));
-    backend=createBackendManager(launchSpec({packaged:app.isPackaged,resourcesPath:process.resourcesPath,sourceRoot,workspaceRoot}));
-    const workspaceReady=backend.start(message=>{if(!startup.isDestroyed())startup.setTitle(message);}).then(state=>{recordStartup('backend_ready');return state;});
+    if (devNode) {
+      startup.setTitle('Building the development UI…');
+      devBundle = createDevBundle(sourceRoot, devNode);
+      initialBuild = devBundle.build();
+      await initialBuild;
+    }
+    if (quitting) return;
+    const backendOptions = {packaged:app.isPackaged, resourcesPath:process.resourcesPath, sourceRoot, workspaceRoot};
+    let backendSpec = launchSpec(backendOptions);
+    backend=createBackendManager(backendSpec);
+    let workspaceReady=backend.start(message=>{if(!startup.isDestroyed())startup.setTitle(message);}).then(state=>{recordStartup('backend_ready');return state;});
     workspaceReady.catch(()=>{}); // The startup owner and trusted preload await it below.
     const protectedAudioReady=initializeProtectedAudio(require('electron'))
       .then(state=>{recordStartup('protected_audio_ready');return state;})
@@ -68,13 +83,17 @@ if (!app.requestSingleInstanceLock()) {
     // promise through the trusted preload, so its window can appear immediately.
     if(!bundledWorkspace)await workspaceReady;
     if(quitting)return;
-    if (bundledWorkspace) uiServer = await serveUI(path.join(app.getAppPath(), 'resources/ui'),UI_PORT);
+    if (bundledWorkspace) {
+      const bundledRoot = path.join(app.getAppPath(), 'resources/ui');
+      uiServer = await serveUI(bundledRoot, UI_PORT, () => devBundle?.current ?? bundledRoot);
+    }
     nativeBrowser = await createNativeBrowser(require('electron'), {
       root: workspaceRoot,
       cdpEndpoint:await readDebuggerEndpoint(app), ownerWindow:()=>host?.openWorkspace(),
     });
     if(quitting){await nativeBrowser.stop();return;}
-    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady,protectedAudioReady});
+    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
+      onWorkspaceClose:()=>{if(!quitting&&!booting)app.quit();}});
     host.configurePermissions(session.fromPartition('persist:vellum-workspace'));
     const commandItem=id=>({id:'command-'+id,label:CommandRegistry.definition(id).label,click:()=>{const win=BrowserWindow.getFocusedWindow();if(win&&!win.isDestroyed())win.webContents.send('vellum:app-command',id);}});
     Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -104,7 +123,42 @@ if (!app.requestSingleInstanceLock()) {
     recordStartup('workspace_window_requested');
     window.webContents.once('did-finish-load',()=>recordStartup('workspace_document_loaded'));
     startup?.close();
-    await workspaceReady;
+    let backendState = await workspaceReady;
+    if (devBundle && !quitting) {
+      let backendReady = true;
+      stopWatching = watchDevelopment(sourceRoot, async changed => {
+        if (changed.has('desktop')) {
+          relaunch = true;
+          app.quit();
+          return;
+        }
+        let reload = false;
+        if (changed.has('backend')) {
+          const next = launchSpec(backendOptions);
+          if (next.buildId !== backendSpec.buildId || !backendReady || (!backendState.reused && !backend.owned)) {
+            if (backendState.reused) {
+              console.warn('[Vellum dev] Restart the independently started API to apply backend edits.');
+            } else {
+              await backend.stop();
+              if (quitting) return;
+              backend = createBackendManager(next);
+              backendReady = false;
+              workspaceReady = backend.start();
+              backendState = await workspaceReady;
+              backendReady = true;
+              backendSpec = next;
+              reload = true;
+            }
+          }
+        }
+        if (changed.has('ui')) {
+          await devBundle.build();
+          reload = true;
+        }
+        if (reload && !quitting) host.windows.get('workspace')?.webContents.reloadIgnoringCache();
+      });
+      console.log('[Vellum dev] Watching workspace source changes.');
+    }
   }).catch(async error => {
     if(quitting)return;
     booting=false;
@@ -121,12 +175,14 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', event => {
     if (quitting) return;
     event.preventDefault();quitting=true;
-    Promise.resolve(nativeBrowser?.stop()).then(()=>backend?.stop()).then(()=>{
-      uiServer?.close();workspaceLock?.close();tray?.destroy();app.quit();
+    Promise.all([initialBuild?.catch(()=>{}), stopWatching?.()]).then(()=>nativeBrowser?.stop()).then(()=>backend?.stop()).then(()=>{
+      uiServer?.close();workspaceLock?.close();tray?.destroy();
+      devBundle?.close();
+      if (relaunch) app.relaunch();
+      app.quit();
     }).catch(error=>{quitting=false;dialog.showErrorBox('Vellum is still closing',error.message);});
   });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) host?.openWorkspace(); });
-  // Packaged windows can close while automations continue in the tray. Quit
-  // gracefully stops only the backend this desktop instance actually spawned.
-  app.on('window-all-closed', () => { if (!booting && !tray && process.platform !== 'darwin') app.quit(); });
+  // Closing the workspace stops its watcher and the backend owned by this app.
+  app.on('window-all-closed', () => { if (!booting && process.platform !== 'darwin') app.quit(); });
 }

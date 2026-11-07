@@ -5,10 +5,10 @@ const {conversationTarget, trustedWorkspace, validateCommand} = require('./polic
 const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 const {createLocalFiles}=require('./local-files.cjs');
 
-function createDesktopHost(electron, {workspace, workspaceRoot, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'})}) {
+function createDesktopHost(electron, {workspace, workspaceRoot, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = () => Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'}), onWorkspaceClose = () => {}}) {
   const {BrowserWindow, ipcMain, screen, dialog, shell} = electron;
   const windows = new Map();
-  const providerAuthWindows = new Map();
+  const providerAuthSessions = new Map();
   const controlsURL = pathToFileURL(path.join(root, 'index.html')).href;
   const overlayURL = pathToFileURL(path.join(root, 'overlay.html')).href;
   const known = contents => [...windows.values()].some(win => !win.isDestroyed() && win.webContents === contents);
@@ -20,62 +20,44 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
     try {
       const target = new URL(value), api = new URL(backend);
       const flowId = target.searchParams.get('flow_id');
-      const provider = /^\/api\/plugins\/(github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|district|zomato|swiggy|vercel|clickup|asana|hubspot)\/oauth\/open$/.exec(target.pathname)?.[1];
+      const provider = /^\/api\/plugins\/(youtube|github|linear|slack|airtable|notion|firecrawl|apify|exa|tavily|supabase|district|zomato|swiggy|vercel|clickup|asana|hubspot)\/oauth\/open$/.exec(target.pathname)?.[1];
       return target.origin === api.origin && ['127.0.0.1','localhost'].includes(target.hostname) &&
         !target.username && !target.password && !target.hash && provider && target.searchParams.getAll('flow_id').length===1 &&
         [...target.searchParams.keys()].every(key=>key==='flow_id') && /^[A-Za-z0-9_-]{20,100}$/.test(flowId || '') ? {provider,flowId} : null;
     } catch { return null; }
   }
 
-  function providerLoopback(target) {
-    const api=new URL(backend);
-    return ['127.0.0.1','localhost'].includes(api.hostname)&&['127.0.0.1','localhost'].includes(target.hostname)&&
-      target.protocol===api.protocol&&target.port===api.port&&!target.username&&!target.password;
-  }
-
   function openProviderAuth(owner, url, {provider,flowId}) {
     const key=provider+':'+flowId;
-    const previous = providerAuthWindows.get(key);
-    if (previous && !previous.isDestroyed()) {previous.show(); previous.focus(); return;}
-    const auth = new BrowserWindow({parent:owner, width:680, height:780, minWidth:480, minHeight:500,
-      title:'Sign in to '+({github:'GitHub',linear:'Linear',slack:'Slack',airtable:'Airtable',notion:'Notion',firecrawl:'Firecrawl',apify:'Apify',exa:'Exa',tavily:'Tavily',supabase:'Supabase',district:'District',zomato:'Zomato',swiggy:'Swiggy',vercel:'Vercel',clickup:'ClickUp',asana:'Asana',hubspot:'HubSpot'})[provider], autoHideMenuBar:true, show:false,
-      webPreferences:{contextIsolation:true, sandbox:true, nodeIntegration:false, webSecurity:true, partition:'vellum-'+provider+'-oauth'}});
-    providerAuthWindows.set(key,auth);
-    // This window is deliberately outside `windows`/`known`: provider pages get
-    // no preload, native bridge, workspace privileges or device permissions.
-    auth.webContents.session.setPermissionCheckHandler(()=>false);
-    auth.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-    auth.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-    const restoreOwner=()=>{if(!owner.isDestroyed()){owner.show();owner.focus();}};
-    const closeWithOwner=()=>{if(!auth.isDestroyed())auth.destroy();};
-    owner.once('closed',closeWithOwner);
-    auth.on('closed',()=>{providerAuthWindows.delete(key);owner.removeListener('closed',closeWithOwner);restoreOwner();});
-    const navigation=(event,value)=>{
-      if (trustedWorkspace(value,workspace)) {event.preventDefault();auth.close();return;}
-      try {
-        const target=new URL(value);
-        const callbacks=[`/api/plugins/${provider}/oauth/callback`,`/api/plugins/${provider}/oauth/open`,`/api/plugins/${provider}/oauth/return`];
-        if(provider==='github')callbacks.push('/api/accounts/callback/github');
-        const localCallback=providerLoopback(target)&&callbacks.includes(target.pathname);
-        if (target.protocol!=='https:'&&!localCallback) event.preventDefault();
-      } catch {event.preventDefault();}
+    if(providerAuthSessions.has(key))return providerAuthSessions.get(key).opening;
+    // OAuth runs in the user's system browser. Embedded Electron browsers are
+    // rejected by Google and other identity providers, including federated login.
+    const session={timer:null,expires:Date.now()+10*60*1000};
+    const finish=()=>{
+      clearTimeout(session.timer);providerAuthSessions.delete(key);
+      owner.removeListener('closed',finish);
     };
-    auth.webContents.on('will-navigate',navigation);
-    auth.webContents.on('will-redirect',navigation);
-    auth.webContents.on('did-finish-load',async()=>{
+    owner.once('closed',finish);
+    providerAuthSessions.set(key,session);
+    const poll=async()=>{
+      if(!providerAuthSessions.has(key))return;
+      if(owner.isDestroyed()||Date.now()>=session.expires){finish();return;}
       try {
-        if(auth.isDestroyed())return;
-        const page=new URL(auth.webContents.getURL());
-        if(!providerLoopback(page)||page.pathname!==`/api/plugins/${provider}/oauth/return`||page.searchParams.get('flow_id')!==flowId)return;
         const statusUrl=new URL(`/api/plugins/${provider}/oauth/status`,backend);statusUrl.searchParams.set('flow_id',flowId);
         const response=await fetch(statusUrl,{headers:{Origin:new URL(workspace).origin,'X-Vellum-Accounts':'1',...(provider==='linear'?{'X-Vellum-Linear':'1'}:{})},signal:AbortSignal.timeout(5000)});
-        if(!response.ok)return;
-        const result=await response.json();
-        if(['connected','failed','cancelled'].includes(result.status)&&!auth.isDestroyed())auth.close();
-      } catch {/* The return page and original app retain their own status checks. */}
-    });
-    auth.once('ready-to-show',()=>{if(!auth.isDestroyed())auth.show();});
-    auth.loadURL(url).catch(()=>{if(!auth.isDestroyed())auth.close();});
+        if(response.ok){
+          const result=await response.json();
+          if(['connected','complete','failed','cancelled','expired'].includes(result.status)){
+            finish();if(!owner.isDestroyed()){if(owner.isMinimized())owner.restore();owner.show();owner.focus();}return;
+          }
+        }
+      } catch {/* Original app keeps polling and exposes connection errors. */}
+      if(providerAuthSessions.has(key)){session.timer=setTimeout(poll,1500);session.timer.unref?.();}
+    };
+    session.opening=Promise.resolve().then(()=>shell.openExternal(url)).then(()=>{
+      if(providerAuthSessions.has(key)){session.timer=setTimeout(poll,1500);session.timer.unref?.();}
+    }).catch(()=>{finish();throw new Error('Could not open your default browser. Use Continue to sign in again.');});
+    return session.opening;
   }
 
   function createWindow(key, url, options = {}) {
@@ -108,13 +90,13 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
     windows.set(key, win);
     let closing = false;
     win.once('close', () => { closing = true; nativeBrowser?.unmount(win); });
-    win.on('closed', () => windows.delete(key));
+    win.on('closed', () => {windows.delete(key);if(key==='workspace')onWorkspaceClose();});
     win.webContents.on('will-navigate', (event, target) => {
       if (!(key === 'overlay' ? target === overlayURL : trusted(target))) event.preventDefault();
     });
     win.webContents.setWindowOpenHandler(({url}) => {
       const providerFlow=providerAuthStart(url);
-      if(providerFlow){openProviderAuth(win,url,providerFlow);return {action:'deny'};}
+      if(providerFlow){openProviderAuth(win,url,providerFlow).catch(error=>{if(!win.isDestroyed())dialog.showMessageBox(win,{type:'error',title:'Could not open sign-in',message:error.message}).catch(()=>{});});return {action:'deny'};}
       // Only an explicit user-facing link can request an external web window;
       // no native bridge is ever loaded into third-party content.
       if (/^https?:\/\//i.test(url)) {
@@ -170,6 +152,14 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
     }
     const args = validateCommand(command, input);
     switch (command) {
+      case 'open_plugin_oauth': {
+        if(!trustedWorkspace(event.senderFrame.url,workspace))throw new Error('Sign-in is available only in the workspace.');
+        const flow=providerAuthStart(args.url);
+        if(!flow)throw new Error('Choose a valid local plugin sign-in flow.');
+        const owner=[...windows.values()].find(win=>win.webContents===event.sender);
+        await openProviderAuth(owner,args.url,flow);
+        return {opened:true};
+      }
       case 'local_files': {
         if(!trustedWorkspace(event.senderFrame.url,workspace))throw new Error('Local files are available only in the workspace.');
         return localFiles(args);
@@ -179,7 +169,7 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
         return require('./workspace-files.cjs').readWorkspaceFiles(workspaceRoot,args);
       }
       case 'workspace_ready': {
-        const state=await workspaceReady;
+        const state=await (typeof workspaceReady==='function'?workspaceReady():workspaceReady);
         return {ready:true,reused:state.reused};
       }
       case 'protected_audio_ready': return await protectedAudioReady;

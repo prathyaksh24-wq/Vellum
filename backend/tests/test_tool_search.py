@@ -30,6 +30,21 @@ def _def(name: str, description: str = "", params: dict | None = None) -> dict:
     }
 
 
+def test_compact_tool_docs_preserve_parameter_names_constraints_and_literal_data():
+    schema={'type':'object','required':['examples','description'],'properties':{
+        'examples':{'type':'string','description':'Vendor docs. '*300,'minLength':2},
+        'description':{'type':'object','const':{'description':'x'*500,'examples':[1,2,3]}}},
+        'examples':[{'examples':'illustration'}],'additionalProperties':False}
+    tool=StructuredTool.from_function(lambda **kwargs:kwargs,name='vendor_read',description='Read only.',args_schema=schema)
+    params=ts.to_openai_defs([tool])[0]['function']['parameters']
+    assert params['required']==['examples','description']
+    assert set(params['properties'])=={'examples','description'}
+    assert params['properties']['description']['const']==schema['properties']['description']['const']
+    assert params['properties']['examples']['minLength']==2
+    assert len(params['properties']['examples']['description'])==240
+    assert 'examples' not in params and params['additionalProperties'] is False
+
+
 def test_assemble_defers_marked_tools_and_adds_bridge():
     defs = [_def("search_my_notes"), _def("plugin_mcp"), _def("spotify_play", "Play Spotify tracks")]
     result = ts.assemble_tool_defs(

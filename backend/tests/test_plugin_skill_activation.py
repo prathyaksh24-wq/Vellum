@@ -3,6 +3,21 @@ from pathlib import Path
 from agent.skills.registry import SkillRegistry
 
 
+def test_explicit_plugin_route_precedes_unrelated_specialist_keywords(monkeypatch):
+    from agent import api
+    from agent.tools import plugin_mcp
+    calls=[]
+    def requested(message,*,references):
+        calls.append((message,references))
+        return [{'id':'district','tools':['district_mcp_catalog'],'enabled':True}]
+    monkeypatch.setattr(plugin_mcp,'requested_plugins',requested)
+    attachment=api.ChatAttachment(kind='reference',name='District',reference={'kind':'plugin','id':'district','owner_plugin_id':'district','label':'District'})
+    assert api._main_plugin_request('What movies are playing this week?',[attachment])
+    assert calls[0][1][0]['id']=='district'
+    monkeypatch.setattr(plugin_mcp,'requested_plugins',lambda *args,**kwargs:[{'id':'spotify','tools':['spotify_search']}])
+    assert not api._main_plugin_request('Play a song',[])
+
+
 def test_owned_external_skill_reports_plugin_owner(tmp_path: Path):
     local = tmp_path / "local"
     plugin_skills = tmp_path / "plugin-skills"

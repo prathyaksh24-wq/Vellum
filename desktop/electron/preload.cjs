@@ -1,7 +1,7 @@
 const {contextBridge, ipcRenderer} = require('electron');
 
 // No IPC object, filesystem access, or arbitrary channel names cross this seam.
-const commands = new Set(['backend_health', 'workspace_ready', 'protected_audio_ready', 'open_vellum_window', 'open_conversation_window', 'set_overlay', 'skill_file', 'workspace_files', 'local_files']);
+const commands = new Set(['backend_health', 'workspace_ready', 'protected_audio_ready', 'open_vellum_window', 'open_conversation_window', 'set_overlay', 'skill_file', 'workspace_files', 'local_files', 'open_plugin_oauth']);
 contextBridge.exposeInMainWorld('VellumDesktop', Object.freeze({
   runtime: 'electron',
   backendURL: 'http://127.0.0.1:8000',

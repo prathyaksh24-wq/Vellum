@@ -60,7 +60,7 @@
       const popup=desktop?null:window.open('about:blank','vellum-linear-oauth','popup,width=680,height=780');
       popupRef.current=popup;setBusy(true);setError('');
       try{const next=await action('linear.connection.oauth.start',{return_url:window.location.origin+window.location.pathname+(new URLSearchParams(window.location.search).get('desktop')==='1'?'?desktop=1':''),popup:true});
-        if(next){const target=authorizationTarget(next.authorization_url);setOAuth({...next,status:'pending',message:'Continue to Linear and approve access to your workspace.'});if(desktop)popupRef.current=window.open(api.plugins.linearOAuthWindowUrl(next.flow_id),'vellum-linear-oauth','popup,width=680,height=780');else if(popup)popup.location.href=target;}
+        if(next){const target=authorizationTarget(next.authorization_url);setOAuth({...next,status:'pending',message:'Continue to Linear and approve access to your workspace.'});if(desktop)popupRef.current=await api.plugins.openOAuthFlow('linear',next.flow_id);else if(popup)popup.location.href=target;}
         else popup?.close();
       }catch(err){popup?.close();setError(err.message);}finally{setBusy(false);}
     };

@@ -7,8 +7,18 @@
     if(['localhost','127.0.0.1','[::1]'].includes(url.hostname) && ['localhost','127.0.0.1','[::1]'].includes(location.hostname))url.hostname=location.hostname;
     return url.origin;
   }
+  function withArtwork(groups) {
+    return groups.map(group => ({...group, entries:group.entries.map(entry => ({
+      ...entry,
+      artwork_url:entry.artwork_url?.startsWith(base+'/artwork/')?mediaBase()+entry.artwork_url:entry.artwork_url || '',
+    }))}));
+  }
   window.VellumApi.localMusic = {
-    library: () => client.request(base+'/library',{cache:'no-store'}).then(page=>({...page,collections:page.collections.map(group=>({...group,entries:group.entries.map(entry=>({...entry,artwork_url:entry.artwork_url?.startsWith(base+'/artwork/')?mediaBase()+entry.artwork_url:entry.artwork_url || ''}))}))})),
+    library: () => client.request(base+'/library',{cache:'no-store'}).then(page => ({
+      ...page,
+      collections:withArtwork(page.collections),
+      pending_imports:withArtwork(page.pending_imports || []),
+    })),
     player: () => client.request(base+'/player',{cache:'no-store'}),
     report: body => client.request(base+'/player/report',{...client.jsonOptions('POST',body),headers:{...headers,'Content-Type':'application/json'}}),
     action: (name,args) => window.VellumApi.appActions.dispatch({action_id:'local_music.'+name,arguments:args},{source:'ui'}),

@@ -2,3 +2,4 @@
 # Reviewed independently; update after focused extraction and acquisition checks.
 yt-dlp[default]==2026.10.26
 ytmusicapi==1.12.3
+imageio-ffmpeg==0.6.0

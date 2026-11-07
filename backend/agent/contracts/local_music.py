@@ -1,6 +1,7 @@
 """Local music contracts: playlist references and acquired audio remain distinct."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from urllib.parse import urlsplit
 
 
 class MusicSourceEntry(BaseModel):
@@ -9,9 +10,21 @@ class MusicSourceEntry(BaseModel):
     artist: str = Field(default='', max_length=500)
     album: str = Field(default='', max_length=500)
     duration_ms: int = Field(default=0, ge=0, le=86400000)
-    provider: Literal['local', 'spotify', 'apple_music', 'youtube'] = 'local'
+    provider: Literal['local', 'spotify', 'apple_music', 'youtube','amazon_music','jiosaavn','soundcloud','bandcamp'] = 'local'
     source_id: str = Field(default='', max_length=200)
     source_url: str = Field(default='', max_length=2048)
+    thumbnail_url: str = Field(default='',max_length=2048)
+
+    @field_validator('thumbnail_url')
+    @classmethod
+    def public_thumbnail(cls,value):
+        if not value:return value
+        parsed=urlsplit(value)
+        host=(parsed.hostname or '').lower()
+        domains=('ytimg.com','mzstatic.com','saavncdn.com','sndcdn.com','bcbits.com','media-amazon.com','googleusercontent.com','scdn.co')
+        if parsed.scheme!='https' or parsed.username or parsed.password or not any(host==domain or host.endswith('.'+domain) for domain in domains):
+            raise ValueError('Choose artwork from the music provider.')
+        return value
 
 
 class LocalMusicEntry(MusicSourceEntry):
@@ -37,25 +50,59 @@ class MusicImportRequest(BaseModel):
     entries: list[MusicSourceEntry] = Field(default_factory=list, max_length=5000)
     completeness: Literal['complete', 'partial', 'unknown'] = 'unknown'
     source_origin: str = Field(default='', max_length=2048)
+    download_mp3: bool = False
+    auto_import: bool = False
+    permission_confirmed: Literal[True] | None = None
+    pending_import_id: str = Field(default='', max_length=64)
 
     @model_validator(mode='after')
     def source(self):
-        if bool(self.url.strip()) == bool(self.entries):
+        if sum(map(bool, (self.url.strip(), self.entries, self.pending_import_id))) != 1:
             raise ValueError('Choose a source link or a playlist manifest.')
+        if self.download_mp3 and not self.url.strip():
+            raise ValueError('Choose a song or playlist link to convert.')
+        if self.auto_import and not self.download_mp3:
+            raise ValueError('Automatic import requires MP3 downloads.')
         return self
 
 
 class MusicDownloadRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    entry_ids: list[str] = Field(min_length=1, max_length=500)
+    entry_ids: list[str] = Field(default_factory=list, max_length=500)
+    collection_id: str = Field(default='', max_length=64)
     source_url: str = Field(default='', max_length=2048)
-    permission_confirmed: Literal[True]
+    permission_confirmed: Literal[True] | None = None
+
+    @model_validator(mode='after')
+    def target(self):
+        if bool(self.entry_ids) == bool(self.collection_id):
+            raise ValueError('Choose songs or a playlist to download.')
+        if self.collection_id and self.source_url:
+            raise ValueError('A recording link can only be supplied for one song.')
+        return self
 
 
 class MusicFileImportRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     file_token: str = Field(pattern=r'^[a-f0-9]{32}$')
     entry_id: str = Field(default='', max_length=64)
+
+
+class MusicRemoveRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    collection_id: str = Field(default='', max_length=64)
+    entry_id: str = Field(default='', max_length=64)
+
+    @model_validator(mode='after')
+    def target(self):
+        if bool(self.collection_id) == bool(self.entry_id):
+            raise ValueError('Choose one playlist or one song to remove.')
+        return self
+
+
+class MusicRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    collection_id: str = Field(min_length=1,max_length=64)
 
 
 class MusicJobRequest(BaseModel):
@@ -106,14 +153,18 @@ class LocalMusicJob(BaseModel):
     title: str
     status: Literal['queued', 'running', 'complete', 'failed', 'cancelled']
     error: str = ''
+    stage: Literal['', 'finding', 'downloading', 'converting'] = ''
+    progress: int | None = Field(default=None, ge=0, le=100)
 
 
 class LocalMusicLibrary(BaseModel):
     collections: list[LocalMusicCollection] = Field(default_factory=list)
+    pending_imports: list[LocalMusicCollection] = Field(default_factory=list)
     jobs: list[LocalMusicJob] = Field(default_factory=list)
     player: LocalPlayerState
     downloader_available: bool
     discovery_available: bool
+    mp3_available: bool = False
 
 
 class MusicDiscoveryPage(BaseModel):

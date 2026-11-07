@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 985,
-      "sha256": "53062c974268915107f94d4204aa181a8b7eda2834e9d3d79ea6c2a32ebba79e"
+      "count": 975,
+      "sha256": "e4fed83a688d9338c7b37f914cfc3a679a3cbcf78e7aae96521fbda185991297"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -58,8 +58,8 @@
       "sha256": "43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"
     },
     "design/Velllum/uploads/components/music-page.jsx": {
-      "count": 109,
-      "sha256": "e8fd725b337f44e001b6ec4a432c877a0109518e6f603cbae299b22eedd35267"
+      "count": 110,
+      "sha256": "50a63b9a9abb1e159622a667d92344bcffd6862297f6146600a9b53fc9317bec"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
       "count": 17,
@@ -147,7 +147,7 @@
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
       "count": 132,
-      "sha256": "8c32f1a4ac803d980f7d5dcd8bfb1fff4e75fb93d5081f50f93606f98747162f"
+      "sha256": "06814c66ac8e0bca5ca4afa97a19f7646aa5ff2c07fad553083d0fc383f28629"
     },
     "design/Velllum/uploads/books-entry.js": {
       "count": 0,
@@ -218,8 +218,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/local-music.jsx": {
-      "count": 18,
-      "sha256": "62932c41f79c678981dac1d561ecb71900d049246f484147866462f7cea3135e"
+      "count": 27,
+      "sha256": "e75860c4507a110d34fc5e012376dd2f657b14ed8de5d07fa12baf1788805b36"
     },
     "design/Velllum/uploads/components/settings-overview.jsx": {
       "count": 19,
@@ -386,24 +386,6 @@
       "probe": {
         "path": "design/Velllum/uploads/api/plugins.js",
         "text": "action_id:'spotify.playlist.edit'"
-      }
-    },
-    {
-      "surface": "Music",
-      "name": "selected collection and song position playback",
-      "actionId": "spotify.playback.control",
-      "probe": {
-        "path": "design/Velllum/uploads/components/music-page.jsx",
-        "text": "offset_position:item.position"
-      }
-    },
-    {
-      "surface": "Music",
-      "name": "measured seek volume mute shuffle repeat and track controls",
-      "actionId": "spotify.playback.control",
-      "probe": {
-        "path": "design/Velllum/uploads/components/music-page.jsx",
-        "text": "control('set_volume',isLocal?{volume:volume_percent/100}:{volume_percent})"
       }
     },
     {
@@ -2181,42 +2163,6 @@
     },
     {
       "surface": "Local music",
-      "name": "import and match selected audio files",
-      "actionId": "local_music.file",
-      "probe": {
-        "path": "design/Velllum/uploads/components/local-music.jsx",
-        "text": "api.upload(file,entryId)"
-      }
-    },
-    {
-      "surface": "Local music",
-      "name": "import playlist information and manifests",
-      "actionId": "local_music.playlist",
-      "probe": {
-        "path": "design/Velllum/uploads/components/local-music.jsx",
-        "text": "action('playlist',"
-      }
-    },
-    {
-      "surface": "Local music",
-      "name": "measured local transport and queue",
-      "actionId": "local_music.playback",
-      "probe": {
-        "path": "design/Velllum/uploads/components/local-music.jsx",
-        "text": "action('playback',args)"
-      }
-    },
-    {
-      "surface": "Music",
-      "name": "retain exact linked Spotify playlists",
-      "actionId": "spotify.playlists.link",
-      "probe": {
-        "path": "design/Velllum/uploads/components/music-page.jsx",
-        "text": "action_id:'spotify.playlists.link'"
-      }
-    },
-    {
-      "surface": "Local music",
       "name": "Dynamic Island local transport",
       "actionId": "local_music.playback",
       "probe": {
@@ -2348,6 +2294,96 @@
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "onPin={()=>onProjectAction(project.id,'pin')}"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "selected collection and song position playback",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "offset_position:item.position"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "measured seek volume mute shuffle repeat and track controls",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "control('set_volume',isLocal?{volume:volume_percent/100}:{volume_percent})"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "import selected audio files",
+      "actionId": "local_music.file",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "api.upload(file)"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "prepare and confirm playlist imports",
+      "actionId": "local_music.playlist",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('playlist',"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "measured local transport and queue",
+      "actionId": "local_music.playback",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('playback',args)"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "retain exact linked Spotify playlists",
+      "actionId": "spotify.playlists.link",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "action_id:'spotify.playlists.link'"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "queue missing MP3s",
+      "actionId": "local_music.download",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('download',"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "cancel or retry MP3 downloads",
+      "actionId": "local_music.job",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('job',"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "remove songs and playlists",
+      "actionId": "local_music.remove",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('remove',"
+      }
+    },
+    {
+      "surface": "Local music",
+      "name": "refresh linked playlist songs",
+      "actionId": "local_music.refresh",
+      "probe": {
+        "path": "design/Velllum/uploads/components/local-music.jsx",
+        "text": "action('refresh',"
       }
     },
     {

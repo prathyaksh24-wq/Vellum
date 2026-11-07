@@ -31,7 +31,9 @@ def _connected_operation(action, arguments, *, write=False):
             from agent.tools.app_actions import app_action
             return app_action.invoke({"operation": "execute", "action_id": "github.mcp.execute", "arguments": operation.model_dump()})
         return GitHubMcpAdapter().read(operation)
-    except (GitHubConnectionError, ValueError, RuntimeError):
+    except GitHubConnectionError as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+    except (ValueError, RuntimeError):
         return json.dumps({"ok": False, "error": "Use GitHub's connected tool catalog and exact schema: github_mcp_catalog, github_mcp_describe, then github_mcp_read or github_mcp_execute. Connect GitHub in Plugins first."})
 
 
