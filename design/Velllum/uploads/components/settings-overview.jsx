@@ -52,7 +52,7 @@
       <p className="cfg-connection-footnote">A saved key is a connection setting. Available models and account access are managed separately.</p>
     </div>;
   }
-  function General({theme,onTheme,dockPosition,onDockPosition,dockLocked,onDockLocked,onNavigate,model,ModelIcon}) {
+  function General({theme,onTheme,dockPosition,onDockPosition,dockLocked,onDockLocked,previewRail,onDeviceSettings,onNavigate,model,ModelIcon}) {
     return <div className="settings-overview settings-general-view">
       <header className="settings-view-head"><div><h1>General</h1><p>Appearance, workspace, and privacy</p></div></header>
       <section className="settings-preference-section"><div className="settings-section-heading"><h2>Appearance</h2><p>Choose how Vellum looks</p></div><div className="settings-preference-list">
@@ -63,6 +63,18 @@
         <button type="button" className="settings-preference-row settings-preference-link" onClick={()=>onNavigate('Configuration')}><span><strong>Models & connections</strong><span className="settings-row-description">Manage providers and your default model.</span></span><span className="settings-current-model">{ModelIcon && <ModelIcon model={model || {}}/>}<span>{model?.label || 'Choose a model'}</span><Arrow/></span></button>
         <div className="settings-preference-row"><div><strong>Dock position</strong><p>Choose where the dock appears</p></div><VSelect className="dock-pos-select" ariaLabel="Dock position" value={dockPosition} onValueChange={onDockPosition} options={[{value:'auto',label:'Automatic'},{value:'top',label:'Top'},{value:'bottom',label:'Bottom'},{value:'left',label:'Left'},{value:'right',label:'Right'}]}/></div>
         <div className="settings-preference-row"><div><strong>Keep dock visible</strong><p>Keep quick actions in view while you work.</p></div><button type="button" role="switch" aria-label="Keep dock visible" aria-checked={dockLocked} className={'settings-preference-switch'+(dockLocked?' on':'')} onClick={()=>onDockLocked(!dockLocked)}><span/></button></div>
+        <div className="settings-preference-row">
+          <div><strong>Preview rail position</strong><p>Choose which side of the chat shows prompt markers.</p></div>
+          <VSelect className="dock-pos-select" ariaLabel="Preview rail position" value={previewRail.position}
+            onValueChange={position => onDeviceSettings({preview_rail_position:position})}
+            options={[{value:'left',label:'Left'},{value:'right',label:'Right'}]}/>
+        </div>
+        <div className="settings-preference-row">
+          <div><strong>Preview rail visibility</strong><p>Choose when prompt markers appear in conversations.</p></div>
+          <VSelect className="dock-pos-select" ariaLabel="Preview rail visibility" value={previewRail.visibility}
+            onValueChange={visibility => onDeviceSettings({preview_rail_visibility:visibility})}
+            options={[{value:'visible',label:'Always visible'},{value:'hover',label:'On hover'},{value:'hidden',label:'Hidden'}]}/>
+        </div>
       </div></section>
       <section className="settings-preference-section"><div className="settings-section-heading"><h2>Personalization & privacy</h2><p>Memory, responses, and your account</p></div><div className="settings-preference-list"><button type="button" className="settings-preference-row settings-preference-link" onClick={()=>onNavigate('Personalization')}><span><strong>Personalization</strong><span className="settings-row-description">Response preferences, memory, and sharing controls.</span></span><Arrow/></button><button type="button" className="settings-preference-row settings-preference-link" onClick={()=>onNavigate('Accounts')}><span><strong>Your account</strong><span className="settings-row-description">Manage the accounts you use with Vellum.</span></span><Arrow/></button></div></section>
     </div>;

@@ -92,6 +92,7 @@ class ElectronContext:
 
     async def synchronize(self):
         result = await self.bridge.call('status')
+        self.owner._zoom_factor = max(0.25, min(3, float(result.get('zoom_factor') or 1)))
         if result.get('human_input') and self.owner.control == 'agent':
             self.owner.control = 'user'
             self.owner._invalidate(view_changed=False)
@@ -105,6 +106,11 @@ class ElectronContext:
             self.owner._invalidate()
         # Downloads use Electron's session event rather than a second CDP owner.
         for item in result.get('downloads', []):
+            record = self.owner._downloads.get(item['id'])
+            if record is not None:
+                record.received_bytes = max(0, int(item.get('received_bytes') or 0))
+                record.total_bytes = max(0, int(item.get('total_bytes') or 0))
+                record.paused = bool(item.get('paused'))
             if item['id'] not in self.owner._native_download_ids:
                 self.owner._native_download_ids.add(item['id'])
                 page = self.targets.get(item['target_id'])

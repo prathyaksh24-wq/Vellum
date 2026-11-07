@@ -47,3 +47,10 @@ test('skill file actions accept registered identifiers rather than paths or comm
     assert.throws(()=>validateCommand('skill_file',args));
   }
 });
+
+
+test('workspace files expose only bounded read operations through the desktop bridge',()=>{
+  assert.deepEqual(validateCommand('workspace_files',{operation:'list',relativePath:''}),{operation:'list',relativePath:''});
+  for(const args of [{operation:'write',relativePath:'a'},{operation:'read',relativePath:42},
+    {operation:'read',relativePath:'a',command:'execute'}])assert.throws(()=>validateCommand('workspace_files',args));
+});

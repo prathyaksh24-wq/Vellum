@@ -46,7 +46,7 @@ describe("Vellum default redesigned frontend", () => {
     }
   });
   test("binds every React hook used at application startup", () => {
-    expect(html).toContain("const {useState, useRef, useEffect, useMemo} = React;");
+    expect(html).toContain("const {useState, useRef, useEffect, useLayoutEffect, useMemo} = React;");
     expect(html).toContain("const availableAgents = useMemo(");
   });
 

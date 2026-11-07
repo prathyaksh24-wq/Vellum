@@ -238,7 +238,8 @@ def test_agent_prompt_documents_memory_orchestrator_tool():
 
 def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog(tmp_path: Path, monkeypatch):
     class FakeRegistry:
-        pass
+        def list_skills(self):
+            return []
 
     class FakeCatalog:
         def delegation_manifest(self):

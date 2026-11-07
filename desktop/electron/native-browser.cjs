@@ -182,9 +182,11 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       require('node:fs').mkdirSync(directory, {recursive:true});
       const destination = path.join(directory, filename);
       item.setSavePath(destination); item.pause();
-      const record = {id, profile_id:profile.id, name:filename, item, path:destination, target_id:contents.getOrCreateDevToolsTargetId(), state:'paused'};
+      const record = {id, profile_id:profile.id, name:filename, item, path:destination, target_id:contents.getOrCreateDevToolsTargetId(), state:'paused',received_bytes:0,total_bytes:0,paused:true};
       downloads.set(id, record);
-      item.on('done', (_event,state)=>{record.state=state;});
+      const update=()=>{try{record.received_bytes=Math.max(0,item.getReceivedBytes?.()||0);record.total_bytes=Math.max(0,item.getTotalBytes?.()||0);record.paused=!!item.isPaused?.();}catch{}};
+      update();item.on('updated',(_event,state)=>{record.state=state;update();});
+      item.on('done', (_event,state)=>{record.state=state;update();record.paused=false;});
     });
   }
   async function close() {
@@ -221,9 +223,9 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
     },
     async status() {
       const tab=tabs.get(active), bounds=tab?.view.getBounds();
-      const result={active_target_id:active,tabs:[...tabs].filter(([,item])=>!item.view.webContents.isDestroyed()).map(([id,item])=>({target_id:id,background:item.background})),
+      const result={active_target_id:active,zoom_factor:tab?.view.webContents.getZoomFactor?.()||1,tabs:[...tabs].filter(([,item])=>!item.view.webContents.isDestroyed()).map(([id,item])=>({target_id:id,background:item.background})),
         human_input:humanInput, viewport:bounds && bounds.width>=240 && bounds.height>=160 ? {width:bounds.width,height:bounds.height} : null,
-        downloads:[...downloads.values()].filter(item=>item.profile_id===profile?.id).map(({id,name,target_id})=>({id,name,target_id}))};
+        downloads:[...downloads.values()].filter(item=>item.profile_id===profile?.id).map(({id,name,target_id,received_bytes,total_bytes,paused})=>({id,name,target_id,received_bytes,total_bytes,paused}))};
       humanInput=false; return result;
     },
     async activity(data) { agentAction=data.active === true; return {}; },
@@ -246,7 +248,27 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       else tab.view.webContents.stopFindInPage('clearSelection');
       return {};
     },
-    async download_resume(data) { const item=downloads.get(data.download_id); if (!item) throw new Error('Download is unavailable.'); item.item.resume(); return {}; },
+    async page_tool(data) {
+      const tab=tabs.get(data.target_id);
+      if (!tab || tab.view.webContents.isDestroyed()) throw new Error('The embedded tab changed.');
+      const page=tab.view.webContents;
+      if(data.kind==='find') {
+        if(typeof data.text!=='string'||data.text.length>10000)throw new Error('Invalid find text.');
+        if(data.text)page.findInPage(data.text,{forward:data.forward!==false,findNext:data.find_next===true});
+        else page.stopFindInPage('clearSelection');
+      }else if(data.kind==='zoom') {
+        if(!Number.isFinite(data.factor)||data.factor<0.25||data.factor>3)throw new Error('Invalid zoom.');
+        page.setZoomFactor(data.factor);
+      }else if(data.kind==='print')page.print({silent:false});
+      else throw new Error('Unsupported browser control.');
+      return {};
+    },
+    async reveal_download(data) {
+      if(!downloads.has(data.download_id)||typeof data.path!=='string'||!path.isAbsolute(data.path)||(await fs.stat(data.path)).isFile()!==true)throw new Error('Download is unavailable.');
+      electron.shell.showItemInFolder(data.path);return {};
+    },
+    async download_pause(data) {const item=downloads.get(data.download_id);if(!item)throw new Error('Download is unavailable.');item.item.pause();item.paused=true;return {};},
+    async download_resume(data) { const item=downloads.get(data.download_id); if (!item) throw new Error('Download is unavailable.'); item.item.resume();item.paused=false; return {}; },
     async download_cancel(data) { downloads.get(data.download_id)?.item.cancel(); return {}; },
     async download_status(data) { const item=downloads.get(data.download_id); if (!item) throw new Error('Download is unavailable.'); return {state:item.state,path:item.path}; },
   };

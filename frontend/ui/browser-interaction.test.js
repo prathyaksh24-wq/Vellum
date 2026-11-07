@@ -1,5 +1,6 @@
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
+import {createRequire} from 'node:module';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {expect, test, vi} from 'vitest';
@@ -349,17 +350,26 @@ test('New tab focuses an empty address immediately while creation is pending', a
   } finally {await act(async()=>finish?.({status:'applied'}));await panel.cleanup();}
 });
 
-test('Alt+W closes the last browser tab and Alt+L focuses its address', async()=> {
+test('shared browser shortcuts focus the address and close the last tab', async()=> {
+  const registry=createRequire(import.meta.url)('../../desktop/electron/commands.cjs');
+  const controller=React.createRef();
+  window.VellumCommands={runtime:registry.createRuntime({
+    context:()=>({browser:true,tabs:true}),
+    handlers:()=>({
+      'browser.address':()=>controller.current.focusAddress(),
+      'browser.close':()=>controller.current.closeTab('tab'),
+    }),
+  })};
   const api = {frame:async()=>sampleFrame,control:vi.fn(async()=>({status:'applied'}))};
-  const panel = await mountPanel(api,manualState());
+  const panel = await mountPanel(api,manualState(),{controllerRef:controller});
   try {
     const screen=panel.container.querySelector('.browser-screen');
-    await act(async()=>screen.dispatchEvent(new KeyboardEvent('keydown',{key:'l',altKey:true,bubbles:true,cancelable:true})));
+    await act(async()=>screen.dispatchEvent(new KeyboardEvent('keydown',{key:'l',code:'KeyL',ctrlKey:true,bubbles:true,cancelable:true})));
     expect(document.activeElement).toBe(panel.container.querySelector('[aria-label="Browser address"]'));
-    await act(async()=>screen.dispatchEvent(new KeyboardEvent('keydown',{key:'w',altKey:true,bubbles:true,cancelable:true})));
+    await act(async()=>screen.dispatchEvent(new KeyboardEvent('keydown',{key:'w',code:'KeyW',ctrlKey:true,bubbles:true,cancelable:true})));
     expect(api.control).toHaveBeenCalledWith({operation:'close'},undefined);
     expect(panel.onHide).toHaveBeenCalledOnce();
-  } finally {await panel.cleanup();}
+  } finally {await panel.cleanup();delete window.VellumCommands;}
 });
 
 test('clicking the page takes ownership and retains the click; typing is batched', async () => {

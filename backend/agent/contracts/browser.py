@@ -103,7 +103,8 @@ class BrowserPreferences(BaseModel):
 
 class BrowserControl(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "reopen_tab", "find", "click", "hover", "type", "press", "scroll", "show_download", "resize", "preferences"]
+    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "reopen_tab", "click", "hover", "type", "press", "scroll", "show_download", "resize", "preferences", "find", "zoom", "print", "ack_downloads", "pause_download", "resume_download", "cancel_download"]
+    zoom_factor: float = Field(default=1, ge=0.25, le=3)
     search_engine: SearchEngine | None = None
     suggestions_enabled: bool | None = None
     searxng_url: str | None = Field(default=None, max_length=4096)
@@ -151,8 +152,12 @@ class BrowserAddressSuggestions(BaseModel):
 class BrowserDownload(BaseModel):
     id: str
     name: str
-    state: Literal["downloading", "saved", "failed", "awaiting_approval", "blocked"]
+    state: Literal["downloading", "saved", "failed", "awaiting_approval", "blocked", "cancelled"]
     size: int = 0
+    received_bytes: int = Field(default=0, ge=0)
+    total_bytes: int = Field(default=0, ge=0)
+    paused: bool = False
+    acknowledged: bool = False
 
 
 class BrowserSettingsPatch(BaseModel):
@@ -236,6 +241,8 @@ class BrowserStatus(BaseModel):
     native_target_id: str = ''
     available: bool
     reason: str = ""
+    features: dict[str, bool] = Field(default_factory=dict)
+    zoom_factor: float = Field(default=1, ge=0.25, le=3)
     running: bool = False
     presentation_requested: bool = True
     presentation_revision: int = Field(default=0, ge=0)

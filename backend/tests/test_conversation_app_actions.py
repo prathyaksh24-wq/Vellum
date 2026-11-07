@@ -604,3 +604,18 @@ def test_submission_matcher_recognizes_fork_window_and_share_commands() -> None:
     assert subject.match_submission('Open chat named "Release plan" in a new window').arguments == {"reference": "Release plan"}
     assert subject.match_submission('Share the chat called "Release plan"').arguments == {"reference": "Release plan"}
     assert subject.match_submission("tell me about sharing chats") is None
+
+
+def test_side_chat_creation_persists_a_validated_parent_without_main_navigation(tmp_path):
+    lifecycle = ConversationLifecycle(path=tmp_path / "conversations.json")
+    lifecycle.save("main", {"title": "Main task", "messages": []})
+    subject = AppActionRuntime(conversation_lifecycle=lifecycle)
+    receipt = subject.dispatch(AppActionRequest(action_id=CONVERSATION_NEW_ACTION_ID,
+        arguments={"create_record": True, "parent_conversation_id": "main"}),
+        AppActionContext(source="ui", invocation_conversation_id="main"))
+    assert receipt.status == "applied"
+    side = receipt.result["conversation"]
+    assert side["parent_conversation_id"] == "main"
+    assert lifecycle.get(side["id"])["parent_conversation_id"] == "main"
+    assert "navigation" not in receipt.result
+    assert lifecycle.get("main")["messages"] == []

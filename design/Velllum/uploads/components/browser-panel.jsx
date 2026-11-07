@@ -207,7 +207,7 @@
   }
   const assets = 'assets/browser-home/';
   const browserIcons={"close": "X", "plus": "Plus", "pause": "Pause", "restore": "SidebarRight", "expand": "Expand", "more": "DotsHorizontal", "back": "ArrowLeft", "forward": "ArrowRight", "reload": "ArrowRotateCw", "home": "Home", "download": "Download", "search": "Search", "chevron": "ChevronDown", "check": "Check", "settings": "SettingsCog", "globe": "Globe"};
-  const Icon = ({name,size=16}) => browserIcons[name]?<window.VellumUI.AppIcon name={browserIcons[name]} size={size}/>:<span className="browser-glyph" aria-hidden="true" style={{width:size,height:size,maskImage:`url("${assets}icons/${name}.svg")`,WebkitMaskImage:`url("${assets}icons/${name}.svg")`}}/>;
+  const Icon = ({name,size=16}) => browserIcons[name]?React.createElement(window.VellumUI.WorkspaceIcon||window.VellumUI.AppIcon,{name:window.VellumUI.WorkspaceIcon?(name==='expand'?'Full':name==='restore'?'Split':browserIcons[name]):browserIcons[name],size}):<span className="browser-glyph" aria-hidden="true" style={{width:size,height:size,maskImage:`url("${assets}icons/${name}.svg")`,WebkitMaskImage:`url("${assets}icons/${name}.svg")`}}/>;
   const BrandIcon = ({engine, size=20}) => engine.mask ? <span className={'browser-brand-icon brand-' + engine.id} aria-hidden="true" style={{width:size, height:size, maskImage:`url("${assets}${engine.icon}")`, WebkitMaskImage:`url("${assets}${engine.icon}")`}}/> : <img className="browser-brand-icon" src={assets + engine.icon} width={size} height={size} alt=""/>;
   const fallbackEngines = [
     {id:'google', name:'Google', wallpaper:'google.png', icon:'google.ico'},
@@ -786,6 +786,10 @@
         command('press', {key:[...modifiers, event.key === ' ' ? 'Space' : event.key].join('+')});
       }
     };
+    const transfers=state.downloads||[],activeTransfers=transfers.filter(file=>file.state==='downloading'),known=activeTransfers.length>0&&activeTransfers.every(file=>file.total_bytes>0),totalBytes=activeTransfers.reduce((sum,file)=>sum+(file.total_bytes||0),0),received=activeTransfers.reduce((sum,file)=>sum+(file.received_bytes||0),0),percent=known?Math.min(100,Math.round(received/totalBytes*100)):null;
+    const allPaused=activeTransfers.length>0&&activeTransfers.every(file=>file.paused),attention=transfers.filter(file=>!file.acknowledged&&['failed','saved'].includes(file.state)).sort((a,b)=>Number(b.state==='failed')-Number(a.state==='failed'))[0];
+    const toggleDownloads=()=>{setDownloadsOpen(!downloadsOpen);setMoreOpen(false);if(!downloadsOpen)command('ack_downloads');};
+    const downloadLabel=activeTransfers.length?(allPaused?'Downloads paused':known?'Downloading · '+percent+'%':'Downloads in progress'):attention?.state==='failed'?'Download failed':attention?'Download complete':'Downloads';
     return <aside hidden={hidden} inert={hidden?'':undefined} className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel" data-shared-tabs={sharedTabs}
       onKeyDownCapture={shortcut} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDownloadsOpen(false); setMoreOpen(false); } }}>
       <header className="browser-heading">
@@ -826,14 +830,25 @@
               {completions.query === addressQuery && completions.engine === engine.id && completions.status === 'unavailable' && <small className="browser-suggestions-status" role="status">{engine.name} suggestions unavailable</small>}
             </div>}
           </div>
-          <button type="button" className="browser-icon" title="Downloads" aria-expanded={downloadsOpen} onClick={() => { setDownloadsOpen(!downloadsOpen); setMoreOpen(false); }}><Icon name="download"/></button>
+          <button type="button" title={downloadLabel} aria-label={downloadLabel} className="browser-icon browser-download-indicator" aria-expanded={downloadsOpen} data-attention={attention?.state} data-paused={allPaused} onClick={toggleDownloads}><Icon name={allPaused?'pause':'download'}/>{!!activeTransfers.length&&<progress aria-hidden="true" max="100" value={percent===null?undefined:percent}/>}</button>
         </form>
       </>
-      {moreOpen && <section className="browser-session-menu" aria-label="Browser session menu"><strong>{preferences.profiles?.find(profile => profile.id===preferences.active_profile_id)?.name || 'Brave session'}</strong><p>Separate session · On this device</p><label><input type="checkbox" checked={preferences.suggestions_enabled !== false} onChange={event => command('preferences', {suggestions_enabled:event.target.checked})}/>Search suggestions</label><p>Sends what you type to {engine.name}. History stays on this device.</p><button className="browser-button" onClick={() => {setMoreOpen(false);onSettings?.();}}>Browser settings</button><button className="browser-button" onClick={closeWindow}><Icon name="close"/>Close session</button></section>}
+      {moreOpen && <section className="browser-session-menu" aria-label="Browser options"><strong>{preferences.profiles?.find(profile => profile.id===preferences.active_profile_id)?.name || 'Browser'}</strong>
+        {state.features?.find&&<button type="button" className="browser-menu-row" onClick={()=>{setFindOpen(true);setMoreOpen(false);}}><Icon name="search"/>Find in page</button>}
+        {state.features?.zoom&&<div className="browser-zoom-controls"><span>Zoom</span><button type="button" aria-label="Zoom out" disabled={state.zoom_factor<=0.25} onClick={()=>command('zoom',{zoom_factor:Math.max(0.25,(state.zoom_factor||1)-0.1)})}><window.VellumUI.WorkspaceIcon name="Minus" size={14}/></button><button type="button" aria-label="Reset zoom" onClick={()=>command('zoom',{zoom_factor:1})}>{Math.round((state.zoom_factor||1)*100)}%</button><button type="button" aria-label="Zoom in" disabled={state.zoom_factor>=3} onClick={()=>command('zoom',{zoom_factor:Math.min(3,(state.zoom_factor||1)+0.1)})}><window.VellumUI.AppIcon name="Plus" size={14}/></button></div>}
+        {state.features?.print&&<button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);command('print');}}>Print…</button>}
+        <button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);setDownloadsOpen(true);command('ack_downloads');}}><Icon name="download"/>Downloads</button>
+        <button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);onSettings?.();}}><Icon name="settings"/>History and browser settings</button>
+        <label className="browser-menu-row"><input type="checkbox" checked={preferences.suggestions_enabled !== false} onChange={event => command('preferences', {suggestions_enabled:event.target.checked})}/>Search suggestions</label><p>Suggestions use {engine.name}.</p>
+        <button type="button" className="browser-menu-row" onClick={closeWindow}><Icon name="close"/>Close session</button>
+      </section>}
+      {attention&&!downloadsOpen&&<button type="button" className="browser-download-peek" role="status" onClick={toggleDownloads}><Icon name="download"/><span>{attention.state==='failed'?'Download failed':'Downloaded'}<strong>{attention.name}</strong></span></button>}
       {downloadsOpen && <section className="browser-downloads" aria-label="Browser downloads">
         <div className="browser-downloads-head"><strong>Downloads</strong><button className="browser-icon" title="Close downloads" onClick={() => setDownloadsOpen(false)}><Icon name="close"/></button></div>
         {state.downloads.length ? state.downloads.map(file => <div className="browser-download" key={file.id}>
-          <Icon name="download"/><div><span>{file.name}</span><small>{file.state === 'saved' ? Math.max(1, Math.round(file.size/1024)) + ' KB · Saved' : file.state === 'failed' ? 'Download failed' : 'Downloading…'}</small></div>
+          <Icon name="download"/><div><span>{file.name}</span><small>{file.state==='saved'?Math.max(1,Math.round(file.size/1024))+' KB · Saved':file.state==='awaiting_approval'?'Needs approval in Browser settings':file.state==='blocked'?'Blocked by download permissions':file.state==='failed'?'Download failed':file.state==='cancelled'?'Cancelled':file.paused?'Paused':file.total_bytes?Math.round(file.received_bytes/file.total_bytes*100)+'% · Downloading':'Downloading…'}</small>{file.state==='downloading'&&<progress aria-label={'Download progress: '+file.name} max={file.total_bytes||undefined} value={file.total_bytes?file.received_bytes:undefined}/>}</div>
+          {state.features?.download_controls&&file.state==='downloading'&&<button type="button" className="browser-link" onClick={()=>command(file.paused?'resume_download':'pause_download',{download_id:file.id})}>{file.paused?'Resume':'Pause'}</button>}
+          {state.features?.download_controls&&['downloading','awaiting_approval'].includes(file.state)&&<button type="button" className="browser-link" onClick={()=>command('cancel_download',{download_id:file.id})}>Cancel</button>}
           {file.state === 'saved' && <button className="browser-link" onClick={() => command('show_download', {download_id:file.id})}>Show in folder</button>}
         </div>) : <p>No downloads in this session.</p>}
       </section>}

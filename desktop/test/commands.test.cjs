@@ -8,7 +8,8 @@ test('side chat is available through the shared command registry',()=>{assert.eq
 
 test('old Vellum aliases and familiar chat/sidebar bindings use the same commands',()=>{
   for(const event of [key('KeyN'),key('KeyO',{shiftKey:true})])assert.equal(registry.match(event,base).id,'chat.new');
-  for(const event of [key('KeyB'),key('KeyS',{shiftKey:true})])assert.equal(registry.match(event,base).id,'sidebar.toggle');
+  assert.equal(registry.match(key('KeyB'),base).id,'sidebar.toggle');
+  assert.equal(registry.match(key('KeyS',{shiftKey:true}),base).id,'workspace.summary');
   assert.equal(registry.match(key('KeyH',{shiftKey:true}),base).id,'app.home');
   assert.equal(registry.match(key('KeyM',{shiftKey:true}),base).id,'model.open');
 });
@@ -18,7 +19,7 @@ test('editing, composition, AltGraph and nested popup owners retain their keys',
   assert.equal(registry.match(key('KeyB',{isComposing:true}),base),null);
   assert.equal(registry.match(key('KeyB',{getModifierState:()=>true}),base),null);
   assert.equal(registry.match(key('KeyN'),{...base,overlay:true}),null);
-  assert.equal(registry.match(key('KeyS',{shiftKey:true}),{...base,editable:true}).id,'sidebar.toggle');
+  assert.equal(registry.match(key('KeyS',{shiftKey:true}),{...base,editable:true}).id,'workspace.summary');
 });
 test('find wins over Analytics only while Find is active',()=>{
   const event=key('KeyG',{shiftKey:true});

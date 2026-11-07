@@ -31,8 +31,8 @@ def test_shared_registry_combines_specialist_and_mcp_capabilities(tmp_path):
         "memory.review_proposals",
         "context7.resolve_library",
         "github.write_issue",
-        "obsidian.search_notes",
     } <= set(registry.names())
+    assert "obsidian.search_notes" not in registry.names()
 
 
 def test_default_shared_registry_does_not_give_x_agent_generic_web_fallback(tmp_path):

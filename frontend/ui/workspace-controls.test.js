@@ -14,14 +14,19 @@ test('full workspace always exposes restore and hide controls, including empty m
   await act(async()=>host.querySelector('[aria-label="Restore split view"]').click());expect(layout).toHaveBeenCalledWith('split');
   await act(async()=>host.querySelector('[aria-label="Hide workspace views"]').click());expect(hide).toHaveBeenCalledOnce();
 });
-test('files browse the native local drive on demand and preserve chat-file navigation',async()=>{
+test('workspace folders use the bounded native reader and chat files keep their previews',async()=>{
   window.VellumUI={AppIcon:()=>null};load('workspace-content.jsx');
-  const invoke=vi.fn(async(_command,args)=>args.operation==='list'?{path:'C:\\',parent:null,entries:[{name:'notes.txt',path:'C:\\notes.txt',kind:'file'}]}:{path:'C:\\notes.txt',name:'notes.txt',kind:'text',text:'Local file fixture'});
-  window.VellumDesktop={runtime:'electron',invoke};
-  await mount(React.createElement(window.VellumUI.WorkspaceContent,{items:[{id:'files',kind:'files',reference_id:'library'}],activeId:'files',visible:true,chats:[],library:[]}));
-  expect(invoke).toHaveBeenCalledWith('local_files',{operation:'list'});
+  const read=vi.fn(async args=>args.operation==='list'
+    ? {workspace_root:'C:\\Workspace',entries:[{name:'notes.txt',path:'notes.txt',directory:false}]}
+    : {id:'notes.txt',name:'notes.txt',mime_type:'text/plain',text_content:'Local file fixture'});
+  window.VellumDesktop={runtime:'electron',files:{read}};
+  const items=[{id:'directory',kind:'directory',reference_id:'workspace'},{id:'files',kind:'files',reference_id:'library'}];
+  await mount(React.createElement(window.VellumUI.WorkspaceContent,{items,activeId:'directory',directoryAvailable:true,visible:true,chats:[],library:[]}));
+  expect(read).toHaveBeenCalledWith({operation:'list',relativePath:''});
   await act(async()=>[...host.querySelectorAll('button')].find(n=>n.textContent==='notes.txt').click());
+  expect(read).toHaveBeenCalledWith({operation:'read',relativePath:'notes.txt'});
   expect(host.querySelector('pre').textContent).toBe('Local file fixture');
-  await act(async()=>[...host.querySelectorAll('button')].find(n=>n.textContent==='Chat files').click());
+  await act(async()=>root.render(React.createElement(window.VellumUI.WorkspaceContent,{items,activeId:'files',directoryAvailable:true,visible:true,chats:[],library:[]})));
   expect(host.querySelector('[aria-label="Files and previews"]')).toBeTruthy();
+  expect(read).toHaveBeenCalledTimes(2);
 });

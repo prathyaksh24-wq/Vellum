@@ -92,7 +92,7 @@ if (!app.requestSingleInstanceLock()) {
       cdpEndpoint:await readDebuggerEndpoint(app), ownerWindow:()=>host?.openWorkspace(),
     });
     if(quitting){await nativeBrowser.stop();return;}
-    host = createDesktopHost(require('electron'), {workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
+    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
       onWorkspaceClose:()=>{if(!quitting&&!booting)app.quit();}});
     host.configurePermissions(session.fromPartition('persist:vellum-workspace'));
     const commandItem=id=>({id:'command-'+id,label:CommandRegistry.definition(id).label,click:()=>{const win=BrowserWindow.getFocusedWindow();if(win&&!win.isDestroyed())win.webContents.send('vellum:app-command',id);}});

@@ -46,12 +46,14 @@ test('verified sign-in closes the OAuth popup and focuses the original app',asyn
   expect(popup.close).toHaveBeenCalledOnce();expect(window.focus).toHaveBeenCalled();
   expect(host.textContent).toContain('Connected to GitHub');
 });
-test('desktop sign-in uses only the server-owned OAuth launch route',async()=>{
+test('desktop sign-in uses the canonical native OAuth handoff',async()=>{
   window.VellumDesktop={runtime:'electron'};
+  api.plugins.openOAuthFlow=vi.fn(async()=>popup);
   api.plugins.githubOAuthWindowUrl=vi.fn(id=>'http://127.0.0.1:8000/api/plugins/github/oauth/open?flow_id='+id);
   await render();await click(button('Sign in with GitHub'));
-  expect(window.open.mock.invocationCallOrder[0]).toBeGreaterThan(api.appActions.dispatch.mock.invocationCallOrder[0]);
-  expect(window.open.mock.calls[0][0]).toBe('http://127.0.0.1:8000/api/plugins/github/oauth/open?flow_id=fixture');
+  expect(api.plugins.openOAuthFlow.mock.invocationCallOrder[0]).toBeGreaterThan(api.appActions.dispatch.mock.invocationCallOrder[0]);
+  expect(api.plugins.openOAuthFlow).toHaveBeenCalledWith('github','fixture');
+  expect(window.open).not.toHaveBeenCalled();
   expect(api.appActions.dispatch.mock.calls[0][0].arguments.popup).toBe(true);
 });
 test('disconnect uses the existing reviewed App Action instead of removing authorization immediately',async()=>{

@@ -5,7 +5,7 @@ const {conversationTarget, trustedWorkspace, validateCommand} = require('./polic
 const {workspaceChromeOptions,installChromeHandler} = require('./chrome.cjs');
 const {createLocalFiles}=require('./local-files.cjs');
 
-function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = () => Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'}), onWorkspaceClose = () => {}}) {
+function createDesktopHost(electron, {workspace, workspaceRoot, root = path.resolve(__dirname, '..'), backend = 'http://127.0.0.1:8000', showWindows = true, nativeBrowser = null, workspaceReady = () => Promise.resolve({reused:true}), protectedAudioReady = Promise.resolve({status:'unsupported'}), onWorkspaceClose = () => {}}) {
   const {BrowserWindow, ipcMain, screen, dialog, shell} = electron;
   const windows = new Map();
   const providerAuthSessions = new Map();
@@ -163,6 +163,10 @@ function createDesktopHost(electron, {workspace, root = path.resolve(__dirname, 
       case 'local_files': {
         if(!trustedWorkspace(event.senderFrame.url,workspace))throw new Error('Local files are available only in the workspace.');
         return localFiles(args);
+      }
+      case 'workspace_files': {
+        if (!workspaceRoot || !trustedWorkspace(event.senderFrame.url,workspace)) throw new Error('Workspace files are unavailable here.');
+        return require('./workspace-files.cjs').readWorkspaceFiles(workspaceRoot,args);
       }
       case 'workspace_ready': {
         const state=await (typeof workspaceReady==='function'?workspaceReady():workspaceReady);
