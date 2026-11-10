@@ -159,22 +159,33 @@
         controls()?.commit(next);
       }}><span/></div>;
   }
-  function SidebarResizeHandle({value=260,onChange}) {
-    const ref=useRef(null),drag=useRef(null),dragBody=useRef(null),frame=useRef(0),epoch=useRef(0);
-    const settings=useRef({value,onChange});settings.current={value,onChange};
+  function SidebarResizeHandle({value=260,onChange,onCollapse}) {
+    const ref=useRef(null),drag=useRef(null),dragTarget=useRef(null),frame=useRef(0),epoch=useRef(0);
+    const settings=useRef({value,onChange,onCollapse});settings.current={value,onChange,onCollapse};
     const [position,setPosition]=useState(value);
-    useLayoutEffect(()=>{if(drag.current)fromPointer(drag.current.x);else setPosition(value);},[value]);
+    const target=()=>ref.current?.closest(settings.current.onCollapse ? '.main-sidebar-slot' : '.body');
+    const applyStyle=(element,width)=>{
+      if(settings.current.onCollapse){
+        if(width==null)element?.style.removeProperty('--scheduled-sidebar-drag-width');
+        else element?.style.setProperty('--scheduled-sidebar-drag-width',width+'px');
+      }else element?.style.setProperty('--workspace-sidebar-width',(width??settings.current.value)+'px');
+    };
+    useLayoutEffect(()=>{if(drag.current)apply(pointerWidth(drag.current.x));else setPosition(value);},[value]);
     const apply=width=>{
-      const body=ref.current?.closest('.body');if(!body)return;
       const next=Math.round(Math.max(200,Math.min(400,width)));
-      body.style.setProperty('--workspace-sidebar-width',next+'px');setPosition(next);
+      applyStyle(target(),next);setPosition(next);
       return next;
     };
-    const fromPointer=x=>{
-      const body=ref.current?.closest('.body');
-      return body ? apply(x-body.getBoundingClientRect().left) : undefined;
+    const pointerWidth=x=>{
+      if(settings.current.onCollapse && drag.current)return drag.current.width + x - drag.current.startX;
+      return x-(target()?.getBoundingClientRect().left??0);
     };
     const commit=width=>{
+      if(settings.current.onCollapse){
+        const next=Math.round(Math.max(200,Math.min(400,width)));
+        applyStyle(target(),null);setPosition(next);settings.current.onChange(next);
+        return;
+      }
       const next=apply(width),current=++epoch.current;
       Promise.resolve().then(()=>settings.current.onChange(next)).then(receipt=>{
         if(current===epoch.current && ref.current && (receipt===null || (receipt?.status && receipt.status!=='applied')))apply(settings.current.value);
@@ -182,10 +193,17 @@
     };
     const finish=(save=true)=>{
       if(!drag.current)return;
-      const current=drag.current;drag.current=null;cancelAnimationFrame(frame.current);frame.current=0;
-      const width=save ? fromPointer(current.x) : null;
-      dragBody.current?.classList.remove('sidebar-resizing');dragBody.current=null;
-      if(save && Math.abs(width-current.width)>.5)commit(width);else apply(settings.current.value);
+      const current=drag.current;cancelAnimationFrame(frame.current);frame.current=0;
+      const rawWidth=pointerWidth(current.x);
+      const collapse=save && settings.current.onCollapse && rawWidth<=64;
+      const width=save && !collapse ? apply(rawWidth) : null;
+      drag.current=null;
+      dragTarget.current?.classList.remove('sidebar-resizing');dragTarget.current=null;
+      if(collapse){
+        settings.current.onCollapse();
+        applyStyle(target(),null);
+      }else if(save && Math.abs(width-current.width)>.5)commit(width);
+      else {applyStyle(target(),null);setPosition(settings.current.value);}
       if(ref.current?.hasPointerCapture?.(current.id))ref.current.releasePointerCapture(current.id);
     };
     const handlers=useRef(null);handlers.current={finish};
@@ -194,16 +212,21 @@
       window.addEventListener('pointerup',end);window.addEventListener('blur',cancel);
       return ()=>{
         window.removeEventListener('pointerup',end);window.removeEventListener('blur',cancel);cancelAnimationFrame(frame.current);
-        if(dragBody.current){dragBody.current.classList.remove('sidebar-resizing');dragBody.current.style.setProperty('--workspace-sidebar-width',settings.current.value+'px');}
-        drag.current=null;dragBody.current=null;
+        if(dragTarget.current){dragTarget.current.classList.remove('sidebar-resizing');applyStyle(dragTarget.current,null);}
+        drag.current=null;dragTarget.current=null;
       };
     },[]);
-    return <div ref={ref} className="sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="400" aria-valuenow={position} aria-valuetext={position+' pixels'} tabIndex="0"
-      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();drag.current={x:event.clientX,width:position,id:event.pointerId};event.currentTarget.setPointerCapture?.(event.pointerId);dragBody.current=event.currentTarget.closest('.body');dragBody.current.classList.add('sidebar-resizing');}}
-      onPointerMove={event=>{if(drag.current){drag.current.x=event.clientX;if(!frame.current)frame.current=requestAnimationFrame(()=>{frame.current=0;if(drag.current)fromPointer(drag.current.x);});}}}
+    return <div ref={ref} className="sidebar-resizer" role="separator" aria-label={onCollapse?'Resize or collapse Scheduled sidebar':'Resize sidebar'} aria-orientation="vertical" aria-valuemin={onCollapse?0:200} aria-valuemax="400" aria-valuenow={position} aria-valuetext={position?position+' pixels':'Collapsed'} tabIndex="0"
+      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();drag.current={x:event.clientX,startX:event.clientX,width:position,id:event.pointerId};event.currentTarget.setPointerCapture?.(event.pointerId);dragTarget.current=target();dragTarget.current?.classList.add('sidebar-resizing');}}
+      onPointerMove={event=>{if(drag.current){drag.current.x=event.clientX;if(!frame.current)frame.current=requestAnimationFrame(()=>{frame.current=0;if(drag.current)apply(pointerWidth(drag.current.x));});}}}
       onPointerUp={event=>{if(drag.current){drag.current.x=event.clientX;finish();}}}
       onPointerCancel={()=>finish(false)} onLostPointerCapture={()=>finish()} onDoubleClick={()=>commit(260)}
-      onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();commit(event.key==='Home'?260:event.key==='End'?400:position+(event.key==='ArrowLeft'?-16:16));}}><span/></div>;
+      onKeyDown={event=>{
+        if(!['ArrowLeft','ArrowRight','Home','End','Enter'].includes(event.key) || event.key==='Enter' && !onCollapse)return;
+        event.preventDefault();
+        if(onCollapse && (event.key==='Home' || event.key==='Enter' || event.key==='ArrowLeft' && position<=200))onCollapse();
+        else commit(event.key==='Home'?260:event.key==='End'?400:position+(event.key==='ArrowLeft'?-16:16));
+      }}><span/></div>;
   }
   const assets = 'assets/browser-home/';
   const browserIcons={"close": "X", "plus": "Plus", "pause": "Pause", "restore": "SidebarRight", "expand": "Expand", "more": "DotsHorizontal", "back": "ArrowLeft", "forward": "ArrowRight", "reload": "ArrowRotateCw", "home": "Home", "download": "Download", "search": "Search", "chevron": "ChevronDown", "check": "Check", "settings": "SettingsCog", "globe": "Globe"};

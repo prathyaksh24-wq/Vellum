@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import asyncio
+from datetime import datetime, timezone
 import hashlib
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, Request
 from fastapi.responses import StreamingResponse
 from agent.contracts.automation_notifications import AutomationNotifications as AutomationNotificationSnapshot
 from agent.contracts.automation_notifications import NotificationChangeEvent
+from agent.contracts.scheduled_tasks import ScheduledTasks
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent.automations.store import AutomationStore
@@ -26,13 +28,14 @@ from agent.automations.validation import (
     validate_model_profile,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from agent.config import REPO_ROOT
 
 router = APIRouter(prefix="/automations", tags=["automations"])
 
 _AUTOMATIONS_STORE: AutomationStore | None = None
 
 _MUTATION_HOOK: Any | None = None
+_NEXT_RUN_LOOKUP: Any | None = None
 
 
 def get_store() -> AutomationStore:
@@ -48,10 +51,11 @@ def set_store(store: AutomationStore | None) -> None:
     _AUTOMATIONS_STORE = store
 
 
-def set_mutation_hook(hook: Any | None) -> None:
+def set_mutation_hook(hook: Any | None, *, next_run_lookup=None) -> None:
     """Install a callback invoked after create/update/delete (scheduler sync)."""
-    global _MUTATION_HOOK
+    global _MUTATION_HOOK, _NEXT_RUN_LOOKUP
     _MUTATION_HOOK = hook
+    _NEXT_RUN_LOOKUP = next_run_lookup
 
 
 def mutation_hook_available() -> bool:
@@ -223,9 +227,25 @@ async def notification_events(request: Request):
         headers={'Cache-Control':'no-store', 'X-Accel-Buffering':'no'})
 
 
-@router.get("")
-async def list_automations() -> dict[str, Any]:
-    return {"automations": get_store().list()}
+@router.get("", response_model=ScheduledTasks)
+async def list_automations(response: Response) -> ScheduledTasks:
+    from agent.automations.scheduler import one_shot_run_at
+
+    response.headers["Cache-Control"] = "no-store"
+    now = datetime.now(timezone.utc)
+    records = get_store().list()
+    for record in records:
+        schedule = record.get("schedule") or {}
+        next_run = _NEXT_RUN_LOOKUP(record["id"]) if _NEXT_RUN_LOOKUP and record.get("state") == "active" else None
+        try:
+            deadline = one_shot_run_at(record)
+            if schedule.get("end_at"):
+                deadline = datetime.fromisoformat(schedule["end_at"])
+        except (ValueError, TypeError, OverflowError):
+            deadline = None
+        record["next_run_at"] = next_run
+        record["schedule_ended"] = bool(deadline and deadline <= now and not next_run)
+    return ScheduledTasks(automations=records, scheduler_available=_NEXT_RUN_LOOKUP is not None)
 
 
 @router.get("/create-prompt")
@@ -328,6 +348,28 @@ async def delete_automation(automation_id: str) -> dict[str, Any]:
     store.remove(automation_id)
     _notify_mutation(automation_id)
     return {"ok": True}
+
+
+@router.post("/{automation_id}/conversation")
+async def open_automation_conversation(automation_id: str) -> dict[str, Any]:
+    from agent.api import _UI_CONVERSATIONS_PATH
+    from agent.conversations.lifecycle import ConversationLifecycle
+
+    try:
+        task = get_store().get(automation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="This scheduled task is no longer available.") from exc
+    conversation_id = f"scheduled-task-{task['id']}"
+    lifecycle = ConversationLifecycle(path=_UI_CONVERSATIONS_PATH)
+    await asyncio.to_thread(
+        lifecycle.deliver_automation,
+        delivery_id=f"{conversation_id}-intro",
+        new_chat_id=conversation_id,
+        name=task["name"],
+        text="This is the conversation for this scheduled task. Ask about the schedule, results, or changes you want to make.",
+        instructions=str(task.get("instructions") or ""),
+    )
+    return {"conversation": await asyncio.to_thread(lifecycle.get, conversation_id)}
 
 
 @router.get("/{automation_id}/runs")

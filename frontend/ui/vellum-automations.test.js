@@ -13,13 +13,14 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain("<ScheduledView");
     expect(html).toContain("Scheduled");
     expect(html).toContain("Create with Vellum");
-    expect(html).toContain("Set up manually");
+    expect(html).toContain("On-device voice AI research");
+    expect(html).toContain("sendMessage(idea.request");
   });
 
-  test("lists tasks with filters, status dots, details, and an actions menu", () => {
+  test("lists tasks with filters, status dots, task chat, and an actions menu", () => {
     expect(html).toContain("scheduleLabel(record.schedule)");
-    expect(html).toContain("destinationLabel(selected.destination, chats)");
-    expect(html).toContain("runStatusLabel(lastRun(selected))");
+    expect(html).toContain("onOpenTask(record)");
+    expect(html).toContain("Previous runs");
     expect(html).toContain("Actions for ");
     expect(html).toContain("Run now");
     expect(html).toContain("Reset task");
@@ -31,6 +32,9 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain('id="au-description"');
     expect(html).toContain('id="au-instructions"');
     expect(html).toContain('ariaLabel="Runs in"');
+    expect(html).toContain('Time zone');
+    expect(html).toContain("label: 'One time'");
+    expect(html).toContain("label: 'Monthly'");
     expect(html).toContain('ariaLabel="Pinned chat"');
     expect(html).toContain('ariaLabel="Automation project"');
     expect(html).toContain('ariaLabel="Automation model"');
@@ -38,7 +42,7 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain('ariaLabel="Automation frequency"');
     expect(html).toContain('ariaLabel="Automation notifications"');
     expect(html).toContain('id="au-interval-value"');
-    expect(html).toContain('id="au-time"');
+    expect(html).toContain('aria-label="Run time"');
     expect(html).toContain("AUTOMATION_REASONING_MODES");
     expect(html).toContain("{value: 'extra high', label: 'Extra high'}");
     expect(html).toContain("{value: 'ultra', label: 'Ultra'}");
@@ -66,6 +70,7 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain("onAction('automation.remove', {automation_id:record.id}, {confirmedFromUi:true})");
     expect(html).toContain("onAction('automation.run', {automation_id:record.id})");
     expect(html).toContain("onAction('automation.history', {automation_id:record.id}, {notify:false})");
+    expect(html).toContain("onAction('automation.run.state'");
     expect(html).toContain("onAction={dispatchAutomationAction}");
     expect(html).not.toContain("API.automations.create(payload)");
     expect(html).not.toContain("API.automations.update(editing.record.id, payload)");
@@ -76,7 +81,7 @@ describe("Vellum default automations surface", () => {
 
   test("uses quiet generic errors and an explicit discard action", () => {
     expect(html).toContain("Save failed");
-    expect(html).toContain("Unavailable");
+    expect(html).toContain("Scheduler unavailable");
     expect(html).toContain("Discard");
     expect(html).toContain("Discard changes?");
     expect(html).toContain("Your unsaved changes will be lost.");

@@ -495,15 +495,6 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .ap-seg-b{display:flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:7px;background:transparent;color:var(--dim);font:inherit;font-size:11.5px;cursor:pointer;transition:background .16s,color .16s,box-shadow .16s}
 .ap-seg-b:hover{color:var(--txt2)}
 .ap-seg-b.on{background:var(--active);color:var(--txt2);box-shadow:0 1px 6px rgba(0,0,0,.18)}
-.ap-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
-.ap-card{position:relative;display:flex;align-items:center;gap:10px;min-width:0;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:border-color .18s,background .18s,transform .18s}
-.ap-card:hover{border-color:var(--line2);background:var(--hover);transform:none}
-.ap-card.on{border-color:color-mix(in srgb,var(--ember) 56%,var(--line2));background:color-mix(in srgb,var(--ember) 9%,var(--panel))}
-.ap-sw{display:grid;grid-template-columns:repeat(2,15px);grid-template-rows:repeat(2,15px);overflow:hidden;border-radius:7px;box-shadow:0 0 0 1px var(--line2);flex-shrink:0}
-.ap-sw-c{display:block}
-.ap-name{min-width:0;font-size:11.5px;color:var(--txt2);line-height:1.3}
-.ap-def{display:block;margin-top:2px;color:var(--dim2);font-size:12px;text-transform:none;letter-spacing:0}
-.ap-check{margin-left:auto;display:flex;color:var(--ember)}
 .appearance-backgrounds{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .appearance-backgrounds-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:9px}
 .appearance-backgrounds-title{font-size:12px;text-transform:none;letter-spacing:0;color:var(--dim2)}
@@ -520,7 +511,7 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .bg-preview-name{font-size:11.5px;font-weight:500;color:var(--txt2)}
 .bg-preview-kind{margin-left:auto;padding:2px 6px;border:1px solid var(--line);border-radius:6px;color:var(--dim2);font:12px var(--font-m);text-transform:none;letter-spacing:0}
 .bg-preview-check{position:absolute;right:9px;top:9px;z-index:4;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(10,9,9,.72);border:1px solid rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(10px)}
-@media(max-width:560px){.ap-grid,.bg-preview-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.bg-preview-grid{grid-template-columns:1fr}}
 .sw{width:34px;height:19px;border-radius:11px;background:var(--line2);position:relative;cursor:pointer;transition:background .15s;flex-shrink:0}
 .sw::after{content:"";position:absolute;left:2.5px;top:2.5px;width:14px;height:14px;border-radius:50%;background:var(--bg);transition:left .15s}
 .sw.on{background:var(--ember)}
@@ -1952,79 +1943,113 @@ body{font-size:14px;font-family:var(--font-ui)}
 @media(max-width:720px){.spotify-now{display:none}.spotify-player-pill{gap:2px;padding:0}.spotify-now-trigger{padding:0}.spotify-player-pill .spotify-mini-btn{width:28px;height:28px}.dock-shell.top,.dock-shell.bottom{max-width:calc(100% - 24px)}.dock:not(.vertical){gap:2px;padding:4px}.dock:not(.vertical) .dock-item{width:34px;height:40px}.dock:not(.vertical) .dock-separator{margin:0 2px}.dock:not(.vertical) .spotify-player-shell{position:static}.dock:not(.vertical) .spotify-player-panel{left:50%;right:auto;transform:translateX(-50%)}.side-left .spotify-player-panel,.side-right .spotify-player-panel{width:min(280px,calc(100vw - 112px))}}
 @media(max-width:420px){.dock:not(.vertical) .dock-item{width:28px}}
 @media(prefers-reduced-motion:reduce){.spotify-wait::before{animation:none}}
-.au-page{padding:28px 30px 34px}
-.au-page-shell{width:min(1180px,100%);height:100%;margin:0 auto;display:flex;flex-direction:column;min-height:0}
-.au-page-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-shrink:0}
-.au-page-head .page-sub{margin-top:4px}
-.au-head-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
-.au-head-actions .btn,.au-head-actions .new-btn{white-space:nowrap}
-.au-layout{display:grid;grid-template-columns:minmax(290px,350px) minmax(0,1fr);gap:16px;flex:1;min-height:0}
-.au-list-panel,.au-detail-panel{border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 88%,transparent);border-radius:14px;min-height:0;overflow:hidden}
-.au-list-panel{display:flex;flex-direction:column}
-.au-list-toolbar{padding:14px 14px 8px;display:flex;align-items:center;gap:8px}
-.au-search{display:flex;align-items:center;gap:8px;min-width:0;flex:1;background:var(--input);border:1px solid var(--line);border-radius:14px;padding:8px 11px;color:var(--dim)}
-.au-search input{min-width:0;flex:1;border:none;background:transparent;outline:none;color:var(--txt2);font:inherit;font-size:11.5px}
-.au-filter-row{display:flex;align-items:center;gap:3px;padding:0 14px 10px;border-bottom:1px solid var(--line)}
-.au-filter{border:none;background:none;color:var(--dim);font:inherit;font-size:11.5px;padding:5px 8px;border-radius:14px;cursor:pointer}
-.au-filter:hover{background:var(--hover);color:var(--txt2)}
-.au-filter.on{color:var(--txt2);background:color-mix(in srgb,var(--ember) 14%,transparent)}
-.au-task-list{flex:1;overflow:auto;padding:4px 8px 12px}
-.au-task{position:relative;display:flex;align-items:flex-start;gap:9px;padding:12px 9px;border-bottom:1px solid var(--line);cursor:pointer;min-height:56px}
-.au-task:hover{background:var(--hover)}
-.au-task.active{background:color-mix(in srgb,var(--active) 80%,transparent)}
-.au-task-dot{width:8px;height:8px;border-radius:50%;background:var(--ember);margin-top:5px;flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 13%,transparent)}
-.au-task-dot.paused{background:var(--dim2);box-shadow:none}
-.au-task-copy{min-width:0;flex:1}
-.au-task-title{font-family:var(--font-d);font-size:13px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.au-task-meta{font-size:10.5px;line-height:1.45;color:var(--dim2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.au-task-note{font-size:10px;color:var(--dim2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.au-task-menu{width:26px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;border-radius:6px;background:none;color:var(--dim2);cursor:pointer;opacity:0}
-.au-task:hover .au-task-menu,.au-task.active .au-task-menu{opacity:1}
-.au-task-menu:hover{background:var(--hover);color:var(--txt2)}
-.au-list-empty{padding:38px 20px;text-align:center;color:var(--dim);font-size:12px;line-height:1.55}
-.au-list-empty strong{display:block;color:var(--txt2);font-family:var(--font-d);font-size:15px;margin-bottom:5px}
-.au-detail-panel{overflow:auto;padding:26px 28px 34px}
-.au-detail{max-width:620px;margin:0 auto}
-.au-detail-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:16px}
-.au-detail-head-copy{min-width:0;flex:1}
-.au-detail-status{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:10.5px;margin-bottom:7px}
-.au-detail-status .au-task-dot{margin:0;width:7px;height:7px;box-shadow:none}
-.au-detail-title{font-family:var(--font-d);font-weight:600;letter-spacing:-.02em;font-size:24px;color:var(--txt2);line-height:1.15}
-.au-detail-sub{color:var(--dim);font-size:11.5px;line-height:1.5;margin-top:5px}
-.au-detail-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.au-detail-actions .btn{font-size:11px;padding:6px 10px}
-.au-prompt-card{border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--active) 70%,transparent);padding:15px 16px;color:var(--txt);font-size:12px;line-height:1.6;white-space:pre-wrap;margin-bottom:21px}
-.au-section-label{font-size:12px;letter-spacing:0;text-transform:none;color:var(--dim2);margin:0 0 7px}
-.au-detail-card{border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--glass) 86%,transparent);padding:1px 15px;margin-bottom:20px}
-.au-detail-row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:39px;border-bottom:1px solid var(--line);font-size:11.5px}
-.au-detail-row:last-child{border-bottom:none}
-.au-detail-row span{color:var(--dim)}
-.au-detail-row strong{color:var(--txt2);font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.au-detail-row strong.au-detail-muted{color:var(--dim2);font-weight:400}
-.au-last-run{font-size:10.5px;color:var(--dim);line-height:1.5;margin-top:-8px;margin-bottom:18px}
-.au-form{display:flex;flex-direction:column;gap:16px;max-width:620px;margin:0 auto}
-.au-form-head{display:flex;align-items:center;gap:10px;margin-bottom:2px}
-.au-form-head h2{font-family:var(--font-d);font-size:21px;font-weight:600;color:var(--txt2);margin:0;flex:1}
-.au-field{min-width:0}.au-field>label{display:block;font-size:10.5px;color:var(--dim);letter-spacing:.03em;margin-bottom:6px}
-.au-field input[type=text],.au-field input[type=number],.au-field input[type=time],.au-field textarea{width:100%;box-sizing:border-box;background:var(--input);border:1px solid var(--line);border-radius:6px;color:var(--txt);font:inherit;font-size:11.5px;padding:9px 10px;outline:none}
-.au-form input[type=time]{color-scheme:dark}
-.au-field input[type=text]:focus,.au-field input[type=number]:focus,.au-field input[type=time]:focus,.au-field textarea:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
-.au-field textarea{min-height:82px;resize:vertical;line-height:1.5}
-.au-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.au-form-section{border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--glass) 86%,transparent);padding:14px 15px;display:flex;flex-direction:column;gap:13px}
-.au-form-section-title{font-size:12px;letter-spacing:0;text-transform:none;color:var(--dim2);margin-bottom:-2px}
-.au-form-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px}
-.au-form-row>span:first-child{color:var(--dim);font-size:11.5px}
-.au-form-row .v-select,.au-form-row .dock-pos-select{margin-left:auto;min-width:165px}
-.au-form-hint{color:var(--dim2);font-size:10.5px;line-height:1.45;margin-top:-5px}
-.au-warn{font-size:10.5px;color:var(--ember);line-height:1.5;margin-top:-4px}
-.au-form-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:2px}.au-form-error{color:var(--ember);font-size:10.5px;margin-right:auto;line-height:1.45}
-.au-form-actions .btn{font-size:11.5px}
-.au-danger-btn{color:var(--ember)!important}
-.au-confirm{width:min(390px,calc(100vw - 32px));background:var(--modal);border:1px solid var(--line2);border-radius:14px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.46)}
-.au-confirm h3{font-family:var(--font-d);font-size:17px;color:var(--txt2);margin:0 0 6px}.au-confirm p{color:var(--dim);font-size:11.5px;line-height:1.5;margin:0 0 16px}.au-confirm-actions{display:flex;justify-content:flex-end;gap:8px}
-@media(max-width:900px){.au-layout{grid-template-columns:minmax(250px,310px) minmax(0,1fr)}.au-page{padding:22px 18px 28px}.au-detail-panel{padding:22px 20px 30px}}
-@media(max-width:720px){.au-page-shell{height:auto}.au-page-head{align-items:flex-start;flex-wrap:wrap}.au-head-actions{width:100%;margin-left:46px;justify-content:flex-start}.au-layout{grid-template-columns:1fr}.au-list-panel{min-height:300px;max-height:48vh}.au-detail-panel{min-height:500px}.au-form-grid{grid-template-columns:1fr}.au-detail-title{font-size:21px}}
+/* Scheduled uses the same contextual slot as Library, with a separate work pane. */
+.au-sidebar-host{position:absolute;inset:0;width:var(--scheduled-sidebar-drag-width,var(--scheduled-sidebar-width,260px));height:100%;transition:transform .2s cubic-bezier(.22,1,.36,1)}
+.main-sidebar-slot[data-state=closed] .au-sidebar-host{transform:translateX(-100%);pointer-events:none}
+.main-sidebar-slot[data-peeking=true] .au-sidebar-host{transform:none;transition:none}
+.sidebar-resizing .au-sidebar-host{transition:none}
+@media(prefers-reduced-motion:reduce){.au-sidebar-host{transition:none}}
+.au-sidebar-host>.au-sidebar{width:100%;height:100%;padding:12px 10px 8px;background:var(--glass-side);border-right:1px solid var(--line)}
+.main-sidebar-slot[data-peeking=true] .au-sidebar{background:var(--menu-solid);border-radius:0 12px 12px 0;box-shadow:8px 0 24px rgba(0,0,0,.18)}
+.au-sidebar-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding-inline:8px 2px}
+.au-sidebar-head h2{font-family:var(--font-d);font-size:17px;font-weight:650;color:var(--txt2);margin:0}
+.au-sidebar-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.au-icon-btn{display:grid;place-items:center;width:30px;height:30px;flex:none;border:0;border-radius:8px;background:transparent;color:var(--dim);cursor:pointer}
+.au-icon-btn:hover,.au-icon-btn[aria-expanded=true]{background:var(--hover);color:var(--txt2)}
+.au-search{display:flex;align-items:center;gap:8px;min-height:35px;border:1px solid var(--line);border-radius:18px;padding:0 10px;margin:3px 0 5px;background:var(--input);color:var(--dim)}
+.au-search input{min-width:0;width:100%;border:0;background:transparent;color:var(--txt2);font:inherit;font-size:13px}
+.au-search:focus-within{border-color:var(--ember)}
+.au-sidebar-new,.au-group-label{width:100%;border:0;border-radius:8px;display:flex;align-items:center;gap:8px;background:transparent;text-align:left;color:var(--txt2);font:inherit;cursor:pointer;padding:8px;min-height:34px}
+.au-sidebar-new{font-size:13px;margin-block:4px 6px}
+.au-sidebar-new:hover,.au-group-label:hover{background:var(--hover)}
+.au-task-list{flex:1;min-height:0;overflow:auto;padding:0 0 12px;scrollbar-width:thin}
+.au-group-label{font-size:12px;color:var(--dim);margin-block:3px}
+.au-task{display:flex;align-items:center;border-radius:10px;padding-right:3px;min-width:0}
+.au-task-select{display:grid;gap:3px;min-width:0;flex:1;text-align:left;border:0;border-radius:8px;background:transparent;padding:8px;color:var(--txt2);font:inherit;cursor:pointer}
+.au-task-title,.au-task-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.au-task-title{font-size:13px;font-weight:550}.au-task-meta{font-size:11px;color:var(--dim);line-height:1.4}
+.au-unread-dot{display:inline-block;width:6px;height:6px;background:var(--ember);border-radius:50%;margin-inline-start:7px;vertical-align:middle}
+.au-task-menu{width:26px;height:28px;opacity:0}
+.au-task:hover .au-task-menu,.au-task:focus-within .au-task-menu,.au-task[data-menu-open=true] .au-task-menu{opacity:1}
+.au-list-empty{padding:14px 8px;color:var(--dim);font-size:12px;line-height:1.5}
+.shell-section-menu.au-filter-menu{width:160px}
+.ctx-menu.au-task-actions-menu{width:174px;min-width:0}
+.au-task-actions-menu button.ctx-item{border:0;background:transparent;width:100%;text-align:left;color:var(--txt);font:inherit}
+.au-task-actions-menu button:hover:not(:disabled){background:var(--hover)}
+.au-task-actions-menu button:disabled{opacity:.45;cursor:default}
+.au-task-actions-menu button.danger{color:var(--danger)}
+.au-page{padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:0;color:var(--txt)}
+.au-page-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;padding:24px clamp(14px,4%,40px) 36px}
+.au-page-notice{max-width:740px;margin:0 auto 16px;padding:8px 12px;border:1px solid var(--line2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;background:var(--glass)}
+.au-page-scroll>.au-form-error{max-width:740px;margin:0 auto 12px}
+.au-run-unread{font-size:10px;color:var(--ember)}
+.au-start{max-width:740px;margin:clamp(16px,6vh,68px) auto 0;text-align:center;container-type:inline-size}
+.au-start-icon{font-size:44px;line-height:1.1;margin:0 auto 14px}
+.au-start h1{font-family:var(--font-d);font-weight:620;font-size:clamp(20px,3vw,27px);margin:0 0 6px;color:var(--txt2)}
+.au-start p{color:var(--dim);line-height:1.55;font-size:14px;margin:0}
+.au-ideas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:40px;text-align:left}
+.au-idea{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:14px;min-height:104px;border:1px dashed var(--line2);border-radius:24px;background:transparent;color:var(--txt2);font:inherit;text-align:left;padding:17px 19px;cursor:pointer}
+.au-idea:hover{background:var(--hover);border-color:var(--dim)}
+.au-idea:disabled{cursor:default}
+.au-idea-icon{font-size:20px;line-height:1}
+.au-idea-copy{min-width:0;display:grid;gap:5px}
+.au-idea-copy strong{font-size:14px;font-weight:600}
+.au-idea-copy>span{color:var(--dim);font-size:13px;line-height:1.5}
+@container(max-width:500px){.au-ideas{grid-template-columns:minmax(0,1fr);margin-top:24px}}
+.au-dialog{position:fixed;inset:0;margin:auto;padding:0;width:min(620px,calc(100vw - 24px));height:fit-content;max-width:unset;max-height:min(790px,calc(100dvh - 40px));border:1px solid var(--line2);border-radius:16px;background:var(--menu-solid);color:var(--txt);box-shadow:0 18px 68px rgba(0,0,0,.4);overflow:hidden}
+.au-dialog::backdrop{background:rgba(0,0,0,.48)}
+.au-form{display:flex;flex-direction:column;max-height:min(788px,calc(100dvh - 42px))}
+.au-form-head,.au-form-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;padding:12px 18px}
+.au-form-head{border-bottom:1px solid var(--line)}.au-form-head h2{flex:1;color:var(--txt2);font-size:17px;margin:0}
+.au-form-body{min-height:0;overflow:auto;display:grid;gap:16px;padding:16px 18px}
+.au-form-actions{justify-content:flex-end;flex-wrap:wrap;border-top:1px solid var(--line)}.au-form-actions .au-form-error{flex:1;min-width:160px}
+.au-form-section{min-width:0;margin:0;border:0;border-top:1px solid var(--line);padding:7px 0 0;display:grid;gap:8px}
+.au-form-section legend{font-size:12px;font-weight:650;padding-right:8px;color:var(--txt2)}
+.au-form-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,min(54%,246px));align-items:center;gap:9px;min-height:35px;font-size:13px}
+.au-form-row small{font-size:11px;color:var(--dim)}
+.au-field{min-width:0}.au-field label{display:block;color:var(--txt2);font-size:13px;margin:0 0 6px}
+.au-form input,.au-form textarea{background:var(--input);border:1px solid var(--line2);border-radius:7px;color:var(--txt2);font:inherit;font-size:13px;padding:7px 9px;min-height:34px;max-width:100%;box-sizing:border-box}
+.au-form .au-field input,.au-form textarea{width:100%}
+.au-form textarea{min-height:112px;resize:vertical;line-height:1.55}
+.au-form-row>.au-select,.au-form-row>input,.au-time-control,.au-date-control{min-width:0;width:100%}
+.au-form-row>.sw{justify-self:end}
+.au-select.v-select{min-width:0}
+.au-select .v-select-trigger,.au-date-control>.v-select-trigger{min-height:34px}
+.au-select .v-select-trigger:focus-visible{outline:0}
+.au-select .v-select-content[popover]:popover-open{position:fixed;inset:auto;bottom:auto;right:auto;margin:0;min-width:0}
+.au-select .v-select-content[popover] .v-select-list{max-height:var(--select-available-height)}
+.au-select .v-select-option{min-width:0}
+.au-time-control{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:7px}
+.au-date-control>.v-select-trigger{justify-content:space-between}
+.au-calendar{margin-top:5px;border:1px solid var(--line2);border-radius:12px;padding:7px;background:var(--input)}
+.au-calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.au-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));align-items:center;text-align:center}
+.au-calendar-grid>span{color:var(--dim);font-size:11px}
+.au-calendar-grid>.au-icon-btn{width:100%;height:30px;font-size:12px}
+.au-calendar-grid>.au-icon-btn[aria-pressed=true]{background:var(--hover);color:var(--ember)}
+.au-date-clear{margin-top:5px}
+.au-task-list .morphic-group>.hlb{background:var(--hover)}
+.au-recent-task{width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer}
+
+.au-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.au-form .sw{border:0}
+.au-description{color:var(--dim);font-size:12px}.au-description summary{cursor:pointer}.au-description .au-field{margin-top:8px}
+.au-form-hint,.au-warn,.au-form-error{font-size:12px;line-height:1.5;margin:3px 0;color:var(--dim)}
+.au-warn,.au-form-error,.au-danger-btn{color:var(--danger)}
+.au-confirm-dialog{width:min(520px,calc(100vw - 24px));border-radius:20px}
+.au-confirm{padding:20px}
+.au-confirm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.au-confirm h3{margin:4px 0 8px;color:var(--txt2);font-size:18px;overflow-wrap:anywhere}
+.au-confirm p{color:var(--dim);font-size:14px;line-height:1.5}
+.au-confirm-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px}
+.au-confirm-actions .au-danger-btn{border-color:transparent;background:color-mix(in srgb,var(--danger) 13%,transparent)}
+.au-confirm-actions .au-danger-btn:hover:not(:disabled){background:color-mix(in srgb,var(--danger) 21%,transparent)}
+.au-page :focus-visible,.au-sidebar :focus-visible,.au-dialog :focus-visible,.au-task-actions-menu :focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.au-task-select:focus-visible{outline-offset:-2px}
+.au-sidebar .au-search input:focus-visible{outline:none;box-shadow:none}
+@media(hover:none){.au-task-menu{opacity:1}}
+@media(max-width:760px){.au-sidebar-host{width:min(280px,calc(100vw - 48px));z-index:70}.main-sidebar-slot[data-state=closed] .au-sidebar-host{visibility:hidden}.au-sidebar-host>.au-sidebar{background:var(--menu-solid)}.au-form input,.au-form textarea,.au-search input{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.au-sidebar-host,.au-task-actions-menu,.au-filter-menu{animation:none;transition:none}}
 .px-sprite-box{position:relative;overflow:hidden;flex:none}
 .px-sprite{position:absolute;left:0;top:0;width:192px;height:208px;transform-origin:top left;transform:scale(var(--px-scale));background-image:var(--px-url);background-size:1536px auto;background-repeat:no-repeat;background-position-y:calc(var(--px-row) * -208px);animation:px-walk var(--px-ms) steps(calc(var(--px-frames) - 1)) infinite;image-rendering:pixelated}
 @keyframes px-walk{from{background-position-x:0}to{background-position-x:calc((var(--px-frames) - 1) * -192px)}}
@@ -3317,15 +3342,15 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
 };
 /* closes on a document-level outside mousedown ? no click-eating backdrop,
    so one click both dismisses the open menu and lands on the next target */
-const Popover = ({className, style, onClose, children, portal, role, label, onKeyDown, onMouseEnter, onMouseLeave, sidebarOverlay}) => {
+const Popover = ({className, style, onClose, children, portal, role, label, onKeyDown, onMouseEnter, onMouseLeave, sidebarOverlay, anchor}) => {
   const ref = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) closeRef.current(); };
+    const h = e => { if (ref.current && !ref.current.contains(e.target) && !anchor?.contains(e.target)) closeRef.current(); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
-  }, []);
+  }, [anchor]);
   const node = <div ref={ref} className={className} style={style} role={role} aria-label={label} onKeyDown={onKeyDown} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-sidebar-overlay={sidebarOverlay?'true':undefined}>{children}</div>;
   return portal ? ReactDOM.createPortal(node, document.body) : node;
 };
@@ -3538,7 +3563,9 @@ const SidebarSection = ({id, label, count, open, onToggle, actions, children}) =
   );
 };
 
-const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, secOpen, expandedProj, onToggleSec, onToggleProj, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onChatAction, onRename, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onProjectNewChat, onMoveToProject, onProjectAction, projectMenuId, hoverEnabled=true}) => {
+const scheduledTaskConversationId = id => 'scheduled-task-' + id;
+
+const Sidebar = ({chats, conversationLibrary, projects, automations=[], onOpenTask, activeChatId, view, renamingId, projRenamingId, secOpen, expandedProj, onToggleSec, onToggleProj, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onChatAction, onRename, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onProjectNewChat, onMoveToProject, onProjectAction, projectMenuId, hoverEnabled=true}) => {
   const [activityOnly,setActivityOnly]=useState(false),[recentLimit,setRecentLimit]=useState(16);
   const [projectSort,setProjectSort]=useState('recent'),[recentSort,setRecentSort]=useState('recent'),[recentFilter,setRecentFilter]=useState('unassigned');
   const sort=(a,b)=>recentSort==='name'?a.title.localeCompare(b.title):(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0);
@@ -3547,7 +3574,15 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
   const Menu=window.VellumUI.SidebarSectionMenu;
   const attention=sorted.filter(chat=>status(chat));
   const pinnedChats=sorted.filter(chat=>chat.pinned);
-  const rows=activityOnly?attention:sorted.filter(chat=>recentFilter==='all'||(recentFilter==='attention'?!!status(chat):!chat.projectId));
+  const taskIds=new Set(automations.map(task=>scheduledTaskConversationId(task.id)));
+  const taskRows=recentFilter==='attention'?[]:automations.filter(task=>!task.builtin && !chats.some(chat=>chat.id===scheduledTaskConversationId(task.id)))
+    .map(task=>({id:scheduledTaskConversationId(task.id),title:task.name,created_at:task.created_at,scheduledTask:task}));
+  const rows=activityOnly?attention:[...sorted.filter(chat=>recentFilter==='all'||(recentFilter==='attention'?!!status(chat):!chat.projectId||taskIds.has(chat.id))),...taskRows].sort(sort);
+  const recentRow=chat=>chat.scheduledTask
+    ? <button key={chat.id} type="button" className="sb-row au-recent-task" title={chat.title} onClick={()=>onOpenTask(chat.scheduledTask)}>
+        <span className="sb-ic"><IcGCal size={15}/></span><span className="chat-title">{chat.title}</span>
+      </button>
+    : row(chat);
   const row=chat=><ChatRow key={chat.id} chat={chat} project={projects.find(project=>project.id===chat.projectId)} active={view==='chat'&&chat.id===activeChatId} renaming={renamingId===chat.id} onOpen={()=>onOpenChat(chat.id)} onMenu={event=>onChatMenu(chat.id,event)} onRename={title=>onRename(chat.id,title)} onPin={onChatAction?()=>onChatAction(chat.id,'pin'):undefined} onArchive={onChatAction?()=>onChatAction(chat.id,'archive'):undefined}/>;
   return <window.VellumUI.SidebarHoverProvider enabled={hoverEnabled}><aside className="sidebar shell-conversations" data-ui-reference="sidebar" aria-label="Conversations">
     <div className="sb-head"><window.VellumUI.ModeSwitcher/><div className="shell-heading-actions"><button type="button" className="tbtn" aria-label="View chat activity" aria-pressed={activityOnly} title="Chat activity" onClick={()=>setActivityOnly(!activityOnly)}><IcBell size={17}/>{attention.length>0&&<span className="shell-attention-dot"/>}</button><button type="button" className="tbtn" data-command="commands.open" aria-label="Search chats" title="Search chats" onClick={onSearch}><IcSearch size={17}/></button></div></div>
@@ -3559,7 +3594,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           {projectRows.map(project=><React.Fragment key={project.id}><ProjectRow proj={project} menuOpen={projectMenuId===project.id} chats={chats} onPin={()=>onProjectAction(project.id,'pin')} onEdit={()=>onProjectAction(project.id,'rename')} onNewChat={()=>onProjectNewChat(project.id)} onDropChat={id=>onMoveToProject(id,project.id)} renaming={projRenamingId===project.id} open={!!expandedProj[project.id]} onToggle={()=>onToggleProj(project.id)} onOpen={()=>onOpenProject(project.id)} onMenu={event=>onProjectMenu(project.id,event)} onRename={title=>onProjectRename(project.id,title)}/>{expandedProj[project.id]&&<div className="space-chat-list">{sorted.filter(chat=>chat.projectId===project.id).map(row)}</div>}</React.Fragment>)}
           {!projects.length&&<p className="sb-empty">Create a project to group related chats.</p>}
         </SidebarSection>
-        <SidebarSection id="recents" label="Recents" open={secOpen.recents!==false} onToggle={()=>onToggleSec('recents')} actions={<><Menu label="Recent chat organization" groups={[{label:'Show chats',value:recentFilter,onChange:setRecentFilter,options:[['unassigned','Outside projects'],['all','All chats'],['attention','Needs attention']]},{label:'Sort chats',value:recentSort,onChange:setRecentSort,options:[['recent','Recently updated'],['name','Name']]}]}/><button type="button" className="tbtn" aria-label="New chat from Recents" title="New chat" data-command="chat.new" onClick={onNewChat}><IcPencilSq size={15}/></button></>}>{rows.slice(0,recentLimit).map(row)}{rows.length>recentLimit&&<button type="button" className="sb-row shell-show-more" onClick={()=>setRecentLimit(count=>count+20)}>Show more</button>}{!rows.length&&<p className="sb-empty">Your conversations will appear here.</p>}</SidebarSection>
+        <SidebarSection id="recents" label="Recents" open={secOpen.recents!==false} onToggle={()=>onToggleSec('recents')} actions={<><Menu label="Recent chat organization" groups={[{label:'Show chats',value:recentFilter,onChange:setRecentFilter,options:[['unassigned','Outside projects'],['all','All chats'],['attention','Needs attention']]},{label:'Sort chats',value:recentSort,onChange:setRecentSort,options:[['recent','Recently updated'],['name','Name']]}]}/><button type="button" className="tbtn" aria-label="New chat from Recents" title="New chat" data-command="chat.new" onClick={onNewChat}><IcPencilSq size={15}/></button></>}>{rows.slice(0,recentLimit).map(recentRow)}{rows.length>recentLimit&&<button type="button" className="sb-row shell-show-more" onClick={()=>setRecentLimit(count=>count+20)}>Show more</button>}{!rows.length&&<p className="sb-empty">Your conversations will appear here.</p>}</SidebarSection>
       </>}
     </div>
   </aside></window.VellumUI.SidebarHoverProvider>;
@@ -7659,7 +7694,6 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
-  const setAccent = id => onDeviceSettings && onDeviceSettings({accent:id});
   const [pers, setPers] = useState(() => ({...DEFAULT_PERS, ...(personalization || {})}));
   useEffect(() => setPers(current => ({...current, ...(personalization || {})})), [personalization]);
   const setP = async (k, v) => {
@@ -7802,17 +7836,6 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
                 <div>Keep dock visible<span className="sr-sub">Turn this off to reveal the dock only when you approach its edge.</span></div>
                 <span className="sr-end"><div className={'sw' + (dockLocked ? ' on' : '')} role="switch" tabIndex="0" aria-checked={dockLocked} onClick={() => onDockLocked(!dockLocked)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onDockLocked(!dockLocked); } }}/></span>
               </div>
-              <div className="cfg-sec">Accent palette</div>
-              <div className="ap-grid">
-                {ACCENTS.map(a => (
-                  <button key={a.id} className={'ap-card' + (accent === a.id ? ' on' : '')} onClick={() => setAccent(a.id)}>
-                    <span className="ap-sw">{a.swatch.map((c, i) => <span key={i} className="ap-sw-c" style={{background: c}}/>)}</span>
-                    <span className="ap-name">{a.name}{a.id === 'default' && <span className="ap-def">Default</span>}</span>
-                    {accent === a.id && <span className="ap-check"><IcCheck size={13}/></span>}
-                  </button>
-                ))}
-              </div>
-              <div className="quiet-foot">Saved on this device. Accent choices are blended into each background's matched palette so contrast and color harmony stay intact.</div>
             </React.Fragment>
           )}
           {tab === 'Personalization' && (
@@ -7919,10 +7942,13 @@ const AUTOMATION_DESTINATIONS = [
   {value: 'existing_chat', label: 'Existing chat'},
 ];
 const AUTOMATION_REPEAT_OPTIONS = [
+  {value: 'once', label: 'One time'},
   {value: 'daily', label: 'Daily'},
   {value: 'weekdays', label: 'Weekdays'},
   {value: 'weekly', label: 'Weekly'},
-  {value: 'custom', label: 'Custom'},
+  {value: 'monthly', label: 'Monthly'},
+  {value: 'interval', label: 'Elapsed interval'},
+  {value: 'advanced', label: 'Custom expression'},
 ];
 const AUTOMATION_WEEKDAYS = [
   {value: '0', label: 'Sunday'},
@@ -7960,72 +7986,145 @@ const AUTOMATION_REASONING_MODES = [
   {value: 'ultra', label: 'Ultra'},
 ];
 const automationWeekdayLabel = value => (AUTOMATION_WEEKDAYS.find(day => String(day.value) === String(value)) || AUTOMATION_WEEKDAYS[1]).label;
-const automationNotificationLabel = value => (AUTOMATION_NOTIFICATIONS.find(item => item.value === value) || AUTOMATION_NOTIFICATIONS[0]).label;
+const AUTOMATION_LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+const AUTOMATION_TIME_ZONES = [...new Set(['UTC', AUTOMATION_LOCAL_ZONE, ...(Intl.supportedValuesOf?.('timeZone') || [])])];
+const automationDate = (value, zone) => {
+  const date = new Date(value);
+  if (!value || !Number.isFinite(date.getTime())) return '';
+  try {
+    return new Intl.DateTimeFormat(undefined, {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:zone || AUTOMATION_LOCAL_ZONE, timeZoneName:'short'}).format(date);
+  } catch (_) {
+    return date.toLocaleString();
+  }
+};
+const automationScheduleZone = schedule => schedule?.time_zone || (schedule?.kind === 'cron' || schedule?.at_time ? 'UTC' : AUTOMATION_LOCAL_ZONE);
+const automationRunDay = (value, zone) => {
+  try {return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',timeZone:zone}).format(new Date(value));}
+  catch (_) {return '';}
+};
+const automationIntervalLabel = schedule => schedule.value + ' ' + (Number(schedule.value)===1 ? String(schedule.unit).replace(/s$/,'') : schedule.unit);
 const scheduleLabel = schedule => {
   if (!schedule) return 'Not scheduled';
-  if (schedule.kind === 'interval') return 'Every ' + schedule.value + ' ' + schedule.unit + (schedule.at_time ? ' at ' + schedule.at_time : '');
-  if (schedule.kind === 'relative') return 'In ' + schedule.value + ' ' + schedule.unit;
+  if (schedule.kind === 'iso') return 'Once · ' + automationDate(schedule.run_at, schedule.time_zone || 'UTC');
+  if (schedule.kind === 'interval') return 'Every ' + automationIntervalLabel(schedule) + (schedule.at_time ? ' at ' + schedule.at_time + ' UTC' : '');
+  if (schedule.kind === 'relative') return 'Once · ' + automationIntervalLabel(schedule) + ' after setup';
   if (schedule.kind === 'cron') {
-    const parts = String(schedule.expression || '').trim().split(/\s+/);
-    if (parts.length === 5) {
-      const time = String(parts[1]).padStart(2, '0') + ':' + String(parts[0]).padStart(2, '0');
-      if (parts[4] === '1-5') return 'Weekdays at ' + time;
-      if (/^\d$/.test(parts[4])) return 'Every ' + automationWeekdayLabel(parts[4]) + ' at ' + time;
-      if (parts[4] === '*') return 'Daily at ' + time;
-    }
+    const draft = frequencyFromSchedule(schedule);
+    const zone = schedule.time_zone || 'UTC';
+    if (draft.repeat === 'daily') return 'Daily at ' + draft.time + ' · ' + zone;
+    if (draft.repeat === 'weekdays') return 'Weekdays at ' + draft.time + ' · ' + zone;
+    if (draft.repeat === 'weekly') return automationWeekdayLabel(draft.weekday) + ' at ' + draft.time + ' · ' + zone;
+    if (draft.repeat === 'monthly') return 'Monthly on day ' + draft.monthDay + ' at ' + draft.time + ' · ' + zone;
+    return schedule.expression + ' · ' + zone;
   }
   return schedule.expression || schedule.run_at || 'Not scheduled';
 };
-const destinationLabel = (destination, chats = []) => {
-  if (destination && destination.kind === 'notification') return 'Notification ping';
-  if (!destination || destination.kind !== 'existing_chat') return 'New chat';
-  const chat = chats.find(item => String(item.thread_id || item.id) === String(destination.thread_id));
-  return chat ? 'Pinned · ' + chat.title : 'Pinned chat';
-};
-const lastRun = automation => {
-  const runs = (automation && automation.run_history) || [];
-  return runs.length ? runs[runs.length - 1] : null;
-};
 const runStatusLabel = run => {
   if (!run) return '';
-  if (run.status === 'failed') return 'Last run failed';
+  if (run.status === 'failed') return 'Failed';
   if (run.status === 'running') return 'Running now';
-  return 'Last run complete';
+  return 'Completed';
 };
 const frequencyFromSchedule = schedule => {
-  const fallback = {repeat: 'daily', time: '09:00', weekday: '1', intervalValue: '2', intervalUnit: 'days'};
+  const fallback = {repeat:'daily', time:'09:00', date:'', weekday:'1', monthDay:'1', intervalValue:'2', intervalUnit:'hours',
+    zone:schedule ? schedule.time_zone || 'UTC' : AUTOMATION_LOCAL_ZONE, endDate:schedule?.end_at?.slice(0,10) || '', expression:schedule?.expression || ''};
   if (!schedule) return fallback;
+  if (schedule.kind === 'iso' && schedule.time_zone && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(fallback.expression)) {
+    const [date,time] = fallback.expression.split('T');
+    return {...fallback, repeat:'once', date, time};
+  }
   if (schedule.kind === 'interval') {
-    const value = String(schedule.value || 1);
-    const unit = String(schedule.unit || 'days').toLowerCase();
-    const time = schedule.at_time || fallback.time;
-    if (value === '1' && unit === 'days') return {...fallback, repeat: 'daily', time};
-    if (value === '1' && unit === 'weeks') return {...fallback, repeat: 'weekly', time};
-    return {...fallback, repeat: 'custom', time, intervalValue: value, intervalUnit: unit};
+    if (schedule.at_time && schedule.seconds === 86400) return {...fallback, time:schedule.at_time};
+    if (!schedule.at_time) return {...fallback, repeat:'interval', intervalValue:String(schedule.value), intervalUnit:schedule.unit};
   }
   if (schedule.kind === 'cron') {
-    const parts = String(schedule.expression || '').trim().split(/\s+/);
-    if (parts.length === 5) {
-      const time = String(parts[1]).padStart(2, '0') + ':' + String(parts[0]).padStart(2, '0');
-      if (parts[4] === '1-5') return {...fallback, repeat: 'weekdays', time};
-      if (/^\d$/.test(parts[4])) return {...fallback, repeat: 'weekly', time, weekday: parts[4]};
-      if (parts[4] === '*') return {...fallback, repeat: 'daily', time};
+    const [minute,hour,day,month,weekday] = fallback.expression.trim().split(/\s+/);
+    if (/^\d{1,2}$/.test(minute || '') && /^\d{1,2}$/.test(hour || '') && month === '*') {
+      const time = hour.padStart(2,'0') + ':' + minute.padStart(2,'0');
+      if (day === '*' && weekday === '*') return {...fallback, time};
+      if (day === '*' && weekday === '1-5') return {...fallback, repeat:'weekdays', time};
+      if (day === '*' && /^[0-7]$/.test(weekday)) return {...fallback, repeat:'weekly', time, weekday:weekday === '7' ? '0' : weekday};
+      if (weekday === '*' && /^[0-9]{1,2}$/.test(day)) return {...fallback, repeat:'monthly', time, monthDay:String(Number(day))};
     }
   }
-  return fallback;
+  return {...fallback, repeat:'advanced', zone:schedule.time_zone || ''};
 };
-const buildScheduleExpression = ({repeat, time, weekday, intervalValue, intervalUnit}) => {
-  const safeTime = /^\d{2}:\d{2}$/.test(time || '') ? time : '09:00';
-  const [hour, minute] = safeTime.split(':');
-  if (repeat === 'weekdays') return `${Number(minute)} ${Number(hour)} * * 1-5`;
-  if (repeat === 'weekly') return `${Number(minute)} ${Number(hour)} * * ${weekday || '1'}`;
-  if (repeat === 'daily') return `every 1d at ${safeTime}`;
-  const value = Math.max(1, Number(intervalValue) || 1);
-  const unit = AUTOMATION_INTERVAL_UNITS.some(item => item.value === intervalUnit) ? intervalUnit : 'days';
-  const withTime = (unit === 'days' || unit === 'weeks') && safeTime ? ` at ${safeTime}` : '';
-  return `every ${value}${unit}${withTime}`;
+const buildScheduleExpression = ({repeat,time,date,weekday,monthDay,intervalValue,intervalUnit,zone,endDate,expression}) => {
+  const inZone = zone.trim() ? ' @ ' + zone.trim() : '';
+  const until = endDate ? ' until ' + endDate : '';
+  if (repeat === 'advanced') return expression.trim() + inZone + until;
+  if (repeat === 'interval') return `every ${Number(intervalValue)}${intervalUnit}`;
+  if (repeat === 'once') return `${date}T${time}${inZone}`;
+  const [hour,minute] = time.split(':').map(Number);
+  const days = repeat === 'weekdays' ? '1-5' : repeat === 'weekly' ? weekday : '*';
+  return `${minute} ${hour} ${repeat === 'monthly' ? monthDay : '*'} * ${days}${inZone}${until}`;
 };
 
+const AutomationSelect = props => <VSelect className="au-select" sharedLayout floating {...props}/>;
+const automationClockOptions = count => Array.from({length:count}, (_,index)=>String(index).padStart(2,'0'));
+const AUTOMATION_HOURS = automationClockOptions(24);
+const AUTOMATION_MINUTES = automationClockOptions(60);
+const AutomationTimeField = ({value, onChange}) => {
+  const [hour='09', minute='00'] = value.split(':');
+  return <div className="au-time-control" role="group" aria-label="Run time">
+    <AutomationSelect ariaLabel="Hour (24-hour)" value={hour} options={AUTOMATION_HOURS} onValueChange={next=>onChange(next+':'+minute)}/>
+    <span aria-hidden="true">:</span>
+    <AutomationSelect ariaLabel="Minute" value={minute} options={AUTOMATION_MINUTES} onValueChange={next=>onChange(hour+':'+next)}/>
+  </div>;
+};
+const AutomationDateField = ({label, value, onChange, optional=false}) => {
+  const [month,setMonth] = useState(null);
+  const trigger = useRef(null);
+  const start = value ? new Date(value+'T00:00:00') : new Date();
+  const displayed = month || new Date(start.getFullYear(),start.getMonth(),1);
+  const year = displayed.getFullYear(), monthIndex = displayed.getMonth();
+  const offset = displayed.getDay(), days = new Date(year,monthIndex+1,0).getDate();
+  const monthLabel = displayed.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  const close = ()=>{setMonth(null);trigger.current?.focus();};
+  const move = delta=>setMonth(new Date(year,monthIndex+delta,1));
+  return <div className="au-date-control" onKeyDown={event=>{
+    if(month && event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}
+  }}>
+    <button ref={trigger} type="button" className="v-select-trigger" aria-label={label} aria-expanded={!!month}
+      onClick={()=>month?close():setMonth(displayed)}>
+      <span>{value ? start.toLocaleDateString(undefined,{dateStyle:'medium'}) : 'Choose date'}</span><AutomationIcon name="Calendar"/>
+    </button>
+    {month && <div className="au-calendar" role="group" aria-label={label+' calendar'}>
+      <div className="au-calendar-head">
+        <button type="button" className="au-icon-btn" aria-label="Previous month" data-tip="Previous month" onClick={()=>move(-1)}><AutomationIcon name="ChevronLeft"/></button>
+        <span aria-live="polite">{monthLabel}</span>
+        <button type="button" className="au-icon-btn" aria-label="Next month" data-tip="Next month" onClick={()=>move(1)}><AutomationIcon name="ChevronRight"/></button>
+      </div>
+      <div className="au-calendar-grid">
+        {Array.from({length:7},(_,index)=><span aria-hidden="true" key={'weekday'+index}>{new Date(2024,0,7+index).toLocaleDateString(undefined,{weekday:'narrow'})}</span>)}
+        {Array.from({length:offset},(_,index)=><span key={'blank'+index}/>)}
+        {Array.from({length:days},(_,index)=>{
+          const day=index+1;
+          const key=year+'-'+String(monthIndex+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+          return <button type="button" key={key} className="au-icon-btn" aria-pressed={key===value}
+            aria-label={new Date(year,monthIndex,day).toLocaleDateString(undefined,{dateStyle:'full'})}
+            onClick={()=>{onChange(key);close();}}>{day}</button>;
+        })}
+      </div>
+      {optional && value && <button type="button" className="btn au-date-clear" onClick={()=>{onChange('');close();}}>Clear date</button>}
+    </div>}
+  </div>;
+};
+const AutomationDialog = ({label, onCancel, children, className=""}) => {
+  const dialog = useRef(null);
+  useLayoutEffect(()=>{
+    const element = dialog.current;
+    element.showModal();
+    element.querySelector('[data-dialog-initial-focus]')?.focus();
+    window.dispatchEvent(new Event('vellum:shell-overlay'));
+    return ()=>{
+      element.close();
+      requestAnimationFrame(()=>window.dispatchEvent(new Event('vellum:shell-overlay')));
+    };
+  },[]);
+  return <dialog ref={dialog} className={("au-dialog "+className).trim()} aria-label={label} data-shell-overlay="true"
+    onCancel={event=>{event.preventDefault();onCancel();}}>{children}</dialog>;
+};
 const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], models = MODELS}) => {
   const isNew = !record;
   const modelOptions = [{value: '', label: 'Default model'}, ...(models || []).map(model => ({value: model.id, label: model.label || model.id}))];
@@ -8033,26 +8132,26 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
   const pinnedChats = (chats || []).filter(chat => chat.pinned && !chat.archived);
   const chatOptions = [{value: '', label: 'Choose a pinned chat'}, ...pinnedChats.map(chat => ({value: chat.thread_id || chat.id, label: chat.title}))];
   const initialFrequency = frequencyFromSchedule(record && record.schedule);
-  const [name, setName] = useState(record ? record.name || '' : '');
+  const [frequency, setFrequency] = useState(initialFrequency);
+  const setScheduleField = (key, value) => setFrequency(current=>({...current, [key]:value}));
+  const {repeat,time,date,weekday,monthDay,intervalValue,intervalUnit,zone,endDate,expression} = frequency;
+  const [name, setName] = useState(record?.name || '');
   const [description, setDescription] = useState(record ? record.description || '' : '');
-  const [instructions, setInstructions] = useState(record ? record.instructions || '' : '');
+  const [instructions, setInstructions] = useState(record?.instructions || '');
   const [destination, setDestination] = useState(record && record.destination ? (record.destination.kind || 'new_chat') : 'new_chat');
   const [threadId, setThreadId] = useState(record && record.destination ? (record.destination.thread_id || '') : '');
   const [projectId, setProjectId] = useState(record ? record.project_id || '' : '');
   const [model, setModel] = useState(record && record.model_profile ? (record.model_profile.model || '') : '');
   const [tier, setTier] = useState(record && record.model_profile ? (record.model_profile.tier || '') : '');
   const [reasoningMode, setReasoningMode] = useState(record && record.model_profile ? (record.model_profile.reasoning_mode || '') : '');
-  const [repeat, setRepeat] = useState(initialFrequency.repeat);
-  const [time, setTime] = useState(initialFrequency.time);
-  const [weekday, setWeekday] = useState(initialFrequency.weekday);
-  const [intervalValue, setIntervalValue] = useState(initialFrequency.intervalValue);
-  const [intervalUnit, setIntervalUnit] = useState(initialFrequency.intervalUnit);
   const [notification, setNotification] = useState(record && record.notifications ? (record.notifications.level || 'all') : 'all');
   const [fullAccess, setFullAccess] = useState(record ? !!(record.permission && record.permission.full_access) : false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const showTime = repeat !== 'custom' || intervalUnit === 'days' || intervalUnit === 'weeks';
+  const calendar = ['daily','weekdays','weekly','monthly'].includes(repeat);
+  const advancedCron = repeat === 'advanced' && !/^every\b/i.test(expression.trim()) && expression.trim().split(/\s+/).length === 5;
+  const scheduleChanged = Object.keys(initialFrequency).some(key=>initialFrequency[key] !== frequency[key]);
   const initialDestination = record && record.destination ? (record.destination.kind || 'new_chat') : 'new_chat';
   const initialThreadId = record && record.destination ? (record.destination.thread_id || '') : '';
   const initialProjectId = record ? record.project_id || '' : '';
@@ -8062,7 +8161,7 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
   const initialNotification = record && record.notifications ? (record.notifications.level || 'all') : 'all';
   const initialFullAccess = record ? !!(record.permission && record.permission.full_access) : false;
   const hasChanges = isNew
-    ? Boolean(name.trim() || description.trim() || instructions.trim() || destination !== 'new_chat' || threadId || projectId || model || tier || reasoningMode || repeat !== 'daily' || time !== '09:00' || weekday !== '1' || intervalValue !== '2' || intervalUnit !== 'days' || notification !== 'all' || fullAccess)
+    ? Boolean(name.trim() || description.trim() || instructions.trim() || destination !== 'new_chat' || threadId || projectId || model || tier || reasoningMode || scheduleChanged || notification !== 'all' || fullAccess)
     : name.trim() !== String(record.name || '').trim()
       || description.trim() !== String(record.description || '').trim()
       || instructions.trim() !== String(record.instructions || '').trim()
@@ -8072,14 +8171,12 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
       || model !== initialModel
       || tier !== initialTier
       || reasoningMode !== initialReasoningMode
-      || repeat !== initialFrequency.repeat
-      || time !== initialFrequency.time
-      || weekday !== initialFrequency.weekday
-      || String(intervalValue) !== String(initialFrequency.intervalValue)
-      || intervalUnit !== initialFrequency.intervalUnit
+      || scheduleChanged
       || notification !== initialNotification
       || fullAccess !== initialFullAccess;
   const requestDiscard = () => {
+    if (saving) return;
+    if (discardOpen) {setDiscardOpen(false);return;}
     if (hasChanges) setDiscardOpen(true);
     else onCancel();
   };
@@ -8089,7 +8186,12 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
     setError('');
     if (!name.trim() || !instructions.trim()) { setError('Title and instructions are required'); return; }
     if (destination === 'existing_chat' && !threadId) { setError('Choose a pinned chat'); return; }
-    if (repeat === 'custom' && (!Number(intervalValue) || Number(intervalValue) < 1)) { setError('Choose a valid interval'); return; }
+    if (saving) return;
+    if (isNew || scheduleChanged) {
+      if ((calendar || repeat === 'once') && (!time || !zone.trim())) { setError('Choose a time and time zone.'); return; }
+      if (repeat === 'once' && !date) { setError('Choose a date for the one-time run.'); return; }
+      if (repeat === 'advanced' && !expression.trim()) { setError('Enter a schedule expression.'); return; }
+    }
     const modelProfile = {};
     if (model.trim()) modelProfile.model = model.trim();
     if (tier) modelProfile.tier = tier;
@@ -8098,7 +8200,8 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
       name: name.trim(),
       description: description.trim(),
       instructions: instructions.trim(),
-      schedule: buildScheduleExpression({repeat, time, weekday, intervalValue, intervalUnit}),
+      ...(isNew || scheduleChanged ? {schedule:buildScheduleExpression({...frequency,
+        zone:supportsZone ? zone : '', endDate:calendar || advancedCron ? endDate : ''})} : {}),
       destination: {kind: destination, ...(destination === 'existing_chat' ? {thread_id: threadId} : {})},
       project_id: projectId || null,
       model_profile: modelProfile,
@@ -8108,178 +8211,330 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
     setSaving(true);
     try {
       await onSave(payload);
-    } catch (_) {
-      setError('Save failed');
+    } catch (failure) {
+      setError(failure?.message || 'Save failed. Try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <form className="au-form" onSubmit={submit}>
-      <div className="au-form-head"><h2>{isNew ? 'New scheduled task' : 'Edit scheduled task'}</h2><button type="button" className="tbtn" title="Discard" onClick={requestDiscard}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div>
-      <div className="au-field"><label htmlFor="au-name">Title</label><input id="au-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Scheduled task title" autoFocus/></div>
-      <div className="au-field"><label htmlFor="au-description">Description</label><textarea id="au-description" value={description} onChange={e => setDescription(e.target.value)} placeholder="A short note about what this task is for."/></div>
-      <div className="au-field"><label htmlFor="au-instructions">Instructions</label><textarea id="au-instructions" value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Describe what Vellum should do when this task runs."/></div>
-      <div className="au-form-section">
-        <div className="au-form-section-title">Details</div>
-        <div className="au-form-row"><span>Runs in</span><VSelect className="dock-pos-select" ariaLabel="Runs in" value={destination} onValueChange={setDestination} options={AUTOMATION_DESTINATIONS}/></div>
-        {destination === 'existing_chat' && <div className="au-form-row"><span>Chat</span><VSelect className="dock-pos-select" ariaLabel="Pinned chat" value={threadId} onValueChange={setThreadId} options={chatOptions}/></div>}
-        <div className="au-form-row"><span>Project</span><VSelect className="dock-pos-select" ariaLabel="Automation project" value={projectId} onValueChange={setProjectId} options={projectOptions}/></div>
-        <div className="au-form-row"><span>Model</span><VSelect className="dock-pos-select" ariaLabel="Automation model" value={model} onValueChange={setModel} options={modelOptions}/></div>
-        <div className="au-form-row"><span>Reasoning</span><VSelect className="dock-pos-select" ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/></div>
+  const title = isNew ? 'New scheduled task' : 'Edit scheduled task';
+  const supportsZone = calendar || repeat === 'once' || advancedCron || repeat === 'advanced' && /^\d{4}-\d{2}-\d{2}T/.test(expression);
+  const zoneOptions = [{value:'',label:'UTC (default)'}, ...AUTOMATION_TIME_ZONES.map(item=>({value:item,label:item}))];
+  const availableOptions = (options, value) => value && !options.some(option=>option.value === value)
+    ? [...options, {value, label:value + ' (unavailable)'}] : options;
+  return <AutomationDialog label={title} onCancel={requestDiscard}>
+    {discardOpen ? <div className="au-confirm">
+      <h3>Discard changes?</h3><p>Your unsaved changes will be lost.</p>
+      <div className="au-confirm-actions"><button type="button" className="btn" autoFocus onClick={()=>setDiscardOpen(false)}>Keep editing</button><button type="button" className="btn au-danger-btn" onClick={onCancel}>Discard changes</button></div>
+    </div> : <form className="au-form" onSubmit={submit}>
+      <header className="au-form-head"><h2>{title}</h2><button type="button" className="tbtn" aria-label="Close editor" data-tip="Close editor" onClick={requestDiscard}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></header>
+      <div className="au-form-body">
+        <div className="au-field"><label htmlFor="au-name">Task name</label><input id="au-name" type="text" required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Monday project brief" data-dialog-initial-focus=""/></div>
+        <div className="au-field"><label htmlFor="au-instructions">Instructions</label><textarea id="au-instructions" required value={instructions} onChange={e=>setInstructions(e.target.value)} placeholder="What should Vellum do each time this task runs?"/></div>
+        <details className="au-description" open={description ? true : undefined}><summary>Optional description</summary><div className="au-field"><label htmlFor="au-description">Description</label><input type="text" id="au-description" value={description} onChange={e=>setDescription(e.target.value)}/></div></details>
+        <fieldset className="au-form-section"><legend>Schedule</legend>
+          <div className="au-form-row"><span>Frequency</span><AutomationSelect ariaLabel="Automation frequency" value={repeat} onValueChange={value=>setScheduleField('repeat',value)} options={AUTOMATION_REPEAT_OPTIONS}/></div>
+          {repeat === 'once' && <div className="au-form-row"><span>Date</span><AutomationDateField label="Run date" value={date} onChange={value=>setScheduleField('date',value)}/></div>}
+          {repeat === 'weekly' && <div className="au-form-row"><span>Day</span><AutomationSelect ariaLabel="Weekday" value={weekday} onValueChange={value=>setScheduleField('weekday',value)} options={AUTOMATION_WEEKDAYS}/></div>}
+          {repeat === 'monthly' && <label className="au-form-row"><span>Day of month</span><input type="number" required min="1" max="31" value={monthDay} onChange={e=>setScheduleField('monthDay',e.target.value)}/></label>}
+          {repeat === 'monthly' && <p className="au-form-hint">Months without this date are skipped.</p>}
+          {repeat === 'interval' && <div className="au-form-grid"><div className="au-field"><label htmlFor="au-interval-value">Every</label><input id="au-interval-value" required type="number" min="1" max="999999" value={intervalValue} onChange={e=>setScheduleField('intervalValue',e.target.value)}/></div><div className="au-field"><label>Unit</label><AutomationSelect ariaLabel="Interval unit" value={intervalUnit} options={AUTOMATION_INTERVAL_UNITS} onValueChange={value=>setScheduleField('intervalUnit',value)}/></div></div>}
+          {repeat === 'advanced' && <div className="au-field"><label htmlFor="au-expression">Schedule expression</label><input id="au-expression" type="text" required placeholder="e.g. 0 9 * * 1-5 or every 2h" value={expression} onChange={e=>setScheduleField('expression',e.target.value)}/><p className="au-form-hint">Use a delay, interval, five-field cron, or ISO timestamp. Supply the zone and end date below.</p></div>}
+          {(calendar || repeat === 'once') && <div className="au-form-row"><span>Time</span><AutomationTimeField value={time} onChange={value=>setScheduleField('time',value)}/></div>}
+          {supportsZone && <div className="au-form-row"><span>Time zone</span><AutomationSelect ariaLabel="Time zone" value={zone}
+            options={availableOptions(repeat==='advanced'?zoneOptions:zoneOptions.slice(1),zone)} onValueChange={value=>setScheduleField('zone',value)}/></div>}
+          {(calendar || advancedCron) && <div className="au-form-row"><span>End date <small>(optional)</small></span><AutomationDateField label="End date" value={endDate} onChange={value=>setScheduleField('endDate',value)} optional/></div>}
+        </fieldset>
+        <fieldset className="au-form-section"><legend>Execution</legend>
+          <div className="au-form-row"><span>Result destination</span><AutomationSelect ariaLabel="Runs in" value={destination} onValueChange={setDestination} options={AUTOMATION_DESTINATIONS}/></div>
+          {destination === 'existing_chat' && <div className="au-form-row"><span>Chat</span><AutomationSelect ariaLabel="Pinned chat" value={threadId} onValueChange={setThreadId} options={availableOptions(chatOptions, threadId)}/></div>}
+          <div className="au-form-row"><span>Project</span><AutomationSelect ariaLabel="Automation project" value={projectId} onValueChange={setProjectId} options={availableOptions(projectOptions, projectId)}/></div>
+          <div className="au-form-row"><span>Model</span><AutomationSelect ariaLabel="Automation model" value={model} onValueChange={setModel} options={availableOptions(modelOptions, model)}/></div>
+          {!model && <div className="au-form-row"><span>Model tier</span><AutomationSelect ariaLabel="Automation model tier" value={tier} onValueChange={setTier} options={AUTOMATION_TIERS}/></div>}
+          <div className="au-form-row"><span>Reasoning</span><AutomationSelect ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/></div>
+          <div className="au-form-row"><span>Notifications</span><AutomationSelect ariaLabel="Automation notifications" value={notification} onValueChange={setNotification} options={AUTOMATION_NOTIFICATIONS}/></div>
+          <div className="au-form-row"><span>Run unattended</span><button type="button" className={'sw'+(fullAccess?' on':'')} role="switch" aria-checked={fullAccess} aria-label="Run unattended (full access)" onClick={()=>setFullAccess(!fullAccess)}/></div>
+          <p className={fullAccess?'au-warn':'au-form-hint'}>{fullAccess ? 'Unattended runs can perform actions without asking first. Enable this only for tasks you trust.' : 'With unattended access off, start runs yourself with Run now.'}</p>
+        </fieldset>
       </div>
-      <div className="au-form-section">
-        <div className="au-form-section-title">Frequency</div>
-        <div className="au-form-row"><span>Repeat</span><VSelect className="dock-pos-select" ariaLabel="Automation frequency" value={repeat} onValueChange={setRepeat} options={AUTOMATION_REPEAT_OPTIONS}/></div>
-        {repeat === 'weekly' && <div className="au-form-row"><span>On</span><VSelect className="dock-pos-select" ariaLabel="Weekday" value={weekday} onValueChange={setWeekday} options={AUTOMATION_WEEKDAYS}/></div>}
-        {repeat === 'custom' && <div className="au-form-grid"><div className="au-field"><label htmlFor="au-interval-value">Every</label><input id="au-interval-value" type="number" min="1" value={intervalValue} onChange={e => setIntervalValue(e.target.value)}/></div><div className="au-field"><label htmlFor="au-interval-unit">Unit</label><VSelect className="dock-pos-select" ariaLabel="Interval unit" value={intervalUnit} onValueChange={setIntervalUnit} options={AUTOMATION_INTERVAL_UNITS}/></div></div>}
-        {showTime && <div className="au-form-row"><span>At</span><input id="au-time" aria-label="Automation time" type="time" value={time} onChange={e => setTime(e.target.value)}/></div>}
-        <div className="au-form-row"><span>Notifications</span><VSelect className="dock-pos-select" ariaLabel="Automation notifications" value={notification} onValueChange={setNotification} options={AUTOMATION_NOTIFICATIONS}/></div>
-      </div>
-      <div className="au-form-section">
-        <div className="au-form-section-title">Access</div>
-        <div className="au-form-row"><span>Run unattended</span><div className={'sw' + (fullAccess ? ' on' : '')} role="switch" aria-checked={fullAccess} aria-label="Full access opt-in" tabIndex="0" onClick={() => setFullAccess(!fullAccess)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFullAccess(!fullAccess); } }}/></div>
-        {fullAccess && <div className="au-warn">Unattended runs can perform actions without asking first. Enable this only for tasks you trust.</div>}
-      </div>
-      <div className="au-form-actions">{error && <div className="au-form-error" role="alert">{error}</div>}<button type="button" className="btn" onClick={requestDiscard}>Discard</button><button type="submit" className="btn primary" disabled={saving}>{saving ? 'Saving…' : (isNew ? 'Create task' : 'Save changes')}</button></div>
-      {discardOpen && <div className="backdrop dim" style={{display:'flex',alignItems:'center',justifyContent:'center',zIndex:1100}}>
-        <div className="au-confirm" role="dialog" aria-modal="true" aria-labelledby="au-discard-title">
-          <h3 id="au-discard-title">Discard changes?</h3>
-          <p>Your unsaved changes will be lost.</p>
-          <div className="au-confirm-actions"><button type="button" className="btn" onClick={() => setDiscardOpen(false)}>Keep editing</button><button type="button" className="btn au-danger-btn" onClick={onCancel}>Discard changes</button></div>
-        </div>
-      </div>}
-    </form>
-  );
+      <footer className="au-form-actions">{error && <p className="au-form-error" role="alert">{error}</p>}<button type="button" className="btn" disabled={saving} onClick={requestDiscard}>Discard</button><button type="submit" className="btn primary" disabled={saving}>{saving ? 'Saving…' : isNew ? 'Create task' : 'Save changes'}</button></footer>
+    </form>}
+  </AutomationDialog>;
 };
 
-const AutomationConfirmModal = ({record, builtin, onCancel, onConfirm, busy}) => (
-  <div className="backdrop dim" style={{display:'flex',alignItems:'center',justifyContent:'center',zIndex:1100}}>
-    <div className="au-confirm" role="dialog" aria-modal="true" aria-labelledby="au-confirm-title">
-      <h3 id="au-confirm-title">{builtin ? 'Reset ' : 'Delete '}{record.name}?</h3>
-      <p>{builtin ? 'This restores the built-in task to its default settings.' : 'This permanently deletes the scheduled task and stops future runs.'}</p>
-      <div className="au-confirm-actions"><button className="btn" onClick={onCancel}>Keep task</button><button className="btn au-danger-btn" disabled={busy} onClick={onConfirm}>{builtin ? 'Reset task' : 'Delete task'}</button></div>
+const AUTOMATION_GROUPS = [['active','Active'], ['paused','Paused'], ['ended','Completed']];
+const AUTOMATION_IDEAS = [
+  {name:'On-device voice AI research', icon:'microscope', request:'Every Friday, brief me on voice AI research worth testing in Vellum.'},
+  {name:'Music playback integrations', icon:'music', request:'Let me know when music platforms change APIs or policies that could affect playback in Vellum.'},
+  {name:'Vellum pull request alerts', icon:'computer', request:'Alert me when Vellum pull request checks, reviews, or merges reveal issues that need my attention.'},
+  {name:'Find weekend reads', icon:'book', request:'Send me a great article to read every Saturday.'},
+  {name:'Price alerts', icon:'shopping', request:'Check prices daily and alert me when my item costs less.'},
+  {name:'Find concerts', icon:'music', request:'Check weekly for new concerts that match my taste.'},
+  {name:'Plan my weekend', icon:'pin', request:'Send me local weekend ideas every Thursday.'},
+];
+const AUTOMATION_IDEA_ICONS = {microscope:'\u{1f52c}', music:'\u{1f3b5}', computer:'\u{1f4bb}', book:'\u{1f4d6}', shopping:'\u{1f6cd}\ufe0f', pin:'\u{1f4cd}'};
+const automationGroup = task => task.schedule_ended ? 'ended' : task.state === 'paused' ? 'paused' : 'active';
+const automationRunning = task => (task.run_history || []).some(run=>run.status === 'running');
+const automationUnread = run => run.status !== 'running' && Object.hasOwn(run,'read_at') && !run.read_at && !run.archived_at;
+const automationStatus = (task, schedulerAvailable) => {
+  if (automationRunning(task)) return 'Running now';
+  if (task.schedule_ended) return 'Schedule ended';
+  if (task.state === 'paused') return 'Paused';
+  if (!task.permission?.full_access) return 'Unattended access off';
+  if (!schedulerAvailable) return 'Scheduler unavailable';
+  return task.next_run_at ? 'Active' : 'No run queued';
+};
+const AutomationIcon = ({name, size=16}) => <window.VellumUI.AppIcon name={name} size={size}/>;
+const AutomationConfirmModal = ({record, builtin, onCancel, onConfirm, busy, error}) => {
+  const title = (builtin ? 'Reset ' : 'Delete ') + record.name + '?';
+  return <AutomationDialog label={title} className="au-confirm-dialog" onCancel={()=>{if(!busy)onCancel();}}>
+    <div className="au-confirm">
+      <div className="au-confirm-heading"><h3>{title}</h3><button type="button" className="au-icon-btn" aria-label="Close confirmation" data-tip="Close" disabled={busy} onClick={onCancel}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div>
+      <p>{builtin ? 'This restores the built-in task to its default settings.' : 'This will permanently delete the scheduled task and its run history and stop future runs.'}</p>
+      {error && <div className="au-form-error" role="alert">{error}</div>}
+      <div className="au-confirm-actions">
+        <button type="button" className="btn" data-dialog-initial-focus="" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="button" className="btn au-danger-btn" disabled={busy} onClick={onConfirm}>{builtin ? 'Reset task' : 'Delete scheduled task'}</button>
+      </div>
     </div>
-  </div>
-);
+  </AutomationDialog>;
+};
 
-const ScheduledView = ({automations = [], projects = [], chats = [], models = MODELS, onStartChat, onItemsChange, onAction}) => {
-  const [items, setItems] = useState(automations || []);
+const ScheduledView = ({automations = [], projects = [], chats = [], models = MODELS, showPage, sidebarTarget,
+  sidebarVisible, activeTaskId, onEnsureContext, onStartChat, onOpenChat, onOpenTask, onItemsChange, onAction, onSidebarEnter, onSidebarLeave}) => {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
+  const [schedulerAvailable, setSchedulerAvailable] = useState(false);
   const [busy, setBusy] = useState('');
+  const pendingAction = useRef(false);
   const [editing, setEditing] = useState(null);
-  const [selectedId, setSelectedId] = useState(automations && automations[0] ? automations[0].id : null);
   const [menu, setMenu] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [history, setHistory] = useState(null);
-  const [filter, setFilter] = useState('all');
+  const [filters, setFilters] = useState(['active','paused','ended']);
+  const [collapsed, setCollapsed] = useState({});
+  const [filterOpen, setFilterOpen] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
-
+  const [starting, setStarting] = useState('');
+  const menuBody = useRef(null);
+  const searchButton = useRef(null);
+  const searchInput = useRef(null);
+  const filterButton = useRef(null);
+  const requests = useRef({active:false, version:0});
   const refresh = async () => {
+    const token = ++requests.current.version;
     try {
       const data = await API.automations.list();
-      const next = (data && Array.isArray(data.automations)) ? data.automations : [];
-      setItems(next);
-      if (onItemsChange) onItemsChange(next);
-      setSelectedId(current => next.some(item => item.id === current) ? current : (next[0] ? next[0].id : null));
-      setError('');
+      if (!requests.current.active || token !== requests.current.version) return;
+      const next = Array.isArray(data?.automations) ? data.automations : [];
+      onItemsChange?.(next);
+      setSchedulerAvailable(data?.scheduler_available === true);
+      setLoadError('');
     } catch (_) {
-      setError('Unavailable');
+      if (requests.current.active && token === requests.current.version) {
+        setSchedulerAvailable(false);
+        setLoadError('Scheduled tasks could not refresh. Check the Vellum backend and retry.');
+      }
     } finally {
-      setLoading(false);
+      if (requests.current.active && token === requests.current.version) setLoading(false);
     }
   };
-  useEffect(() => { refresh(); }, []);
-  useEffect(() => { setItems(automations || []); }, [automations]);
-
-  const runNow = async record => {
-    setMenu(null); setBusy(record.id); setError('');
-    try { const receipt = await onAction('automation.run', {automation_id:record.id}); if (receipt && receipt.status === 'applied') await refresh(); }
-    catch (_) { setError('Run failed'); }
-    finally { setBusy(''); }
+  useEffect(()=>{
+    requests.current.active = true;
+    refresh();
+    let timer;
+    const onChange = ()=>{clearTimeout(timer);timer=setTimeout(refresh,120);};
+    const unsubscribe = API.automations.notificationEvents(onChange);
+    const refreshVisible = ()=>{if(!document.hidden)onChange();};
+    window.addEventListener('focus',refreshVisible);
+    document.addEventListener('visibilitychange',refreshVisible);
+    const poll = setInterval(refreshVisible,30000);
+    return ()=>{
+      requests.current.active = false;requests.current.version++;
+      unsubscribe();clearTimeout(timer);clearInterval(poll);
+      window.removeEventListener('focus',refreshVisible);
+      document.removeEventListener('visibilitychange',refreshVisible);
+    };
+  },[]);
+  useEffect(()=>{if(searchOpen && sidebarVisible)searchInput.current?.focus();},[searchOpen,sidebarVisible]);
+  useEffect(()=>{if(!sidebarVisible){setMenu(null);setFilterOpen(false);}},[sidebarVisible]);
+  useLayoutEffect(()=>{if(menu)menuBody.current?.querySelector('button:not(:disabled)')?.focus();},[menu]);
+  const closeSearch = ()=>{setQuery('');setSearchOpen(false);searchButton.current?.focus();};
+  const closeFilter = ()=>{setFilterOpen(false);filterButton.current?.focus();};
+  const closeMenu = (restoreFocus=false) => {
+    const trigger = menu?.trigger;
+    setMenu(null);
+    if(restoreFocus)trigger?.focus();
   };
-  const toggleState = async record => {
-    setMenu(null); setBusy(record.id); setError('');
-    try { const receipt = await onAction(record.state === 'active' ? 'automation.pause' : 'automation.resume', {automation_id:record.id}); if (!receipt || receipt.status !== 'applied') throw new Error('Update failed'); await refresh(); }
-    catch (_) { setError('Update failed'); }
-    finally { setBusy(''); }
+  const newTask = ()=>{onEnsureContext?.();setEditing({mode:'new'});setError('');};
+  const editTask = record=>{onEnsureContext?.();closeMenu(true);setEditing({mode:'edit',record});setError('');};
+  const startChat = async idea=>{
+    if(starting)return;
+    setStarting(idea?.name || 'guided');
+    try{await onStartChat(idea);}
+    catch(_){setError('Setup chat could not open. Try again.');}
+    finally{setStarting('');}
   };
-  const removeAutomation = async record => {
-    setMenu(null); setBusy(record.id); setError('');
-    try { const receipt = await onAction('automation.remove', {automation_id:record.id}, {confirmedFromUi:true}); if (!receipt || receipt.status !== 'applied') throw new Error('Delete failed'); setConfirm(null); await refresh(); }
-    catch (_) { setError('Delete failed'); }
-    finally { setBusy(''); }
+  const runAction = async (key, operation) => {
+    if(pendingAction.current)return;
+    pendingAction.current=true;setBusy(key);setError('');
+    try{return await operation();}
+    catch(failure){setError(failure?.message || 'This action could not finish. Try again.');}
+    finally{pendingAction.current=false;setBusy('');}
   };
-  const inspectHistory = async record => {
-    setBusy(record.id); setError('');
-    try { const receipt = await onAction('automation.history', {automation_id:record.id}, {notify:false}); if (!receipt || receipt.status !== 'applied') throw new Error('History unavailable'); setHistory({automationId:record.id, runs:(receipt.result && receipt.result.runs) || []}); }
-    catch (_) { setError('History unavailable'); }
-    finally { setBusy(''); }
+  const requireApplied = receipt=>{
+    if(receipt?.status !== 'applied')throw new Error(receipt?.message || 'This action could not finish. Try again.');
+    return receipt;
   };
+  const runNow = record => {
+    closeMenu(true);
+    return runAction(record.id, async()=>{
+      const receipt = await onAction('automation.run', {automation_id:record.id});
+      if (receipt?.status === 'confirmation_required') return;
+      requireApplied(receipt);
+      await refresh();
+    });
+  };
+  const toggleState = record => {
+    closeMenu(true);
+    return runAction(record.id, async()=>{
+      requireApplied(await onAction(record.state === 'active' ? 'automation.pause' : 'automation.resume', {automation_id:record.id}));
+      await refresh();
+    });
+  };
+  const removeAutomation = record => runAction(record.id, async()=>{
+    requireApplied(await onAction('automation.remove', {automation_id:record.id}, {confirmedFromUi:true}));
+    setConfirm(null);
+    await refresh();
+  });
+  const inspectHistory = record => {
+    closeMenu(true);
+    return runAction(record.id, async()=>{
+      const receipt = requireApplied(await onAction('automation.history', {automation_id:record.id}, {notify:false}));
+      setHistory({id:record.id,runs:receipt.result?.runs || []});
+    });
+  };
+  const changeRunState = (record,run,operation) => runAction(run.id, async()=>{
+    requireApplied(await onAction('automation.run.state', {automation_id:record.id, run_id:run.id, operation}, {notify:false}));
+    await refresh();
+  });
   const saveAutomation = async payload => {
-    setBusy('save');
-    try {
-      const receipt = editing && editing.mode === 'edit' ? await onAction('automation.update', {automation_id:editing.record.id, ...payload}) : await onAction('automation.create', payload);
-      if (!receipt || receipt.status !== 'applied') throw new Error('Save failed');
-      const saved = receipt.result && receipt.result.automation;
+    if(pendingAction.current)throw new Error('Another task action is still running.');
+    pendingAction.current=true;setBusy('save');
+    try{
+      const receipt = requireApplied(editing.mode === 'edit'
+        ? await onAction('automation.update', {automation_id:editing.record.id, ...payload})
+        : await onAction('automation.create', payload));
+      const saved = receipt.result?.automation;
       setEditing(null);
-      if (saved) setSelectedId(saved.id);
+      if(saved && editing.mode === 'new')await onOpenTask(saved);
       await refresh();
     } finally {
-      setBusy('');
+      pendingAction.current=false;setBusy('');
     }
   };
-  const selected = items.find(item => item.id === selectedId) || null;
-  const filtered = items.filter(item => {
-    if (filter !== 'all' && item.state !== filter) return false;
-    if (!query.trim()) return true;
-    const haystack = `${item.name || ''} ${item.description || ''} ${item.instructions || ''}`.toLowerCase();
-    return haystack.includes(query.trim().toLowerCase());
-  });
-
-  return (
-    <div className="page au-page">
-      <div className="au-page-shell">
-        <div className="au-page-head"><div className="page-head-ic"><IcGCal size={17}/></div><div><div className="page-title">Scheduled</div><div className="page-sub">Automations that run on your time.</div></div><div className="au-head-actions"><button className="btn" onClick={onStartChat}><IcSparkle size={14}/>Create with Vellum</button><button className="new-btn" onClick={() => { setSelectedId(null); setEditing({mode:'new'}); }}><I d="M12 5v14M5 12h14" size={14}/>Set up manually</button></div></div>
-        <div className="au-layout">
-          <section className="au-list-panel" aria-label="Scheduled tasks">
-            <div className="au-list-toolbar"><label className="au-search"><IcSearch size={14}/><input aria-label="Search scheduled tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search scheduled tasks"/></label></div>
-            <div className="au-filter-row">{[['all','All'],['active','Active'],['paused','Paused']].map(([value,label]) => <button key={value} className={'au-filter' + (filter === value ? ' on' : '')} onClick={() => setFilter(value)}>{label}</button>)}</div>
-            <div className="au-task-list">
-              {filtered.map(record => {
-                const run = lastRun(record);
-                return <div key={record.id} className={'au-task' + (record.id === selectedId && !editing ? ' active' : '')} onClick={() => { setSelectedId(record.id); setEditing(null); }}>
-                  <span className={'au-task-dot' + (record.state === 'paused' ? ' paused' : '')} aria-hidden="true"/>
-                  <div className="au-task-copy"><div className="au-task-title">{record.name}</div><div className="au-task-meta">{scheduleLabel(record.schedule)}{run && run.status === 'complete' ? ' · Next run follows schedule' : ''}</div>{record.builtin && <div className="au-task-note">Built-in task</div>}</div>
-                  <button className="au-task-menu" aria-label={'Actions for ' + record.name} title="Actions" onClick={event => { event.stopPropagation(); setMenu({record, x:event.clientX, y:event.clientY}); }}><IcDots size={15}/></button>
-                </div>;
-              })}
-              {!loading && filtered.length === 0 && <div className="au-list-empty"><strong>{items.length ? 'No matching tasks' : 'No scheduled tasks'}</strong>{items.length ? 'Try another search or filter.' : 'Create a task manually or ask Vellum to draft one with you.'}</div>}
-              {loading && <div className="au-list-empty">Loading scheduled tasks…</div>}
-            </div>
-          </section>
-          <section className="au-detail-panel" aria-label="Scheduled task details">
-            {editing ? <AutomationForm key={editing.mode + ':' + (editing.record ? editing.record.id : 'new')} record={editing.mode === 'edit' ? editing.record : null} projects={projects} chats={chats} models={models} onSave={saveAutomation} onCancel={() => setEditing(null)}/> : selected ? <div className="au-detail">
-              <div className="au-detail-head"><div className="au-detail-head-copy"><div className="au-detail-status"><span className={'au-task-dot' + (selected.state === 'paused' ? ' paused' : '')}/>{selected.state === 'active' ? 'Active' : 'Paused'}</div><div className="au-detail-title">{selected.name}</div><div className="au-detail-sub">{selected.description || 'Scheduled reasoning task'}</div></div><div className="au-detail-actions"><button className="btn primary" disabled={busy === selected.id} onClick={() => runNow(selected)}>{busy === selected.id ? 'Working…' : 'Run now'}</button><button className="btn" disabled={busy === selected.id} onClick={() => inspectHistory(selected)}>History</button><button className="btn" onClick={() => setEditing({mode:'edit', record:selected})}>Edit</button><button className="tbtn" title="Close details" onClick={() => setSelectedId(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div></div>
-              {history && history.automationId === selected.id ? <><button className="btn" onClick={() => setHistory(null)}>Back to details</button><AutomationRunHistory runs={selected.run_history || history.runs}/></> : <>
-              <div className="au-prompt-card">{selected.instructions}</div>
-              <div className="au-section-label">Details</div>
-              <div className="au-detail-card"><div className="au-detail-row"><span>Runs in</span><strong>{destinationLabel(selected.destination, chats)}</strong></div><div className="au-detail-row"><span>Project</span><strong className={!selected.project_id ? 'au-detail-muted' : ''}>{selected.project_id ? ((projects.find(project => project.id === selected.project_id) || {}).name || selected.project_id) : 'None'}</strong></div><div className="au-detail-row"><span>Model</span><strong>{(selected.model_profile && selected.model_profile.model) || 'Default model'}</strong></div><div className="au-detail-row"><span>Reasoning</span><strong>{(selected.model_profile && selected.model_profile.reasoning_mode) || 'Default'}</strong></div></div>
-              <div className="au-section-label">Frequency</div>
-              <div className="au-detail-card"><div className="au-detail-row"><span>Repeat</span><strong>{scheduleLabel(selected.schedule)}</strong></div><div className="au-detail-row"><span>Notifications</span><strong>{automationNotificationLabel(selected.notifications && selected.notifications.level)}</strong></div></div>
-              {lastRun(selected) && <div className="au-last-run">{runStatusLabel(lastRun(selected))}</div>}
-              </>}
-              {error && <div className="au-form-error" role="alert">{error}</div>}
-            </div> : <div className="au-list-empty"><strong>Select a scheduled task</strong>Choose a task to see its instructions and details.</div>}
+  const historyTask = history && automations.find(item=>item.id===history.id);
+  const menuRecord = menu && automations.find(item=>item.id===menu.id);
+  const search = query.trim().toLowerCase();
+  const filtered = automations.filter(item=>filters.includes(automationGroup(item)) && item.name?.toLowerCase().includes(search));
+  const sidebar = <aside className="sidebar au-sidebar" aria-label="Scheduled sidebar">
+    <header className="au-sidebar-head"><h2>Scheduled</h2><div className="au-sidebar-controls">
+      <button ref={filterButton} type="button" className="au-icon-btn" data-tip="Filter tasks" aria-label="Filter tasks" aria-expanded={!!filterOpen}
+        onClick={event=>{
+          const bounds=event.currentTarget.getBoundingClientRect();
+          setFilterOpen(current=>current ? null : {x:bounds.left,y:bounds.bottom+5});
+          setMenu(null);
+        }}><I d="M4 6h16M7 12h10M10 18h4" size={16}/></button>
+      <button ref={searchButton} type="button" className="au-icon-btn" data-tip="Search scheduled tasks" aria-label="Search scheduled tasks" aria-expanded={searchOpen} aria-controls="scheduled-sidebar-search"
+        onClick={()=>{setFilterOpen(false);searchOpen?closeSearch():setSearchOpen(true);}}><AutomationIcon name="Search"/></button>
+    </div>
+    {filterOpen && <Popover portal sidebarOverlay className="shell-section-menu au-filter-menu" anchor={filterButton.current} role="group" label="Task statuses"
+      style={clampMenuPosition(filterOpen,160,142)} onMouseEnter={onSidebarEnter} onMouseLeave={onSidebarLeave} onClose={()=>setFilterOpen(null)}
+      onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();closeFilter();}}}>
+      <h3>Show tasks</h3>
+      {AUTOMATION_GROUPS.map(([id,label],index)=><button key={id} type="button" role="checkbox" autoFocus={index===0} aria-checked={filters.includes(id)}
+        onClick={()=>setFilters(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id])}>{label}{filters.includes(id) && <AutomationIcon name="Check" size={14}/>}</button>)}
+    </Popover>}
+    </header>
+    {searchOpen && <label className="au-search" id="scheduled-sidebar-search"><AutomationIcon name="Search"/><input ref={searchInput} type="search" aria-label="Search scheduled tasks"
+      value={query} placeholder="Search scheduled tasks" onChange={event=>setQuery(event.target.value)}
+      onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSearch();}}}/></label>}
+    <button type="button" className="au-sidebar-new" onClick={()=>newTask()}><AutomationIcon name="Plus"/>New task</button>
+    <div className="au-task-list" aria-busy={loading}>
+      <window.VellumUI.SharedRowBackground activeSelector='[data-selected="true"]' refreshKey={activeTaskId+'|'+filtered.map(task=>task.id).join(',')+'|'+JSON.stringify(collapsed)} revealActive={false}>
+      {AUTOMATION_GROUPS.map(([id,label])=>{
+        const tasks = filtered.filter(task=>automationGroup(task)===id);
+        if(!tasks.length)return null;
+        const expanded = !!search || !collapsed[id];
+        return <section className="au-task-group" key={id}><button type="button" className="au-group-label" aria-expanded={expanded} onClick={()=>setCollapsed(current=>({...current,[id]:!current[id]}))}>
+          {label}<AutomationIcon name={expanded?'ChevronDown':'ChevronRight'} size={13}/></button>
+          {expanded && tasks.map(record=>{
+            const status = automationStatus(record,schedulerAvailable);
+            const zone = automationScheduleZone(record.schedule);
+            const next = status === 'Active' ? automationRunDay(record.next_run_at,zone) : '';
+            const exactNext = next && automationDate(record.next_run_at,zone);
+            const unread = (record.run_history || []).some(automationUnread);
+            return <div key={record.id} className="au-task" data-shared-row="" data-selected={record.id===activeTaskId} data-menu-open={menu?.id===record.id}>
+              <button type="button" className="au-task-select" aria-label={unread ? record.name + ', unread runs' : undefined} aria-current={record.id===activeTaskId?'true':undefined} onClick={()=>onOpenTask(record)}>
+                <span className="au-task-title" title={record.name}>{record.name}{unread && <i className="au-unread-dot" aria-hidden="true"/>}</span>
+                <span className="au-task-meta" title={exactNext ? 'Next run ' + exactNext + ' · ' + scheduleLabel(record.schedule) : scheduleLabel(record.schedule)}>{next ? next + ' · ' : status + ' · '}{scheduleLabel(record.schedule)}</span>
+              </button>
+              <button type="button" className="au-icon-btn au-task-menu" data-tip="Task actions" aria-label={'Actions for ' + record.name} aria-expanded={menu?.id===record.id}
+                onClick={event=>{const trigger=event.currentTarget,rect=trigger.getBoundingClientRect();setMenu(menu?.id===record.id?null:{id:record.id,trigger,x:rect.right-174,y:rect.bottom+4});setFilterOpen(false);}}><IcDots size={16}/></button>
+            </div>;
+          })}
+        </section>;
+      })}
+      {!filtered.length && <p className="au-list-empty">{loading ? 'Loading tasks…' : loadError ? 'Tasks unavailable.' : search || filters.length!==3 ? 'No matching tasks.' : 'No scheduled tasks yet.'}</p>}
+      </window.VellumUI.SharedRowBackground>
+    </div>
+  </aside>;
+  return <>
+    {sidebarTarget && ReactDOM.createPortal(sidebar,sidebarTarget)}
+    {showPage && <section className="page au-page" aria-label="Scheduled workspace">
+      <div className="au-page-scroll">
+        {(loadError || !loading && !schedulerAvailable) && <div className="au-page-notice" role="status">{loadError || 'The local scheduler is offline. Tasks can run when the Vellum backend is available.'}<button type="button" className="btn" onClick={refresh}>Retry</button></div>}
+        {error && <p className="au-form-error" role="alert">{error}</p>}
+        <div className="au-start">
+          <div className="au-start-icon" aria-hidden="true">{'\u{1f553}'}</div>
+          <h1>Schedule a task</h1><p>Have Vellum handle recurring tasks and bring you the results.</p>
+          <section className="au-ideas" aria-label="Task ideas">
+            {AUTOMATION_IDEAS.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
+              <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon]}</span>
+              <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span></span>
+            </button>)}
           </section>
         </div>
       </div>
-      {menu && <Popover portal className="ctx-menu" style={clampMenuPosition(menu, 220, 210)} onClose={() => setMenu(null)}><div className="ctx-item" onClick={() => runNow(menu.record)}>Run now</div><div className="ctx-item" onClick={() => toggleState(menu.record)}>{menu.record.state === 'active' ? 'Pause' : 'Resume'}</div><div className="ctx-item" onClick={() => { setMenu(null); setSelectedId(menu.record.id); setEditing({mode:'edit', record:menu.record}); }}>Edit</div><div className="ctx-div"/><div className="ctx-item danger" onClick={() => { setMenu(null); setConfirm(menu.record); }}>{menu.record.builtin ? 'Reset task' : 'Delete task'}</div></Popover>}
-      {confirm && <AutomationConfirmModal record={confirm} builtin={!!confirm.builtin} busy={busy === confirm.id} onCancel={() => setConfirm(null)} onConfirm={() => removeAutomation(confirm)}/>}
-    </div>
-  );
+    </section>}
+    {menuRecord && <Popover portal sidebarOverlay anchor={menu.trigger} role="group" className="ctx-menu au-task-actions-menu" style={clampMenuPosition(menu,174,210)} label={'Actions for ' + menuRecord.name}
+      onClose={()=>closeMenu()} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();closeMenu(true);}}}>
+      <div ref={menuBody}>
+      {!menuRecord.schedule_ended && <button type="button" className="ctx-item" disabled={!!busy} onClick={()=>toggleState(menuRecord)}><AutomationIcon name={menuRecord.state==='active'?'Pause':'Play'}/>{menuRecord.state==='active'?'Pause':'Resume'}</button>}
+      <button type="button" className="ctx-item" disabled={!!busy || automationRunning(menuRecord)} onClick={()=>runNow(menuRecord)}><AutomationIcon name="ArrowRotateCw"/>Run now</button>
+      <button type="button" className="ctx-item" onClick={()=>editTask(menuRecord)}><AutomationIcon name="Edit"/>Edit</button>
+      <button type="button" className="ctx-item" disabled={!!busy} onClick={()=>inspectHistory(menuRecord)}><AutomationIcon name="Clock"/>Previous runs</button>
+      <div className="ctx-div"/><button type="button" className="ctx-item danger" onClick={()=>{onEnsureContext?.();closeMenu(true);setError('');setConfirm(menuRecord);}}><AutomationIcon name="Trash"/>{menuRecord.builtin?'Reset task':'Delete'}</button>
+      </div>
+    </Popover>}
+    {historyTask && <AutomationDialog label="Previous runs" onCancel={()=>setHistory(null)}>
+      <div className="au-form">
+        <header className="au-form-head"><h2>Previous runs</h2><button type="button" className="au-icon-btn" aria-label="Close previous runs" data-tip="Close" onClick={()=>setHistory(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></header>
+        <div className="au-form-body">
+          {error && <p className="au-form-error" role="alert">{error}</p>}
+          <AutomationRunHistory key={historyTask.id} runs={historyTask.run_history || history.runs} busy={busy}
+            onOpenChat={(id,messageId)=>{setHistory(null);onOpenChat(id,messageId);}}
+            onRunState={(run,operation)=>changeRunState(historyTask,run,operation)}/>
+        </div>
+      </div>
+    </AutomationDialog>}
+    {editing && <AutomationForm key={editing.mode+':'+(editing.record?.id || 'new')}
+      record={editing.record} projects={projects} chats={chats} models={models} onSave={saveAutomation} onCancel={()=>setEditing(null)}/>}
+    {confirm && <AutomationConfirmModal record={confirm} builtin={!!confirm.builtin} busy={!!busy} error={error} onCancel={()=>{setConfirm(null);setError('');}} onConfirm={()=>removeAutomation(confirm)}/>}
+  </>;
 };
 
 const PETDEX_MANIFEST = 'https://petdex.dev/api/manifest';
@@ -8724,7 +8979,10 @@ const App = () => {
     () => window.VellumUI.ObservabilityActions.initialState()
   );
   const theme = workspaceLayout.surfaces.workspace.properties.theme;
-  const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
+  const sidebarPinned = pendingSidebarVisibility.sidebar?.visible ?? workspaceLayout.surfaces.sidebar.visible;
+  const pluginSidebarVisible = pendingSidebarVisibility['plugin-sidebar']?.visible ?? (workspaceLayout.surfaces['plugin-sidebar']?.visible !== false);
+  const [scheduledSidebarOpen,setScheduledSidebarOpen]=useState(()=>!window.matchMedia('(max-width: 760px)').matches);
+  const [scheduledSidebarWidth,setScheduledSidebarWidth]=useState(260);
   const [sidebarPeeking,setSidebarPeeking]=useState(false);
   const [railPreview,setRailPreview]=useState(null);
   const [pluginNavigation,setPluginNavigation]=useState(null),[musicNavigation,setMusicNavigation]=useState(null);
@@ -8736,9 +8994,10 @@ const App = () => {
   const revealSidebar=()=>{clearTimeout(sidebarPeekTimer.current);};
   const previewSidebar=kind=>{
     clearTimeout(sidebarPeekTimer.current);
-    if(!desktopSidebarHover()||settingsOpen||!['chat','library','apps','music'].includes(kind)){dismissSidebarPreview();return;}
-    const current=['apps','music'].includes(view)?view:view==='library'?'library':'chat';
-    setSidebarPeeking(['chat','library'].includes(kind)&&(!sidebarPinned||current!==kind));
+    if(!desktopSidebarHover()||settingsOpen||!['chat','library','scheduled','apps','music'].includes(kind)){dismissSidebarPreview();return;}
+    if(sidebarHoverSuppressed.current===true || sidebarHoverSuppressed.current===kind)return;
+    const current=scheduledContext?'scheduled':['apps','music','library'].includes(view)?view:'chat';
+    setSidebarPeeking(['chat','library','scheduled'].includes(kind)&&(!shellSidebarPinned||current!==kind));
     setRailPreview(kind);
   };
   useEffect(()=>{window.dispatchEvent(new CustomEvent('vellum:rail-preview',{detail:{kind:railPreview}}));window.dispatchEvent(new Event('vellum:shell-overlay'));},[railPreview]);
@@ -8802,7 +9061,7 @@ const App = () => {
   const [sidebarHover, setSidebarHover] = useState(false);
   useEffect(() => {
     const narrow = window.matchMedia('(max-width: 760px)');
-    const collapse = async event => { if (event.matches) { await dispatchSidebarVisibility(false, {notify:false}); await dispatchSurfacePresentation('plugin-sidebar',{visible:false},{notify:false}); } };
+    const collapse = async event => { if (event.matches) { setScheduledSidebarOpen(false); await dispatchSidebarVisibility(false, {notify:false}); await dispatchSurfacePresentation('plugin-sidebar',{visible:false},{notify:false}); } };
     collapse(narrow);
     narrow.addEventListener('change', collapse);
     return () => narrow.removeEventListener('change', collapse);
@@ -8922,6 +9181,9 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [spotify, setSpotify] = useState({connected:false,status:'loading',account_name:'',product:''});
   const [spotifyConnectOpen, setSpotifyConnectOpen] = useState(false);
   const [automations, setAutomations] = useState([]);
+  const [scheduledChatId, setScheduledChatId] = useState(null);
+  const scheduledChatScopes = useRef(new Map());
+  const [scheduledSidebarTarget, setScheduledSidebarTarget] = useState(null);
   const [petManifest, setPetManifest] = useState(null);
   const [petLoading, setPetLoading] = useState(true);
   const [petError, setPetError] = useState('');
@@ -9285,16 +9547,26 @@ const [slashSkills, setSlashSkills] = useState([]);
     setExpandedProj(value=>({...value,[projectId]:true}));
     if(FEATURE_FLAGS.realConversations)return dispatchConversationAction('conversation.new',{project_id:projectId},{applyNavigation:false});
   };
-  const startAutomationChat = async () => {
+  const startAutomationChat = async idea => {
+    if (idea?.request) {
+      const scope = {task_id:null, time_zone:AUTOMATION_LOCAL_ZONE};
+      const chatId = sendMessage(idea.request, [], {forceNew:true, projectId:null, scheduledChat:scope});
+      if (!chatId) throw new Error('Setup chat could not open.');
+      scheduledChatScopes.current.set(chatId, scope);
+      setScheduledChatId(chatId);
+      setView('chat');
+      return;
+    }
     let prompt = "I'd like to create a new automation — a scheduled reasoning task that Vellum runs on its own. Draft the instructions, propose a schedule and destination, confirm the plan with me, then create it with the cronjob tool.";
     try {
       const data = await API.automations.createPrompt();
       if (data && data.prompt) prompt = data.prompt;
     } catch (_) {}
     dispatchSurfacePresentation('settings', {visible:false}, {notify:false});
-    const projectId = activeProjectId || (projects[0] && projects[0].id) || null;
-    if (projectId) setActiveProjectId(projectId);
-    sendMessage(prompt, [], {forceNew: true, projectId});
+    const projectId = activeProjectId || null;
+    prompt += '\n\nMy device time zone is ' + AUTOMATION_LOCAL_ZONE + '. Confirm it when proposing clock times.';
+    setScheduledChatId(sendMessage(prompt, [], {forceNew: true, projectId}));
+    setView('chat');
   };
   const leaveNotFound = () => {
     try {
@@ -9319,6 +9591,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (messageId) setTimeout(() => scrollToConversationMessage(messageId), 80);
   };
   const openChat = (id, messageId) => {
+    setScheduledChatId(null);
     if (!FEATURE_FLAGS.realConversations) {
       applyOpenChatNavigation(id, messageId);
       return null;
@@ -9332,8 +9605,39 @@ const [slashSkills, setSlashSkills] = useState([]);
       return receipt;
     });
   };
+  const openScheduledTask = task => {
+    const id = scheduledTaskConversationId(task.id);
+    const existing = chats.find(chat=>chat.id===id);
+    if (existing) {
+      setScheduledChatId(id);
+      return applyOpenChatNavigation(id);
+    }
+    const introId = id+'-intro';
+    const draft = {id,thread_id:id,title:task.name,created_at:task.created_at,messages:[
+      ...(task.instructions ? [{id:introId+'-prompt',role:'user',text:task.instructions}] : []),
+      {id:introId,role:'assistant',text:'This is the conversation for this scheduled task. Ask about the schedule, results, or changes you want to make.'},
+    ]};
+    setChats(current=>current.some(chat=>chat.id===id)?current:[draft,...current]);
+    setScheduledChatId(id);
+    applyOpenChatNavigation(id);
+    API.automations.openConversation(task.id).then(({conversation})=>{
+      if (!conversation) return;
+      setChats(current=>current.map(chat=>chat===draft?conversation:chat));
+      scheduleConversationLibraryRefresh();
+    }).catch(()=>{});
+  };
+  const openScheduledRunChat = async (id, messageId) => {
+    const epoch = navigationEpochRef.current;
+    const receipt = await dispatchConversationAction('conversation.open', {conversation_id:id}, {applyNavigation:false,notify:false});
+    if (epoch !== navigationEpochRef.current) return;
+    if (receipt?.status !== 'applied') {pushToast('This run’s chat is no longer available.');return;}
+    setScheduledChatId(id);
+    applyOpenChatNavigation(id, messageId);
+    if (messageId) setTimeout(()=>{if(navigationEpochRef.current===epoch+1)scrollToConversationMessage(messageId);},80);
+  };
   const openSearch = (preset = null) => { setSearchPreset(preset); setSearchOpen(true); };
   const nav = v => {
+    setScheduledChatId(null);
     // Keep older shortcuts, links, and action receipts on their new Settings home.
     if (['skills','ledger','archive'].includes(v)) {
       if (v === 'skills') setSettingsPluginTarget({v:'settings',tab:'skills'});
@@ -9963,10 +10267,13 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}, modelId = selModel) => {
     const completedSpotifyTools = new Set();
+    const task = automations.find(item=>scheduledTaskConversationId(item.id)===chatId);
+    const scheduledChat = opts.scheduledChat || scheduledChatScopes.current.get(chatId) ||
+      (task && {task_id:task.id,time_zone:AUTOMATION_LOCAL_ZONE});
     updateTurn(chatId,assistantId,m=>({...m,responseModel:responseModelSnapshot(modelId,models)}));
     try {
       await API.chat.stream(
-        {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
+        {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId), ...(scheduledChat ? {scheduled_chat:scheduledChat} : {})},
         {
           playbackRequest: opts.playbackRequest,
           controller: controller => {
@@ -10543,7 +10850,20 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  const previewSidebarVisibility = (reference, visible) => {
+    const intent = {visible};
+    setPendingSidebarVisibility(current=>({...current,[reference]:intent}));
+    return ()=>{
+      setPendingSidebarVisibility(current=>{
+        if(current[reference]!==intent)return current;
+        const next={...current};
+        delete next[reference];
+        return next;
+      });
+    };
+  };
   const dispatchSidebarVisibility = async (visible, options = {}) => {
+    const finishPreview = previewSidebarVisibility('sidebar', visible);
     try {
       const receipt = await workspaceActionRuntimeRef.current.dispatchSidebar(visible, {conversationId:activeChatId, persistence:options.persistence, learn:options.learn});
       showAppActionReceipt(receipt, options);
@@ -10551,9 +10871,13 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (_) {
       if (options.notify !== false) pushToast('App actions are unreachable.');
       return null;
+    } finally {
+      finishPreview();
     }
   };
   const dispatchSurfacePresentation = async (reference, presentation, options = {}) => {
+    const finishPreview = reference==='plugin-sidebar' && typeof presentation.visible==='boolean'
+      ? previewSidebarVisibility(reference,presentation.visible) : null;
     try {
       const receipt = await workspaceActionRuntimeRef.current.dispatchSurface(reference, presentation, {conversationId:activeChatId, persistence:options.persistence, learn:options.learn});
       showAppActionReceipt(receipt, options);
@@ -10561,12 +10885,15 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (_) {
       if (options.notify !== false) pushToast('App actions are unreachable.');
       return null;
+    } finally {
+      finishPreview?.();
     }
   };
   // The title bar and keyboard shortcuts share the same page history.
   const desktopHistoryRef = useRef({entries:[], index:-1, pending:null});
   const desktopLocation = {
     view, chatId:view === 'chat' ? activeChatId : null,
+    scheduledChatId:view === 'chat' && scheduledChatId === activeChatId ? scheduledChatId : null,
     agentId:view === 'agent' ? activeAgentId : null,
     agentConvoId:view === 'agent' ? activeConvo[activeAgentId] || null : null,
     projectId:view === 'project' ? activeProjectId : null,
@@ -10614,6 +10941,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             if(FEATURE_FLAGS.realConversations && receipt?.status!=='applied')throw new Error('Conversation unavailable');
           } else applyNewChatNavigation();
         }
+        setScheduledChatId(target.scheduledChatId || null);
         if(target.settingsOpen!==settingsOpen){
           const receipt=await dispatchSurfacePresentation('settings',{visible:target.settingsOpen},{notify:false,persistence:'session'});
           if(receipt?.status!=='applied')throw new Error('Settings unavailable');
@@ -10890,26 +11218,42 @@ const [slashSkills, setSlashSkills] = useState([]);
   const workspaceBrowserVisible=workspacePanelVisible && workspaceBrowserSelected && browserFeature;
   const workspaceMode=workspaceLayout.surfaces['right-panel'].properties.layout==='full'?'full':'split';
   const featureOwnsSidebar=['apps','music'].includes(view);
-  const mainSidebarContext=sidebarPeeking&&['chat','library'].includes(railPreview)?railPreview:view==='library'?'library':'chat';
-  const shellSidebarVisible=(!featureOwnsSidebar&&sidebarPinned)||sidebarPeeking;
+  const activeScheduledTask = automations.find(task=>scheduledTaskConversationId(task.id)===activeChatId);
+  const scheduledContext=view==='scheduled' || view==='chat' && (Boolean(activeScheduledTask) || Boolean(scheduledChatId) && scheduledChatId===activeChatId);
+  const mainSidebarContext=sidebarPeeking&&['chat','library','scheduled'].includes(railPreview)?railPreview:scheduledContext?'scheduled':view==='library'?'library':'chat';
+  const shellSidebarPinned=!featureOwnsSidebar&&(scheduledContext?scheduledSidebarOpen:sidebarPinned);
+  const shellSidebarVisible=shellSidebarPinned||sidebarPeeking;
+  const activeSidebarWidth=mainSidebarContext==='scheduled'?scheduledSidebarWidth:sidebarWidth;
   const [musicSidebarVisible,setMusicSidebarVisible]=useState(true);
-  const contextualSidebarVisible=view==='apps'?workspaceLayout.surfaces['plugin-sidebar']?.visible!==false:view==='music'?musicSidebarVisible:sidebarPinned;
+  const contextualSidebarVisible=view==='apps'?pluginSidebarVisible:view==='music'?musicSidebarVisible:shellSidebarPinned;
   const toggleContextualSidebar=()=>{
     if(settingsOpen)return;
     if(view==='music'){window.dispatchEvent(new Event('vellum:music-sidebar-toggle'));return;}
     if(view==='apps'){dispatchSurfacePresentation('plugin-sidebar',{visible:!contextualSidebarVisible},{notify:false});return;}
+    if(scheduledContext){
+      sidebarHoverSuppressed.current=scheduledSidebarOpen&&!!document.querySelector('.app-destination-rail:hover')?'scheduled':false;
+      dismissSidebarPreview();
+      setScheduledSidebarOpen(!scheduledSidebarOpen);
+      return;
+    }
     sidebarHoverSuppressed.current=sidebarPinned&&!!document.querySelector('.app-destination-rail:hover');setSidebarPeeking(false);dispatchSidebarVisibility(!sidebarPinned,{learn:true});
+  };
+  const collapseScheduledSidebar=()=>{
+    sidebarHoverSuppressed.current='scheduled';
+    dismissSidebarPreview();
+    setScheduledSidebarOpen(false);
+    document.querySelector('[data-rail-preview-trigger="scheduled"]')?.focus();
   };
   useEffect(()=>{
     const listener=event=>setMusicSidebarVisible(!!event.detail?.visible);
     window.addEventListener('vellum:music-sidebar-state',listener);return()=>window.removeEventListener('vellum:music-sidebar-state',listener);
   },[]);
   useEffect(()=>{
-    const publish=()=>window.dispatchEvent(new CustomEvent('vellum:sidebar-state',{detail:{visible:contextualSidebarVisible,context:view==='apps'?'Customize':view==='music'?'Music':view==='library'?'Library':'Conversations',disabled:settingsOpen}}));
+    const publish=()=>window.dispatchEvent(new CustomEvent('vellum:sidebar-state',{detail:{visible:contextualSidebarVisible,context:scheduledContext?'Scheduled':view==='apps'?'Customize':view==='music'?'Music':view==='library'?'Library':'Conversations',disabled:settingsOpen}}));
     const toggle=()=>toggleContextualSidebar();
     window.addEventListener('vellum:sidebar-toggle',toggle);window.addEventListener('vellum:sidebar-ready',publish);publish();
     return()=>{window.removeEventListener('vellum:sidebar-toggle',toggle);window.removeEventListener('vellum:sidebar-ready',publish);};
-  },[view,contextualSidebarVisible,settingsOpen,sidebarPinned]);
+  },[view,contextualSidebarVisible,settingsOpen,sidebarPinned,scheduledContext,scheduledSidebarOpen]);
   const workspaceHasHeader=['chat','agent','project'].includes(view) || workspacePanelVisible;
   const workspaceConversation=view==='chat' && activeChat && activeChat.messages?.length ? activeChat : null;
   const workspaceDetailsVisible=(chatDetails.visible || legacyDetailsVisible) && (Boolean(workspaceConversation) || Boolean(activityMsg) && view==='agent');
@@ -11152,9 +11496,9 @@ const [slashSkills, setSlashSkills] = useState([]);
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} data-rail-preview={railPreview||''} className={'body app-shell' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
-          <window.VellumUI.NavigationRail view={view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
+          <window.VellumUI.NavigationRail view={view} contextualView={scheduledContext?'scheduled':view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
 
-          <div className="main-sidebar-slot" id="main-sidebar" data-shell-overlay={sidebarPeeking?'true':undefined} data-state={shellSidebarVisible?'open':'closed'} data-pinned={!featureOwnsSidebar&&sidebarPinned} data-peeking={sidebarPeeking&&(!sidebarPinned||featureOwnsSidebar)} data-variant="inset" data-collapsible="offcanvas" onPointerEnter={revealSidebar} onPointerLeave={hideSidebarPeek} inert={!shellSidebarVisible} aria-hidden={!shellSidebarVisible}>{mainSidebarContext==='library'?<window.VellumUI.LibrarySidebar section={librarySection} onSection={section=>{setLibrarySection(section);if(view!=='library'){dismissSidebarPreview();nav('library');}}} items={libraryProjection} projects={projects}/>:<Sidebar hoverEnabled={!settingsOpen&&shellSidebarVisible} notificationState={notificationState} chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
+          <div className="main-sidebar-slot" id="main-sidebar" data-shell-overlay={sidebarPeeking?'true':undefined} data-state={shellSidebarVisible?'open':'closed'} data-pinned={shellSidebarPinned} data-peeking={sidebarPeeking&&!shellSidebarPinned} data-context={mainSidebarContext} style={{"--scheduled-sidebar-width":scheduledSidebarWidth+"px"}} data-variant="inset" data-collapsible="offcanvas" onPointerEnter={revealSidebar} onPointerLeave={hideSidebarPeek} inert={!shellSidebarVisible} aria-hidden={!shellSidebarVisible}>{mainSidebarContext==='scheduled'?<div className='au-sidebar-host' ref={setScheduledSidebarTarget}/>:mainSidebarContext==='library'?<window.VellumUI.LibrarySidebar section={librarySection} onSection={section=>{setLibrarySection(section);if(view!=='library'){dismissSidebarPreview();nav('library');}}} items={libraryProjection} projects={projects}/>:<Sidebar hoverEnabled={!settingsOpen&&shellSidebarVisible} notificationState={notificationState} chats={chats} automations={automations} onOpenTask={openScheduledTask} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
                 onTogglePin={() => {sidebarHoverSuppressed.current=sidebarPinned;setSidebarPeeking(false);dispatchSidebarVisibility(!sidebarPinned, {learn:true});}} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
@@ -11166,10 +11510,10 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
                 projectMenuId={menu?.type==='project'?menu.id:null} onProjectRename={renameProject} onOpenProject={openProject} onProjectNewChat={newProjectChat} onMoveToProject={moveToProject} onProjectAction={projectMenuAction}
                 />}
-            {sidebarPinned && !featureOwnsSidebar && <window.VellumUI.SidebarResizeHandle value={sidebarWidth} onChange={width=>dispatchSurfacePresentation('sidebar',{properties:{width}},{notify:false}).then(receipt=>{if(receipt?.status!=='applied')pushToast('Sidebar width could not be saved.');return receipt;})}/>}
+            {shellSidebarPinned && !sidebarPeeking && <window.VellumUI.SidebarResizeHandle key={scheduledContext?'scheduled':'main'} value={activeSidebarWidth} onCollapse={scheduledContext?collapseScheduledSidebar:undefined} onChange={scheduledContext?setScheduledSidebarWidth:width=>dispatchSurfacePresentation('sidebar',{properties:{width}},{notify:false}).then(receipt=>{if(receipt?.status!=='applied')pushToast('Sidebar width could not be saved.');return receipt;})}/>}
           </div>
 
-          {sidebarPinned && !featureOwnsSidebar && <button type="button" className="main-sidebar-backdrop" aria-label="Close main sidebar" onClick={()=>dispatchSidebarVisibility(false,{learn:true})}/>}
+          {shellSidebarPinned && <button type="button" className="main-sidebar-backdrop" aria-label="Close sidebar" onClick={toggleContextualSidebar}/>}
           {railPreview&&railPreview!==view&&['apps','music'].includes(railPreview)&&<window.VellumUI.RailContextPreview kind={railPreview} apps={apps} Logo={ConnLogo} onEnter={revealSidebar} onLeave={hideSidebarPeek} onChoose={(kind,section,id)=>{dismissSidebarPreview();if(kind==='apps'){setPluginNavigation({v:section,p:id,nonce:Date.now()});nav('apps');}else{setMusicNavigation({screen:section,nonce:Date.now()});nav('music');}}}/>}
           <div className="workspace-content" data-toolbar={workspaceHasHeader} data-panel-open={workspacePanelVisible} data-layout={workspaceMode}>
           {workspaceHasHeader && <window.VellumUI.WorkspaceToolbar controller={workspaceController} workspace={workspaceViews}
@@ -11206,8 +11550,12 @@ const [slashSkills, setSlashSkills] = useState([]);
               onViewImage={setViewer}
               composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
-            {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
-            {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={workspaceLayout.surfaces['plugin-sidebar']?.visible!==false} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
+            {(scheduledContext || mainSidebarContext==='scheduled') && <ScheduledView automations={automations} projects={projects} chats={chats} models={models}
+              showPage={view==='scheduled'} activeTaskId={activeScheduledTask?.id} sidebarTarget={scheduledSidebarTarget} sidebarVisible={shellSidebarVisible && mainSidebarContext==='scheduled'}
+              onEnsureContext={()=>{if(!scheduledContext)nav('scheduled');}} onStartChat={startAutomationChat}
+              onSidebarEnter={revealSidebar} onSidebarLeave={hideSidebarPeek}
+              onOpenChat={openScheduledRunChat} onOpenTask={openScheduledTask} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
+            {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={pluginSidebarVisible} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}

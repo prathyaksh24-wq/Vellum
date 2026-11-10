@@ -17,6 +17,7 @@
     ariaLabel = "Select",
     menuWidth,
     sharedLayout = false,
+    floating = false,
   }) => {
     const items = normalizeOptions(options);
     const rootRef = useRef(null);
@@ -24,6 +25,7 @@
     const contentRef = useRef(null);
     const optionRefs = useRef([]);
     const focusOnOpen = useRef(false);
+    const typeahead = useRef({text:"", at:0});
     const [open, setOpen] = useState(false);
     const [placement, setPlacement] = useState("bottom");
     const selectedIndex = Math.max(0, items.findIndex(item => item.value === value));
@@ -45,8 +47,9 @@
       const start = items[selectedIndex]?.disabled
         ? (direction < 0 ? enabled[enabled.length - 1] : enabled[0])
         : selectedIndex;
+      typeahead.current = {text:"", at:0};
       setActiveIndex(start);
-      focusOnOpen.current = direction !== 0;
+      focusOnOpen.current = floating || direction !== 0;
       setOpen(true);
     };
     const closeMenu = (restoreFocus = false) => {
@@ -66,7 +69,10 @@
         if (!rootRef.current?.contains(event.target)) closeMenu();
       };
       const onEscape = event => {
-        if (event.key === "Escape") closeMenu(true);
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          if (floating) event.preventDefault();
+          closeMenu(true);
+        }
       };
       window.addEventListener("pointerdown", onPointer);
       window.addEventListener("keydown", onEscape);
@@ -77,12 +83,44 @@
     }, [open]);
 
     React.useLayoutEffect(() => {
-      if (!open || !triggerRef.current || !contentRef.current) return;
+      if (floating || !open || !triggerRef.current || !contentRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
       const height = contentRef.current.scrollHeight;
       const below = window.innerHeight - rect.bottom;
       setPlacement(below < height + 16 && rect.top > below ? "top" : "bottom");
-    }, [open, items.length]);
+    }, [open, items.length, floating]);
+
+    React.useLayoutEffect(() => {
+      const panel = contentRef.current, trigger = triggerRef.current;
+      if (!floating || !open || !panel || !trigger) return;
+      const update = event => {
+        if (event?.type === "scroll" && panel.contains(event.target)) return;
+        const rect = trigger.getBoundingClientRect();
+        const dialog = trigger.closest("dialog")?.getBoundingClientRect();
+        if (dialog && (rect.bottom <= dialog.top || rect.top >= dialog.bottom)) {
+          closeMenu();
+          return;
+        }
+        const below = window.innerHeight - rect.bottom - 14;
+        const above = rect.top - 14;
+        const up = below < 280 && above > below;
+        const height = Math.min(280, up ? above : below);
+        const width = Math.min(menuWidth || rect.width, window.innerWidth - 16);
+        panel.style.setProperty("--select-available-height", height + "px");
+        panel.style.width = width + "px";
+        panel.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + "px";
+        panel.style.top = (up ? rect.top - 6 - panel.offsetHeight : rect.bottom + 6) + "px";
+      };
+      panel.showPopover();
+      update();
+      window.addEventListener("resize", update);
+      window.addEventListener("scroll", update, true);
+      return () => {
+        window.removeEventListener("resize", update);
+        window.removeEventListener("scroll", update, true);
+        if (panel.matches(":popover-open")) panel.hidePopover();
+      };
+    }, [open, floating, menuWidth]);
 
     useEffect(() => {
       if (!open || !focusOnOpen.current) return;
@@ -118,6 +156,16 @@
         closeMenu(true);
       } else if (event.key === "Tab") {
         closeMenu();
+      } else if (floating && event.key.length === 1 && event.key !== " " && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        const now = Date.now();
+        const query = (now - typeahead.current.at < 700 ? typeahead.current.text : "") + event.key.toLowerCase();
+        typeahead.current = {text:query, at:now};
+        const next = items.findIndex(item => !item.disabled && String(item.label).toLowerCase().includes(query));
+        if (next >= 0) {
+          setActiveIndex(next);
+          optionRefs.current[next]?.focus();
+        }
       }
     };
 
@@ -147,6 +195,7 @@
           role="listbox"
           aria-label={ariaLabel}
           aria-hidden={!open}
+          popover={floating ? "manual" : undefined}
           className="v-select-content"
           style={menuWidth ? { width: menuWidth } : undefined}
         >

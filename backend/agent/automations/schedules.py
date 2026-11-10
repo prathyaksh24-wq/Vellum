@@ -13,10 +13,13 @@ turn into an APScheduler trigger; garbage input raises ``ScheduleParseError``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from apscheduler.triggers.combining import OrTrigger
+from apscheduler.triggers.cron import CronTrigger
 from croniter import croniter
 
 
@@ -44,6 +47,8 @@ class ScheduleRecord:
     seconds: int | None = None
     at_time: str | None = None
     run_at: str | None = None
+    time_zone: str | None = None
+    end_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         record: dict[str, object] = {"kind": self.kind, "expression": self.expression}
@@ -57,6 +62,10 @@ class ScheduleRecord:
             record["at_time"] = self.at_time
         if self.run_at is not None:
             record["run_at"] = self.run_at
+        if self.time_zone is not None:
+            record["time_zone"] = self.time_zone
+        if self.end_at is not None:
+            record["end_at"] = self.end_at
         return record
 
 
@@ -68,7 +77,7 @@ def _canonical_unit(label: str) -> str:
     return _UNIT_LABEL[label.lower()[0]]
 
 
-def _parse_iso(expression: str) -> ScheduleRecord:
+def _parse_iso(expression: str, zone=None) -> ScheduleRecord:
     text = expression.strip()
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
@@ -77,7 +86,15 @@ def _parse_iso(expression: str) -> ScheduleRecord:
             f"invalid ISO timestamp {expression!r}; expected e.g. '2026-08-03T09:00:00Z'"
         ) from exc
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        wall_time = parsed
+        parsed = wall_time.replace(tzinfo=zone or timezone.utc)
+        if zone is not None:
+            if parsed.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) != wall_time:
+                raise ScheduleParseError("This clock time does not exist in the selected time zone.")
+            if parsed.utcoffset() != parsed.replace(fold=1).utcoffset():
+                raise ScheduleParseError("This clock time occurs twice. Use a timestamp with an explicit UTC offset.")
+    elif zone is not None:
+        raise ScheduleParseError("Specify either a time zone or a UTC offset for this timestamp.")
     return ScheduleRecord(
         kind="iso",
         expression=text,
@@ -92,6 +109,8 @@ def _parse_relative(expression: str) -> ScheduleRecord:
             f"invalid relative delay {expression!r}; expected e.g. '30m', '2h', '1d', '2w'"
         )
     value = int(match.group(1))
+    if not 1 <= value <= 999_999:
+        raise ScheduleParseError("Delay must be between 1 and 999999 units.")
     unit = _canonical_unit(match.group(2))
     return ScheduleRecord(
         kind="relative",
@@ -130,6 +149,8 @@ def _parse_interval(expression: str) -> ScheduleRecord:
             f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
         )
     value = int(value_text)
+    if not 1 <= value <= 999_999:
+        raise ScheduleParseError("Interval must be between 1 and 999999 units.")
     try:
         unit = _canonical_unit(unit_text)
         seconds = value * _unit_seconds(unit_text)
@@ -176,12 +197,26 @@ def _looks_like_cron(expression: str) -> bool:
 
 
 def _parse_cron(expression: str) -> ScheduleRecord:
-    text = expression.strip()
+    return ScheduleRecord(kind="cron", expression=expression.strip())
+
+
+def cron_trigger(expression: str, *, zone=timezone.utc, end_at=None):
+    """Use standard cron weekdays (0/7 Sunday) and day-of-month/day-of-week OR."""
     try:
-        croniter(text, datetime.now(timezone.utc))
+        minute, hour, day, month, _ = expression.split()
+        expanded, nth_weekdays = croniter.expand(expression)
+        if nth_weekdays:
+            raise ValueError("nth weekday syntax is unsupported")
+        weekdays = expanded[4]
+        names = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+        weekday = "*" if weekdays == ["*"] else ",".join(names[value % 7] for value in weekdays)
+        day = "last" if day.lower() == "l" else day
+        options = {"minute": minute, "hour": hour, "month": month, "timezone": zone, "end_date": end_at}
+        if day != "*" and weekday != "*":
+            return OrTrigger([CronTrigger(day=day, **options), CronTrigger(day_of_week=weekday, **options)])
+        return CronTrigger(day=day, day_of_week=weekday, **options)
     except (ValueError, KeyError) as exc:
-        raise ScheduleParseError(f"invalid cron expression {text!r}") from exc
-    return ScheduleRecord(kind="cron", expression=text)
+        raise ScheduleParseError(f"invalid or unsupported cron expression {expression!r}") from exc
 
 
 def parse_schedule(expression: str) -> ScheduleRecord:
@@ -189,10 +224,31 @@ def parse_schedule(expression: str) -> ScheduleRecord:
     text = expression.strip()
     if not text:
         raise ScheduleParseError("schedule expression cannot be empty")
-    if text.casefold().startswith("every "):
-        return _parse_interval(text)
-    if _looks_like_cron(text):
-        return _parse_cron(text)
-    if _RELATIVE_RE.match(text) is not None:
-        return _parse_relative(text)
-    return _parse_iso(text)
+    body, _, end_date = text.partition(" until ")
+    body, _, zone_name = body.partition(" @ ")
+    body, zone_name = body.strip(), zone_name.strip()
+    try:
+        zone = ZoneInfo(zone_name) if zone_name else timezone.utc
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ScheduleParseError(f"Unknown time zone {zone_name!r}. Use a name like Asia/Kolkata.") from exc
+    if body.casefold().startswith("every "):
+        record = _parse_interval(body)
+    elif _looks_like_cron(body):
+        record = _parse_cron(body)
+    elif _RELATIVE_RE.match(body) is not None:
+        record = _parse_relative(body)
+    else:
+        record = _parse_iso(body, zone if zone_name else None)
+    if zone_name and record.kind not in {"cron", "iso"}:
+        raise ScheduleParseError("Use a time zone with a calendar schedule or a one-time date.")
+    end_at = None
+    if end_date:
+        if record.kind != "cron" or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_date.strip()):
+            raise ScheduleParseError("End dates require a calendar schedule and a YYYY-MM-DD date.")
+        try:
+            end_at = datetime.fromisoformat(end_date.strip() + "T23:59:59").replace(tzinfo=zone)
+        except ValueError as exc:
+            raise ScheduleParseError("Choose a valid end date.") from exc
+    if record.kind == "cron":
+        cron_trigger(body, zone=zone, end_at=end_at)
+    return replace(record, time_zone=zone_name or None, end_at=end_at.isoformat() if end_at else None)

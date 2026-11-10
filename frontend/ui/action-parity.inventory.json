@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 980,
-      "sha256": "d547e0d40d36043cb919e7d1919935084e753427a88454619a2b3541682d253c"
+      "count": 1014,
+      "sha256": "82dfeaa51dbc32f54cfd04c4839adbf622b458aabd6950e27417c23291a9445e"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -27,7 +27,7 @@
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
       "count": 79,
-      "sha256": "230a837ed0578e373a320a1aa72594e01c795d0b1bda5cd05c8dd4fa18dd2089"
+      "sha256": "89ff4d90e0341366f4828a6fe19e035312b33045d1d5de466009c6918c20f749"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
@@ -62,8 +62,8 @@
       "sha256": "42d09cfd32a7e20e2a3b163735b37417d41a0698c02dfe4446743bc8e9c32c8e"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
-      "count": 17,
-      "sha256": "3656c35484035eea5bdf71c0ce1d9bb4a3e7a5515e1cd9df34741c738f171e47"
+      "count": 21,
+      "sha256": "f4db887c2281e8d618052c413524cf5d73d5f30d7e2278547de784cc43094e71"
     },
     "design/Velllum/uploads/components/PatternWaves.jsx": {
       "count": 0,
@@ -290,8 +290,8 @@
       "sha256": "f22e86949597afa18b5545553aa344e136f9fda91573b5288161f96028b07263"
     },
     "design/Velllum/uploads/components/navigation-shell.jsx": {
-      "count": 70,
-      "sha256": "e581939fb30894fbf43cae9d7208eba352a97eb457a0ecaebc5cbec09f82a345"
+      "count": 72,
+      "sha256": "179c5b636eb11724c455013bcb9a5a57738422a8ba2fbd573bf1a1616ab29852"
     },
     "design/Velllum/uploads/commands-entry.js": {
       "count": 0,
@@ -890,6 +890,15 @@
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "onAction('automation.history'"
+      }
+    },
+    {
+      "surface": "Automations",
+      "name": "update automation run history",
+      "actionId": "automation.run.state",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "onAction('automation.run.state'"
       }
     },
     {

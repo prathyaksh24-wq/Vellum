@@ -38,7 +38,7 @@ describe("Vellum automations API client", () => {
     const api = await loadAutomationsApi((path, options) => calls.push({ path, options }));
     await api.list();
     expect(calls[0].path).toBe("/api/automations");
-    expect(calls[0].options).toBeUndefined();
+    expect(calls[0].options).toEqual({ cache: "no-store" });
   });
 
   test("creates an automation with a JSON body", async () => {

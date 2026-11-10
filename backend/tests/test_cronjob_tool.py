@@ -170,6 +170,23 @@ def test_cronjob_tool_updates_automation(store):
     assert automation["instructions"] == "Old text"
 
 
+def test_schedule_update_preserves_task_details(store):
+    created = _invoke(
+        action="create", name="Friday update", instructions="Write a summary.", description="Weekly check-in",
+        schedule="0 15 * * 5", destination="existing_chat", thread_id="team-thread", project_id="project-1",
+    )
+    task_id = created["automation"]["id"]
+
+    result = _invoke(action="update", automation_id=task_id, schedule="0 15 * * 1")
+
+    assert result["ok"] is True
+    task = store.get(task_id)
+    assert task["schedule"]["expression"] == "0 15 * * 1"
+    assert task["destination"] == {"kind": "existing_chat", "thread_id": "team-thread"}
+    assert task["description"] == "Weekly check-in"
+    assert task["project_id"] == "project-1"
+
+
 def test_cronjob_tool_update_rejects_unknown_id(store):
     result = _invoke(action="update", automation_id="automation-nope", name="X")
 

@@ -6,6 +6,9 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Give Scheduled an independent sidebar with search, filters, resize, and drag-to-collapse. Open saved tasks in chat and use the task menu to review runs or delete a custom schedule.
+- Show a single focus ring in Settings and plugin search. Keep task ideas on the Scheduled landing page, and remove the Accent palette picker from Appearance.
+
 - Open a prefilled chat with the installed Plugin Creator skill from plugin discovery and Settings. Share the styled marketplace, archive upload, and custom MCP dialogs across both Add menus. Use the shared moving highlight on plugin sidebar rows.
 
 - Let chat pick a playable local song, list saved Local Music playlists, and recognize their names in playback requests. Keep the Dynamic Island on the paused provider and ignore stale local track-end commands.

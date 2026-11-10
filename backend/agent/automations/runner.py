@@ -49,14 +49,30 @@ async def run_automation_now(
                 answer = ('YouTube history refreshed.' if status == 'ready' else 'YouTube history checked; the current page is empty.')
                 answer += f" {int(result.get('records') or 0)} saved video/day entries."
             return store.finish_run(automation['id'], run['id'], status='complete', output=answer)
-        answer = await _execute_reasoning_turn(automation)
-        if (automation.get("destination") or {}).get("kind") == "notification":
-            store.deliver_notification(automation["id"], run["id"], answer)
-        else:
-            _deliver_result(automation, answer)
-        return store.finish_run(automation["id"], run["id"], status="complete", output=answer)
+        if automation.get("builtin"):
+            from agent.automations.builtins import run_builtin
+            await run_builtin(automation, raise_errors=True)
+            return store.finish_run(automation["id"], run["id"], status="complete")
+        execution = {**automation, "_execution_thread_id": _fresh_thread_id(automation)}
+        answer = await _execute_reasoning_turn(execution)
+        destination = (automation.get("destination") or {}).get("kind")
+        conversation_id = None
+        if destination != "notification":
+            conversation_id = _deliver_result(execution, answer, run["id"])
+        finished = store.finish_run(automation["id"], run["id"], status="complete", output=answer,
+                                    conversation_id=conversation_id, message_id=run["id"] if conversation_id else None)
     except Exception as exc:
-        return store.finish_run(automation["id"], run["id"], status="failed", error=str(exc))
+        finished = store.finish_run(automation["id"], run["id"], status="failed", error=str(exc))
+    try:
+        if finished["status"] == "failed":
+            store.deliver_notification(automation["id"], run["id"], "The task failed. See Previous runs for details.", failed=True)
+        elif destination == "notification":
+            store.deliver_notification(automation["id"], run["id"], answer)
+        elif (automation.get("notifications") or {}).get("level", "all") == "all":
+            store.deliver_notification(automation["id"], run["id"], "The task completed. See Previous runs for the result.")
+    except (OSError, ValueError) as exc:
+        logger.warning("[AUTOMATIONS] Notification delivery failed for %s: %s", automation["id"], exc)
+    return finished
 
 
 async def _execute_reasoning_turn(automation: dict[str, Any]) -> str:
@@ -69,7 +85,7 @@ async def _execute_reasoning_turn(automation: dict[str, Any]) -> str:
 
         model = get_settings().fast_model
     reasoning_mode = _resolve_reasoning_mode(model_profile.get("reasoning_mode"))
-    thread_id = _fresh_thread_id(automation)
+    thread_id = automation.get("_execution_thread_id") or _fresh_thread_id(automation)
 
     result = await api.agent.ainvoke(
         {"messages": [{"role": "user", "content": automation["instructions"]}]},
@@ -113,7 +129,7 @@ def _fresh_thread_id(automation: dict[str, Any]) -> str:
     return f"automation-{uuid4().hex[:16]}"
 
 
-def _deliver_result(automation: dict[str, Any], answer: str) -> None:
+def _deliver_result(automation: dict[str, Any], answer: str, run_id: str) -> str | None:
     """Land the run's result where the destination says.
 
     ``existing_chat`` appends a user/assistant turn to the pinned conversation;
@@ -122,59 +138,21 @@ def _deliver_result(automation: dict[str, Any], answer: str) -> None:
     stays visible in run history either way.
     """
     from agent import api  # lazy import: the main api module mounts this router
+    from agent.conversations.lifecycle import ConversationLifecycle
 
     destination = automation.get("destination") or {}
-    thread_id = _fresh_thread_id(automation)
-    user_text = automation["instructions"]
+    thread_id = automation["_execution_thread_id"]
+    existing = destination.get("kind") == "existing_chat"
+    lifecycle = ConversationLifecycle(path=api._UI_CONVERSATIONS_PATH)
     try:
-        if destination.get("kind") == "existing_chat":
-            _append_thread_turn(api, thread_id, user_text, answer)
-        else:
-            _append_feed_conversation(api, automation, thread_id, user_text, answer)
+        lifecycle.deliver_automation(
+            delivery_id=run_id, text=answer, name=f"Automation: {automation['name']}",
+            thread_id=thread_id if existing else "", new_chat_id=thread_id if not existing else "",
+            project_id=automation.get("project_id"), instructions=automation["instructions"],
+        )
+        if not existing:
+            return thread_id
+        return next((str(chat["id"]) for chat in lifecycle.list() if chat.get("thread_id") == thread_id), None)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[AUTOMATIONS] delivery failed for %s: %s", automation["id"], exc)
-
-
-def _append_thread_turn(api, thread_id: str, user_text: str, answer: str) -> None:
-    conversations = api._read_ui_conversations()
-    for conversation in conversations:
-        if str(conversation.get("thread_id")) != thread_id:
-            continue
-        messages = conversation.setdefault("messages", [])
-        messages.extend(
-            [
-                {"role": "user", "text": user_text, "id": f"automation-{uuid4().hex[:12]}"},
-                {"role": "assistant", "text": answer, "id": f"automation-{uuid4().hex[:12]}"},
-            ]
-        )
-        conversation["updated_at"] = api._conversation_timestamp()
-        api._write_ui_conversations(conversations)
-        return
-    logger.warning("[AUTOMATIONS] pinned thread %s not found; result kept in run history", thread_id)
-
-
-def _append_feed_conversation(
-    api,
-    automation: dict[str, Any],
-    thread_id: str,
-    user_text: str,
-    answer: str,
-) -> None:
-    conversations = api._read_ui_conversations()
-    record = {
-        "id": thread_id,
-        "thread_id": thread_id,
-        "title": f"Automation: {automation.get('name', 'Scheduled run')}",
-        "created": api._conversation_timestamp(),
-        "pinned": False,
-        "archived": False,
-        "projectId": automation.get("project_id"),
-        "messages": [
-            {"role": "user", "text": user_text, "id": f"automation-{uuid4().hex[:12]}"},
-            {"role": "assistant", "text": answer, "id": f"automation-{uuid4().hex[:12]}"},
-        ],
-        "updated_at": api._conversation_timestamp(),
-        "organization": {},
-    }
-    conversations.insert(0, record)
-    api._write_ui_conversations(conversations)
+        return None

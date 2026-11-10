@@ -3,6 +3,7 @@ html,body{overflow:clip}
 .win{overflow:clip}
 .main-sidebar-slot{position:relative;flex:0 0 auto;width:var(--workspace-sidebar-width,260px);min-height:0;transition:width .2s cubic-bezier(.22,1,.36,1);overflow:hidden}
 .main-sidebar-slot>.sidebar{position:absolute;inset:0;width:var(--workspace-sidebar-width,260px);height:100%;border-right:0;overflow:clip;transition:transform .2s cubic-bezier(.22,1,.36,1)}
+.main-sidebar-slot[data-context=scheduled]{width:var(--scheduled-sidebar-drag-width,var(--scheduled-sidebar-width,260px))}
 .main-sidebar-slot[data-state=closed]{width:0}
 .main-sidebar-slot[data-state=closed]>.sidebar{transform:translateX(-100%);pointer-events:none}
 .body>.workspace-split>.main[data-variant=inset]{position:relative;margin:8px;min-height:0;border:1px solid var(--line);border-radius:14px;overflow:clip}
@@ -71,5 +72,5 @@ html,body{overflow:clip}
 .sidebar-resizer>span{position:absolute;inset:0 0 0 auto;width:1px;background:transparent}
 .sidebar-resizer:hover>span,.sidebar-resizer:focus-visible>span,.sidebar-resizing .sidebar-resizer>span{background:var(--ember)}
 .sidebar-resizing{cursor:col-resize;user-select:none}
-.sidebar-resizing>.main-sidebar-slot,.sidebar-resizing>.main-sidebar-slot>.sidebar{transition:none}
+.sidebar-resizing.main-sidebar-slot,.sidebar-resizing>.main-sidebar-slot,.sidebar-resizing>.main-sidebar-slot>.sidebar{transition:none}
 @media(max-width:760px){.sidebar-resizer{display:none}}

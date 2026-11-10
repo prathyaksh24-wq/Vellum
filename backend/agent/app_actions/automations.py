@@ -26,6 +26,7 @@ AUTOMATION_PAUSE_ACTION_ID = "automation.pause"
 AUTOMATION_RESUME_ACTION_ID = "automation.resume"
 AUTOMATION_RUN_ACTION_ID = "automation.run"
 AUTOMATION_HISTORY_ACTION_ID = "automation.history"
+AUTOMATION_RUN_STATE_ACTION_ID = "automation.run.state"
 AUTOMATION_REMOVE_ACTION_ID = "automation.remove"
 AUTOMATION_NOTIFICATIONS_READ_ACTION_ID = "automation.notifications.read"
 
@@ -36,6 +37,7 @@ AUTOMATION_ACTION_IDS = frozenset({
     AUTOMATION_RESUME_ACTION_ID,
     AUTOMATION_RUN_ACTION_ID,
     AUTOMATION_HISTORY_ACTION_ID,
+    AUTOMATION_RUN_STATE_ACTION_ID,
     AUTOMATION_REMOVE_ACTION_ID,
     AUTOMATION_NOTIFICATIONS_READ_ACTION_ID,
 })
@@ -146,6 +148,13 @@ class AutomationActionService:
             return self._set_state(arguments, "active")
         if action_id == AUTOMATION_HISTORY_ACTION_ID:
             return self._history(arguments)
+        if action_id == AUTOMATION_RUN_STATE_ACTION_ID:
+            store = self._store_provider()
+            automation_id = self._required_text(arguments, "automation_id")
+            run_id = self._required_text(arguments, "run_id")
+            operation = self._required_text(arguments, "operation")
+            changed = store.set_run_state(automation_id, run_id, operation)
+            return self._automation_result(store.get(automation_id), changed=changed, message="Updated run history.")
         if action_id in {AUTOMATION_RUN_ACTION_ID, AUTOMATION_REMOVE_ACTION_ID}:
             return self._confirmed_operation(
                 action_id,
@@ -289,7 +298,7 @@ class AutomationActionService:
     def _create_fields(self, arguments: dict[str, Any]) -> dict[str, Any]:
         name = self._required_text(arguments, "name")
         instructions = self._required_text(arguments, "instructions")
-        schedule = parse_schedule_expression(self._required_text(arguments, "schedule"))
+        schedule = parse_schedule_expression(self._required_text(arguments, "schedule"), require_future=True)
         destination = self._destination(arguments.get("destination"))
         model_profile = self._model_profile(arguments.get("model_profile"))
         permission = self._permission(arguments.get("permission"))
@@ -315,7 +324,7 @@ class AutomationActionService:
         if "instructions" in arguments:
             fields["instructions"] = self._required_text(arguments, "instructions")
         if "schedule" in arguments:
-            fields["schedule"] = parse_schedule_expression(self._required_text(arguments, "schedule"))
+            fields["schedule"] = parse_schedule_expression(self._required_text(arguments, "schedule"), require_future=True)
         if "destination" in arguments:
             fields["destination"] = self._destination(arguments.get("destination"))
         if "project_id" in arguments:
@@ -495,6 +504,10 @@ def automation_action_definitions() -> list[AppActionDefinition]:
         (AUTOMATION_RESUME_ACTION_ID, "Resume automation", "Resume future scheduled runs.", CapabilityAccess.WRITE, "none", identity, []),
         (AUTOMATION_RUN_ACTION_ID, "Run automation now", "Run a scheduled reasoning task immediately.", CapabilityAccess.EXTERNAL_WRITE, "operation_bound", identity, []),
         (AUTOMATION_HISTORY_ACTION_ID, "Inspect automation history", "Read the bounded run history for a scheduled reasoning task.", CapabilityAccess.READ, "none", identity, []),
+        (AUTOMATION_RUN_STATE_ACTION_ID, "Update run history", "Mark a run read or unread, archive it, or restore it.", CapabilityAccess.WRITE, "none",
+         {"automation_id": {"type": "string"}, "run_id": {"type": "string"},
+          "operation": {"type": "string", "enum": ["read", "unread", "archive", "restore"]}},
+         ["automation_id", "run_id", "operation"]),
         (AUTOMATION_REMOVE_ACTION_ID, "Remove automation", "Remove a scheduled task or reset a built-in task.", CapabilityAccess.DESTRUCTIVE, "operation_bound", identity, []),
     ]
     return [
@@ -509,7 +522,7 @@ def automation_action_definitions() -> list[AppActionDefinition]:
             confirmation_rule=confirmation_rule,
             executor_location="server",
             supports_undo=False,
-            idempotent=action_id in {AUTOMATION_PAUSE_ACTION_ID, AUTOMATION_RESUME_ACTION_ID, AUTOMATION_HISTORY_ACTION_ID, AUTOMATION_NOTIFICATIONS_READ_ACTION_ID},
+            idempotent=action_id in {AUTOMATION_PAUSE_ACTION_ID, AUTOMATION_RESUME_ACTION_ID, AUTOMATION_HISTORY_ACTION_ID, AUTOMATION_RUN_STATE_ACTION_ID, AUTOMATION_NOTIFICATIONS_READ_ACTION_ID},
             argument_schema={
                 "type": "object",
                 "properties": properties,

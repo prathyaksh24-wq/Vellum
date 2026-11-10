@@ -33,6 +33,7 @@
 .settings-back:hover{background:var(--hover);color:var(--txt2)}
 .settings-search{display:flex;align-items:center;gap:9px;margin:0 4px 22px;padding:9px 11px;background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--dim)}
 .settings-search input{min-width:0;width:100%;border:0;outline:none;background:none;color:var(--txt2);font:inherit;font-size:12px;caret-color:var(--txt2)}
+.settings-page .settings-search input:focus-visible{outline:none;box-shadow:none}
 .settings-search:focus-within{outline:2px solid var(--ember);outline-offset:2px}
 .settings-nav-group{margin-bottom:24px}
 .settings-nav-group h2{font-size:12px;line-height:1.5;font-weight:500;color:var(--dim);margin:0 12px 8px}

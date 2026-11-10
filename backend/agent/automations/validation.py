@@ -7,6 +7,7 @@ destination rejected by the API is rejected identically by the tool.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from agent.automations.schedules import ScheduleParseError, parse_schedule
@@ -14,9 +15,13 @@ from agent.automations.schedules import ScheduleParseError, parse_schedule
 NOTIFICATION_LEVELS = frozenset({"all", "important", "failures", "none"})
 
 
-def parse_schedule_expression(expression: str) -> dict[str, Any]:
+def parse_schedule_expression(expression: str, *, require_future: bool = False) -> dict[str, Any]:
     """Parse a schedule expression into its canonical record."""
-    return parse_schedule(expression).to_dict()
+    record = parse_schedule(expression)
+    deadline = record.run_at or record.end_at
+    if require_future and deadline and datetime.fromisoformat(deadline) <= datetime.now(timezone.utc):
+        raise ScheduleParseError("Choose a future run date or end date.")
+    return record.to_dict()
 
 
 def validate_destination(

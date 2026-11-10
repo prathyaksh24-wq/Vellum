@@ -101,6 +101,8 @@ from agent.memory.project_context import ProjectContext
 from agent.memory.sessions import SessionsReader
 from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
+from agent.automations.prompts import scheduled_chat_prompt
+from agent.contracts.scheduled_tasks import ScheduledChatContext
 from agent.llm.routing.api import configure_action_dispatcher, router as llm_routing_router
 from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
@@ -461,6 +463,7 @@ class ChatRequest(BaseModel):
     force_web_search: bool = False
     attachments: list["ChatAttachment"] = Field(default_factory=list)
     action_context: AppActionContext | None = None
+    scheduled_chat: ScheduledChatContext | None = None
 
 
 class ChatAttachment(ConversationAttachment):
@@ -6116,7 +6119,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         return StreamingResponse(_compact_conversation_stream(request, active_thread_id), media_type='text/event-stream')
     submitted_text = str(request.action_message or "").strip()
     action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
-    resolved_action_message = _contextual_presentation_message(action_message, active_thread_id)
+    scheduled_prompt = None
+    if request.scheduled_chat is not None:
+        try:
+            scheduled_prompt = await asyncio.to_thread(scheduled_chat_prompt, request.scheduled_chat)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="This scheduled task is no longer available.") from exc
+    resolved_action_message = "" if scheduled_prompt else _contextual_presentation_message(action_message, active_thread_id)
     action_turn = await asyncio.to_thread(_app_action_runtime.plan_submission, resolved_action_message)
     submitted_actions = list(action_turn.actions)
     action_receipts = []
@@ -6295,59 +6304,63 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 1,
             )
 
-    direct_answer = _direct_contextual_answer(clean_message, active_thread_id)
-    if direct_answer is not None:
-        return stream_response(_direct_answer_stream(direct_answer, active_thread_id))
+    if not scheduled_prompt:
+        direct_answer = _direct_contextual_answer(clean_message, active_thread_id)
+        if direct_answer is not None:
+            return stream_response(_direct_answer_stream(direct_answer, active_thread_id))
 
-    skill_command = _skill_surface().slash(clean_message)
-    if skill_command["handled"]:
-        msg = str(skill_command.get("answer") or "")
-        final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
+        skill_command = _skill_surface().slash(clean_message)
+        if skill_command["handled"]:
+            msg = str(skill_command.get("answer") or "")
+            final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
 
-        async def skill_event():
-            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
-            yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
-            yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
+            async def skill_event():
+                yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
+                yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
+                yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
-        return stream_response(skill_event())
-    clean_message = str(skill_command.get("expanded") or clean_message)
-    skill_system_result = _skill_system_answer(clean_message)
-    if skill_system_result is not None:
-        answer, tools = skill_system_result
-        return stream_response(_skill_system_stream(answer, tools, active_thread_id))
-    from agent.agents.music import MusicAgent
-    if request.force_web_search or MusicAgent.public_research_request(clean_message):
-        clean_message = _with_forced_web_search_context(clean_message)
-    computer_use_intent = _computer_use_mode_intent(clean_message)
-    if computer_use_intent:
-        return stream_response(
-            _stream_computer_use_command(
-                clean_message=clean_message,
-                intent=computer_use_intent,
-                active_thread_id=active_thread_id,
-                source="voice" if request.voice else "text",
-                voice=request.voice,
+            return stream_response(skill_event())
+        clean_message = str(skill_command.get("expanded") or clean_message)
+        skill_system_result = _skill_system_answer(clean_message)
+        if skill_system_result is not None:
+            answer, tools = skill_system_result
+            return stream_response(_skill_system_stream(answer, tools, active_thread_id))
+        from agent.agents.music import MusicAgent
+        if request.force_web_search or MusicAgent.public_research_request(clean_message):
+            clean_message = _with_forced_web_search_context(clean_message)
+        computer_use_intent = _computer_use_mode_intent(clean_message)
+        if computer_use_intent:
+            return stream_response(
+                _stream_computer_use_command(
+                    clean_message=clean_message,
+                    intent=computer_use_intent,
+                    active_thread_id=active_thread_id,
+                    source="voice" if request.voice else "text",
+                    voice=request.voice,
+                )
             )
-        )
 
-    if clean_message.startswith("/project"):
-        parts = clean_message.split()
-        args = parts[1:]
-        ctx = _project_context()
-        try:
-            result = handle_project_command(ctx, active_thread_id, args)
-            msg = result.message
-        except InvalidCommand as exc:
-            msg = f"⚠ {exc}"
+        if clean_message.startswith("/project"):
+            parts = clean_message.split()
+            args = parts[1:]
+            ctx = _project_context()
+            try:
+                result = handle_project_command(ctx, active_thread_id, args)
+                msg = result.message
+            except InvalidCommand as exc:
+                msg = f"⚠ {exc}"
 
-        final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
+            final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
 
-        async def single_event():
-            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
-            yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
-            yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
+            async def single_event():
+                yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
+                yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
+                yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
-        return stream_response(single_event())
+            return stream_response(single_event())
+
+    else:
+        clean_message = f"{scheduled_prompt}\n\nLatest user request:\n{clean_message}"
 
     return stream_response(
         _stream_agent_turn(

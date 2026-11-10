@@ -30,6 +30,13 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _save_schedule(schedule: dict[str, Any], now: str) -> dict[str, Any]:
+    result = dict(schedule)
+    if result.get("kind") in {"relative", "interval"}:
+        result["anchor_at"] = now
+    return result
+
+
 class AutomationStore:
     def __init__(self, root: str | Path):
         self.root = Path(root)
@@ -60,7 +67,7 @@ class AutomationStore:
             "name": name,
             "description": description,
             "instructions": instructions,
-            "schedule": dict(schedule),
+            "schedule": _save_schedule(schedule, now),
             "destination": dict(destination),
             "project_id": project_id,
             "model_profile": dict(model_profile) if model_profile else {},
@@ -117,9 +124,16 @@ class AutomationStore:
             if automation_id not in data:
                 raise ValueError(f"automation not found: {automation_id}")
             record = data[automation_id]
+            now = utc_now()
             for key, value in fields.items():
-                record[key] = dict(value) if isinstance(value, dict) else value
-            record["updated_at"] = utc_now()
+                if key == "schedule":
+                    previous = record.get("schedule") or {}
+                    if value == {k: v for k, v in previous.items() if k != "anchor_at"}:
+                        continue
+                    record[key] = _save_schedule(value, now)
+                else:
+                    record[key] = dict(value) if isinstance(value, dict) else value
+            record["updated_at"] = now
             self._write(data)
         return dict(data[automation_id])
 
@@ -139,6 +153,7 @@ class AutomationStore:
             "status": "running",
             "output": None,
             "error": None,
+            "read_at": None,
         }
         with self._lock:
             data = self._read()
@@ -159,6 +174,8 @@ class AutomationStore:
         status: RunStatus,
         output: str | None = None,
         error: str | None = None,
+        conversation_id: str | None = None,
+        message_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             data = self._read()
@@ -173,6 +190,10 @@ class AutomationStore:
                         run["output"] = output
                     if error is not None:
                         run["error"] = error
+                    if conversation_id:
+                        run["conversation_id"] = conversation_id
+                    if message_id:
+                        run["message_id"] = message_id
                     data[automation_id]["run_history"] = self._prune(history)
                     data[automation_id]["updated_at"] = utc_now()
                     self._write(data)
@@ -183,16 +204,37 @@ class AutomationStore:
         record = self.get(automation_id)
         return [dict(run) for run in record.get("run_history", [])]
 
+    def set_run_state(self, automation_id: str, run_id: str, operation: str) -> bool:
+        fields = {"read": ("read_at", True), "unread": ("read_at", False),
+                  "archive": ("archived_at", True), "restore": ("archived_at", False)}
+        if operation not in fields:
+            raise ValueError("Choose read, unread, archive, or restore.")
+        field, enabled = fields[operation]
+        with self._lock:
+            data = self._read()
+            for run in data.get(automation_id, {}).get("run_history", []):
+                if run.get("id") != run_id:
+                    continue
+                if run.get("status") == "running":
+                    raise ValueError("This run is still in progress.")
+                if bool(run.get(field)) == enabled and field in run:
+                    return False
+                run[field] = utc_now() if enabled else None
+                self._write(data)
+                return True
+        raise ValueError("This run is no longer in the task history.")
+
     def deliver_notification(self, automation_id: str, delivery_id: str, message: str,
                              *, title: str = "", url: str = "", read_at: str | None = None,
-                             created_at: str | None = None) -> bool:
+                             created_at: str | None = None, failed: bool = False) -> bool:
         """Persist once before the creator outbox is acknowledged; create no chat."""
         with self._lock:
             data = self._read()
             record = data.get(automation_id)
             if record is None:
                 raise ValueError(f"automation not found: {automation_id}")
-            if (record.get("notifications") or {}).get("level", "all") in {"none", "failures"}:
+            level = (record.get("notifications") or {}).get("level", "all")
+            if level == "none" or (level == "failures" and not failed):
                 return False
             history = record.setdefault("notification_history", [])
             if any(item.get("id") == delivery_id for item in history):

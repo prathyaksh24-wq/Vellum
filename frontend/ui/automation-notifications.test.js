@@ -19,8 +19,7 @@ try {
   const toastExpression=html.slice(toastStart,html.indexOf('\n',toastStart)).trim().slice(1,-1);
   toastCompiled=createRequire(require.resolve('vite'))('esbuild').transformSync(
     'function Toast({toast,browserPanelVisible=false,view="chat"}) {return '+toastExpression+';}',{loader:'jsx'}).code;
-  const source = html.slice(html.indexOf('const AUTOMATION_WEEKDAYS'),html.indexOf('const AutomationForm')) +
-    html.slice(html.indexOf('const ScheduledView'),html.indexOf('const PETDEX_MANIFEST'));
+  const source = html.slice(html.indexOf('const AUTOMATION_DESTINATIONS'),html.indexOf('const PETDEX_MANIFEST'));
   scheduledCompiled = createRequire(require.resolve('vite'))('esbuild').transformSync(source,{loader:'jsx'}).code;
 } finally {globalThis.Uint8Array = nativeUint;}
 let host,root,Center,History,Trigger,onAction,onPing,notifications,snapshot;
@@ -186,24 +185,49 @@ test('history displays ordered timestamps, durations, results, and failures',asy
   expect(document.body.textContent).toContain('latest 100 runs retained');
 });
 
-test('Scheduled exposes Run now directly and History replaces the detail body with retained runs',async () => {
+test('Scheduled search stays in its sidebar and a task opens its previous runs',async () => {
   const job={id:'creator-job',name:'Creator uploads',state:'active',instructions:'Check uploads',
     schedule:{kind:'interval',value:15,unit:'minutes'},destination:{kind:'notification'},
     run_history:[{id:'run-1',status:'complete',started_at:'2026-10-11T02:00:00Z',finished_at:'2026-10-11T02:00:02Z',output:'1 delivered upload'}]};
   const icons='const IcGCal=()=>null,IcSparkle=()=>null,IcSearch=()=>null,IcDots=()=>null,I=()=>null;';
-  const Scheduled=new Function('React','API','AutomationRunHistory','const {useState,useEffect}=React;const MODELS=[];'+icons+scheduledCompiled+';return ScheduledView;')(React,{automations:{list:async()=>({automations:[job]})}},History);
+  const api={automations:{list:async()=>({automations:[job],scheduler_available:true}),notificationEvents:()=>()=>{}}};
+  const Popover=({children})=>createPortal(React.createElement('div',null,children),document.body);
+  const onOpenTask=vi.fn();
+  vi.spyOn(HTMLDialogElement.prototype,'showModal').mockImplementation(function(){this.open=true;});
+  vi.spyOn(HTMLDialogElement.prototype,'close').mockImplementation(function(){this.open=false;});
+  window.VellumUI.SharedRowBackground=({children})=>React.createElement('div',null,children);
+  const Scheduled=new Function('React','ReactDOM','API','AutomationRunHistory','Popover','clampMenuPosition','const {useState,useEffect,useLayoutEffect,useMemo,useRef}=React;const MODELS=[];'+icons+scheduledCompiled+';return ScheduledView;')(React,{createPortal},api,History,Popover,()=>({}));
   onAction.mockImplementation(async action => ({status:action==='automation.run'?'confirmation_required':'applied',result:{runs:job.run_history}}));
-  await act(async () => root.render(React.createElement(Scheduled,{automations:[job],onAction})));
-  const detail=document.body.querySelector('[aria-label="Scheduled task details"]');
-  await act(async () => [...detail.querySelectorAll('button')].find(button=>button.textContent==='Run now').click());
+  const sidebarTarget=document.createElement('div');
+  document.body.append(sidebarTarget);
+  try {
+  await act(async () => root.render(React.createElement(Scheduled,{automations:[job],onAction,onOpenTask,sidebarTarget,sidebarVisible:true,showPage:true})));
+  expect([...sidebarTarget.querySelectorAll('button')].map(button=>button.textContent.trim())).not.toContain('Task ideas');
+  const search=sidebarTarget.querySelector('button[aria-label="Search scheduled tasks"]');
+  await act(async () => search.click());
+  const field=sidebarTarget.querySelector('input[type=search]');
+  expect(document.activeElement).toBe(field);
+  expect(host.querySelector('input[type=search]')).toBeNull();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+  expect(document.activeElement).toBe(search);
+  expect(sidebarTarget.querySelector('input[type=search]')).toBeNull();
+  await act(async () => sidebarTarget.querySelector('.au-task-select').click());
+  expect(onOpenTask).toHaveBeenCalledWith(job);
+  const actions=sidebarTarget.querySelector('.au-task-menu');
+  const clickAction=async name=>{
+    await act(async () => actions.click());
+    await act(async () => [...document.querySelectorAll('button.ctx-item')].find(button=>button.textContent===name).click());
+  };
+  await clickAction('Run now');
   expect(onAction).toHaveBeenCalledWith('automation.run',{automation_id:job.id});
-  await act(async () => [...detail.querySelectorAll('button')].find(button=>button.textContent==='History').click());
+  await clickAction('Previous runs');
   expect(onAction).toHaveBeenCalledWith('automation.history',{automation_id:job.id},{notify:false});
-  expect(detail.querySelector('.au-prompt-card')).toBeNull();
-  expect(detail.querySelector('time').getAttribute('datetime')).toBe('2026-10-11T02:00:00Z');
-  expect(detail.textContent).toContain('1 delivered upload');
-  await act(async () => [...detail.querySelectorAll('button')].find(button=>button.textContent==='Back to details').click());
-  expect(detail.textContent).toContain('Notification ping');
+  const history=host.querySelector('dialog[aria-label="Previous runs"]');
+  expect(history.querySelector('time').getAttribute('datetime')).toBe('2026-10-11T02:00:00Z');
+  expect(history.textContent).toContain('1 delivered upload');
+  } finally {
+    sidebarTarget.remove();
+  }
 });
 
 

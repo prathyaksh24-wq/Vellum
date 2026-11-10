@@ -8,6 +8,7 @@ from agent.app_actions.automations import (
     AUTOMATION_REMOVE_ACTION_ID,
     AUTOMATION_RESUME_ACTION_ID,
     AUTOMATION_RUN_ACTION_ID,
+    AUTOMATION_RUN_STATE_ACTION_ID,
     AUTOMATION_UPDATE_ACTION_ID,
     AutomationActionService,
 )
@@ -98,6 +99,24 @@ def test_nlp_matches_automation_lifecycle_without_catching_casual_questions(tmp_
     assert update.action_id == AUTOMATION_UPDATE_ACTION_ID
     assert update.arguments == {"reference": "Morning Brief", "schedule": "every 1h"}
     assert runtime.match_submission("How do scheduled automations work?") is None
+
+
+def test_previous_run_can_be_read_archived_and_restored_without_editing_task(tmp_path):
+    runtime, store, _notifications = _runtime(tmp_path)
+    task = _create(runtime).result["automation"]
+    store.record_run(task["id"], "run-1")
+    store.finish_run(task["id"], "run-1", status="complete", output="Result")
+
+    for operation in ("read", "archive", "restore"):
+        receipt = runtime.dispatch(AppActionRequest(action_id=AUTOMATION_RUN_STATE_ACTION_ID, arguments={
+            "automation_id": task["id"], "run_id": "run-1", "operation": operation,
+        }), _context())
+        assert receipt.status == "applied"
+        run = store.runs(task["id"])[0]
+        assert run["read_at"]
+        assert bool(run.get("archived_at")) is (operation == "archive")
+        assert run["output"] == "Result"
+        assert store.get(task["id"])["schedule"] == task["schedule"]
 
 
 def test_create_update_pause_resume_and_history_share_the_canonical_store(tmp_path):

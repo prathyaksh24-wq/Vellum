@@ -139,6 +139,34 @@ def test_relative_one_shot_gets_future_date_trigger(tmp_path) -> None:
     assert scheduler.jobs[0]["id"] == f"{JOB_PREFIX}{relative['id']}"
 
 
+def test_local_weekdays_schedule_keeps_its_clock_time_and_skips_weekend(tmp_path) -> None:
+    from agent.automations.schedules import parse_schedule
+
+    store = AutomationStore(tmp_path)
+    task = _create(store, schedule=parse_schedule("0 9 * * 1-5 @ Asia/Kolkata until 2026-11-16").to_dict())
+    scheduler = FakeScheduler()
+    assert AutomationScheduler(store, scheduler=scheduler).install(task)
+    trigger = scheduler.jobs[0]["trigger"]
+    friday = datetime(2026, 11, 13, 5, tzinfo=timezone.utc)
+    monday = datetime(2026, 11, 16, 3, 30, tzinfo=timezone.utc)
+    assert trigger.get_next_fire_time(None, friday) == monday
+    assert trigger.get_next_fire_time(monday, monday) is None
+
+
+def test_expired_relative_schedule_does_not_restart_after_edit(tmp_path, monkeypatch) -> None:
+    from agent.automations.schedules import parse_schedule
+
+    store = AutomationStore(tmp_path)
+    monkeypatch.setattr("agent.automations.store.utc_now", lambda: "2020-01-01T12:00:00+00:00")
+    task = _create(store, schedule=parse_schedule("30m").to_dict())
+    monkeypatch.undo()
+    saved = store.update(task["id"], instructions="Updated text.")
+    assert saved["schedule"]["anchor_at"] == "2020-01-01T12:00:00+00:00"
+    scheduler = FakeScheduler()
+    assert not AutomationScheduler(store, scheduler=scheduler).install(saved)
+    assert scheduler.jobs == []
+
+
 def test_uninstall_and_sync_remove_stale_jobs(tmp_path) -> None:
     store = AutomationStore(tmp_path)
     first = _create(store, name="first")

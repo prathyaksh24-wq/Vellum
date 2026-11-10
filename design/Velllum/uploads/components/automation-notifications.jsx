@@ -12,18 +12,30 @@
     const milliseconds = new Date(run.finished_at) - new Date(run.started_at);
     return Number.isFinite(milliseconds) && milliseconds >= 0 ? (milliseconds / 1000).toFixed(1) + ' seconds' : '—';
   }
-  function AutomationRunHistory({runs = []}) {
-    const ordered = [...runs].sort((a,b) => String(b.started_at).localeCompare(String(a.started_at)));
+  function AutomationRunHistory({runs = [], busy, onOpenChat, onRunState}) {
+    const [archived,setArchived] = useState(false);
+    const ordered = runs.filter(run=>Boolean(run.archived_at)===archived)
+      .sort((a,b)=>String(b.started_at).localeCompare(String(a.started_at)));
     return <section className="au-run-history" aria-label="Run history">
-      <h3>Run history <span>{runs.length} recorded</span></h3>
+      <div className="au-run-history-head"><h3>Run history <span>{runs.length} recorded</span></h3>
+        {onRunState && <button type="button" className="btn" aria-pressed={archived} onClick={()=>setArchived(!archived)}>{archived?'Show recent':'Show archived'}</button>}
+      </div>
       <p>Newest first · times in {Intl.DateTimeFormat().resolvedOptions().timeZone} · latest 100 runs retained</p>
-      {!ordered.length && <p>No recorded runs yet.</p>}
+      {!ordered.length && <p>{archived?'No archived runs.':'No recorded runs yet.'}</p>}
       {ordered.map(run => <article className="au-run-entry" key={run.id}>
-        <div className="au-run-heading"><strong>{run.status === 'failed' ? 'Failed' : run.status === 'running' ? 'Running' : 'Completed'}</strong><time dateTime={run.started_at}>{timestamp(run.started_at)}</time></div>
+        <div className="au-run-heading"><strong>{run.status === 'failed' ? 'Failed' : run.status === 'running' ? 'Running' : 'Completed'}
+          {run.status!=='running' && run.read_at===null && !archived && <span className="au-run-unread">Unread</span>}</strong><time dateTime={run.started_at}>{timestamp(run.started_at)}</time></div>
         <dl><div><dt>Started</dt><dd>{timestamp(run.started_at)}</dd></div><div><dt>Finished</dt><dd>{timestamp(run.finished_at)}</dd></div><div><dt>Duration</dt><dd>{duration(run)}</dd></div></dl>
-        {run.output && <div className="au-run-output">{run.output}</div>}
-        {run.error && <div className="au-run-error">{run.error}</div>}
-        <details><summary>Run ID</summary><code>{run.id}</code></details>
+        {(run.output || run.error) && <details className="au-run-result"><summary>{run.error?'View error':'View result'}</summary>
+          <div className={run.error?'au-run-error':'au-run-output'}>{run.error || run.output}</div></details>}
+        <div className="au-run-actions">
+          {run.conversation_id && onOpenChat && <button type="button" className="btn" onClick={()=>onOpenChat(run.conversation_id,run.message_id)}>Open chat</button>}
+          {onRunState && run.status!=='running' && <>
+            {!archived && <button type="button" className="btn" disabled={!!busy} onClick={()=>onRunState(run,run.read_at===null?'read':'unread')}>{run.read_at===null?'Mark read':'Mark unread'}</button>}
+            <button type="button" className="btn" disabled={!!busy} onClick={()=>onRunState(run,archived?'restore':'archive')}>{archived?'Restore run':'Archive run'}</button>
+          </>}
+          <details><summary>Run ID</summary><code>{run.id}</code></details>
+        </div>
       </article>)}
     </section>;
   }

@@ -1,6 +1,6 @@
 """AutomationScheduler — turns store automations into APScheduler jobs.
 
-Each active automation registers one job (``max_instances=1``, ``coalesce``,
+Each active automation with unattended access registers one job (``max_instances=1``, ``coalesce``,
 misfire grace matching the existing jobs). When a job fires, the run gates:
 paused automations do nothing, non-full-access automations do not run
 unattended (recorded as a failed run with a clear error), and a fire whose
@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -21,6 +22,7 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from agent.automations.runner import run_automation_now
+from agent.automations.schedules import cron_trigger
 from agent.automations.store import AutomationStore
 
 logger = logging.getLogger(__name__)
@@ -44,8 +46,16 @@ class AutomationScheduler:
 
     def install(self, automation: dict[str, Any]) -> bool:
         job_id = self._job_id(automation["id"])
-        trigger = self._trigger(automation)
+        if not (automation.get("permission") or {}).get("full_access"):
+            self.uninstall(automation["id"])
+            return False
+        try:
+            trigger = self._trigger(automation)
+        except (ValueError, KeyError, OverflowError) as exc:
+            logger.warning("[AUTOMATIONS] Invalid saved schedule %s: %s", automation["id"], exc)
+            trigger = None
         if trigger is None:
+            self.uninstall(automation["id"])
             return False
         self.scheduler.add_job(
             self._fire,
@@ -58,6 +68,10 @@ class AutomationScheduler:
             misfire_grace_time=MISFIRE_GRACE_SECONDS,
         )
         return True
+
+    def next_run_at(self, automation_id: str) -> datetime | None:
+        job = self.scheduler.get_job(self._job_id(automation_id))
+        return getattr(job, "next_run_time", None)
 
     def uninstall(self, automation_id: str) -> None:
         try:
@@ -100,15 +114,6 @@ class AutomationScheduler:
         if self._busy(automation):
             logger.info("[AUTOMATIONS] Skip fire for %s: a run is already in flight", automation_id)
             return
-        if automation.get("builtin"):
-            if automation.get('builtin_key') in {'youtube_browser_history', 'youtube_creator_tracking'}:
-                # Use the same quiet reader and visible run receipts as Run now.
-                await self.executor(automation, self.store)
-                return
-            from agent.automations.builtins import run_builtin
-
-            await run_builtin(automation)
-            return
         try:
             await self.executor(automation, self.store)
         except Exception as exc:  # noqa: BLE001
@@ -136,43 +141,57 @@ class AutomationScheduler:
         schedule = automation.get("schedule") or {}
         kind = schedule.get("kind")
         if kind == "cron":
-            return CronTrigger.from_crontab(str(schedule.get("expression")), timezone=timezone.utc)
+            zone = ZoneInfo(schedule["time_zone"]) if schedule.get("time_zone") else timezone.utc
+            return cron_trigger(str(schedule.get("expression")), zone=zone, end_at=_date(schedule.get("end_at")))
         if kind == "interval":
+            seconds = int(schedule.get("seconds") or 0)
+            if seconds <= 0:
+                return None
+            if seconds == 86400 and schedule.get("at_time"):
+                hour, minute = map(int, schedule["at_time"].split(":"))
+                return CronTrigger(hour=hour, minute=minute, timezone=timezone.utc)
             return IntervalTrigger(
-                seconds=int(schedule.get("seconds") or 0),
-                start_date=_interval_start_date(schedule),
+                seconds=seconds,
+                start_date=_interval_start_date(automation),
                 timezone=timezone.utc,
             )
         if kind in ("relative", "iso"):
-            run_at = _one_shot_run_at(schedule)
+            run_at = one_shot_run_at(automation)
             if run_at is None or run_at <= datetime.now(timezone.utc):
                 return None
             return DateTrigger(run_date=run_at, timezone=timezone.utc)
         return None
 
 
-def _interval_start_date(schedule: dict[str, Any]) -> datetime:
-    now = datetime.now(timezone.utc)
+def _date(value: Any) -> datetime | None:
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _interval_start_date(automation: dict[str, Any]) -> datetime:
+    schedule = automation["schedule"]
+    anchor = _date(schedule.get("anchor_at") or automation.get("created_at")) or datetime.now(timezone.utc)
     at_time = schedule.get("at_time")
     if not at_time:
-        return now
+        return anchor + timedelta(seconds=schedule["seconds"])
     hour, minute = (int(part) for part in str(at_time).split(":"))
-    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if candidate <= now:
+    candidate = anchor.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= anchor:
         candidate += timedelta(days=1)
     return candidate
 
 
-def _one_shot_run_at(schedule: dict[str, Any]) -> datetime | None:
+def one_shot_run_at(automation: dict[str, Any]) -> datetime | None:
+    schedule = automation.get("schedule") or {}
     kind = schedule.get("kind")
     if kind == "relative":
         seconds = int(schedule.get("seconds") or 0)
-        return datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        anchor = _date(schedule.get("anchor_at") or automation.get("created_at"))
+        return anchor + timedelta(seconds=seconds) if anchor and seconds > 0 else None
     if kind == "iso":
-        try:
-            return datetime.fromisoformat(str(schedule.get("run_at")).replace("Z", "+00:00"))
-        except ValueError:
-            return None
+        return _date(schedule.get("run_at"))
     return None
 
 
@@ -191,7 +210,7 @@ def install_automation_jobs(
     _startup_curator_tick()
     automation_scheduler = AutomationScheduler(store, scheduler=scheduler)
     automation_scheduler.install_all()
-    set_mutation_hook(automation_scheduler.sync_one)
+    set_mutation_hook(automation_scheduler.sync_one, next_run_lookup=automation_scheduler.next_run_at)
     return automation_scheduler
 
 

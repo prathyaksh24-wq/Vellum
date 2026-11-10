@@ -72,7 +72,7 @@ def _create(payload: dict[str, Any]) -> dict[str, Any]:
         name=name,
         description=description,
         instructions=instructions,
-        schedule=parse_schedule_expression(schedule_expression),
+        schedule=parse_schedule_expression(schedule_expression, require_future=True),
         destination=validate_destination(
             str(payload.get("destination") or "new_chat"),
             str(payload.get("thread_id") or "") or None,
@@ -107,11 +107,11 @@ def _update(payload: dict[str, Any]) -> dict[str, Any]:
     instructions = str(payload.get("instructions") or "").strip()
     if instructions:
         fields["instructions"] = instructions
-    if "description" in payload:
+    if payload.get("description") is not None:
         fields["description"] = str(payload.get("description") or "").strip()
     schedule_expression = str(payload.get("schedule") or "").strip()
     if schedule_expression:
-        fields["schedule"] = parse_schedule_expression(schedule_expression)
+        fields["schedule"] = parse_schedule_expression(schedule_expression, require_future=True)
     destination = str(payload.get("destination") or "")
     if destination:
         fields["destination"] = validate_destination(destination, str(payload.get("thread_id") or "") or None)
@@ -123,7 +123,7 @@ def _update(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if payload.get("full_access") is not None:
         fields["permission"] = {"full_access": bool(payload["full_access"])}
-    if "project_id" in payload:
+    if payload.get("project_id") is not None:
         fields["project_id"] = str(payload.get("project_id") or "").strip() or None
     if payload.get("notifications"):
         fields["notifications"] = validate_notifications_level(str(payload["notifications"]))
@@ -186,15 +186,15 @@ def cronjob(
     automation_id: str = "",
     name: str = "",
     instructions: str = "",
-    description: str = "",
+    description: str | None = None,
     schedule: str = "",
-    destination: str = "new_chat",
+    destination: str | None = None,
     thread_id: str = "",
     model: str = "",
     tier: str = "",
     reasoning_mode: str = "",
     full_access: bool | None = None,
-    project_id: str = "",
+    project_id: str | None = None,
     notifications: str = "",
 ) -> str:
     """Create, list, update, pause, resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
@@ -210,10 +210,12 @@ def cronjob(
     - run — needs automation_id; executes the automation now (in the background).
     - remove — needs automation_id; built-in automations are restored to their defaults instead of deleted.
 
-    Schedule formats: '30m' (one-shot delay), 'every 2h' (recurring interval),
-    '0 9 * * *' (5-field cron, UTC), or an ISO timestamp like
-    '2026-08-03T09:00:00Z'. Confirm the full plan with the user before creating
-    or removing. Validation errors are returned in the result, never thrown."""
+    Schedule formats: '30m' (one-shot delay), 'every 2h' (elapsed interval),
+    '0 9 * * 1-5 @ Asia/Kolkata' (local weekdays, optional ' until YYYY-MM-DD'),
+    '2027-01-12T09:00 @ Asia/Kolkata' (one local date), or an ISO timestamp
+    with a UTC offset. Cron without a time zone uses UTC. Confirm the plan
+    before creating or removing. Set full_access only after explicit opt-in.
+    Validation errors are returned in the result, never thrown."""
     normalized = action.strip().casefold().replace("-", "_")
     payload: dict[str, Any] = {
         "automation_id": automation_id,
