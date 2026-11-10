@@ -11,6 +11,7 @@
 .composer-reference[data-reference-brand="google"],.composer-reference[data-reference-brand="googledrive"]{color:var(--composer-mention-blue)}
 .composer-reference[data-reference-brand="superdesign"]{color:var(--txt)}
 .composer-reference svg,.composer-reference img{margin-inline-end:4px;vertical-align:-.125em}
+.composer-reference[data-reference-kind="skill"][data-reference-id="plugin-creator"] svg{padding:2px;border-radius:4px;background:#3468bb;color:#fff;vertical-align:-.2em}
 .composer-reference img{object-fit:contain;border-radius:3px}
 .composer-reference img[hidden]{display:none}
 .composer-reference.ProseMirror-selectednode{background:var(--active);outline:none}

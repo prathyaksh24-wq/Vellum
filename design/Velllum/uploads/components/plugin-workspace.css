@@ -211,6 +211,109 @@ from{opacity:0;transform:translateY(8px)}
 .vplug a{cursor:pointer}
 .vplug .ov{position:fixed;inset:0;z-index:150}
 .vplug .dl{max-height:94%;overflow:auto;flex:none}
+.vplug .plugin-add-dialog{
+  --plugin-add-inset:color-mix(in srgb,var(--modal,#252525) 82%,black);
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  max-inline-size:calc(100% - 24px);
+  min-inline-size:0;
+  padding:20px;
+  border-radius:20px;
+  overflow:hidden;
+}
+[data-background-tone="light"] .vplug .plugin-add-dialog{
+  --plugin-add-inset:color-mix(in srgb,var(--modal,#F5F5F5) 92%,var(--txt,#222));
+}
+.vplug .plugin-add-dialog :is(.dh,.df){flex:none}
+.vplug .plugin-add-dialog .dh{align-items:flex-start;gap:8px}
+.vplug .plugin-add-dialog .dh h2{font-size:19px;line-height:1.35}
+.vplug .plugin-add-dialog .dh .ib{width:28px;height:28px}
+.vplug .plugin-add-dialog .sub{margin:8px 0 0}
+.vplug .plugin-add-fields{display:grid;gap:16px;min-block-size:0;margin-block-start:16px;overflow:auto}
+.vplug .plugin-add-fields :is(button,input,select,textarea):focus-visible{outline-offset:-2px}
+.vplug .plugin-add-mcp .plugin-add-fields{gap:12px}
+.vplug .plugin-add-dialog .fd{display:grid;gap:6px;min-inline-size:0;font-size:12.5px}
+.vplug .plugin-add-dialog .fi{
+  box-sizing:border-box;
+  inline-size:100%;
+  min-block-size:37px;
+  border:1px solid var(--line2,#3F3F3F);
+  border-radius:8px;
+  padding:8px 10px;
+  background:color-mix(in srgb,var(--modal,#252525) 75%,var(--panel,#1D1D1D));
+  color:var(--txt,#ECECEC);
+  font:inherit;
+}
+.vplug .plugin-add-dialog .fi::placeholder{color:var(--dim,#A0A0A0)}
+.vplug .plugin-add-dialog .fi:focus-visible{border-color:var(--ember,#7FD6C8)}
+.vplug .plugin-add-dialog textarea.fi{min-block-size:96px;resize:vertical}
+.vplug .plugin-add-dialog .cn,.vplug .plugin-icon-field{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.vplug .plugin-add-dialog :is(.cn button,.ch){
+  border:1px solid transparent;
+  border-radius:8px;
+  min-block-size:26px;
+  padding:3px 9px;
+  color:var(--txt,#ECECEC);
+  background:transparent;
+  font:inherit;
+}
+.vplug .plugin-add-dialog .cn button:is(:hover,.on),.vplug .plugin-add-dialog .ch{background:var(--active,#2E2E2E)}
+.vplug .plugin-icon-field{font-size:12px;color:var(--dim,#A0A0A0)}
+.vplug .plugin-add-dialog :is(.adv,.wn,.cs){
+  display:flex;
+  gap:12px;
+  align-items:center;
+  border:1px solid var(--line2,#3F3F3F);
+  border-radius:10px;
+  padding:12px 16px;
+  color:var(--txt,#ECECEC);
+  text-align:start;
+  font:inherit;
+}
+.vplug .plugin-add-dialog :is(.adv,.wn)>svg{flex:none}
+.vplug .plugin-add-dialog .adv{background:var(--panel,#1D1D1D)}
+.vplug .plugin-add-dialog .wn{
+  border-color:color-mix(in srgb,#D77A44 55%,var(--line2,#3F3F3F));
+  background:color-mix(in srgb,#D77A44 9%,var(--modal,#252525));
+}
+.vplug .plugin-add-dialog .wn svg{color:#D77A44}
+.vplug .plugin-add-dialog .cs{background:var(--plugin-add-inset);cursor:pointer}
+.vplug .plugin-add-dialog :is(.adv,.cs) .gr{gap:4px}
+.vplug .plugin-add-dialog .cs input{
+  flex:none;
+  inline-size:16px;
+  block-size:16px;
+  margin:0;
+  accent-color:var(--ember,#7FD6C8);
+}
+.vplug .plugin-add-dialog .dz{
+  display:grid;
+  justify-items:center;
+  align-content:center;
+  gap:6px;
+  min-block-size:192px;
+  padding:20px;
+  border:1px dashed var(--line2,#3F3F3F);
+  border-radius:16px;
+  background:var(--plugin-add-inset);
+  color:var(--txt,#ECECEC);
+  font:inherit;
+  overflow-wrap:anywhere;
+  cursor:pointer;
+}
+.vplug .plugin-add-dialog .dz:is(:hover,[data-dragging="true"]){border-color:var(--ember,#7FD6C8)}
+.vplug .plugin-add-dialog .dz svg{margin-block-end:8px}
+.vplug .plugin-add-dialog .dz :is(svg,small){color:var(--dim,#A0A0A0)}
+.vplug .plugin-add-dialog .dz .lk{color:var(--ember,#7FD6C8);text-decoration:underline;text-underline-offset:2px}
+.vplug .plugin-add-dialog .df,.vplug .plugin-add-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.vplug .plugin-add-dialog .df{margin-block-start:20px}
+.vplug .plugin-add-actions{margin-inline-start:auto}
+.vplug .plugin-add-dialog .sec2{background:var(--active,#2E2E2E)}
+@media(max-width:480px){
+  .vplug .plugin-add-dialog{padding:16px}
+  .vplug .plugin-add-dialog .fi{font-size:16px}
+}
 .vplug .error{color:#FF7B7B;margin:14px 0;line-height:1.7;white-space:pre-wrap}
 .vplug .notice{color:var(--dim,#B4B4B4);margin:14px 0;line-height:1.7}
 .vplug .md{overflow-wrap:anywhere;white-space:normal}

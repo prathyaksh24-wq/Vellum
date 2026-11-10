@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Open a prefilled chat with the installed Plugin Creator skill from plugin discovery and Settings. Share the styled marketplace, archive upload, and custom MCP dialogs across both Add menus. Use the shared moving highlight on plugin sidebar rows.
+
 - Keep the sidebar shortcut from overriding text editing in the embedded browser and align CI fixtures with the shared command, file-preview, notification, and OAuth owners.
 
 - Move conversation previews to the left by default and add position and visibility settings. Put the default search engine at the top of Browser settings, remove Plugins and MCPs from the new-tab page, and show the summary shortcut once.

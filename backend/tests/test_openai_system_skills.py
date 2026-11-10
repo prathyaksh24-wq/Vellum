@@ -41,6 +41,15 @@ def test_bundle_disable_removes_skills_from_discovery(tmp_path):
     assert BUNDLE / 'skills' not in plugins.skill_roots()
 
 
+def test_explicit_plugin_creator_reference_loads_the_matching_installed_skill(tmp_path):
+    owner = 'openai-system-skills'
+    registry = SkillRegistry(local_root=tmp_path, owned_external_dirs={BUNDLE / 'skills': owner})
+    query = 'I need an integration for tracking invoices.'
+    assert not build_skill_activation_block(query, registry, selected_skills={'plugin-creator': 'different-owner'})
+    body = build_skill_activation_block(query, registry, selected_skills={'plugin-creator': owner})
+    assert '### plugin-creator' in body and 'plugin.add' in body
+
+
 def test_selected_plugin_exposes_only_its_discovery_bridges(monkeypatch, tmp_path):
     plugins = PluginRegistry(ROOT / 'plugins', state_path=tmp_path / 'state.json')
     monkeypatch.setattr(tools, 'get_plugin_registry', lambda: plugins)

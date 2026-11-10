@@ -107,6 +107,7 @@
     w = 560,
     close,
     label,
+    className = '',
     children
   }) {
     const ref = useRef(),
@@ -119,7 +120,7 @@
           close();
         }
         if (e.key === 'Tab') {
-          const nodes = [...ref.current.querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]')].filter(n => !n.disabled);
+          const nodes = [...ref.current.querySelectorAll('button,input:not([hidden]),select,textarea,a[href],[tabindex="0"]')].filter(n => !n.disabled);
           if (!nodes.length) {
             e.preventDefault();
             return;
@@ -139,7 +140,7 @@
         previous.current?.focus?.();
       };
     }, []);
-    return <div className="ov" onMouseDown={e => e.target === e.currentTarget && close()}><div ref={ref} className="dl" style={{
+    return <div className="ov" onMouseDown={e => e.target === e.currentTarget && close()}><div ref={ref} className={className ? `dl ${className}` : 'dl'} style={{
         width: w
       }} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label}>{children}</div></div>;
   }
@@ -153,33 +154,30 @@
     settings
   }) {
     const {
-        setDlg
+        setDlg, createPlugin
       } = useX(),
-      [open, setOpen] = useState(false);
-    return <><button className={settings ? 'addb wt' : 'add'} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>Add <Ic n="chevD" s={14} /></button>{open && <Pop cls="am" close={() => setOpen(false)} items={[{
+      [open, setOpen] = useState(false),
+      trigger = useRef(null);
+    const openDialog = kind => {
+      trigger.current?.focus();
+      setDlg({t: kind});
+    };
+    return <><button ref={trigger} className={settings ? 'addb wt' : 'add'} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>Add <Ic n="chevD" s={14} /></button>{open && <Pop cls="am" close={() => setOpen(false)} items={[...(createPlugin ? [{
         icon: 'plug',
         label: 'Create plugin',
-        action: () => setDlg({
-          t: 'create'
-        })
-      }, {
+        action: createPlugin
+      }] : []), {
         icon: 'plus',
         label: 'Add a marketplace',
-        action: () => setDlg({
-          t: 'marketplace'
-        })
-      }, ...(!settings ? [{
+        action: () => openDialog('marketplace')
+      }, {
         icon: 'file',
         label: 'Upload plugin archive',
-        action: () => setDlg({
-          t: 'archive'
-        })
-      }] : []), {
+        action: () => openDialog('archive')
+      }, {
         icon: 'mcp',
-        label: settings ? 'Add MCP server' : 'Add custom MCP server',
-        action: () => setDlg({
-          t: 'mcp'
-        })
+        label: 'Add custom MCP server',
+        action: () => openDialog('mcp')
       }]} />}</>;
   }
   function usePluginMenus(p) {
@@ -959,15 +957,12 @@
     multiline = false
   }) => {
     const id = React.useId();
-    return <div className="fd"><label htmlFor={id}>{label}</label>{multiline ? <textarea id={id} className="fi" style={{
-        height: 110
-      }} value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} /> : <input id={id} className="fi" value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} />}</div>;
+    return <div className="fd"><label htmlFor={id}>{label}</label>{multiline ? <textarea id={id} className="fi" value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} /> : <input id={id} className="fi" value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} />}</div>;
   };
   function AddDialog({
-    kind: requestedKind,
+    kind,
     close
   }) {
-    const kind = requestedKind === 'create' ? 'archive' : requestedKind;
     const {
         submit,
         setDlg
@@ -982,11 +977,12 @@
       [auth, sa] = useState('None'),
       [ack, sc] = useState(false),
       [file, sf] = useState(null),
+      [dragging, setDragging] = useState(false),
+      fileInput = useRef(null),
       [busy, sb] = useState(false),
       [error, se] = useState(''),
       label = {
         marketplace: 'Add plugin marketplace',
-        create: 'New Plugin',
         archive: 'New Plugin',
         mcp: 'Add custom MCP server',
         skillAdd: 'Add skill'
@@ -1044,37 +1040,65 @@
       }
     };
     const valid = kind === 'marketplace' || kind === 'skillAdd' ? source.trim() : kind === 'archive' ? file : kind === 'mcp' ? n.trim() && url.trim() && ack : n.trim();
-    return <Dlg w={kind === 'archive' || kind === 'create' ? 640 : 700} close={close} label={label}><DH t={label} close={close} sub={kind === 'marketplace' ? <p className="sub" style={{
-        marginTop: 8
-      }}>Add from a public GitHub repository.</p> : null} />{kind === 'marketplace' ? <><Field label="Source" value={source} setValue={ss} placeholder="vellum/plugins or git@github.com:org/repo.git" /><Field label="Git ref" value={ref} setValue={sr} placeholder="main" /><Field label="Sparse paths" value={paths} setValue={sp} placeholder="plugins/vellum" multiline /></> : kind === 'skillAdd' ? <Field label="Skill source" value={source} setValue={ss} placeholder="Marketplace skill identifier" /> : kind === 'archive' ? <label className="dz" onDragOver={e => e.preventDefault()} onDrop={e => {
-        e.preventDefault();
-        sf(e.dataTransfer.files[0] || null);
-      }}><input type="file" className="vh" accept=".zip,application/zip" onChange={e => sf(e.target.files[0] || null)} /><Ic n="upload" s={22} /><span style={{
-          marginTop: 6
-        }}>{file ? file.name : <>Drag and drop your plugin here, or <span className="lk">click to upload</span></>}</span><small>Only .zip archives are supported</small><small>Maximum size: 2 MiB</small></label> : <><Field label="Name" value={n} setValue={sn} placeholder={kind === 'mcp' ? 'Custom Tool' : 'My plugin'} /><Field label="Description (optional)" value={d} setValue={sd} placeholder="Explain what it does in a few words" /></>}{kind === 'mcp' && <><div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginTop: 14
-        }}><button className="ch" disabled title="Custom icon storage is not supported by this backend yet.">Choose icon</button><span style={{
-            color: 'var(--dim,#B4B4B4)',
-            fontSize: 12.5
-          }}>Optional PNG, up to 10 KB</span></div><div className="fd"><span className="fl">Connection</span><div className="cn" role="group" aria-label="Connection type">{['Server URL', 'Tunnel'].map(t => <button key={t} className={tab === t ? 'on' : ''} aria-pressed={tab === t} onClick={() => st(t)}>{t}</button>)}</div><input className="fi" aria-label={tab} placeholder="https://example.com/mcp" value={url} onChange={e => su(e.target.value)} /></div><label className="fd">Authentication<select className="fi" value={auth} onChange={e => sa(e.target.value)}><option>OAuth</option><option>API key</option><option>None</option></select></label><button className="adv" disabled><span className="gr" style={{
-            gap: 4
-          }}><b>Advanced OAuth settings</b><span>Review discovered OAuth settings, or enter them manually, then choose a client setup method and configure default scopes</span></span><Ic n="chevR" s={16} /></button><div className="wn"><Ic n="warn" /><span>Custom MCP servers introduce risk.</span></div><label className="cs"><input type="checkbox" style={{
-            width: 18,
-            height: 18,
-            marginTop: 2
-          }} checked={ack} onChange={e => sc(e.target.checked)} /><span className="gr"><b>I understand and want to continue</b><span>Only connect to MCP servers you trust. An untrusted server may access or steal information shared through app use, or trick Vellum into using tools in unintended ways, including changing or deleting data.</span></span></label></>}{error && <p className="error" role="alert">{error}</p>}<div className="df" style={{
-        alignItems: 'center'
-      }}>{kind === 'archive' ? <button className="bs sec2" onClick={() => setDlg({
-          t: 'mcp'
-        })}>Add custom MCP server</button> : kind === 'mcp' ? <button className="bs sec2" onClick={() => setDlg({
-          t: 'archive'
-        })}>Upload plugin archive</button> : <span />}<span style={{
-          display: 'flex',
-          gap: 10
-        }}><button className="bs" disabled={busy} onClick={close}>Cancel</button><button className="bt" disabled={busy || !valid} onClick={save}>{busy ? 'Checking…' : kind === 'marketplace' ? 'Add marketplace' : kind === 'mcp' ? 'Create as a plugin' : kind === 'skillAdd' ? 'Review skill' : 'Add plugin'}</button></span></div></Dlg>;
+    return <Dlg w={kind === 'archive' ? 512 : 600} className={`plugin-add-dialog plugin-add-${kind}`} close={close} label={label}>
+      <DH t={label} close={close} sub={kind === 'marketplace' ? <p className="sub">Add from a public GitHub repository.</p> : null} />
+      <div className="plugin-add-fields">
+        {kind === 'marketplace' && <>
+          <Field label="Source" value={source} setValue={ss} placeholder="vellum/plugins or git@github.com:org/repo.git" />
+          <Field label="Git ref" value={ref} setValue={sr} placeholder="Default branch" />
+          <Field label="Sparse paths" value={paths} setValue={sp} placeholder="plugins/vellum" multiline />
+        </>}
+        {kind === 'skillAdd' && <Field label="Skill source" value={source} setValue={ss} placeholder="Marketplace skill identifier" />}
+        {kind === 'archive' && <>
+          <input ref={fileInput} type="file" hidden accept=".zip,application/zip" onChange={e => sf(e.target.files[0] || null)} />
+          <button type="button" className="dz" data-dragging={dragging} onClick={() => fileInput.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+            onDrop={e => { e.preventDefault(); setDragging(false); sf(e.dataTransfer.files[0] || null); }}>
+            <window.VellumUI.AppIcon name="UploadDocuments" size={22} />
+            <span>{file ? file.name : <>Drag and drop your plugin here, or <span className="lk">click to upload</span></>}</span>
+            <small>Only .zip archives are supported</small>
+            <small>Maximum size: 2 MiB</small>
+          </button>
+        </>}
+        {kind === 'mcp' && <>
+          <div className="plugin-icon-field">
+            <button className="ch" disabled title="Custom icon storage is not supported by this backend yet.">Choose icon</button>
+            <span>Optional PNG, up to 10 KB</span>
+          </div>
+          <Field label="Name" value={n} setValue={sn} placeholder="Custom Tool" />
+          <Field label="Description (optional)" value={d} setValue={sd} placeholder="Explain what it does in a few words" />
+          <div className="fd">
+            <span>Connection</span>
+            <div className="cn" role="group" aria-label="Connection type">
+              {['Server URL', 'Tunnel'].map(t => <button key={t} className={tab === t ? 'on' : ''} aria-pressed={tab === t} onClick={() => st(t)}>{t}</button>)}
+            </div>
+            <input className="fi" aria-label={tab} placeholder="https://example.com/mcp" value={url} onChange={e => su(e.target.value)} />
+          </div>
+          <label className="fd">Authentication
+            <select className="fi" value={auth} onChange={e => sa(e.target.value)}><option>OAuth</option><option>API key</option><option>None</option></select>
+          </label>
+          <button className="adv" disabled>
+            <span className="gr"><b>Advanced OAuth settings</b><span>Review discovered OAuth settings, or enter them manually, then choose a client setup method and configure default scopes.</span></span>
+            <Ic n="chevR" s={16} />
+          </button>
+          <div className="wn"><Ic n="warn" /><span>Custom MCP servers introduce risk.</span></div>
+          <label className="cs">
+            <input type="checkbox" checked={ack} onChange={e => sc(e.target.checked)} />
+            <span className="gr"><b>I understand and want to continue</b><span>Only connect to MCP servers you trust. An untrusted server may access or steal information shared through app use, or trick Vellum into using tools in unintended ways, including changing or deleting data.</span></span>
+          </label>
+        </>}
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="df">
+        {kind === 'archive' && <button className="bs sec2" onClick={() => setDlg({t: 'mcp'})}>Add custom MCP server</button>}
+        {kind === 'mcp' && <button className="bs sec2" onClick={() => setDlg({t: 'archive'})}>Upload plugin archive</button>}
+        <div className="plugin-add-actions">
+          <button className="bs" disabled={busy} onClick={close}>Cancel</button>
+          <button className="bt" disabled={busy || !valid} onClick={save}>{busy ? 'Checking…' : kind === 'marketplace' ? 'Add marketplace' : kind === 'mcp' ? 'Create as a plugin' : kind === 'skillAdd' ? 'Review skill' : 'Add plugin'}</button>
+        </div>
+      </div>
+    </Dlg>;
   }
   function Review({
     pending,
@@ -1108,7 +1132,8 @@
     onExit,
     Logo,
     renderDiscord,
-    onTry
+    onTry,
+    onCreatePlugin
   }) {
     const [r, setR] = useState(initialRoute || {
         v: mode === 'directory' ? 'directory' : 'settings',
@@ -1308,6 +1333,7 @@
       Logo,
       renderDiscord,
       tryNow,
+      createPlugin: onCreatePlugin,
       loading: catalogState?.loading
     }}><div className="vplug" data-ui-reference="plugins" data-sidebar-layout={mode} data-variant="inset" data-collapsible="offcanvas" data-sidebar-state={sidebarVisible?'open':'closed'}><div className="bd"><div className="ct">{mode === 'directory' && <aside id="vellum-plugin-sidebar" data-ui-reference="plugin-sidebar" className="pn" aria-label="Plugins sidebar" data-shell-overlay={sidebarPeeking&&!sidebarVisible?'true':undefined} data-sidebar-preview={sidebarPeeking&&!sidebarVisible} onPointerEnter={onPreviewEnter} onPointerLeave={onPreviewLeave} inert={!sidebarVisible&&!sidebarPeeking} aria-hidden={!sidebarVisible&&!sidebarPeeking}><div className="pnh"><h2>Customize</h2>{onSidebarVisibility&&<button ref={sidebarHideRef} className="ib" aria-label="Hide plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="true" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}</div><ActionLink className={'ni2' + (r.v !== 'skills' ? ' on' : '')} onClick={() => go({
                 v: 'directory'
@@ -1318,7 +1344,7 @@
                 p: p.id
               })}><Tile p={p} sz={22} i={14} r={6} />{p.name}</ActionLink>)}</aside>}{mode==='directory'&&sidebarVisible&&<button type="button" className="plugin-sidebar-backdrop" aria-label="Close plugin sidebar" disabled={busy} onClick={toggleSidebar}/>}<main className="mn" ref={scroll}>{mode==='directory'&&!sidebarVisible&&<button ref={sidebarToggleRef} className="ib plugin-sidebar-reveal" aria-label="Show plugin sidebar" aria-controls="vellum-plugin-sidebar" aria-expanded="false" disabled={busy} onClick={toggleSidebar}>{SidebarIcon?<SidebarIcon size={18}/>:<Ic n="window"/>}</button>}{(error || catalogState?.error) && <div className="cc" style={{
                 paddingBottom: 0
-              }}><p className="error" role="alert">{error || catalogState.error}</p><button className="bs" onClick={refresh}>Retry</button></div>}{r.v === 'directory' && <Directory />}{r.v === 'category' && <Directory category={r.category} />} {r.v === 'detail' && p && <Detail key={p.id} p={p} />} {r.v === 'skills' && <Skills />}{settings && <Settings key={r.tab || r.p || 'plugins'} tab={r.tab} plugin={r.p} />}</main></div></div>{dlg?.t === 'uninstall' && <Uninstall p={dlg.p} close={close} />} {dlg?.t === 'manage' && <Manage p={plugins.find(p => p.id === dlg.p.id) || dlg.p} close={close} />} {dlg?.t === 'install' && <Manage p={plugins.find(p => p.id === dlg.p.id) || dlg.p} close={close} install />}{dlg?.t === 'app' && <AppDialog p={plugins.find(p => p.id === dlg.p.id) || dlg.p} app={dlg.app} mcp={dlg.mcp} close={close} />} {dlg?.t === 'skill' && <SkillDialog s={dlg.s} details={dlg.details} close={close} />} {['create', 'archive', 'marketplace', 'mcp', 'skillAdd'].includes(dlg?.t) && <AddDialog kind={dlg.t} close={close} />} {pending && <Review pending={pending} close={() => decide(false)} />}</div></X.Provider>;
+              }}><p className="error" role="alert">{error || catalogState.error}</p><button className="bs" onClick={refresh}>Retry</button></div>}{r.v === 'directory' && <Directory />}{r.v === 'category' && <Directory category={r.category} />} {r.v === 'detail' && p && <Detail key={p.id} p={p} />} {r.v === 'skills' && <Skills />}{settings && <Settings key={r.tab || r.p || 'plugins'} tab={r.tab} plugin={r.p} />}</main></div></div>{dlg?.t === 'uninstall' && <Uninstall p={dlg.p} close={close} />} {dlg?.t === 'manage' && <Manage p={plugins.find(p => p.id === dlg.p.id) || dlg.p} close={close} />} {dlg?.t === 'install' && <Manage p={plugins.find(p => p.id === dlg.p.id) || dlg.p} close={close} install />}{dlg?.t === 'app' && <AppDialog p={plugins.find(p => p.id === dlg.p.id) || dlg.p} app={dlg.app} mcp={dlg.mcp} close={close} />} {dlg?.t === 'skill' && <SkillDialog s={dlg.s} details={dlg.details} close={close} />} {['archive', 'marketplace', 'mcp', 'skillAdd'].includes(dlg?.t) && <AddDialog kind={dlg.t} close={close} />} {pending && <Review pending={pending} close={() => decide(false)} />}</div></X.Provider>;
   }
   window.VellumUI = window.VellumUI || {};
   window.VellumUI.PluginWorkspace = Workspace;

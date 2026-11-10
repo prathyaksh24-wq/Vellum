@@ -197,7 +197,7 @@ export function composerComponent(React,ReactDOM){
       const referenceView=node=>{
         const dom=document.createElement('span');dom.className='composer-reference';dom.contentEditable='false';
         function render(value){
-          dom.dataset.referenceKind=value.attrs.kind;dom.title=value.attrs.label;dom.replaceChildren();
+          dom.dataset.referenceKind=value.attrs.kind;dom.dataset.referenceId=value.attrs.id;dom.title=value.attrs.label;dom.replaceChildren();
           const source=latest.current.referenceIcon?.(value.attrs) || '';
           dom.dataset.referenceBrand='';
           // Only bundled marks from the existing connector icon owner are used.

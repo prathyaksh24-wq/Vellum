@@ -25,7 +25,7 @@ afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreA
 test('settings projects installed plugins and protects required controls',async()=>{await render();expect(host.querySelector('[aria-label="Enable Linear"]')).toBeTruthy();expect(host.querySelector('[aria-label="Enable Demo"]')).toBeNull();expect(host.querySelector('[aria-label="Enable Core"]').disabled).toBe(true);expect(host.textContent).not.toContain('pr@example.com');});
 test('enablement follows applied receipts and failed changes keep their state',async()=>{await render();await click(host.querySelector('[aria-label="Enable Linear"]'));expect(onState).toHaveBeenCalledWith('linear',false);expect(host.querySelector('[aria-label="Enable Linear"]').getAttribute('aria-checked')).toBe('false');onState.mockResolvedValue({status:'failed',message:'Provider busy'});await click(host.querySelector('[aria-label="Enable Linear"]'));expect(host.querySelector('[role="alert"]').textContent).toContain('Provider busy');expect(host.querySelector('[aria-label="Enable Linear"]').getAttribute('aria-checked')).toBe('false');});
 test('directory searches actual catalog and offers installation for uninstalled plugins',async()=>{await render({mode:'directory'});expect(host.querySelector('[aria-label="Plugins sidebar"]')).toBeTruthy();expect(host.querySelector('[aria-label="Install Demo"]')).toBeTruthy();await fill(host.querySelector('input[type="search"]'),'no match');expect(host.querySelectorAll('.r')).toHaveLength(0);expect(host.textContent).toContain('No plugins match this search');});
-test('MCP creation requires a backend review and never pretends connection success',async()=>{await render();await click(host.querySelector('.addb'));await click(button('Add MCP server'));await fill(host.querySelector('input[placeholder="Custom Tool"]'),'Demo tools');await fill(host.querySelector('input[aria-label="Server URL"]'),'https://example.com/mcp');await click(host.querySelector('input[type="checkbox"]'));await click(button('Create as a plugin'));expect(onAdd).toHaveBeenCalledWith('plugin.add',{kind:'mcp',name:'Demo tools',description:'',transport:'http',url:'https://example.com/mcp'});expect(onConfirm).not.toHaveBeenCalled();expect(host.querySelector('[aria-label="Review change"]')).toBeTruthy();await click(button('Confirm'));expect(onConfirm).toHaveBeenCalledOnce();});
+test('MCP creation requires a backend review and never pretends connection success',async()=>{await render();await click(host.querySelector('.addb'));await click(button('Add custom MCP server'));await fill(host.querySelector('input[placeholder="Custom Tool"]'),'Demo tools');await fill(host.querySelector('input[aria-label="Server URL"]'),'https://example.com/mcp');await click(host.querySelector('input[type="checkbox"]'));await click(button('Create as a plugin'));expect(onAdd).toHaveBeenCalledWith('plugin.add',{kind:'mcp',name:'Demo tools',description:'',transport:'http',url:'https://example.com/mcp'});expect(onConfirm).not.toHaveBeenCalled();expect(host.querySelector('[aria-label="Review change"]')).toBeTruthy();await click(button('Confirm'));expect(onConfirm).toHaveBeenCalledOnce();});
 test('SKILL.md reader displays the actual backend file',async()=>{window.VellumApi.plugins.skillsCatalog.mockResolvedValue({items:[{name:'real-skill',description:'Actual description',is_external:true}],next_cursor:null});await render({initialRoute:{v:'settings',tab:'skills'}});await click(host.querySelector('.sr2'));expect(window.VellumApi.plugins.skillDetail).toHaveBeenCalledWith('real-skill',expect.anything());expect(host.querySelector('.md').textContent).toContain('# Actual source');expect(host.querySelector('[aria-label="Enable real-skill"]').disabled).toBe(true);});
 test('uninstall is a reviewed registry operation and cannot delete source files directly',async()=>{await render({initialRoute:{v:'settings',p:'linear'}});await click(button('Uninstall'));expect(host.querySelector('[aria-label="Uninstall Linear"]')).toBeTruthy();await click([...host.querySelectorAll('[aria-label="Uninstall Linear"] button')].find(b=>b.textContent==='Uninstall'));expect(onAdd).toHaveBeenCalledWith('plugin.uninstall',{plugin_id:'linear'});expect(onConfirm).toHaveBeenCalledOnce();});
 
@@ -161,6 +161,33 @@ test('Try now and whole example rows hand the plugin and draft to the composer',
   expect(example.querySelector('button')).toBeNull();
   await click(example);
   expect(onTry).toHaveBeenLastCalledWith(expect.objectContaining({id:'linear'}),expect.any(String));
+});
+
+test.each(['directory', 'manage'])('Create plugin in %s hands off to chat without opening a setup form', async mode => {
+  const onCreatePlugin = vi.fn();
+  await render({mode, onCreatePlugin});
+  await click(button('Add '));
+  await click(button('Create plugin'));
+  expect(onCreatePlugin).toHaveBeenCalledOnce();
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(onAdd).not.toHaveBeenCalled();
+});
+
+test.each(['directory', 'manage'])('the %s Add menu offers the same three setup dialogs', async mode => {
+  await render({mode});
+  const add = host.querySelector('button[aria-haspopup="menu"].add, button.addb');
+  for (const [option, title] of [
+    ['Add a marketplace', 'Add plugin marketplace'],
+    ['Upload plugin archive', 'New Plugin'],
+    ['Add custom MCP server', 'Add custom MCP server']
+  ]) {
+    await click(add);
+    await click(button(option));
+    expect(host.querySelector(`[role="dialog"][aria-label="${title}"]`)).toBeTruthy();
+    await click(button('Cancel'));
+    expect(document.activeElement).toBe(add);
+  }
+  expect(onAdd).not.toHaveBeenCalled();
 });
 
 test.each(['swiggy','github'])('saved %s authorization can be reconnected from plugin settings',async id=>{
