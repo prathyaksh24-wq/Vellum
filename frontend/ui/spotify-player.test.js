@@ -297,7 +297,7 @@ test('switching between the Music page and chat retains one playback controller 
 test('local playback appears in the Dynamic Island without a connected Spotify account',async()=>{
   let emit;const previous=window.VellumLocalMusicPlayback;
   const pause=vi.fn(),wake=vi.fn();window.VellumLocalMusicPlayback={subscribe:vi.fn(listener=>{emit=listener;return ()=>{};}),start:vi.fn(()=>({wake})),pause};
-  const localApi={library:vi.fn(async()=>({collections:[{entries:[{id:'owned',title:'Owned recording',artist:'Local artist',available:true,artwork_url:'https://images.example/local.jpg'}]}]})),action:vi.fn(async()=>({status:'applied'}))};
+  const localApi={library:vi.fn(),entry:vi.fn(async()=>({id:'owned',title:'Owned recording',artist:'Local artist',available:true,artwork_url:'https://images.example/local.jpg'})),action:vi.fn(async()=>({status:'applied'}))};
   try{
     const api=await renderPlayer([],false,{open:false,spotify:{connected:false},localApi});
     expect(emit).toBeTypeOf('function');
@@ -318,8 +318,26 @@ test('local playback appears in the Dynamic Island without a connected Spotify a
     await act(async()=>host.querySelector('[aria-label="Next track"]').click());
     expect(localApi.action).toHaveBeenLastCalledWith('playback',{action:'next'});
     expect(api.action).not.toHaveBeenCalled();expect(window.VellumSpotifyPlayback.create).not.toHaveBeenCalled();
-    expect(localApi.library).toHaveBeenCalledTimes(1);
+    expect(localApi.entry).toHaveBeenCalledTimes(1);
     await act(async()=>emit({queue:['owned'],index:0,volume:.7,observed:{entry_id:'owned',playing:false,seconds:37,duration:120}}));
-    expect(localApi.library).toHaveBeenCalledTimes(1);
+    expect(localApi.entry).toHaveBeenCalledTimes(1);
+    expect(localApi.library).not.toHaveBeenCalled();
+  }finally{window.VellumLocalMusicPlayback=previous;}
+});
+
+test.each([true,false])('pausing Spotify keeps its provider when a local queue is parked (track returned: %s)',async(returnsTrack)=>{
+  let emitLocal;
+  const previous=window.VellumLocalMusicPlayback;
+  const pause=vi.fn();
+  window.VellumLocalMusicPlayback={subscribe:listener=>{emitLocal=listener;return ()=>{};},pause};
+  const localApi={entry:vi.fn(async()=>({id:'owned',title:'Older local song'})),action:vi.fn()};
+  try{
+    const api=await renderPlayer([],false,{open:false,localApi});
+    await act(async()=>emitLocal({queue:['owned'],index:0,observed:{entry_id:'owned',playing:false}}));
+    api.player.mockResolvedValue({track:returnsTrack ? track('spotify:track:current','Current song') : null,is_playing:false,repeat:'off'});
+    await act(async()=>host.querySelector('[aria-label="Pause Spotify"]').click());
+    expect(host.querySelector('.spotify-now').textContent).toContain(returnsTrack ? 'Current song' : 'Spotify idle');
+    expect(host.querySelector('[aria-label="Play Spotify"]')).toBeTruthy();
+    expect(localApi.action).not.toHaveBeenCalled();
   }finally{window.VellumLocalMusicPlayback=previous;}
 });

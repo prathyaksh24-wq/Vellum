@@ -7,18 +7,25 @@
     if(['localhost','127.0.0.1','[::1]'].includes(url.hostname) && ['localhost','127.0.0.1','[::1]'].includes(location.hostname))url.hostname=location.hostname;
     return url.origin;
   }
-  function withArtwork(groups) {
-    return groups.map(group => ({...group, entries:group.entries.map(entry => ({
+  function withArtwork(entry, origin) {
+    return {
       ...entry,
-      artwork_url:entry.artwork_url?.startsWith(base+'/artwork/')?mediaBase()+entry.artwork_url:entry.artwork_url || '',
-    }))}));
+      artwork_url:entry.artwork_url?.startsWith(base+'/artwork/') ? origin+entry.artwork_url : entry.artwork_url || '',
+    };
   }
+  let libraryRead;
   window.VellumApi.localMusic = {
-    library: () => client.request(base+'/library',{cache:'no-store'}).then(page => ({
-      ...page,
-      collections:withArtwork(page.collections),
-      pending_imports:withArtwork(page.pending_imports || []),
-    })),
+    library: ({fresh=false}={}) => {
+      if (fresh && libraryRead) return libraryRead.catch(() => {}).then(() => window.VellumApi.localMusic.library());
+      libraryRead ??= client.request(base+'/library',{cache:'no-store'}).then(page => {
+        const origin = mediaBase();
+        const groups = items => items.map(group => ({...group, entries:group.entries.map(entry => withArtwork(entry, origin))}));
+        return {...page, collections:groups(page.collections), pending_imports:groups(page.pending_imports || [])};
+      }).finally(() => { libraryRead = undefined; });
+      return libraryRead;
+    },
+    entry: (id, signal) => client.request(base+'/entry/'+encodeURIComponent(id),{cache:'no-store',signal})
+      .then(entry => withArtwork(entry, mediaBase())),
     player: () => client.request(base+'/player',{cache:'no-store'}),
     report: body => client.request(base+'/player/report',{...client.jsonOptions('POST',body),headers:{...headers,'Content-Type':'application/json'}}),
     action: (name,args) => window.VellumApi.appActions.dispatch({action_id:'local_music.'+name,arguments:args},{source:'ui'}),

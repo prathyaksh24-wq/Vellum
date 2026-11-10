@@ -6117,7 +6117,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     submitted_text = str(request.action_message or "").strip()
     action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
     resolved_action_message = _contextual_presentation_message(action_message, active_thread_id)
-    action_turn = _app_action_runtime.plan_submission(resolved_action_message)
+    action_turn = await asyncio.to_thread(_app_action_runtime.plan_submission, resolved_action_message)
     submitted_actions = list(action_turn.actions)
     action_receipts = []
     for attachment in request.attachments:
@@ -6135,8 +6135,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 *(attachment.digest for attachment in request.attachments if attachment.digest),
             ])),
         })
-        # Spotify actions perform network I/O; keep heartbeats/token refresh responsive.
-        if any(action.action_id == "spotify.playback.control" for action in submitted_actions):
+        # Music actions read provider or local library data. Keep the API event loop responsive.
+        if any(action.action_id == "spotify.playback.control" or action.action_id.startswith("local_music.")
+               for action in submitted_actions):
             action_receipts = await asyncio.to_thread(_app_action_runtime.dispatch_many, submitted_actions, action_context)
         else:
             action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)

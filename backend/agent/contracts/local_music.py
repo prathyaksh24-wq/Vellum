@@ -111,16 +111,28 @@ class MusicJobRequest(BaseModel):
     operation: Literal['cancel', 'retry']
 
 
+class MusicPlaylistListRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+
 class LocalPlaybackRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     action: Literal['play', 'pause', 'resume', 'next', 'previous', 'seek', 'volume', 'shuffle', 'repeat']
     entry_ids: list[str] = Field(default_factory=list, max_length=5000)
     query: str = Field(default='', max_length=500)
+    pick_any: bool = False
+    expected_revision: int | None = Field(default=None, ge=0)
     position: int = Field(default=0, ge=0, le=4999)
     seconds: float = Field(default=0, ge=0, le=86400, allow_inf_nan=False)
     volume: float = Field(default=0.7, ge=0, le=1, allow_inf_nan=False)
     enabled: bool = False
     repeat: Literal['off', 'all', 'one'] = 'off'
+
+    @model_validator(mode='after')
+    def validate_pick(self):
+        if self.pick_any and (self.action != 'play' or self.query or self.entry_ids or self.position):
+            raise ValueError('Pick a local song or specify what to play.')
+        return self
 
 
 class LocalPlayerReport(BaseModel):

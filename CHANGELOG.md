@@ -6,6 +6,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Let chat pick a playable local song, list saved Local Music playlists, and recognize their names in playback requests. Keep the Dynamic Island on the paused provider and ignore stale local track-end commands.
+
+- Keep Local Music playback responsive during library and artwork reads, show imported playlist covers in the sidebar, and start the local player from chat commands. Ctrl+[ and Ctrl+] now share the title bar’s history and step through Music pages.
+
 - Keep the sidebar shortcut from overriding text editing in the embedded browser and align CI fixtures with the shared command, file-preview, notification, and OAuth owners.
 
 - Move conversation previews to the left by default and add position and visibility settings. Put the default search engine at the top of Browser settings, remove Plugins and MCPs from the new-tab page, and show the summary shortcut once.

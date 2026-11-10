@@ -7401,20 +7401,28 @@ const DockMusicMarquee = ({title, artists, playing, provider='spotify'}) => {
   </span>;
 };
 
-const SpotifyPlayer = ({musicNavigation,spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection, renderDock}) => {
+const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection, renderDock}) => {
   const connected = !!(spotify && spotify.connected);
   const [player, setPlayer] = useState(null);
   const [localState,setLocalState]=useState(null),[localEntries,setLocalEntries]=useState([]),[localError,setLocalError]=useState('');
   const [dockPosition,setDockPosition]=useState(null),[dockVolume,setDockVolume]=useState(null);
+  const [open, setOpen] = useState(false);
+  const localEntryId=localState?.observed?.entry_id;
+  const upcomingIds=open && localEntryId ? (localState.queue || []).slice(localState.index+1,localState.index+6).join(',') : '';
   useEffect(()=>window.VellumLocalMusicPlayback?.subscribe?.(setLocalState),[]);
   useEffect(()=>{
-    if(!localState?.observed?.entry_id || !API.localMusic?.library)return;
-    let disposed=false;
-    API.localMusic.library().then(page=>{if(!disposed)setLocalEntries(page.collections.flatMap(group=>group.entries));}).catch(()=>{});
-    return ()=>{disposed=true;};
-  },[localState?.observed?.entry_id]);
+    if(!localEntryId || !API.localMusic?.entry)return;
+    const abort=new AbortController();
+    const ids=new Set([localEntryId,...upcomingIds.split(',').filter(Boolean)]);
+    setLocalEntries(entries=>entries.filter(entry=>ids.has(entry.id)));
+    for(const id of ids){
+      API.localMusic.entry(id,abort.signal).then(entry=>{
+        if(!abort.signal.aborted)setLocalEntries(entries=>[...entries.filter(item=>item.id!==id),entry]);
+      }).catch(()=>{});
+    }
+    return ()=>abort.abort();
+  },[localEntryId,upcomingIds]);
 
-  const [open, setOpen] = useState(false);
   const compactRef = useRef(null);
   const triggerRef = useRef(null);
   const [error, setError] = useState('');
@@ -7548,7 +7556,13 @@ const SpotifyPlayer = ({musicNavigation,spotify, dockSide='top', onReconnect, on
     finally { commandRef.current = false; setBusy(false); }
   };
   const localObserved=localState?.observed || {};
-  const dockLocal=!!localObserved.entry_id && !localState?.shared && (!!localObserved.playing || !isPlaying);
+  const lastDockProvider=useRef(null);
+  const hasLocalTrack=!!localObserved.entry_id && !localState?.shared;
+  const dockLocal=hasLocalTrack && (localObserved.playing || (!isPlaying && (lastDockProvider.current!=='spotify' || !connected)));
+  React.useLayoutEffect(() => {
+    if (dockLocal) lastDockProvider.current='local';
+    else if (track) lastDockProvider.current='spotify';
+  }, [dockLocal, !!track]);
   const localTrack=localEntries.find(entry=>entry.id===localObserved.entry_id);
   const dockPlayer=dockLocal?{
     track:{id:localObserved.entry_id,uri:'local:'+localObserved.entry_id,name:localTrack?.title || 'Local audio'},
@@ -7568,13 +7582,13 @@ const SpotifyPlayer = ({musicNavigation,spotify, dockSide='top', onReconnect, on
     try{
       const receipt=await API.localMusic.action('playback',args);
       if(receipt.status!=='applied')throw new Error(receipt.message || 'Local playback could not be updated.');
-      await window.VellumLocalMusicPlayback?.start()?.wake();return true;
+      window.VellumLocalMusicPlayback?.start()?.wake();return true;
     }catch(err){setLocalError(err.message || 'Local playback is unavailable.');return false;}
     finally{commandRef.current=false;setBusy(false);setDockPosition(null);setDockVolume(null);}
   };
   const revealMusicPreview=()=>window.dispatchEvent(new Event('vellum:sidebar-preview-enter'));
   const leaveMusicPreview=event=>window.dispatchEvent(new CustomEvent('vellum:sidebar-preview-leave',{detail:{relatedTarget:event.relatedTarget}}));
-  const page = musicPageTarget && ReactDOM.createPortal(<window.VellumUI.MusicPage navigationRequest={musicNavigation} onPreviewEnter={revealMusicPreview} onPreviewLeave={leaveMusicPreview} initialProvider={dockLocal?'local':'spotify'} spotify={spotify} onReconnect={onReconnect} onRefreshConnection={onRefreshConnection} onCloseMusic={onCloseMusic} onSelectCollection={onSelectCollection}
+  const page = musicPageTarget && ReactDOM.createPortal(<window.VellumUI.MusicPage navigationRequest={musicNavigation} onRouteChange={onMusicRouteChange} onPreviewEnter={revealMusicPreview} onPreviewLeave={leaveMusicPreview} initialProvider={dockLocal?'local':'spotify'} spotify={spotify} onReconnect={onReconnect} onRefreshConnection={onRefreshConnection} onCloseMusic={onCloseMusic} onSelectCollection={onSelectCollection}
     music={{player,playback,upcoming,run,busy,error,refresh,enable:() => playbackRef.current?.enable()} }/>, musicPageTarget);
   const toggle = event => { event.stopPropagation(); dockRun({action:dockPlaying ? 'pause' : 'play'}); };
   const repeatNext = !dockPlayer || dockPlayer.repeat === 'off' ? 'context' : dockPlayer.repeat === 'context' ? 'track' : 'off';
@@ -8714,6 +8728,7 @@ const App = () => {
   const [sidebarPeeking,setSidebarPeeking]=useState(false);
   const [railPreview,setRailPreview]=useState(null);
   const [pluginNavigation,setPluginNavigation]=useState(null),[musicNavigation,setMusicNavigation]=useState(null);
+  const [musicRoute,setMusicRoute]=useState(null);
   const sidebarPeekTimer=useRef(null);
   const sidebarHoverSuppressed=useRef(false);
   const desktopSidebarHover=()=>window.matchMedia('(hover:hover) and (pointer:fine) and (min-width:761px)').matches;
@@ -8979,30 +8994,6 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [ytConnectOpen, setYtConnectOpen] = useState(false);
   const threadRef = useRef({});
   const pendingMoveRef = useRef(null);
-  const [navTick, setNavTick] = useState(0);
-  const hist = useRef({stack: [{view: 'chat', chat: null, proj: null}], idx: 0, silent: false});
-  useEffect(() => {
-    const h = hist.current;
-    if (h.silent) { h.silent = false; return; }
-    const s = {view, chat: activeChatId, proj: activeProjectId};
-    const cur = h.stack[h.idx];
-    if (cur && cur.view === s.view && cur.chat === s.chat && cur.proj === s.proj) return;
-    h.stack = h.stack.slice(0, h.idx + 1);
-    h.stack.push(s);
-    h.idx++;
-    setNavTick(t => t + 1);
-  }, [view, activeChatId, activeProjectId]);
-  const navGo = dir => {
-    const h = hist.current;
-    const ni = h.idx + dir;
-    if (ni < 0 || ni >= h.stack.length) return;
-    h.idx = ni; h.silent = true;
-    const s = h.stack[ni];
-    setView(s.view); setActiveChatId(s.chat); setActiveProjectId(s.proj);
-    setNavTick(t => t + 1);
-  };
-  const canBack = hist.current.idx > 0;
-  const canFwd = hist.current.idx < hist.current.stack.length - 1;
   const [secOpen, setSecOpen] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(SIDEBAR_SECTION_STORAGE_KEY) || '{}');
@@ -10329,6 +10320,9 @@ const [slashSkills, setSlashSkills] = useState([]);
     });
   };
   const applyAppActionReceipt = (receipt, options = {}) => {
+    if (receipt?.status === 'applied' && receipt.action_id === 'local_music.playback') {
+      window.VellumLocalMusicPlayback?.start()?.wake();
+    }
     if (receipt?.status === 'applied' && receipt.action_id?.startsWith('browser.settings.')) {
       if (receipt.result?.running === false) hideBrowserPanel();
       refreshBrowser().catch(() => {});
@@ -10569,8 +10563,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
-  // A bounded, session-only journal of page locations. Conversations and
-  // Settings keep their existing owners; history stores no message content.
+  // The title bar and keyboard shortcuts share the same page history.
   const desktopHistoryRef = useRef({entries:[], index:-1, pending:null});
   const desktopLocation = {
     view, chatId:view === 'chat' ? activeChatId : null,
@@ -10578,8 +10571,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     agentConvoId:view === 'agent' ? activeConvo[activeAgentId] || null : null,
     projectId:view === 'project' ? activeProjectId : null,
     settingsOpen, settingsTab:settingsOpen ? settingsTab : null,
+    musicRoute:view === 'music' ? musicRoute : null,
   };
-  const desktopLocationKey = JSON.stringify(desktopLocation);
+  const desktopLocationKey = JSON.stringify({...desktopLocation,musicRoute:desktopLocation.musicRoute && {
+    ...desktopLocation.musicRoute, source:desktopLocation.musicRoute.source?.uri || null,
+  }});
   const publishDesktopHistory = () => {
     const journal=desktopHistoryRef.current;
     window.dispatchEvent(new CustomEvent('vellum:navigation-state',{detail:{
@@ -10588,7 +10584,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     }}));
   };
   useEffect(() => {
-    if(!desktopWorkspace)return;
+    if(view === 'music' && !musicRoute)return;
     const journal=desktopHistoryRef.current;
     if(journal.pending){
       if(desktopLocationKey !== journal.pending.key)return;
@@ -10600,11 +10596,12 @@ const [slashSkills, setSlashSkills] = useState([]);
       journal.index=journal.entries.length-1;
     }
     publishDesktopHistory();
-  },[desktopWorkspace,desktopLocationKey]);
+  },[desktopLocationKey]);
   useEffect(() => {
-    if(!desktopWorkspace)return;
-    const traverse=async event => {
-      const direction=event.detail,journal=desktopHistoryRef.current;
+    if(view !== 'music') {setMusicRoute(null);setMusicNavigation(null);}
+  },[view]);
+  const traverseAppHistory=async direction => {
+      const journal=desktopHistoryRef.current;
       if(![-1,1].includes(direction)||journal.pending)return;
       const index=journal.index+direction,entry=journal.entries[index];
       if(!entry)return;
@@ -10627,12 +10624,15 @@ const [slashSkills, setSlashSkills] = useState([]);
           setActiveConvo(current=>({...current,[target.agentId]:target.agentConvoId}));
         }
         if(target.view==='project')setActiveProjectId(target.projectId);
+        if(target.musicRoute)setMusicNavigation({route:target.musicRoute});
         setView(target.view);setMenu(null);setActivityMsg(null);
       } catch (_) {
         journal.pending=null;publishDesktopHistory();
         pushToast('That page could not be opened. Try again.');
       }
-    };
+  };
+  useEffect(() => {
+    const traverse=event=>traverseAppHistory(event.detail);
     window.addEventListener('vellum:navigation-traverse',traverse);
     window.addEventListener('vellum:navigation-ready',publishDesktopHistory);
     return () => {
@@ -11074,7 +11074,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     'chat.new':()=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});return newChat();},'commands.open':()=>setCommandScope(current=>current?'':'all'),
     'settings.open':()=>dispatchSurfacePresentation('settings',{visible:true},{notify:false}),
     'shortcuts.open':()=>setShortcutsOpen(current=>!current),'sidebar.toggle':toggleContextualSidebar,
-    'history.back':()=>{if(canBack)navGo(-1);},'history.forward':()=>{if(canFwd)navGo(1);},
+    'history.back':()=>traverseAppHistory(-1),'history.forward':()=>traverseAppHistory(1),
     'chat.rename':()=>chatMenuAction(activeChatId,'rename'),'chat.pin':()=>chatMenuAction(activeChatId,'pin'),
     'chat.archive':()=>chatMenuAction(activeChatId,'archive'),'chat.delete':deleteActiveChat,
     'chat.previous':()=>visitSidebarChat(-1),'chat.next':()=>visitSidebarChat(1),'chat.attention':()=>visitSidebarChat(1,true),
@@ -11231,7 +11231,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           </div>
           </div>
         </div>
-        <SpotifyPlayer musicNavigation={musicNavigation} spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
+        <SpotifyPlayer musicNavigation={musicNavigation} onMusicRouteChange={setMusicRoute} spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
           compactVisible={view !== 'music'} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}
           renderDock={(music, musicOpen, onDismissMusic) => !settingsOpen && view !== 'music' && <GlobalDock side={dockSide} browserVisible={browserPanelVisible} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
             music={music} musicOpen={musicOpen} onDismissMusic={onDismissMusic} onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onOpenAgent={openAgent}

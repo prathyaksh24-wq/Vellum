@@ -2,12 +2,19 @@
 (function () {
   function create({api, audio, ownerId, beforePlay=async () => {}, onChange=() => {}}) {
     let stopped=false, timer, revision=-1, current='', error='', desired=null, running=false;
-    let appliedPlaying=false, shared=false, failures=0, commandEpoch=0;
+    let appliedPlaying=false, shared=false, failures=0, commandEpoch=0, wakePending=false;
+    let lastPublished='';
     function observed() {
       return {entry_id:current,playing:!audio.paused && !audio.ended,seconds:Number.isFinite(audio.currentTime)?audio.currentTime:0,
         duration:Number.isFinite(audio.duration)?audio.duration:0,error};
     }
-    function publish() {onChange({...(desired || {}),observed:observed(),shared,error});}
+    function publish() {
+      const playback = shared ? desired?.observed || {} : observed();
+      const key = JSON.stringify([desired?.revision, shared, error, playback]);
+      if (key === lastPublished) return;
+      lastPublished = key;
+      onChange({...(desired || {}),observed:playback,shared,error});
+    }
     async function apply(state) {
       const epoch=++commandEpoch;
       const next=state.queue[state.index] || '';
@@ -25,8 +32,13 @@
           try {
             await beforePlay();
             if (epoch!==commandEpoch || stopped || shared) return;
-            await audio.play();error='';
-          } catch (_) {error='Playback could not start. Press Resume to try again, or import another audio file.';}
+            await audio.play();
+            if (epoch!==commandEpoch || stopped) return;
+            error='';
+          } catch (_) {
+            if (epoch!==commandEpoch || stopped) return;
+            error='Playback could not start. Press Resume to try again, or import another audio file.';
+          }
         }
       } else audio.pause();
       appliedPlaying=state.playing;
@@ -40,7 +52,7 @@
         // before observing commands, preventing duplicate local playback.
         const response=await api.report({owner_id:ownerId,revision:Math.max(0,revision),...observed()});
         shared=!response.accepted;
-        if (shared) {audio.pause();desired=response.player;onChange({...desired,shared:true,error:''});}
+        if (shared) {audio.pause();desired=response.player;error='';publish();}
         else if (response.player.revision!==revision) {
           revision=response.player.revision;
           await apply(response.player);
@@ -52,29 +64,38 @@
         if (failures>=3) {audio.pause();error='Vellum’s music service is unavailable. Resume after it reconnects.';publish();}
       } finally {
         running=false;
-        if (!stopped) timer=setTimeout(tick,failures?1500:1000);
+        if (!stopped) timer=setTimeout(tick,wakePending?0:failures?1500:1000);
+        wakePending=false;
       }
     }
     const ended=async () => {
-      if (!desired || shared) return;
+      if (!desired?.playing || !audio.ended || shared || stopped) return;
       const last=desired.index===desired.queue.length-1;
+      const expected_revision=revision;
       try {
-        if (desired.repeat==='one') await api.action('playback',{action:'seek',seconds:0});
-        else if (last && desired.repeat!=='all' && !desired.shuffle) await api.action('playback',{action:'pause'});
-        else await api.action('playback',{action:'next'});
-        clearTimeout(timer);await tick();
+        if (desired.repeat==='one') await api.action('playback',{action:'seek',seconds:0,expected_revision});
+        else if (last && desired.repeat!=='all' && !desired.shuffle) await api.action('playback',{action:'pause',expected_revision});
+        else await api.action('playback',{action:'next',expected_revision});
+        wake();
       } catch (_) {error='The next song could not be started. Choose a song to continue.';publish();}
     };
+    function wake() {
+      if (running) {wakePending=true;return;}
+      clearTimeout(timer);
+      return tick();
+    }
     const failed=() => {error='This audio file could not be decoded. Import another copy of the recording.';publish();};
     audio.addEventListener('ended',ended);audio.addEventListener('error',failed);
     return {
       start:tick,
-      wake:() => {clearTimeout(timer);return tick();},
+      wake,
       snapshot:() => ({...(desired || {}),observed:observed(),shared,error}),
       pause:async () => {
-        if (audio.paused) return;
+        if (shared || stopped || (audio.paused && !desired?.playing)) return;
+        commandEpoch++;
+        if (desired) desired={...desired,playing:false};
         audio.pause();publish();
-        try {await api.action('playback',{action:'pause'});} catch (_) {}
+        try {await api.action('playback',{action:'pause'});wake();} catch (_) {}
       },
       destroy:() => {stopped=true;commandEpoch++;clearTimeout(timer);audio.pause();audio.removeEventListener('ended',ended);audio.removeEventListener('error',failed);},
     };
