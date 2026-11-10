@@ -250,10 +250,11 @@ def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog
 
     seen = {}
 
-    def activate(query, registry, *, excluded_skills):
+    def activate(query, registry, *, excluded_skills, selected_skills):
         seen["query"] = query
         seen["registry"] = registry
         seen["excluded_skills"] = excluded_skills
+        seen["selected_skills"] = selected_skills
         return "## Relevant skills\n\n### code-review\nInspect the current diff."
 
     monkeypatch.setattr(agent_graph, "_prompt_skill_registry", FakeRegistry(), raising=False)
@@ -272,6 +273,7 @@ def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog
         "query": "Review this diff",
         "registry": agent_graph._prompt_skill_registry,
         "excluded_skills": frozenset({"book-to-skill"}),
+        "selected_skills": {},
     }
     assert "## Specialist directory" in messages[0].content
     assert "BooksAgent" in messages[0].content
@@ -292,10 +294,11 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
     registry = FakeRegistry()
     seen = {}
 
-    def activate(query, active_registry, *, excluded_skills):
+    def activate(query, active_registry, *, excluded_skills, selected_skills):
         seen["query"] = query
         seen["registry"] = active_registry
         seen["excluded_skills"] = excluded_skills
+        seen["selected_skills"] = selected_skills
         return "## Activated Vellum Skills\n\n### code-review\nInspect the diff first."
 
     monkeypatch.setattr(agent_graph, "_prompt_skill_registry", registry, raising=False)
@@ -317,6 +320,7 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
         "query": "Review this pull request",
         "registry": registry,
         "excluded_skills": frozenset(),
+        "selected_skills": {},
     }
     assert "### code-review" in messages[0].content
     assert "Inspect the diff first." in messages[0].content

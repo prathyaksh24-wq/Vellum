@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Open a prefilled chat with the installed Plugin Creator skill from plugin discovery and Settings. Share the styled marketplace, archive upload, and custom MCP dialogs across both Add menus. Use the shared moving highlight on plugin sidebar rows.
+
 - Let chat pick a playable local song, list saved Local Music playlists, and recognize their names in playback requests. Keep the Dynamic Island on the paused provider and ignore stale local track-end commands.
 
 - Keep Local Music playback responsive during library and artwork reads, show imported playlist covers in the sidebar, and start the local player from chat commands. Ctrl+[ and Ctrl+] now share the title bar’s history and step through Music pages.

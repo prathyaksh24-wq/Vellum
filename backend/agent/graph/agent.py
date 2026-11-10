@@ -85,7 +85,7 @@ from agent.tools.knowledge_wiki import knowledge_wiki
 from agent.tools.memory_orchestrator import memory_orchestrator
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
-from agent.tools.plugin_mcp import plugin_mcp, plugins_list, plugin_route_names
+from agent.tools.plugin_mcp import current_references, plugin_mcp, plugins_list, plugin_route_names
 from agent.tools.product_hunt import product_hunt
 from agent.tools.google_workspace import google_api_describe, published_google_tools, google_workspace_read
 from agent.tools.skill_bundles import skill_bundles
@@ -257,6 +257,9 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
             _latest_user_query(state),
             _prompt_skill_registry,
             excluded_skills=specialist_skills,
+            selected_skills={ref['id']: str(ref.get('owner_plugin_id') or '')
+                             for ref in current_references(state.get('messages', []))
+                             if ref.get('kind') == 'skill' and isinstance(ref.get('id'), str)},
         )
     except Exception as exc:
         import logging

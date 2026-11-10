@@ -118,18 +118,23 @@ def build_skill_activation_block(
     registry: SkillRegistry | None = None,
     *,
     excluded_skills: set[str] | frozenset[str] = frozenset(),
+    selected_skills: dict[str, str] | None = None,
     max_skills: int = 3,
     max_chars: int = 12_000,
 ) -> str:
     normalized_query = " ".join(_WORD.findall(query.casefold()))
     query_tokens = set(normalized_query.split()) - _STOP_WORDS
-    if not query_tokens:
+    if not query_tokens and not selected_skills:
         return ""
 
     active_registry = registry or get_skill_registry()
     ranked: list[tuple[int, str, str]] = []
     for package in active_registry.list_packages():
-        if package.metadata.name in excluded_skills:
+        name = package.metadata.name
+        if name in excluded_skills:
+            continue
+        if selected_skills is not None and selected_skills.get(name) == (package.owner_plugin or ""):
+            ranked.append((1000, name, package.body.strip()))
             continue
         vellum = package.metadata.metadata.vellum
         negative = [_normalize_phrase(value) for value in vellum.negative_trigger]
