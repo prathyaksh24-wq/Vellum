@@ -72,6 +72,10 @@ Imported audio accepts MP3, FLAC, M4A, AAC, Ogg, Opus, WAV and WebM. AIFF, WMA, 
 
 **local_music.refresh** adds newly exposed playlist occurrences while preserving downloaded audio and existing occurrence IDs. Local Home presents a vertical playlist library, selecting a playlist opens its song view, and its menu contains refresh, export and removal. Download activity is visible across Local Music screens. Closing the main desktop workspace quits the app, its watcher and owned backend, including music workers.
 
+## Local library storage
+
+Local Music stores playlists, song order, download state and playback state in `data/music/library.sqlite3` under the selected Vellum workspace. `data/music/audio/` contains the imported or downloaded recordings, and playlists can reference the same file. `data/music/artwork/` holds the cover cache. Incomplete imports and downloads appear in **Downloads** until they enter the library.
+
 ## Verification
 
 See [Scoped publication notes](verification/music-dictation-pr-2026-10-29.md). Screenshots are earlier synthetic fixtures from the shared development checkout. No tests or builds were rerun for this isolated draft PR, at the user's request. Provider metadata reads do not prove audible playback, native desktop behavior or long-session acceptance.

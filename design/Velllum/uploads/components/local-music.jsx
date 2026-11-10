@@ -1,17 +1,31 @@
 /* Local presentation shares the existing library, App Actions and audio owner. */
 (function () {
-  const {useState,useEffect,useRef}=React;
+  const {useState,useEffect,useRef,useMemo}=React;
+  const emptyEntries = [];
+
+  const LocalPlaylistCover = React.memo(function LocalPlaylistCover({group, Icon}) {
+    const images = new Set();
+    for (const entry of group.entries) {
+      if (entry.artwork_url) images.add(entry.artwork_url);
+      if (images.size === 4) break;
+    }
+    return <span className={'mw-collection-cover'+(images.size>1?' collage':'')} aria-hidden="true">
+      {images.size ? [...images].map(src => <img key={src} src={src} alt="" loading="lazy" referrerPolicy="no-referrer"/>) : <Icon name="list"/>}
+    </span>;
+  });
   function useLocalMusic({active=false,onImported}={}) {
     const [library,setLibrary]=useState(null),[catalog,setCatalog]=useState(null),[player,setPlayer]=useState(null);
     const [selected,setSelected]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
     const [downloadTarget,setDownloadTarget]=useState('');
+    const [controlBusy,setControlBusy]=useState(false);
+    const controlGuard=useRef(false);
     const guard=useRef(false),alive=useRef(true),audioInput=useRef(null),manifestInput=useRef(null),folderInput=useRef(null);
     const controller=useRef(null),api=window.VellumApi?.localMusic;
     const autoImports=useRef(new Set());
     const available=name => !!api && !!catalog?.actions?.some(action => action.id==='local_music.'+name);
-    async function refresh() {
+    async function refresh(fresh=false) {
       if(!api)return null;
-      const next=await api.library();
+      const next=await api.library({fresh});
       if(alive.current){
         setLibrary(next);setSelected(value => next.collections.some(item => item.id===value)?value:next.collections[0]?.id || '');
         for(const group of next.collections){
@@ -43,7 +57,7 @@
     async function perform(task) {
       if(guard.current)return;
       guard.current=true;setBusy(true);setError('');setNotice('');
-      try{const result=await task();await refresh();await controller.current?.wake();return result;}
+      try{const result=await task();await refresh(true);return result;}
       catch(err){if(alive.current)setError(err.message);return null;}
       finally{guard.current=false;if(alive.current)setBusy(false);}
     }
@@ -94,9 +108,18 @@
       if(result){setSelected(result.collection_id);setDownloadTarget('');onImported?.();}
       return result;
     };
-    const control=args => perform(() => action('playback',args));
+    const control=async args => {
+      if(controlGuard.current)return;
+      controlGuard.current=true;setControlBusy(true);setError('');
+      try{
+        const result=await action('playback',args);
+        controller.current?.wake();
+        return result;
+      }catch(err){if(alive.current)setError(err.message);return null;}
+      finally{controlGuard.current=false;if(alive.current)setControlBusy(false);}
+    };
     const collection=library?.collections.find(item => item.id===selected);
-    const entries=library?.collections.flatMap(item => item.entries) || [];
+    const entries=useMemo(()=>library?.collections.flatMap(item => item.entries) || emptyEntries,[library?.collections]);
     const state=player || library?.player;
     const current=entries.find(item => item.id===state?.observed?.entry_id);
     const play=(item,rows=collection?.entries || entries) => {
@@ -104,7 +127,7 @@
       if(!queue.length)return;
       return control({action:'play',entry_ids:queue,position:item?Math.max(0,queue.indexOf(item.id)):0});
     };
-    return {library,catalog,selected,setSelected,collection,entries,state,current,busy,error,notice,available,refresh,perform,action,
+    return {library,catalog,selected,setSelected,collection,entries,state,current,busy,controlBusy,error,notice,available,refresh,perform,action,
       audioInput,manifestInput,folderInput,files,importManifest,chooseFile,chooseFolder,importLink,control,play,setError,
       downloadTarget,setDownloadTarget,downloadCollection,manageJob,finishImport,remove,refreshSource};
   }
@@ -153,12 +176,7 @@
       local.setDownloadTarget(id);
       onNavigate('import');
     };
-    const groupCover=group => {
-      const images=[...new Set(group.entries.map(entry=>entry.artwork_url).filter(Boolean))].slice(0,4);
-      return <span className={'mw-collection-cover'+(images.length>1?' collage':'')} aria-hidden="true">
-        {images.length?images.map(src=><img key={src} src={src} alt="" loading="lazy" referrerPolicy="no-referrer"/>):<Icon name="list"/>}
-      </span>;
-    };
+    const groupCover=group => <LocalPlaylistCover group={group} Icon={Icon}/>;
     const playlistMenu=(group,pending=false)=><details className="mw-playlist-menu"
       onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))event.currentTarget.open=false;}}
       onKeyDown={event=>{if(event.key==='Escape'){event.currentTarget.open=false;event.currentTarget.querySelector('summary').focus();}}}>
@@ -278,14 +296,14 @@
       </header>
       {completeness(collection)}
       <div className="mw-local-toolbar">
-        <button className="music-button primary" disabled={local.busy || !rows.some(item=>item.available) || !local.available('playback')}
+        <button className="music-button primary" disabled={local.controlBusy || !rows.some(item=>item.available) || !local.available('playback')}
           onClick={()=>local.play(null,rows)}><Icon name="play"/>Play playlist</button>
         {rows.some(item=>item.provider!=='local'&&!item.available) && <button className="music-button" onClick={()=>openDownloads(collection.id)}>Download missing songs</button>}
         <span className="mw-toolbar-spacer"/>{playlistMenu(collection)}
       </div>
       <section aria-label="Playlist songs">
         {rows.slice(0,rowLimit).map((item,index) => <div className={'mw-local-song'+(local.current?.id===item.id?' current':'')} key={item.id}>
-          <button className="mw-song-main" disabled={!item.available || local.busy || !local.available('playback')}
+          <button className="mw-song-main" disabled={!item.available || local.controlBusy || !local.available('playback')}
             aria-label={'Play local '+item.title} onClick={() => local.play(item,rows)}>
             {item.artwork_url?cover(item):<span className="mw-song-index" aria-hidden="true">{index+1}</span>}
             <span><b>{item.title}</b><small>{[item.artist,item.album].filter(Boolean).join(' · ') || 'Local audio'}</small></span>
@@ -303,4 +321,5 @@
   window.VellumUI=window.VellumUI || {};
   window.VellumUI.useLocalMusic=useLocalMusic;
   window.VellumUI.LocalMusicContent=LocalMusicContent;
+  window.VellumUI.LocalPlaylistCover=LocalPlaylistCover;
 })();

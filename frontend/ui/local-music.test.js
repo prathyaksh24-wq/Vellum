@@ -35,6 +35,15 @@ test('local library distinguishes references from audio and plays only ready ent
   await render();expect(host.textContent).toContain('2 songs · 1 ready');expect(host.querySelector('[aria-label="Play local Song without audio"]').disabled).toBe(true);
   await act(async()=>button('Play playlist').click());expect(api.action).toHaveBeenCalledWith('playback',{action:'play',entry_ids:['ready'],position:0});
 });
+test('transport stays usable while library reads are slow',async()=>{
+  await render();
+  api.library.mockClear().mockImplementation(()=>new Promise(()=>{}));
+  await act(async()=>button('Play playlist').click());
+  expect(api.library).not.toHaveBeenCalled();
+  expect(button('Play playlist').disabled).toBe(false);
+  await act(async()=>host.querySelector('[aria-label="Play local Owned song"]').click());
+  expect(api.action).toHaveBeenCalledTimes(2);
+});
 test('downloads show measured progress and stay staged until explicit import',async()=>{
   state.collections=[];
   state.pending_imports=[{id:'draft',name:'Road Trip',completeness:'complete',entries:[

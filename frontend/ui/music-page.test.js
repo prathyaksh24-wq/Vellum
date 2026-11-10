@@ -201,6 +201,63 @@ test('local first run shows the three handoff choices and no empty player bar',a
   await render();await press('Local Music');expect(host.textContent).toContain('Add your music');expect(host.querySelectorAll('.mw-add-card')).toHaveLength(3);
   expect(host.querySelector('.mw-player')).toBeNull();expect(host.textContent).not.toContain('Download missing YouTube');
 });
+test('local sidebar shows imported artwork and restores playlist and downloads locations',async()=>{
+  const art='https://images.example/road-trip.jpg';
+  localState.collections=[{id:'owned',name:'Road Trip',entries:[{id:'one',title:'Owned song',available:true,artwork_url:art}]}];
+  props.onRouteChange=vi.fn();
+  await render();await press('Local Music');
+  const sidebar=host.querySelector('.mw-sidebar-playlist-list button');
+  expect(sidebar.querySelector('img').src).toBe(art);
+  await act(async()=>sidebar.click());
+  const playlistRoute=props.onRouteChange.mock.lastCall[0];
+  expect(playlistRoute).toMatchObject({screen:'playlist',playlistId:'owned'});
+  await navigate('Downloads');
+  const downloadsRoute=props.onRouteChange.mock.lastCall[0];
+  props.navigationRequest={route:playlistRoute};await render();
+  expect(host.querySelector('h1').textContent).toBe('Road Trip');
+  props.navigationRequest={route:downloadsRoute};await render();
+  expect(host.querySelector('h1').textContent).toBe('Downloads');
+});
+
+test('Ctrl+[ and Ctrl+] step through Music pages without jumping to the landing page',async()=>{
+  const html=readFileSync(resolve(rootPath,'design/Velllum/uploads/Vellum Default Re-designed.html'),'utf8');
+  const history=html.slice(html.indexOf('  const desktopHistoryRef ='),html.indexOf('  useEffect(() => {\n    const open = async () => {\n      const receipt=await dispatchSurfacePresentation'));
+  const handlers=html.split('\n').find(line=>line.includes("'history.back':"));
+  const registry=require('../../desktop/electron/commands.cjs');
+  const makeHarness=new Function('React','Player','music','props','registry',`return function Harness(){
+    const {useState,useEffect,useRef}=React;
+    const [view,setView]=useState('chat');
+    const [musicRoute,setMusicRoute]=useState(null),[musicNavigation,setMusicNavigation]=useState(null);
+    const activeChatId=null,activeAgentId=null,activeConvo={},activeProjectId=null;
+    const settingsOpen=false,settingsTab=null,setMenu=()=>{},setActivityMsg=()=>{};
+    const pushToast=message=>{throw new Error(message);};
+    ${history}
+    const runtime=registry.createRuntime({context:()=>({}),handlers:()=>({${handlers}})});
+    useEffect(()=>{
+      const shortcut=event=>runtime.dispatch(event);
+      window.addEventListener('keydown',shortcut);
+      return ()=>window.removeEventListener('keydown',shortcut);
+    });
+    return view==='music' ? React.createElement(Player,{...props,music,initialProvider:'local',
+      navigationRequest:musicNavigation,onRouteChange:setMusicRoute}) :
+      React.createElement('button',{onClick:()=>setView('music')},'Open Music');
+  }`);
+  localState.collections=[{id:'owned',name:'Road Trip',entries:[{id:'one',title:'Owned song',available:true}]}];
+  const Harness=makeHarness(React,Player,music,props,registry);
+  await act(async()=>root.render(React.createElement(Harness)));
+  await press('Open Music');
+  await act(async()=>host.querySelector('.mw-sidebar-playlist-list button').click());
+  await navigate('Downloads');
+  const key=code=>act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{code,ctrlKey:true,cancelable:true})));
+  await key('BracketLeft');
+  expect(host.querySelector('h1').textContent).toBe('Road Trip');
+  await key('BracketLeft');
+  expect(host.querySelector('h1').textContent).toBe('Your music');
+  await key('BracketRight');
+  expect(host.querySelector('h1').textContent).toBe('Road Trip');
+  await key('BracketRight');
+  expect(host.querySelector('h1').textContent).toBe('Downloads');
+});
 test('returning local users see their library and missing audio stays unplayable',async()=>{
   localState.collections=[{id:'owned',name:'My playlist',entries:[{id:'one',title:'Owned song',artist:'Artist',available:true},{id:'missing',title:'Missing song',available:false}]}];
   await render();await press('Local Music');expect(host.textContent).toContain('Your music');expect(host.textContent).toContain('2 songs · 1 ready');

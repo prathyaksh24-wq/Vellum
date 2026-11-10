@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from agent.app_actions.models import ActionReceipt, AppActionContext, AppActionRequest
-from agent.contracts.local_music import (LocalMusicLibrary, LocalPlayerState, LocalPlayerReport,
+from agent.contracts.local_music import (LocalMusicEntry, LocalMusicLibrary, LocalPlayerState, LocalPlayerReport,
     MusicDiscoveryPage, MusicAccountPlaylists)
 from agent.music_library import MAX_AUDIO_BYTES, MusicLibraryError, get_music_library
 from agent.plugins.registry import get_plugin_registry
@@ -40,6 +40,14 @@ router = APIRouter(prefix='/music/local',tags=['music'],dependencies=[Depends(en
 
 @router.get('/library',response_model=LocalMusicLibrary)
 def library(): return get_music_library().snapshot()
+
+
+@router.get('/entry/{entry_id}',response_model=LocalMusicEntry)
+def entry(entry_id: str):
+    try:
+        return get_music_library().entry(entry_id)
+    except MusicLibraryError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
 
 
 @router.get('/player',response_model=LocalPlayerState)

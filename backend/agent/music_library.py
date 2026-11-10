@@ -562,6 +562,7 @@ class MusicLibrary:
         self._stopped = Event()
         self._enabled = enabled
         self._cover_cache = OrderedDict()
+        self._cover_lock = RLock()
         # Interrupted subprocess files belong only to this library's staging
         # directory. Never traverse symlinks or remove user-selected originals.
         for partial in self.staging.glob('download-*'):
@@ -621,31 +622,49 @@ class MusicLibrary:
     def snapshot(self):
         self._ensure_worker()
         with self.db() as db:
-            collections = []
-            pending_imports = []
-            for group in db.execute('SELECT * FROM collections ORDER BY rowid DESC').fetchall():
-                entries = [self._entry(db,row) for row in db.execute('SELECT * FROM entries WHERE collection_id=? ORDER BY position',(group['id'],))]
-                target = pending_imports if group['pending_import'] else collections
-                target.append(LocalMusicCollection(**dict(group), entries=entries))
-            jobs = [LocalMusicJob(**dict(row)) for row in db.execute("""
+            groups = db.execute('SELECT * FROM collections ORDER BY rowid DESC').fetchall()
+            rows = db.execute('SELECT * FROM entries ORDER BY collection_id,position').fetchall()
+            assets = {row['id']: row for row in db.execute('SELECT * FROM assets')}
+            jobs = db.execute("""
                 SELECT j.id, j.entry_id, j.status, j.error, j.stage, j.progress,
                        json_extract(e.metadata, '$.title') AS title
                 FROM jobs j JOIN entries e ON e.id = j.entry_id
                 WHERE j.rowid IN (SELECT max(rowid) FROM jobs GROUP BY entry_id)
                 ORDER BY j.rowid DESC
-            """)]
-            downloader = find_spec('yt_dlp') is not None
-            return LocalMusicLibrary(collections=collections, pending_imports=pending_imports, jobs=jobs,
-                player=self._player(db), downloader_available=downloader,
-                discovery_available=find_spec('ytmusicapi') is not None,
-                mp3_available=downloader and bool(ffmpeg_path()))
+            """).fetchall()
+            player = self._player(db)
+        entries_by_group = {}
+        for row in rows:
+            entry = self._project_entry(row, assets.get(row['asset_id']), artwork=True)
+            entries_by_group.setdefault(row['collection_id'], []).append(entry)
+        collections, pending_imports = [], []
+        for group in groups:
+            target = pending_imports if group['pending_import'] else collections
+            target.append(LocalMusicCollection(**dict(group), entries=entries_by_group.get(group['id'], [])))
+        downloader = find_spec('yt_dlp') is not None
+        return LocalMusicLibrary(collections=collections, pending_imports=pending_imports,
+            jobs=[LocalMusicJob(**dict(row)) for row in jobs], player=player,
+            downloader_available=downloader, discovery_available=find_spec('ytmusicapi') is not None,
+            mp3_available=downloader and bool(ffmpeg_path()))
 
     def _entry(self, db, row):
         asset = db.execute('SELECT * FROM assets WHERE id=?',(row['asset_id'],)).fetchone()
+        return self._project_entry(row, asset)
+
+    def entry(self, identity):
+        with self.db() as db:
+            row = db.execute('''SELECT e.* FROM entries e JOIN collections c ON c.id=e.collection_id
+                WHERE e.id=? AND c.pending_import=0''', (identity,)).fetchone()
+            if row is None:
+                raise MusicLibraryError('This song is no longer in your library.')
+            asset = db.execute('SELECT * FROM assets WHERE id=?', (row['asset_id'],)).fetchone()
+        return self._project_entry(row, asset, artwork=True)
+
+    def _project_entry(self, row, asset, *, artwork=False):
         available = bool(asset and (self.assets / (asset['id']+asset['suffix'])).is_file())
         metadata = json.loads(row['metadata'])
         cover = ''
-        if available and self._embedded_cover(asset):
+        if artwork and available and self._embedded_cover(asset):
             cover = '/api/music/local/artwork/'+row['id']
         elif metadata.get('provider') == 'youtube' and re.fullmatch(r'[A-Za-z0-9_-]{11}',metadata.get('source_id','')):
             cover = 'https://i.ytimg.com/vi/'+metadata['source_id']+'/hqdefault.jpg'
@@ -656,7 +675,7 @@ class MusicLibrary:
     def _embedded_cover(self, asset):
         """Derived local artwork only; audio and playlist metadata stay unchanged."""
         identity=asset['id']
-        with self._lock:
+        with self._cover_lock:
             if identity in self._cover_cache:
                 self._cover_cache.move_to_end(identity)
                 return self._cover_cache[identity]
@@ -703,7 +722,7 @@ class MusicLibrary:
         with self.db() as db:
             asset=db.execute('SELECT a.* FROM entries e JOIN assets a ON a.id=e.asset_id WHERE e.id=?',(entry_id,)).fetchone()
             if asset is None: raise MusicLibraryError('This song has no downloaded artwork yet.')
-            path=self._embedded_cover(asset)
+        path=self._embedded_cover(asset)
         if not path:raise MusicLibraryError('This file has no supported embedded cover.')
         return path
 
@@ -1075,7 +1094,7 @@ class MusicLibrary:
     def _remove_unused_assets(self, identities):
         # Shared recordings stay available to other playlists. Only library-owned
         # paths are eligible for cleanup, after the reference deletion commits.
-        with self.db() as db:
+        with self._cover_lock, self.db() as db:
             for identity in identities:
                 if db.execute('SELECT 1 FROM entries WHERE asset_id=?',(identity,)).fetchone():
                     continue
@@ -1098,11 +1117,95 @@ class MusicLibrary:
             row = db.execute("""SELECT a.* FROM entries e JOIN assets a ON a.id=e.asset_id
                              JOIN collections c ON c.id=e.collection_id WHERE e.id=? AND c.pending_import=0""",
                              (identity,)).fetchone()
-            if not row: raise MusicLibraryError('This song has no local audio.')
-            path = self.assets / (row['id'] + row['suffix'])
-            if not path.is_file() or not path.resolve().is_relative_to(self.assets.resolve()):
-                raise MusicLibraryError('This audio file is missing. Import it again.')
-            return path
+        if not row: raise MusicLibraryError('This song has no local audio.')
+        return self._asset_file(row['id'], row['suffix'])
+
+    def _asset_file(self, identity, suffix):
+        path = self.assets / (identity + suffix)
+        if not path.is_file() or not path.resolve().is_relative_to(self.assets.resolve()):
+            raise MusicLibraryError('This audio file is missing. Import it again.')
+        return path
+
+    def _validate_play_queue(self, db, identities):
+        unique = list(dict.fromkeys(identities))
+        assets = set()
+        for offset in range(0, len(unique), 500):
+            batch = unique[offset:offset+500]
+            placeholders = ','.join('?' for _ in batch)
+            rows = db.execute(f'''SELECT a.id, a.suffix FROM entries e
+                JOIN assets a ON a.id=e.asset_id JOIN collections c ON c.id=e.collection_id
+                WHERE c.pending_import=0 AND e.id IN ({placeholders})''', batch).fetchall()
+            if len(rows) != len(batch):
+                raise MusicLibraryError('A selected song has no local audio.')
+            assets.update((row['id'], row['suffix']) for row in rows)
+        for identity, suffix in assets:
+            self._asset_file(identity, suffix)
+
+    @staticmethod
+    def _play_query_key(query):
+        key = query.strip().casefold()
+        if len(key) >= 2 and (key[0], key[-1]) in {('"', '"'), ("'", "'"), ('“', '”'), ('‘', '’')}:
+            return key[1:-1].strip()
+        return key
+
+    def _matching_playlists(self, db, query):
+        key = self._play_query_key(query)
+        without_prefix = key.removeprefix('my ').removeprefix('the ')
+        rows = db.execute('SELECT id,name FROM collections WHERE pending_import=0').fetchall()
+        for candidate in dict.fromkeys((key, without_prefix, key.removesuffix(' playlist'), without_prefix.removesuffix(' playlist'))):
+            matches = [row['id'] for row in rows if row['name'].casefold() == candidate]
+            if matches:
+                return matches
+        return []
+
+    def _resolve_play_query(self, db, query):
+        groups = self._matching_playlists(db, query)
+        if len(groups) == 1:
+            return [row['id'] for row in db.execute('''SELECT e.id, a.id AS asset, a.suffix FROM entries e
+                JOIN assets a ON a.id=e.asset_id WHERE e.collection_id=? ORDER BY e.position LIMIT 5000''', groups)
+                if (self.assets / (row['asset'] + row['suffix'])).is_file()]
+        if groups:
+            return []
+        key = self._play_query_key(query)
+        recordings = {}
+        for row in db.execute('''SELECT e.id, a.id AS asset, a.suffix, json_extract(e.metadata,'$.title') AS title
+                FROM entries e JOIN assets a ON a.id=e.asset_id
+                JOIN collections c ON c.id=e.collection_id WHERE c.pending_import=0 ORDER BY e.rowid'''):
+            if (row['title'] or '').casefold() == key and (self.assets / (row['asset'] + row['suffix'])).is_file():
+                recordings.setdefault(row['asset'], row['id'])
+        return list(recordings.values()) if len(recordings) == 1 else []
+
+    def has_playlist(self, name):
+        with self.db() as db:
+            return bool(self._matching_playlists(db, name))
+
+    def list_playlists(self):
+        with self.db() as db:
+            total = db.execute('SELECT count(*) FROM collections WHERE pending_import=0').fetchone()[0]
+            rows = db.execute('''SELECT c.name, count(e.id) AS song_count FROM collections c
+                LEFT JOIN entries e ON e.collection_id=c.id WHERE c.pending_import=0
+                GROUP BY c.id ORDER BY c.name COLLATE NOCASE, c.id LIMIT 50''').fetchall()
+        items = [dict(row) for row in rows]
+        if not items:
+            message = 'Your Local Music library has no saved playlists yet.'
+        else:
+            visible = [f"{row['name']} ({row['song_count']} songs)" for row in items[:20]]
+            message = 'Your Local Music playlists are ' + ', '.join(visible) + '.'
+            if total > len(visible):
+                message += f' Open Local Music to see all {total} playlists.'
+        return {'changed': False, 'playlists': items, 'total': total, '_message': message}
+
+    def _pick_playable_song(self, db):
+        rows = db.execute('''SELECT e.id, a.id AS asset, a.suffix, json_extract(e.metadata,'$.title') AS title
+            FROM entries e JOIN assets a ON a.id=e.asset_id
+            JOIN collections c ON c.id=e.collection_id WHERE c.pending_import=0 ORDER BY random()''')
+        for row in rows:
+            try:
+                self._asset_file(row['asset'], row['suffix'])
+            except MusicLibraryError:
+                continue
+            return row['id'], row['title']
+        raise MusicLibraryError('Local Music has no playable songs yet. Import audio or finish downloading a playlist first.')
 
     def _player(self, db):
         row = db.execute('SELECT * FROM player WHERE id=1').fetchone()
@@ -1112,23 +1215,26 @@ class MusicLibrary:
         with self.db() as db: return self._player(db)
 
     def playback(self, request: LocalPlaybackRequest):
+        message = 'Local playback command queued; the player reports whether it was applied.'
         with self.db() as db:
             state = self._player(db)
+            if request.expected_revision is not None and (request.expected_revision != state.revision or not state.playing):
+                return {'changed':False,'revision':state.revision,'_message':'The local queue has already moved on or paused.'}
             current = state.queue[state.index] if state.queue and state.index<len(state.queue) else ''
             if state.observed.get('entry_id') == current:
                 state.seconds = state.observed.get('seconds',state.seconds)
             if request.action == 'play':
-                if request.query:
-                    key = request.query.strip().casefold()
-                    groups = [row for row in self.snapshot().collections if row.name.casefold()==key]
-                    songs = [entry for group in self.snapshot().collections for entry in group.entries
-                        if entry.title.casefold()==key and entry.available]
-                    choices = ([entry.id for entry in groups[0].entries if entry.available] if len(groups)==1 else
-                        [songs[0].id] if not groups and len(songs)==1 else [])
+                if request.pick_any:
+                    identity, title = self._pick_playable_song(db)
+                    request = request.model_copy(update={'entry_ids':[identity]})
+                    message = f'Queued “{title}” from Local Music.'
+                elif request.query:
+                    choices = self._resolve_play_query(db, request.query)
                     if not choices: raise MusicLibraryError('No unique, playable local song or playlist matches that name. Select the recording in Music → Local library.')
                     request = request.model_copy(update={'entry_ids':choices,'position':0})
+                    message = f'Queued {request.query} from Local Music.'
                 if not request.entry_ids or request.position >= len(request.entry_ids): raise MusicLibraryError('Choose a local song to play.')
-                for identity in request.entry_ids: self.asset_path(identity)
+                self._validate_play_queue(db, request.entry_ids)
                 state.queue,state.index,state.seconds,state.playing = request.entry_ids,request.position,0,True
             elif request.action == 'pause': state.playing = False
             elif request.action == 'resume':
@@ -1145,7 +1251,7 @@ class MusicLibrary:
             elif request.action == 'repeat': state.repeat = request.repeat
             state.revision += 1
             db.execute('UPDATE player SET state=? WHERE id=1',(state.model_dump_json(),))
-        return {'changed':True,'revision':state.revision,'_message':'Local playback command queued; the player reports whether it was applied.'}
+        return {'changed':True,'revision':state.revision,'_message':message}
 
     def report(self, report):
         with self.db() as db:

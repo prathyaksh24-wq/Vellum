@@ -2,7 +2,7 @@
 from io import BytesIO
 import json
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
 import time
 import wave
 
@@ -91,6 +91,85 @@ def playlist(library):
 def imported(library):
     token=library.stage_file('My song.wav',wav_bytes())
     return library.import_file(token)['entry_id']
+
+
+def test_library_artwork_read_does_not_block_transport(library, monkeypatch):
+    identity = imported(library)
+    reading, release, played = Event(), Event(), Event()
+
+    def slow_cover(_asset):
+        reading.set()
+        release.wait(3)
+
+    def play():
+        library.playback(LocalPlaybackRequest(action='play', entry_ids=[identity]))
+        played.set()
+
+    monkeypatch.setattr(library, '_embedded_cover', slow_cover)
+    snapshot = Thread(target=library.snapshot)
+    transport = Thread(target=play)
+    snapshot.start()
+    try:
+        assert reading.wait(2)
+        transport.start()
+        assert played.wait(1), 'Playback waited for artwork extraction'
+    finally:
+        release.set()
+        snapshot.join()
+        if transport.ident is not None:
+            transport.join()
+
+
+def test_chat_plays_named_local_playlist_without_reading_artwork(tmp_path, library, monkeypatch):
+    identity = imported(library)
+    plugins = PluginRegistry(Path(__file__).parents[2]/'plugins', state_path=tmp_path/'plugins.json')
+    runtime = AppActionRuntime(plugin_registry=plugins)
+    runtime.register_plugin_contribution(local_music_contribution(lambda: library))
+    turn = runtime.plan_submission('Play the playlist "Imported files" from my local music player')
+    assert [action.action_id for action in turn.actions] == ['local_music.playback']
+    monkeypatch.setattr(library, '_embedded_cover', lambda _: pytest.fail('Chat playback inspected artwork'))
+    [receipt] = runtime.dispatch_many(turn.actions, AppActionContext(source='nlp'))
+    assert receipt.status == 'applied', receipt.message
+    assert library.player_state().queue == [identity]
+
+
+def test_chat_next_on_local_player_is_transport():
+    from agent.plugins.local_music_controls import match_local_music_command
+
+    command = match_local_music_command('Play the next song on my local player')
+    assert command.arguments == {'action': 'next'}
+
+
+def test_chat_lists_and_plays_from_the_local_library(tmp_path, library, monkeypatch):
+    identity = imported(library)
+    monkeypatch.setattr('agent.plugins.local_music_controls.get_music_library', lambda: library)
+    plugins = PluginRegistry(Path(__file__).parents[2]/'plugins', state_path=tmp_path/'plugins.json')
+    runtime = AppActionRuntime(plugin_registry=plugins)
+    runtime.register_plugin_contribution(local_music_contribution(lambda: library))
+
+    def submit(text):
+        [receipt] = runtime.dispatch_many(runtime.plan_submission(text).actions, AppActionContext(source='nlp'))
+        assert receipt.status == 'applied', receipt.message
+        return receipt
+
+    submit('play something from my loacl music')
+    playing = library.player_state()
+    assert playing.playing and playing.queue == [identity]
+    listed = submit('what other playlists do I have in my local music?')
+    assert 'Imported files' in listed.message
+    assert library.player_state() == playing
+    submit('play my Imported files playlist')
+    assert library.player_state().queue == [identity]
+
+
+def test_late_end_event_cannot_advance_a_paused_queue(library):
+    first = imported(library)
+    library.playback(LocalPlaybackRequest(action='play', entry_ids=[first, first]))
+    revision = library.player_state().revision
+    library.playback(LocalPlaybackRequest(action='pause'))
+    paused = library.player_state()
+    library.playback(LocalPlaybackRequest(action='next', expected_revision=revision))
+    assert library.player_state() == paused
 
 
 def test_source_canonicalization_strips_untrusted_options():
@@ -299,6 +378,10 @@ def test_local_audio_http_ranges_and_cross_origin_guards(library,monkeypatch):
     app=FastAPI();app.include_router(routes.router,prefix='/api');app.dependency_overrides[routes.enabled]=lambda:None
     identity=imported(library)
     with TestClient(app,base_url='http://127.0.0.1:8000',client=('127.0.0.1',50000)) as web:
+        entry = web.get('/api/music/local/entry/'+identity)
+        assert entry.status_code == 200 and entry.json()['available']
+        assert web.get('/api/music/local/entry/missing').status_code == 404
+        assert web.get('/api/music/local/entry/'+identity,headers={'Origin':'https://evil.example'}).status_code == 403
         response=web.get('/api/music/local/audio/'+identity,headers={'Range':'bytes=0-43'})
         assert response.status_code==206 and response.content==wav_bytes()[:44]
         assert response.headers['cache-control']=='no-store'

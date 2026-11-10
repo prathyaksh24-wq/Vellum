@@ -446,6 +446,8 @@
 .mw-sidebar-playlist-list>button{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;height:auto;padding:8px;border:0;background:transparent;color:var(--mw-muted);border-radius:8px;text-align:left;font-size:12px;line-height:1.4}
 .mw-sidebar-playlist-list>button>span:last-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mw-sidebar-playlist-list .music-artwork{width:30px;height:30px;border-radius:5px}
+.mw-sidebar-playlist-list .mw-collection-cover{width:30px;height:30px;border-radius:5px}
+.mw-sidebar-playlist-list .mw-collection-cover>.music-icon{width:15px;height:15px}
 .mw-sidebar-playlist-list>button:hover,.mw-sidebar-playlist-list>button[aria-current=page]{color:var(--mw-text)}
 .mw-sidebar-playlist-list>button[aria-current=page]{font-weight:500}
 .mw-sidebar-playlist-list>p{padding:8px 12px;color:var(--mw-muted);font-size:12px;line-height:1.6}

@@ -41,18 +41,32 @@ test('pause state does not turn itself back on during polling',async () => {
   const f=await fixture();await controller.pause();await vi.advanceTimersByTimeAsync(4000);
   expect(f.audio.play).toHaveBeenCalledTimes(1);expect(f.audio.paused).toBe(true);
 });
+test('pausing during a pending provider handoff prevents the local track from starting',async () => {
+  const f=await fixture({playing:false});
+  let release;
+  f.beforePlay.mockImplementationOnce(()=>new Promise(resolve=>{release=resolve;}));
+  f.player.playing=true;f.player.revision++;
+  const pending=controller.wake();
+  await flush();
+  expect(f.beforePlay).toHaveBeenCalledOnce();
+  await controller.pause();
+  release();await pending;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(f.audio.play).not.toHaveBeenCalled();
+  expect(controller.snapshot().observed).toMatchObject({entry_id:'song-one',playing:false});
+});
 test('network loss pauses before ownership lease expires',async () => {
   const f=await fixture();f.api.report.mockRejectedValue(new Error('offline'));
   await vi.advanceTimersByTimeAsync(4500);expect(f.audio.paused).toBe(true);expect(controller.snapshot().error).toContain('service is unavailable');
 });
 test('last song stops with repeat off and next transitions keep the queue',async () => {
   const f=await fixture({index:1});f.audio.ended=true;f.audio.dispatchEvent(new Event('ended'));await flush();
-  expect(f.api.action).toHaveBeenCalledWith('playback',{action:'pause'});
+  expect(f.api.action).toHaveBeenCalledWith('playback',{action:'pause',expected_revision:1});
   expect(f.player.queue).toEqual(['song-one','song-two']);
 });
 test('repeat-one seeks to the beginning instead of choosing another track',async () => {
   const f=await fixture({repeat:'one'});f.audio.ended=true;f.audio.dispatchEvent(new Event('ended'));await flush();
-  expect(f.api.action).toHaveBeenCalledWith('playback',{action:'seek',seconds:0});
+  expect(f.api.action).toHaveBeenCalledWith('playback',{action:'seek',seconds:0,expected_revision:1});
 });
 test('destroy releases audio and cancels subsequent polling',async () => {
   const f=await fixture();controller.destroy();const count=f.api.report.mock.calls.length;
