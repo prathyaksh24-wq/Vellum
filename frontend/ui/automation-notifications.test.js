@@ -193,8 +193,16 @@ test('Scheduled search stays in its sidebar and a task opens its previous runs',
   const api={automations:{list:async()=>({automations:[job],scheduler_available:true}),notificationEvents:()=>()=>{}}};
   const Popover=({children})=>createPortal(React.createElement('div',null,children),document.body);
   const onOpenTask=vi.fn();
-  vi.spyOn(HTMLDialogElement.prototype,'showModal').mockImplementation(function(){this.open=true;});
-  vi.spyOn(HTMLDialogElement.prototype,'close').mockImplementation(function(){this.open=false;});
+  // jsdom 25 does not implement the native dialog methods.
+  const dialogPrototype=Object.create(HTMLDialogElement.prototype);
+  dialogPrototype.showModal=function(){this.open=true;};
+  dialogPrototype.close=function(){this.open=false;};
+  const createElement=document.createElement.bind(document);
+  vi.spyOn(document,'createElement').mockImplementation((name,options)=>{
+    const element=createElement(name,options);
+    if(name==='dialog')Object.setPrototypeOf(element,dialogPrototype);
+    return element;
+  });
   window.VellumUI.SharedRowBackground=({children})=>React.createElement('div',null,children);
   const Scheduled=new Function('React','ReactDOM','API','AutomationRunHistory','Popover','clampMenuPosition','const {useState,useEffect,useLayoutEffect,useMemo,useRef}=React;const MODELS=[];'+icons+scheduledCompiled+';return ScheduledView;')(React,{createPortal},api,History,Popover,()=>({}));
   onAction.mockImplementation(async action => ({status:action==='automation.run'?'confirmation_required':'applied',result:{runs:job.run_history}}));

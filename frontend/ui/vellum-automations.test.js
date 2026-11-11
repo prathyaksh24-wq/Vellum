@@ -24,7 +24,7 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain("Actions for ");
     expect(html).toContain("Run now");
     expect(html).toContain("Reset task");
-    expect(html).toContain("Delete task");
+    expect(html).toContain("Delete scheduled task");
   });
 
   test("manual setup covers task, destination, project, model, and schedule fields", () => {

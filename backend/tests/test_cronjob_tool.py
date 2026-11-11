@@ -309,5 +309,6 @@ def test_create_prompt_endpoint_prefills_chat_guidance(tmp_path):
     assert response.status_code == 200
     prompt = response.json()["prompt"]
     assert "cronjob" in prompt
-    assert "0 9 * * *" in prompt
+    assert "0 9 * * 1-5 @ Asia/Kolkata" in prompt
+    assert "Confirm the actual time zone" in prompt
     assert "full access" in prompt

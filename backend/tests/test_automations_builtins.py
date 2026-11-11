@@ -3,7 +3,7 @@
 import asyncio
 
 from agent.automations import api as automations_api
-from agent.automations import builtins
+from agent.automations import builtins, runner
 from agent.automations.scheduler import AutomationScheduler
 from agent.automations.store import AutomationStore
 
@@ -166,22 +166,24 @@ def test_fire_routes_builtin_to_run_builtin_not_reasoning(monkeypatch, tmp_path)
     executor_calls = []
     builtin_calls = []
 
-    async def fake_executor(automation, store_):
+    async def fake_reasoning_turn(automation):
         executor_calls.append(automation["id"])
+        return "Unexpected reasoning turn"
 
-    async def fake_run_builtin(record):
-        builtin_calls.append(record["id"])
+    async def fake_run_builtin(record, *, raise_errors=False):
+        builtin_calls.append((record["id"], raise_errors))
 
-    scheduler.executor = fake_executor
+    monkeypatch.setattr(runner, "_execute_reasoning_turn", fake_reasoning_turn)
     monkeypatch.setattr(builtins, "run_builtin", fake_run_builtin)
 
     asyncio.run(scheduler._fire(automation_id))
 
     assert executor_calls == []
-    assert builtin_calls == [automation_id]
+    assert builtin_calls == [(automation_id, True)]
+    assert store.get(automation_id)["run_history"][0]["status"] == "complete"
 
 
-def test_builtin_runs_do_not_create_run_history(tmp_path, monkeypatch):
+def test_builtin_runs_retain_completed_history(tmp_path, monkeypatch):
     store = _store(tmp_path)
     builtins.seed_builtins(store)
     automation_id = next(r["id"] for r in store.list() if r["builtin_key"] == "memory_dreaming")
@@ -194,7 +196,11 @@ def test_builtin_runs_do_not_create_run_history(tmp_path, monkeypatch):
     scheduler = AutomationScheduler(store, scheduler=type("S", (), {"get_jobs": lambda self: [], "add_job": lambda *a, **k: None})())
     asyncio.run(scheduler._fire(automation_id))
 
-    assert store.get(automation_id)["run_history"] == []
+    history = store.get(automation_id)["run_history"]
+    assert len(history) == 1
+    assert history[0]["status"] == "complete"
+    assert history[0]["finished_at"] is not None
+    assert history[0]["error"] is None
 
 
 def test_sync_one_handles_builtin_schedule_edits(tmp_path):

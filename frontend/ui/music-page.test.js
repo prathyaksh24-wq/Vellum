@@ -229,6 +229,7 @@ test('Ctrl+[ and Ctrl+] step through Music pages without jumping to the landing 
     const [view,setView]=useState('chat');
     const [musicRoute,setMusicRoute]=useState(null),[musicNavigation,setMusicNavigation]=useState(null);
     const activeChatId=null,activeAgentId=null,activeConvo={},activeProjectId=null;
+    const [scheduledChatId,setScheduledChatId]=useState(null);
     const settingsOpen=false,settingsTab=null,setMenu=()=>{},setActivityMsg=()=>{};
     const pushToast=message=>{throw new Error(message);};
     ${history}
