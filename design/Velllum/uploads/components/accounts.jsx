@@ -122,7 +122,7 @@
     </div>;
   }
 
-  function AccountSettings() {
+  function AccountSettings({details}) {
     const context = React.useContext(Context);
     const active = context.state.accounts.find(account=>account.id===context.state.active_account_id);
     const saved = context.state.accounts.filter(account=>account.id!==context.state.active_account_id);
@@ -133,7 +133,8 @@
       <button className="btn" disabled={context.busy} onClick={()=>context.signOut(account.id)} aria-label={`Remove ${account.display_name} from this device`}>Remove account</button></div>
     </div>;
     return <section aria-label="Accounts" className="account-list">
-      <h2>Accounts</h2>
+      {details || <h2>Accounts</h2>}
+      {details && <h3 className="account-signin-title">Sign-in</h3>}
       <p className="account-note">Your Vellum sign-in is shown first. Other accounts are saved on this device and stay inactive until you switch to them.</p>
       {context.error && <p role="alert">{context.error}</p>}
       {active ? <section className="account-current" aria-label="Signed-in account"><h3>Signed in as</h3>{accountRow(active,true)}</section> : <div className="account-guest"><h3>Using Vellum as a guest</h3><p className="account-note">No account is currently signed in.</p></div>}
@@ -151,6 +152,19 @@
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [adding, setAdding] = useState(false);
+    const [photos,setPhotos]=useState({});
+    const photosRef=useRef(photos);
+    photosRef.current=photos;
+    useEffect(()=>()=>{Object.values(photosRef.current).forEach(url=>URL.revokeObjectURL(url));},[]);
+    function setPhoto(url) {
+      const id=state.active_account_id || 'local';
+      const previous=photosRef.current[id];
+      const next={...photosRef.current,[id]:url};
+      photosRef.current=next;
+      setPhotos(next);
+      if(previous)URL.revokeObjectURL(previous);
+    }
+
     const [local, setLocal] = useState(() => {try {return localStorage.getItem(LOCAL_CHOICE) === '1';} catch {return false;}});
     const dialog = useRef(null);
     const returnFocus = useRef(null);
@@ -207,7 +221,7 @@
       finally {mutating.current = false; setBusy(false);}
     }
     function openAccount() {returnFocus.current = document.activeElement; setAdding(true);}
-    const context = {state, error, busy, add: openAccount, select: id => mutate('select', id), signOut: id => mutate('signOut', id), logOut: () => mutate('logOut')};
+    const context = {state, error, busy, photo:photos[state.active_account_id||'local']||null, setPhoto, add: openAccount, select: id => mutate('select', id), signOut: id => mutate('signOut', id), logOut: () => mutate('logOut')};
     const active = state.accounts.find(a => a.id === state.active_account_id);
     const showWelcome = !active && (!local || state.logged_out);
     return <Context.Provider value={context}>

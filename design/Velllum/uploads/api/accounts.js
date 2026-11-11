@@ -16,6 +16,11 @@
   }
   window.VellumApi.accounts = {
     status: function () { return request('status'); },
+    profileActivity: function (timeZone, day) {
+      var query = new URLSearchParams({time_zone:timeZone});
+      if (day) query.set('day',day);
+      return client.request('/api/observability/profile?' + query, {cache:'no-store'});
+    },
     start: function (provider, method) {
       return request('start', {provider: provider, return_url: returnUrl(), open_browser: !!desktopInvoke() || method === 'device'});
     },

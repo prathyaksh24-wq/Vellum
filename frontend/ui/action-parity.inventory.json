@@ -6,12 +6,16 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1014,
-      "sha256": "82dfeaa51dbc32f54cfd04c4839adbf622b458aabd6950e27417c23291a9445e"
+      "count": 1010,
+      "sha256": "53ce9b33f51cc79965c19bd354fb7c2c29163c815c745549cf1671167afcb344"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
       "sha256": "4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"
+    },
+    "design/Velllum/uploads/components/profile.jsx": {
+      "count": 29,
+      "sha256": "dd399d638bb30877b0104339237bba5b4cbf7853c68c10247383998441e4422b"
     },
     "design/Velllum/uploads/components/accounts.jsx": {
       "count": 22,
@@ -223,7 +227,7 @@
     },
     "design/Velllum/uploads/components/settings-overview.jsx": {
       "count": 19,
-      "sha256": "1c84944929027d5f4b100bb1b95c0e6ddeda057274b8aeb38a9f1838a1b1a9c4"
+      "sha256": "77ff8ad08ad3efc28dffe6c68a606617204c8e98896dd000a1d9b91a8a89a17b"
     },
     "design/Velllum/uploads/components/agent-response.js": {
       "count": 14,
@@ -313,7 +317,7 @@
       "actionId": "settings.device.update",
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "dispatchDeviceSettings({profile:p})"
+        "text": "dispatchDeviceSettings({profile:{"
       }
     },
     {
@@ -2433,6 +2437,10 @@
     }
   ],
   "exemptions": [
+    {
+      "scope": "Profile chart view, palette, legend, day selection, read-only response activity, edit drafts, and session photo",
+      "reason": "Chart controls and profile photo are session presentation. Profile saves use settings.device.update. Activity reads the existing observability records and photo object URLs are revoked when replaced or the session ends."
+    },
     {
       "scope": "Windows title-bar menus, native caption controls, theme projection and current-account ordering",
       "reason": "Native window-frame presentation forwards existing Electron menu handlers through a bounded trusted-frame bridge. Account ordering and Active/Saved labels are presentation only; switching, logout and removal retain the existing local Accounts API deferral."

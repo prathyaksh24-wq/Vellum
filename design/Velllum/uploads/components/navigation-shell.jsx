@@ -50,7 +50,7 @@
         <button type="button" className="app-rail-button" title="Search chats" data-command="commands.open" aria-label="Search chats" onClick={onSearch}><Icon name="Search"/></button>
         <button type="button" className="app-rail-button" title="Notifications" data-tip="Notifications" data-notification-trigger="" aria-controls="notification-panel" aria-expanded={notificationsOpen} aria-label={unread?`Notifications, ${unread} unread`:'Notifications'} onClick={onNotifications}><Icon name="Bell"/>{unread>0&&<span className="app-rail-unread"/>}</button>
         <button type="button" className="app-rail-button" title="Settings" data-command="settings.open" aria-label="Settings" onClick={onSettings}><Icon name="SettingsCog"/></button>
-        <button type="button" className="app-rail-avatar" title={profile.displayName||'Account'} data-tip={profile.displayName||'Account'} aria-label="Open account menu" onClick={onProfile}>{String(profile.displayName||'V').split(/\s+/).slice(0,2).map(word=>word[0]).join('')}</button>
+        <button type="button" className="app-rail-avatar" title={profile.displayName||'Account'} data-tip={profile.displayName||'Account'} aria-label="Open account menu" onClick={onProfile}><window.VellumUI.Profile.Avatar profile={profile}/></button>
       </div>
     </nav>;
   }

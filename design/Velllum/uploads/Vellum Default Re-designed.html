@@ -16,13 +16,16 @@
 <script type="text/babel" data-presets="react" src="components/workspace-controller.jsx"></script>
 <script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/accounts.js"></script>
+<script src="components/profile-sky.js"></script>
 <link rel="stylesheet" href="components/accounts.css"/>
+<link rel="stylesheet" href="components/profile.css">
 <link rel="stylesheet" href="components/desktop-chrome.css"/>
 <link rel="stylesheet" href="components/settings-workspace.css?v=20261030-vellum-polish"/>
 <link rel="stylesheet" href="components/settings-overview.css?v=20261030-vellum-polish"/>
 <script type="text/babel" data-presets="react" src="components/settings-overview.jsx?v=20261030-vellum-polish"></script>
 <link rel="stylesheet" href="components/plugin-workspace.css?v=20261030-vellum-polish"/>
 <script defer src="components/desktop-chrome.js"></script>
+<script type="text/babel" data-presets="react" src="components/profile.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
 <script src="api/chat.js?v=20261030-orbs"></script>
 <script src="api/voice.js"></script>
@@ -3209,6 +3212,7 @@ const IcPdf = (p)=> <window.VellumUI.AppIcon name="FileDocument" {...p}/>;
 const IcCode = (p)=> <window.VellumUI.AppIcon name="Code" {...p}/>;
 const IcDiffFile = (p)=> <window.VellumUI.AppIcon name="Code" {...p}/>;
 const IcUserPlus = (p)=> <window.VellumUI.AppIcon name="UserAdd" {...p}/>;
+const IcUser = p => <window.VellumUI.AppIcon name="User" {...p}/>;
 const IcSettings = (p)=> <window.VellumUI.AppIcon name="SettingsCog" {...p}/>;
 const IcHelp = (p)=> <window.VellumUI.AppIcon name="QuestionMarkCircle" {...p}/>;
 const IcLogout = (p)=> <window.VellumUI.AppIcon name="Logout" {...p}/>;
@@ -3681,7 +3685,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
         ))}
       </RailFly>
       </div>
-      <button className="avatar" style={{cursor: 'pointer'}} title={profile.displayName} aria-label="Open account menu" onClick={onProfile}>{initials(profile.displayName)}</button>
+      <button className="avatar" style={{cursor: 'pointer'}} title={profile.displayName} aria-label="Open account menu" onClick={onProfile}><window.VellumUI.Profile.Avatar profile={profile}/></button>
     </div>
   );
 };
@@ -6705,7 +6709,7 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalizat
         <div className="pop-email">{profile.email || 'Local workspace'}</div>
         <div className="pop-acct">
           <button className="pop-row" aria-expanded={acctOpen} onClick={() => setAcctOpen(o => !o)}>
-            <div className="avatar">{initials(profile.displayName)}</div>
+            <div className="avatar"><window.VellumUI.Profile.Avatar profile={profile}/></div>
             <span className="pop-acct-meta"><span>{profile.displayName}</span><span className="pop-acct-plan">{profile.plan}</span></span>
             <span className="pop-acct-chev"><IcChevR size={14}/></span>
           </button>
@@ -6732,38 +6736,6 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalizat
         {accounts.state.active_account_id && <button className="pop-row" disabled={accounts.busy} onClick={async () => {if (await accounts.logOut()) onClose();}}><span className="sb-ic"><IcLogout size={15}/></span>Log out</button>}
         <div className="ctx-hint">Unavailable actions are dimmed</div>
     </Popover>
-  );
-};
-
-const EditProfileModal = ({profile, onSave, onClose}) => {
-  const [name, setName] = useState(profile.displayName);
-  const [user, setUser] = useState(profile.username);
-  return (
-    <React.Fragment>
-      <div className="backdrop dim" onClick={onClose}/>
-      <div className="modal">
-        <div className="m-title">Edit profile</div>
-        <div className="m-avatar-wrap">
-          <div className="m-avatar">
-            {initials(name || profile.displayName)}
-            <div className="m-cam" title="Photo upload is not in this preview"><IcCamera/></div>
-          </div>
-        </div>
-        <div className="m-field">
-          <label>Display name</label>
-          <input value={name} onChange={e => setName(e.target.value)} autoFocus/>
-        </div>
-        <div className="m-field">
-          <label>Username</label>
-          <input value={user} onChange={e => setUser(e.target.value)}/>
-        </div>
-        <div className="m-help">Your profile helps people recognize you in group chats.</div>
-        <div className="m-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={() => onSave({displayName: name.trim() || profile.displayName, username: user.trim() || profile.username})}>Save</button>
-        </div>
-      </div>
-    </React.Fragment>
   );
 };
 
@@ -7666,8 +7638,8 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
-  const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab || 'General';
+const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+  const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
   const [settingsQuery, setSettingsQuery] = useState('');
@@ -7757,7 +7729,8 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
   };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
-    {k: 'Accounts', ic: <IcUserPlus size={14}/>},
+    {k: 'Profile', ic: <IcUser size={14}/>},
+    {k: 'Account', ic: <IcUser size={14}/>},
     {k: 'Appearance', ic: <IcSun size={14}/>},
     {k: 'Responses', ic: <IcNote size={14}/>},
     {k: 'Personalization', ic: <IcPenLine size={14}/>},
@@ -7779,7 +7752,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
           <button className="settings-back" onClick={onClose}><IcChevR size={15}/>Back to Vellum<span>Esc</span></button>
           <div className="sn-title">Settings</div>
           <label className="settings-search"><IcSearch size={15}/><input type="search" aria-label="Search settings" placeholder="Search settings" value={settingsQuery} onChange={event=>setSettingsQuery(event.target.value)}/></label>
-          <nav aria-label="Settings sections">{[['Personal',['General','Accounts','Appearance','Responses','Personalization','Voice','Shortcuts','Petdex']],['Workspace',['Configuration','Automations','Archive','Analytics']],['Integrations',['Plugins','Browser','Computer use']]].map(([label,keys])=>{
+          <nav aria-label="Settings sections">{[['Personal',['General','Profile','Appearance','Account','Responses','Personalization','Voice','Shortcuts','Petdex']],['Workspace',['Configuration','Automations','Archive','Analytics']],['Integrations',['Plugins','Browser','Computer use']]].map(([label,keys])=>{
             const sections=keys.map(key=>SECTIONS.find(section=>section.k===key)).filter(section=>section.k.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
             return sections.length>0 && <div className="settings-nav-group" key={label}><h2>{label}</h2>{sections.map(s=><button key={s.k} className={'set-item'+(tab===s.k?' on':'')} aria-current={tab===s.k?'page':undefined} onClick={()=>selectSettingsTab(s.k)}><span className="sb-ic">{s.ic}</span>{s.k}</button>)}</div>;
           })}{settingsQuery && !SECTIONS.some(section=>section.k.toLowerCase().includes(settingsQuery.trim().toLowerCase())) && <p className="settings-search-empty" role="status">No settings found.</p>}</nav>
@@ -7788,7 +7761,9 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
           <div className="settings-content">
           {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat}/>}
           {tab === 'Analytics' && <ObservabilityView control={analyticsControl} onAction={onAnalyticsAction}/>}
-          {tab === 'Accounts' && <window.VellumUI.Accounts.Settings/>}
+          {tab === 'Profile' && <window.VellumUI.Profile.Page key={profile.accountId} profile={profile} onSave={onProfileSave}/>}
+          {tab === 'Account' && <window.VellumUI.Accounts.Settings details={<window.VellumUI.Profile.AccountDetails key={profile.accountId} profile={profile} onSave={onProfileSave}/>}/>}
+
           {tab === 'Voice' && <window.VellumUI.Dictation.Settings onAction={onDictationAction} onConfirm={onDictationConfirm} onCancel={onDictationCancel}/>}
           {tab === 'Responses' && <window.VellumUI.StreamingSettings preferences={streamingPreferences} onDeviceSettings={onDeviceSettings}/>}
           {tab === 'General' && <window.VellumUI.SettingsOverview.General theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} previewRail={previewRail} onDeviceSettings={onDeviceSettings} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
@@ -9124,7 +9099,15 @@ const App = () => {
   const projectCreationRef=useRef(null);
   const accounts = React.useContext(window.VellumUI.Accounts.Context);
   const signedInAccount = accounts.state.accounts.find(account => account.id === accounts.state.active_account_id);
-  const profile = signedInAccount ? {displayName:signedInAccount.display_name, username:signedInAccount.username, email:signedInAccount.email, plan:({google:'Google account', github:'GitHub account', email:'Email account'})[signedInAccount.provider]} : {...PROFILE_DEFAULT, ...deviceSettings.values.profile, plan:'Guest'};
+  const profileAccountId=signedInAccount?.id || 'local';
+  const savedProfile=deviceSettings.values.profile;
+  const profileOverride=(savedProfile.accountId || 'local')===profileAccountId?savedProfile:{};
+  const profile={...PROFILE_DEFAULT, ...(signedInAccount?{displayName:signedInAccount.display_name,username:signedInAccount.username,email:signedInAccount.email}:{}),
+    website:'',...profileOverride,accountId:profileAccountId,plan:signedInAccount?({google:'Google account',github:'GitHub account',email:'Email account'})[signedInAccount.provider]:'Guest'};
+  const saveProfile = async patch => {
+    const receipt=await dispatchDeviceSettings({profile:{displayName:profile.displayName,username:profile.username||'',email:profile.email||'',website:profile.website||'',...patch,accountId:profileAccountId}});
+    if(receipt?.status!=='applied')throw new Error(receipt?.message || 'Your profile could not be saved. Try again.');
+  };
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(readDefaultModel);
@@ -9292,7 +9275,6 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchPreset, setSearchPreset] = useState(null);
   const [spacePickerChatId, setSpacePickerChatId] = useState(null);
-  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [devMode, setDevMode] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [customInstrOpen, setCustomInstrOpen] = useState(false);
@@ -11397,7 +11379,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       chat:view==='chat'&&!!activeChat,chats:visibleChats(chats).length>0,attention:visibleChats(chats).some(chat=>['attention','error'].includes(window.VellumUI.chatStatus(chat)?.id)),
       composer:!settingsOpen&&!!document.querySelector('[data-ui-reference="composer"]')?.getClientRects().length,desktop:!!window.VellumDesktop?.chrome?.zoom,
       editable:editing,find,numberPrimary:deviceSettings.values.number_shortcuts==='chats'?'chats':'tabs',
-      overlay:!!(commandScope||settingsOpen||menu||searchOpen||shortcutsOpen||agentSettingsOpen||createOpen||editProfileOpen||customInstrOpen||viewer||spacePickerChatId)};
+      overlay:!!(commandScope||settingsOpen||menu||searchOpen||shortcutsOpen||agentSettingsOpen||createOpen||customInstrOpen||viewer||spacePickerChatId)};
   };
   const visitSidebarChat=(offset,attention=false)=>{
     const rows=visibleChats(chats).filter(chat=>!attention||['attention','error'].includes(window.VellumUI.chatStatus(chat)?.id));if(!rows.length)return;
@@ -11418,7 +11400,6 @@ const [slashSkills, setSlashSkills] = useState([]);
     if(localPopup)return false;
     if(viewer){setViewer(null);return;}
     if(spacePickerChatId){setSpacePickerChatId(null);return;}
-    if(editProfileOpen){setEditProfileOpen(false);return;}
     if(agentSettingsOpen){setAgentSettingsOpen(false);return;}
     if(customInstrOpen){setCustomInstrOpen(false);return;}
     if(createOpen){setCreateOpen(false);return;}
@@ -11567,7 +11548,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           {(browserPanelVisible || browserState.running) && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
             hidden={!workspaceBrowserSelected} sharedTabs layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
             overlayVisible={notificationState.open || Boolean(toast?.notificationPing)}
-            suspended={Boolean(!workspaceBrowserVisible || workspaceMotion || commandScope || settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || editProfileOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
+            suspended={Boolean(!workspaceBrowserVisible || workspaceMotion || commandScope || settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
             onHide={workspaceController.hide} onCloseTab={tabId=>closeWorkspaceItem({kind:'browser',reference_id:tabId})} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
@@ -11629,12 +11610,12 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAutomatic={() => updateConversationOrganization(spacePickerChatId, {assignment: 'automatic'})}
           onClose={() => setSpacePickerChatId(null)}/>}
         {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu} hoverOwned={!!menu.fromHoverSidebar} onHoverStart={revealSidebar} onHoverEnd={hideSidebarPeek}
-          onEditProfile={() => { setMenu(null); if (signedInAccount) {setSettingsTab('Accounts'); dispatchSurfacePresentation('settings', {visible:true});} else setEditProfileOpen(true); }}
+          onEditProfile={() => {setMenu(null);setSettingsTab('Profile');dispatchSurfacePresentation('settings',{visible:true});}}
           onSettings={() => { setMenu(null); setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }
@@ -11664,9 +11645,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           />
         )}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
-        {editProfileOpen && <EditProfileModal profile={profile}
-          onSave={async p => { const receipt = await dispatchDeviceSettings({profile:p}); if (receipt?.status === 'applied') setEditProfileOpen(false); }}
-          onClose={() => setEditProfileOpen(false)}/>}
+
         {commandScope&&<window.VellumUI.CommandMenu runtime={commandsRuntime} chats={chats} projects={projects} scope={commandScope} onClose={()=>setCommandScope('')} onChat={id=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});openChat(id);}} onProject={id=>{if(settingsOpen)dispatchSurfacePresentation('settings',{visible:false},{notify:false});openProject(id);}} onCommand={id=>requestAnimationFrame(()=>commandRuntimeRef.current?.execute(id,{overlay:false,browser:workspaceBrowserVisible}))}/>}
         {surfaceFindOpen&&<window.VellumUI.SurfaceFind onFind={rootFind} onClose={()=>setSurfaceFindOpen(false)}/>}
         {shortcutsOpen && <ShortcutsModal numberPrimary={deviceSettings.values.number_shortcuts||'tabs'} onNumberPrimary={number_shortcuts=>dispatchDeviceSettings({number_shortcuts})} dictationShortcuts={dictationShortcuts} onClose={() => setShortcutsOpen(false)}/>}

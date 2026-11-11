@@ -103,6 +103,7 @@ from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
 from agent.automations.prompts import scheduled_chat_prompt
 from agent.contracts.scheduled_tasks import ScheduledChatContext
+from agent.contracts.profile import ProfileActivity
 from agent.llm.routing.api import configure_action_dispatcher, router as llm_routing_router
 from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
@@ -4236,6 +4237,23 @@ _app_action_runtime.set_observability_handler(
 @router.get("/observability/summary")
 async def observability_summary(period: Literal["today", "7d", "30d", "month", "all"] = "7d") -> dict[str, Any]:
     return await asyncio.to_thread(_observability_snapshot, period)
+
+
+@router.get("/observability/profile", response_model=ProfileActivity)
+async def profile_activity(
+    response: Response,
+    time_zone: str = Query(default="UTC", min_length=1, max_length=100),
+    day: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+) -> ProfileActivity:
+    from datetime import date
+    from zoneinfo import ZoneInfoNotFoundError
+
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        selected_date = date.fromisoformat(day) if day else None
+        return await asyncio.to_thread(_observability.profile_activity, time_zone=time_zone, selected_date=selected_date)
+    except (ValueError, ZoneInfoNotFoundError) as exc:
+        raise HTTPException(status_code=422, detail="Choose a valid time zone and a day in the displayed year.") from exc
 
 
 @router.get("/observability/runs")

@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Add Profile to Settings with the supplied Flat/Skyline activity heat map, recorded response details, and a session photo shared with the sidebar. Group editable local Name, Username, and Email details on Account.
+
 - Give Scheduled an independent sidebar with search, filters, resize, and drag-to-collapse. Open saved tasks in chat and use the task menu to review runs or delete a custom schedule.
 - Show a single focus ring in Settings and plugin search. Keep task ideas on the Scheduled landing page, and remove the Accent palette picker from Appearance.
 

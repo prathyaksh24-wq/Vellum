@@ -420,14 +420,16 @@ class SettingsRuntimeActionService:
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Unsupported background.")
                 normalized[key] = background
             elif key == 'profile':
-                if not isinstance(value, dict) or not value or set(value) - {'displayName', 'username'}:
-                    raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS', 'Profile supports displayName and username.')
-                profile = {}
-                for field, text in value.items():
-                    if not isinstance(text, str) or not text.strip() or len(text) > 120:
-                        raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS', 'Profile names must contain 1 to 120 characters.')
-                    profile[field] = text.strip()
-                normalized[key] = profile
+                from agent.contracts.profile import ProfileDetails
+                try:
+                    if not isinstance(value, dict) or not value:
+                        raise ValueError("Enter profile details.")
+                    normalized[key] = ProfileDetails.model_validate(value).model_dump(exclude_unset=True)
+                except ValueError as exc:
+                    raise SettingsRuntimeActionError(
+                        'INVALID_ACTION_ARGUMENTS',
+                        'Check your profile name, contact email, and website. Website addresses must begin with https:// or http://.',
+                    ) from exc
             elif key == "personalization":
                 if not isinstance(value, dict) or not value:
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "personalization must be a non-empty object")
@@ -982,7 +984,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'number_shortcuts':{'type':'string','enum':['tabs','chats']},
         'dock_locked':{'type':'boolean'}, 'computer_use_preview':{'type':'boolean'},
         'personalization':personalization_schema,
-        'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','minLength':1,'maxLength':120}}},
+        'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','maxLength':120},'email':{'type':'string','maxLength':254},'website':{'type':'string','maxLength':2048},'accountId':{'type':'string','maxLength':200}}},
     }
     specs = [
         (WEB_SEARCH_SET_ACTION_ID, 'Choose web search provider', 'Use this provider exclusively for public web searches, or choose automatic fallback. No credentials are changed.', 'process', 'none',

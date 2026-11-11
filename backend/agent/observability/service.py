@@ -7,10 +7,13 @@ arguments, source contents, and local paths are deliberately excluded.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
 from typing import Any
+from zoneinfo import ZoneInfo
+
+from agent.contracts.profile import ProfileActivity, ProfileActivityDay, ProfileActivityItem
 
 
 SCHEMA = """
@@ -191,6 +194,48 @@ class ObservabilityService:
                 (max(1, min(int(limit), 100)),),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def profile_activity(self, *, time_zone: str, selected_date: date | None = None, now: datetime | None = None) -> ProfileActivity:
+        """Count each recorded response once, in the user's calendar time zone."""
+        zone = ZoneInfo(time_zone)
+        today = (now or datetime.now(timezone.utc)).astimezone(zone).date()
+        start = today - timedelta(days=(today.weekday() + 1) % 7 + 52 * 7)
+        selected = selected_date or today
+        if not start <= selected <= today:
+            raise ValueError("Choose a day in the displayed year.")
+        cutoff = datetime.combine(start, datetime.min.time(), tzinfo=zone).astimezone(timezone.utc).isoformat()
+
+        def local_day(timestamp):
+            try:
+                return datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(zone).date().isoformat()
+            except (ValueError, TypeError, AttributeError):
+                return ""
+
+        def item(row):
+            status = str(row["status"])
+            label = {"completed": "Completed a response", "failed": "Response failed"}.get(status, "Started a response")
+            return ProfileActivityItem(id=row["response_id"], at=row["started_at"], label=label, status=status)
+
+        with self._connect() as conn:
+            conn.create_function("profile_day", 1, local_day)
+            counts = conn.execute(
+                "SELECT profile_day(started_at) AS day, COUNT(*) AS count FROM runs "
+                "WHERE started_at >= ? GROUP BY day", (cutoff,),
+            ).fetchall()
+            recent = conn.execute(
+                "SELECT response_id, started_at, status FROM runs WHERE started_at >= ? "
+                "AND profile_day(started_at) BETWEEN ? AND ? ORDER BY started_at DESC LIMIT 8", (cutoff, start.isoformat(), today.isoformat()),
+            ).fetchall()
+            chosen = conn.execute(
+                "SELECT response_id, started_at, status FROM runs WHERE started_at >= ? "
+                "AND profile_day(started_at) = ? ORDER BY started_at LIMIT 50", (cutoff, selected.isoformat()),
+            ).fetchall()
+        return ProfileActivity(
+            time_zone=time_zone, today=today,
+            days=[ProfileActivityDay(date=row["day"], count=row["count"]) for row in counts
+                  if row["day"] and start.isoformat() <= row["day"] <= today.isoformat()],
+            recent=[item(row) for row in recent], selected_date=selected, selected_items=[item(row) for row in chosen],
+        )
 
     def summary(self, *, days: int | None = 7) -> dict[str, Any]:
         cutoff = None if days is None else (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
