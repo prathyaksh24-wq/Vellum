@@ -1,5 +1,42 @@
 # Application backgrounds
 
+## App colors and background visibility
+
+Appearance has one app theme chooser. The Light/Dark toggle selects the matching
+variant of that theme. Named themes use a plain surface: no static image, live
+renderer, ambient orb, cursor glow, or dot pattern is visible underneath them.
+Choosing any static or live background replaces the app theme, including when
+reselecting the previously saved background. The Background option returns to
+that saved scene. Face color remains independent.
+
+`components/app-theme-presets.js` retains the source URLs and both source color
+palettes. `components/app-themes.js` maps them to Vellum's existing CSS variables.
+Named themes bypass the legacy background palette entirely. Vellum keeps its bundled fonts.
+Named themes use solid control and menu surfaces. Foreground contrast is
+adjusted where necessary. In background mode the renderer is fully opaque:
+there is no full-page dimming or tint, Light-mode Galaxy inversion, or ambient
+orb/cursor/grid layer. Source assets and shaders retain their colors. Text
+shadows and local composer/menu surfaces provide separation from the scene.
+A named theme unmounts the full-screen background renderer.
+
+`DeviceAppearanceSettings` validates `appearance.light_theme`,
+`appearance.dark_theme`, and the legacy `appearance.background_opacity`. Saved
+opacity values are retained for compatibility but no longer affect rendering;
+the visibility slider has been removed. The two existing
+theme fields are kept in sync for compatibility; they represent one choice.
+Older split selections resolve to the saved dark choice, or the light choice
+when no named dark choice exists. Selecting a background clears both fields at
+the device settings owner, so chat actions obey the same replacement rule.
+Partial writes merge through `settings.device.update` and the existing revisioned device
+snapshot. Device dispatches are serialized so rapid changes use the latest
+receipt revision. No second preferences store or appearance endpoint is added.
+See [theme verification](verification/app-themes-2026-11-11.md) for provenance,
+checks, and remaining validation limits.
+The [background fidelity correction](verification/background-brightness-2026-11-11.md)
+records the pixel comparisons against the unmodified source image and canvas.
+
+## Background renderers
+
 The production entry is `design/Velllum/uploads/Vellum Default Re-designed.html`.
 Its `BACKGROUND_REGISTRY` supplies renderers, picker labels, preview settings,
 surface colors, and stable device preference IDs. Appearance offers twenty-three live

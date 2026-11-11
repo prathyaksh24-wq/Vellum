@@ -1,0 +1,66 @@
+[
+  {
+    "kind": "static",
+    "mode": "light",
+    "variant": "before",
+    "changedPixels": 262144,
+    "maxChannelDelta": 172,
+    "opacity": "0.21"
+  },
+  {
+    "kind": "static",
+    "mode": "light",
+    "variant": "after",
+    "changedPixels": 0,
+    "maxChannelDelta": 0,
+    "opacity": "1"
+  },
+  {
+    "kind": "static",
+    "mode": "dark",
+    "variant": "before",
+    "changedPixels": 262144,
+    "maxChannelDelta": 182,
+    "opacity": "0.23"
+  },
+  {
+    "kind": "static",
+    "mode": "dark",
+    "variant": "after",
+    "changedPixels": 0,
+    "maxChannelDelta": 0,
+    "opacity": "1"
+  },
+  {
+    "kind": "canvas",
+    "mode": "light",
+    "variant": "before",
+    "changedPixels": 262144,
+    "maxChannelDelta": 200,
+    "opacity": "0.21"
+  },
+  {
+    "kind": "canvas",
+    "mode": "light",
+    "variant": "after",
+    "changedPixels": 0,
+    "maxChannelDelta": 0,
+    "opacity": "1"
+  },
+  {
+    "kind": "canvas",
+    "mode": "dark",
+    "variant": "before",
+    "changedPixels": 262144,
+    "maxChannelDelta": 188,
+    "opacity": "0.19"
+  },
+  {
+    "kind": "canvas",
+    "mode": "dark",
+    "variant": "after",
+    "changedPixels": 0,
+    "maxChannelDelta": 0,
+    "opacity": "1"
+  }
+]

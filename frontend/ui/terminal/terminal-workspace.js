@@ -89,7 +89,7 @@ export function createTerminalWorkspace(root, options = {}) {
       cursorBlink: true,
       fontFamily: "JetBrains Mono, Consolas, monospace",
       fontSize: 13,
-      theme: options.theme || { background: "#050505", foreground: "#f4f4f4" },
+      theme: options.theme || window.VellumUI?.AppThemes?.terminalTheme(root) || { background: "#050505", foreground: "#f4f4f4" },
     });
   }
 
@@ -253,6 +253,13 @@ export function createTerminalWorkspace(root, options = {}) {
     if(disposed)return;
     renderShell();
     newTab(profiles.find(profile=>profile.available!==false)?.id || 'powershell');
+    window.addEventListener('vellum:appearance-change',updateTerminalTheme);
+  }
+
+  function updateTerminalTheme() {
+    if(options.theme)return;
+    const theme=window.VellumUI?.AppThemes?.terminalTheme(root);
+    if(theme)for(const tab of tabs)tab.terminal.options.theme=theme;
   }
 
   return {
@@ -263,6 +270,7 @@ export function createTerminalWorkspace(root, options = {}) {
     resize:()=>{if(root.clientWidth && root.clientHeight)activeTab?.fit?.fit();},
     dispose:()=>{
       disposed=true;
+      window.removeEventListener('vellum:appearance-change',updateTerminalTheme);
       for(const tab of [...tabs])closeTab(tab.id,false);
       root.replaceChildren();
     },

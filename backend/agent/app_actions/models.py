@@ -127,6 +127,21 @@ class DeviceStreamingSettings(BaseModel):
     citations: Literal['auto','always','hidden'] = 'auto'
 
 
+AppThemeId = Literal[
+    "default", "matrix-green", "zen-linen", "catppuccin", "twitter",
+    "vintage-paper", "quantum-rose", "cosmic-night", "sage-garden",
+    "sage-mist", "cyberpunk-neon",
+]
+
+
+class DeviceAppearanceSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    light_theme: AppThemeId = "default"
+    dark_theme: AppThemeId = "default"
+    background_opacity: float = Field(default=0.4, ge=0, le=1, allow_inf_nan=False)
+
+
 class DeviceSettingsValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,6 +149,7 @@ class DeviceSettingsValues(BaseModel):
     previous_background: str | None = None
     profile: dict[str, str] = Field(default_factory=dict)
     accent: str | None = None
+    appearance: DeviceAppearanceSettings = Field(default_factory=DeviceAppearanceSettings)
     dock_position: str | None = None
     dock_locked: bool | None = None
     preview_rail_position: Literal["left", "right"] = "left"

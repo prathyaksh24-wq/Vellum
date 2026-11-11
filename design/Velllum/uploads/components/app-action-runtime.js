@@ -26,6 +26,7 @@
     background: "galaxy",
     previous_background: null,
     accent: "default",
+    appearance: {light_theme:'default',dark_theme:'default',background_opacity:0.4},
     dock_position: "auto",
     dock_locked: false,
     preview_rail_position: "left",
@@ -430,6 +431,7 @@
       values: Object.assign({}, DEVICE_SETTINGS_DEFAULTS, rawValues, {
         profile: Object.assign({}, rawValues.profile || {}),
         streaming: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.streaming, rawValues.streaming || {}),
+        appearance: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.appearance, rawValues.appearance || {}),
         personalization: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.personalization, rawValues.personalization || {}),
       }),
     };
@@ -480,6 +482,7 @@
     var contextResolver = options.contextResolver || function () { return {}; };
     var state = loadDeviceSettings(storage);
     var listeners = [];
+    var dispatchTail = Promise.resolve();
 
     function snapshot() { return clone(state); }
     function persist() { safeSet(storage, DEVICE_SETTINGS_STORAGE_KEY, JSON.stringify(state)); }
@@ -503,6 +506,7 @@
       if (patch.base_revision !== state.revision) throw new Error("STALE_DEVICE_SETTINGS_RECEIPT");
       var nextValues = Object.assign({}, state.values, patch.values);
       if (patch.values.streaming) nextValues.streaming=Object.assign({},state.values.streaming,patch.values.streaming);
+      if (patch.values.appearance) nextValues.appearance=Object.assign({},state.values.appearance,patch.values.appearance);
       if (patch.values.personalization) {
         nextValues.personalization = Object.assign({}, state.values.personalization, patch.values.personalization);
       }
@@ -514,17 +518,21 @@
       emit();
       return receipt;
     }
-    async function dispatch(patch, dispatchOptions) {
-      if (!client || typeof client.dispatch !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
-      dispatchOptions = dispatchOptions || {};
-      var request = {
-        request_id: requestIdFactory(),
-        action_id: DEVICE_SETTINGS_UPDATE_ACTION_ID,
-        action_version: "1",
-        arguments: { patch: patch || {} },
-      };
-      var receipt = await client.dispatch(request, context(dispatchOptions.source || "ui", dispatchOptions.conversationId || ""));
-      return applyReceipt(receipt);
+    function dispatch(patch, dispatchOptions) {
+      var options = dispatchOptions || {};
+      var operation = dispatchTail.then(async function () {
+        if (!client || typeof client.dispatch !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+        var request = {
+          request_id: requestIdFactory(),
+          action_id: DEVICE_SETTINGS_UPDATE_ACTION_ID,
+          action_version: "1",
+          arguments: { patch: patch || {} },
+        };
+        var receipt = await client.dispatch(request, context(options.source || "ui", options.conversationId || ""));
+        return applyReceipt(receipt);
+      });
+      dispatchTail = operation.catch(function () {});
+      return operation;
     }
     function subscribe(listener) {
       listeners.push(listener);

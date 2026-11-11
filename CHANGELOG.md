@@ -6,6 +6,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Preserve the original brightness and colors of static and live backgrounds in Light and Dark. Remove the full-page visibility limiter, its slider, Galaxy inversion, and ambient tint layers; keep text and controls on their existing local surfaces.
+
+- Add ten app-wide community themes with one theme chooser and Light/Dark variants. Show named themes on a plain surface; selecting a static or live background replaces the app theme. Keep background text readable, save appearance through the existing device settings action, and update open terminals when colors change.
+
 - Add Profile to Settings with the supplied Flat/Skyline activity heat map, recorded response details, and a session photo shared with the sidebar. Group editable local Name, Username, and Email details on Account.
 
 - Give Scheduled an independent sidebar with search, filters, resize, and drag-to-collapse. Open saved tasks in chat and use the task menu to review runs or delete a custom schedule.

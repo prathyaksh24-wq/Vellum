@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1010,
-      "sha256": "53ce9b33f51cc79965c19bd354fb7c2c29163c815c745549cf1671167afcb344"
+      "count": 1011,
+      "sha256": "06b3e564a1daf2961e2d2f54bd32e18ef2f9ec79a0266f631fd5231182276ff3"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -308,6 +308,10 @@
     "design/Velllum/uploads/components/workspace-resources.js": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/app-theme-settings.jsx": {
+      "count": 1,
+      "sha256": "dcb09e8006cb91d85df4c77bb27e4ddfd10d9489d63b0b489320cb005faa6486"
     }
   },
   "covered": [
@@ -2434,6 +2438,15 @@
         "path": "design/Velllum/uploads/components/settings-overview.jsx",
         "text": "onDeviceSettings({preview_rail_visibility:visibility})"
       }
+    },
+    {
+      "surface": "Appearance",
+      "name": "single app theme choice and linked Light/Dark variants",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/app-theme-settings.jsx",
+        "text": "onDeviceSettings({appearance:patch})"
+      }
     }
   ],
   "exemptions": [
@@ -2624,6 +2637,10 @@
     {
       "scope": "Conditional task summary, shared launcher descriptors, reference icons, suggested artifacts, and bounded local file previews",
       "reason": "Summary and suggestions project real immutable conversation/resource records; section expansion, focus, selection and export are local presentation. Opening retained content uses Workspace Layout; browser actions retain browser.session.control; launcher tools use their registered owners. Desktop workspace_files is a trusted top-level read-only native bridge bounded to the selected workspace and a 2 MB preview. It cannot execute, write, attach files to a prompt, or read outside the workspace."
+    },
+    {
+      "scope": "Theme palette projection",
+      "reason": "Theme tokens, terminal colors and native caption colors project the applied device receipt without executing imported CSS. Named themes hide scene renderers; background mode preserves source brightness and colors."
     }
   ],
   "deferred": [

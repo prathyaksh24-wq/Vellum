@@ -1,0 +1,25 @@
+.app-theme-settings { margin: 20px 0; padding: 20px 0; border-block: 1px solid var(--line); }
+.app-theme-settings h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.app-theme-settings p { margin: 6px 0; color: var(--dim); font-size: 13px; line-height: 1.6; }
+.app-theme-row { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin: 18px 0; }
+.app-theme-row > span { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.app-theme-row small { font-size: 11px; color: var(--dim); }
+.app-theme-row .v-select { min-width: 210px; }
+.app-theme-row .v-select-trigger { border-radius: 999px; }
+.app-theme-row .v-select-list { max-height: 20rem; overflow-y: auto; }
+.app-theme-row .model-vendor-icon { width: 30px; height: 18px; border: 1px solid var(--line2); border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+.app-theme-settings :focus-visible { outline: 2px solid var(--theme-focus,var(--txt2)); outline-offset: 3px; }
+/* Preserve the source scene's brightness and colors in background mode. */
+[data-app-theme] .app-background { opacity: var(--app-background-opacity,1); }
+[data-background] :is(.bg-orb,.cursor-glow),[data-background] .stage::after { display: none; }
+[data-app-theme]:not([data-app-theme="default"]) :is(.bg-orb,.cursor-glow),
+[data-app-theme]:not([data-app-theme="default"]) .stage::after { display: none; }
+[data-app-theme]:not([data-app-theme="default"]) :is(.set-modal,.settings-page,.profile-card,.bubble,.preview-rail-card) { text-shadow: none; }
+[data-app-theme]:not([data-app-theme="default"]) :is(pre,.code-block) { background-color: var(--code-bg); color: var(--code-ink); }
+[data-app-theme]:not([data-app-theme="default"]) .land-mark { background: none; color: var(--txt2); -webkit-text-fill-color: currentColor; text-shadow: none; }
+[data-app-theme]:not([data-app-theme="default"]) ::selection { background: var(--ember); color: var(--onember); }
+[data-app-theme]:not([data-app-theme="default"]) :is(.btn,.cfg-input,.v-select-trigger) { border-radius: var(--ui-control-radius); }
+@media (max-width: 560px) {
+  .app-theme-row { align-items: stretch; flex-direction: column; gap: 8px; }
+  .app-theme-row .v-select { width: 100%; min-width: 0; }
+}
