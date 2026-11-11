@@ -9,6 +9,10 @@
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script src="components/app-icons.js"></script>
+<script src="components/app-theme-presets.js"></script>
+<script src="components/app-themes.js"></script>
+<link rel="stylesheet" href="components/app-themes.css"/>
+<script type="text/babel" data-presets="react" src="components/app-theme-settings.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/v-select.jsx"></script>
 <link rel="stylesheet" href="components/workspace-controller.css"/>
 <link rel="stylesheet" href="components/workspace-views.css"/>
@@ -1787,7 +1791,6 @@ body{font-size:14px;font-family:var(--font-ui)}
 .app-background-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .galaxy-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;opacity:1;mix-blend-mode:normal}
 .galaxy-container canvas{display:block;width:100%;height:100%;pointer-events:none}
-[data-background="galaxy"][data-theme="light"] .galaxy-container{filter:invert(1);mix-blend-mode:multiply}
 .shader-canvas-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;background:#080a10}
 .shader-canvas-container canvas{display:block;width:100%;height:100%;pointer-events:none}
 .static-image-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--static-position,center);display:block;pointer-events:none}
@@ -1804,7 +1807,6 @@ body{font-size:14px;font-family:var(--font-ui)}
 [data-background-tone="light"] .land-mark{color:var(--txt2);-webkit-text-fill-color:currentColor}
 [data-background-tone="dark"] .land-mark{color:var(--txt2);-webkit-text-fill-color:currentColor}
 [data-background] .backdrop.dim{background:color-mix(in srgb,var(--bg) 34%,transparent);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
-@media (prefers-reduced-motion:reduce){.galaxy-container{opacity:.82}}
 
 /* full-screen 404 */
 .not-found-page{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 48%,#0b0a0a 0,#050505 34%,#020202 74%);color:#f5f3f3;outline:none;isolation:isolate}
@@ -2937,14 +2939,17 @@ const backgroundMixHex = (base, tint, tintWeight=.25) => {
   const mixed = a.map((channel, index) => Math.round(channel * (1 - tintWeight) + b[index] * tintWeight));
   return '#' + mixed.map(channel => channel.toString(16).padStart(2,'0')).join('');
 };
-const applyBackgroundTheme = (entry, mode='dark') => {
+const applyBackgroundTheme = (entry, mode='dark', appearance) => {
+  window.VellumUI.AppThemes?.reset();
   const root = document.documentElement;
   const style = root.style;
   BACKGROUND_THEME_PROPS.forEach(property => style.removeProperty(property));
+  const profile = window.VellumUI.AppThemes?.resolve(appearance, mode);
+  if (profile) { window.VellumUI.AppThemes.apply(appearance, mode); return; }
   const themeConfig = entry && entry.theme;
   const palette = themeConfig && themeConfig.modes ? {...themeConfig, ...(themeConfig.modes[mode] || themeConfig.modes.dark)} : themeConfig;
   root.dataset.backgroundTone = palette ? palette.tone : mode;
-  if (!palette) return;
+  if (!palette) { window.VellumUI.AppThemes?.apply(appearance,mode); return; }
   const density = mode === 'dark' ? (palette.darkDensity || .74) : (palette.lightDensity || .66);
   const surface = palette.surfaceRgb;
   const ink = backgroundRgb(palette.foreground);
@@ -2998,6 +3003,7 @@ const applyBackgroundTheme = (entry, mode='dark') => {
     '--ascii-bg':palette.asciiBackground || palette.base
   };
   Object.entries(variables).forEach(([property, value]) => style.setProperty(property, value));
+  window.VellumUI.AppThemes?.apply(appearance,mode,palette);
 };
 const syncBackgroundTheme = () => {
   try {
@@ -3189,7 +3195,8 @@ const BackgroundRenderer = ({entry, preview=false, paused=false}) => {
   return <Component preview={preview} {...(entry.props || {})} {...(preview ? (entry.previewProps || {}) : {})} paused={paused}/>;
 };
 const AppBackground = () => {
-  const {background,paused} = useBackground();
+  const {background,paused,themeProfile} = useBackground();
+  if (themeProfile) return null;
   return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><BackgroundRenderer entry={background} paused={paused}/></div></div>;
 };
 const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
@@ -7638,7 +7645,7 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
@@ -7662,7 +7669,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
     return () => window.removeEventListener('resize',align);
   }, [tab]);
 
-  const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
+  const {backgroundId, setBackgroundId, selectableBackgrounds,themeProfile} = useBackground();
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
@@ -7770,8 +7777,8 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
           {tab === 'Appearance' && (
             <React.Fragment>
               <div className="set-h">Appearance</div>
-              <div className="cfg-note">Choose a live background and Vellum will match its text contrast, glass surfaces, borders, controls, and accent across the entire app.</div>
-              <div className="set-row">Theme
+              <div className="cfg-note">Choose an app theme or a background. Light and Dark switch the selected look.</div>
+              <div className="set-row">Appearance mode
                 <span className="sr-end">
                   <div className="ap-seg">
                     <button className={'ap-seg-b' + (theme === 'light' ? ' on' : '')} aria-pressed={theme === 'light'} onClick={() => { if (theme !== 'light') onTheme('light'); }}><IcSun size={13}/>Light</button>
@@ -7779,6 +7786,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
                   </div>
                 </span>
               </div>
+              <window.VellumUI.AppThemeSettings appearance={appearancePreferences} mode={theme} onDeviceSettings={onDeviceSettings}/>
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
                   <div className="appearance-backgrounds-title">Live &amp; animated</div>
@@ -7786,7 +7794,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
                 </div>
                 <div className="bg-preview-grid" role="radiogroup" aria-label="Live and animated application backgrounds">
                   {selectableBackgrounds.filter(entry => entry.kind !== 'image').map(entry => (
-                    <BackgroundChoiceCard key={entry.id} entry={entry} selected={backgroundId === entry.id} onSelect={setBackgroundId}/>
+                    <BackgroundChoiceCard key={entry.id} entry={entry} selected={!themeProfile && backgroundId === entry.id} onSelect={setBackgroundId}/>
                   ))}
                 </div>
               </div>
@@ -7797,7 +7805,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
                 </div>
                 <div className="bg-preview-grid" role="radiogroup" aria-label="Static application backgrounds">
                   {selectableBackgrounds.filter(entry => entry.kind === 'image').map(entry => (
-                    <BackgroundChoiceCard key={entry.id} entry={entry} selected={backgroundId === entry.id} onSelect={setBackgroundId}/>
+                    <BackgroundChoiceCard key={entry.id} entry={entry} selected={!themeProfile && backgroundId === entry.id} onSelect={setBackgroundId}/>
                   ))}
                 </div>
               </div>
@@ -9015,7 +9023,7 @@ const App = () => {
     sendSize: workspaceLayout.surfaces['composer.send'].properties.size,
   };
   const backgroundId = resolveBackground(deviceSettings.values.background || 'galaxy').id;
-  const setBackgroundId = id => dispatchDeviceSettings({background:resolveBackground(id).id});
+  const setBackgroundId = id => dispatchDeviceSettings({background:resolveBackground(id).id,appearance:{light_theme:'default',dark_theme:'default'}});
   const background = resolveBackground(backgroundId);
   const selectableBackgrounds = BACKGROUND_REGISTRY.filter(entry => entry.selectable !== false);
   useEffect(() => {
@@ -9029,8 +9037,8 @@ const App = () => {
     root.style.setProperty('--background-cover', tokens.cover || '80%');
     root.style.setProperty('--background-side-cover', tokens.sideCover || tokens.cover || '78%');
     root.style.setProperty('--background-blur', tokens.blur || '7px');
-    applyBackgroundTheme(entry, theme);
-  }, [backgroundId, theme]);
+    applyBackgroundTheme(entry, theme, deviceSettings.values.appearance);
+  }, [backgroundId, theme, deviceSettings.values.appearance]);
   useEffect(() => { try { applyAccent(deviceSettings.values.accent || 'default'); } catch (e) {} }, [deviceSettings.values.accent]);
 
   const [sidebarHover, setSidebarHover] = useState(false);
@@ -11463,7 +11471,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
   },[workspaceRouteKey]);
   return (
-    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,paused:desktopWorkspace && settingsOpen}}>
+    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,themeProfile:window.VellumUI.AppThemes.resolve(deviceSettings.values.appearance,theme),paused:desktopWorkspace && settingsOpen}}>
     <window.VellumUI.ResponsePreferencesProvider value={deviceSettings.values.streaming}>
     <div className="stage" data-ui-reference="workspace" data-preview-rail-position={previewRail.position} data-preview-rail-visibility={previewRail.visibility} onMouseMove={e => { if(desktopWorkspace)return;const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
@@ -11615,7 +11623,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }

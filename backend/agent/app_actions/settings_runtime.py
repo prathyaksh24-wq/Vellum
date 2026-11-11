@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 from pydantic import ValidationError
 
-from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot, DevicePersonalizationSettings, DeviceStreamingSettings
+from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot, DevicePersonalizationSettings, DeviceStreamingSettings, DeviceAppearanceSettings
 from agent.llm.providers import canonical_model_id, PROVIDER_KEY_ENV
 from agent.llm.routing.models import CredentialStrategy, FallbackTarget, ProviderRoutingPolicy
 from agent.tools.registry import CapabilityAccess
@@ -101,6 +101,7 @@ _DEVICE_SETTING_KEYS = frozenset({
     'streaming',
     "background",
     "accent",
+    "appearance",
     "dock_position",
     "number_shortcuts",
     "dock_locked",
@@ -335,9 +336,19 @@ class SettingsRuntimeActionService:
             index = BACKGROUND_IDS.index(previous) if previous in BACKGROUND_IDS else -1
             patch["background"] = BACKGROUND_IDS[(index + 1) % len(BACKGROUND_IDS)]
         normalized = self._validate_device_patch(patch)
+        appearance_patch = normalized.get('appearance', {})
+        selected = appearance_patch.get('dark_theme', appearance_patch.get('light_theme'))
+        if 'background' in normalized:
+            previous_appearance = current.get('appearance') or {}
+            if selected is not None or any(previous_appearance.get(key, 'default') != 'default' for key in ('light_theme', 'dark_theme')):
+                normalized['appearance'] = {**appearance_patch, 'light_theme': 'default', 'dark_theme': 'default'}
+        elif selected is not None:
+            if len({appearance_patch[key] for key in ('light_theme', 'dark_theme') if key in appearance_patch}) > 1:
+                raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS', 'Choose one app theme; Light and Dark use its matching variants.')
+            normalized['appearance'] = {**appearance_patch, 'light_theme': selected, 'dark_theme': selected}
         next_values = dict(current)
         for key, value in normalized.items():
-            if key in {"personalization", 'profile', 'streaming'}:
+            if key in {"personalization", 'profile', 'streaming', 'appearance'}:
                 next_values[key] = {**dict(current.get(key) or {}), **value}
             else:
                 next_values[key] = value
@@ -377,7 +388,14 @@ class SettingsRuntimeActionService:
     def _validate_device_patch(patch: dict[str, Any]) -> dict[str, Any]:
         normalized: dict[str, Any] = {}
         for key, value in patch.items():
-            if key == 'streaming':
+            if key == 'appearance':
+                try:
+                    if not isinstance(value, dict) or not value:
+                        raise ValueError('Expected appearance preferences.')
+                    normalized[key] = DeviceAppearanceSettings.model_validate(value).model_dump(exclude_unset=True)
+                except ValueError as exc:
+                    raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS', 'Choose a registered app theme and background visibility between 0 and 1.') from exc
+            elif key == 'streaming':
                 try:
                     if not isinstance(value,dict) or not value:
                         raise ValueError('Expected streaming preferences.')
@@ -975,6 +993,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
     for name in ('warm','enthusiastic','headers','emoji'):
         personalization_schema['properties'][name]['enum'] = ['more','default','less']
     device_properties = {
+        'appearance': DeviceAppearanceSettings.model_json_schema(),
         'streaming': DeviceStreamingSettings.model_json_schema(),
         'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
         'accent':{'type':'string'},
@@ -1004,6 +1023,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "patch": {"type": "object", 'additionalProperties':False, 'minProperties':1, 'properties':device_properties},
                 "background": {"type": "string", "enum": [*BACKGROUND_IDS, "next", "previous"]},
                 "accent": {"type": "string"},
+                "appearance": device_properties['appearance'],
                 "dock_position": {"type": "string"},
                 "number_shortcuts": {"type":"string", "enum":["tabs","chats"]},
                 "dock_locked": {"type": "boolean"},

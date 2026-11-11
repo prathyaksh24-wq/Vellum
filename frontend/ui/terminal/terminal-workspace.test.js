@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createTerminalWorkspace } from "./terminal-workspace.js";
 
 class FakeTerminal {
-  constructor() {
+  constructor(options) {
+    this.options = options;
     this.lines = [];
     this.handlers = [];
   }
@@ -78,6 +79,25 @@ describe("createTerminalWorkspace", () => {
 
     expect(root.querySelectorAll(".terminal-tab")).toHaveLength(2);
     expect(sockets).toHaveLength(2);
+  });
+
+  test("updates the existing terminal palette when app appearance changes", async () => {
+    const previous = window.VellumUI;
+    const terminalTheme = vi.fn(() => ({background:'#181825',foreground:'#cdd6f4'}));
+    window.VellumUI = {AppThemes:{terminalTheme}};
+    const workspace = createTerminalWorkspace(root, {TerminalClass:FakeTerminal,socketFactory:()=>new FakeSocket()});
+    await workspace.mount();
+    const terminal = workspace.activeTerminal;
+    expect(terminal.options.theme.background).toBe('#181825');
+    terminalTheme.mockReturnValue({background:'#e9e4d8',foreground:'#1e1e1e'});
+    window.dispatchEvent(new Event('vellum:appearance-change'));
+    expect(workspace.activeTerminal).toBe(terminal);
+    expect(terminal.options.theme.background).toBe('#e9e4d8');
+    workspace.dispose();
+    terminalTheme.mockClear();
+    window.dispatchEvent(new Event('vellum:appearance-change'));
+    expect(terminalTheme.mock.calls.some(([element])=>element===root)).toBe(false);
+    window.VellumUI = previous;
   });
 
   test("slash new creates a requested profile tab", async () => {

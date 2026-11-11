@@ -8,6 +8,7 @@ import pytest
 from agent.app_actions.models import AppActionContext, AppActionRequest
 from agent.app_actions.runtime import AppActionRuntime
 from agent.app_actions.settings_runtime import (
+    BACKGROUND_IDS,
     DEFAULT_MODEL_SET_ACTION_ID,
     DEVICE_SETTINGS_UPDATE_ACTION_ID,
     MEMORY_SETTINGS_UPDATE_ACTION_ID,
@@ -355,6 +356,44 @@ def test_device_settings_return_revisioned_patch_for_client_owned_persistence() 
             "preview_rail_visibility": "hover",
         },
     }
+
+
+@pytest.mark.parametrize("theme", ["matrix-green", "zen-linen", "catppuccin", "twitter", "vintage-paper", "quantum-rose", "cosmic-night", "sage-garden", "sage-mist", "cyberpunk-neon"])
+def test_app_theme_selection_links_both_mode_variants(theme: str) -> None:
+    runtime, *_ = make_runtime()
+    action_context = context("ui").model_copy(update={"device_settings": {
+        "version": 1, "revision": 2,
+        "values": {"background": "drifting-clouds", "appearance": {"light_theme": "zen-linen", "dark_theme": "default"}},
+    }})
+    receipt = runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"appearance": {"dark_theme": theme}}}), action_context)
+    assert receipt.status == "applied"
+    assert receipt.result["device_settings_patch"]["values"] == {"appearance": {"light_theme": theme, "dark_theme": theme}}
+
+
+@pytest.mark.parametrize("background", BACKGROUND_IDS)
+def test_background_selection_replaces_the_app_theme_even_for_the_same_background(background):
+    runtime, *_ = make_runtime()
+    ctx=context('ui').model_copy(update={'device_settings':{'version':1,'revision':2,'values':{'background':background,'appearance':{'light_theme':'catppuccin','dark_theme':'catppuccin','background_opacity':0.6}}}})
+    receipt=runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,arguments={'patch':{'background':background}}),ctx)
+    assert receipt.status=='applied'
+    patch=receipt.result['device_settings_patch']
+    assert patch['revision']==3
+    assert patch['values']['appearance']=={'light_theme':'default','dark_theme':'default','background_opacity':0.6}
+
+
+def test_a_background_wins_if_a_patch_also_contains_an_app_theme():
+    runtime, *_ = make_runtime()
+    receipt=runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,arguments={'patch':{'background':'ember-clouds','appearance':{'dark_theme':'catppuccin'}}}),context('ui'))
+    assert receipt.status=='applied'
+    assert receipt.result['device_settings_patch']['values']['appearance']=={'light_theme':'default','dark_theme':'default'}
+
+
+@pytest.mark.parametrize("patch", [{"dark_theme": "unknown"}, {"background_opacity": -0.1}, {"background_opacity": 1.1}, {"css": "body{}"}, {"light_theme":"zen-linen","dark_theme":"catppuccin"}])
+def test_invalid_app_theme_settings_return_no_device_patch(patch) -> None:
+    runtime, *_ = make_runtime()
+    receipt = runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"appearance": patch}}), context("ui"))
+    assert receipt.status != "applied"
+    assert "device_settings_patch" not in receipt.result
 
 
 def test_device_settings_advance_context_between_actions_in_one_turn() -> None:
