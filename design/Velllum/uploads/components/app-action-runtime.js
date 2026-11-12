@@ -26,7 +26,7 @@
     background: "galaxy",
     previous_background: null,
     accent: "default",
-    appearance: {light_theme:'default',dark_theme:'default',background_opacity:0.4},
+    appearance: {light_theme:'default',dark_theme:'default',background_opacity:0.4,droplets:false},
     dock_position: "auto",
     dock_locked: false,
     preview_rail_position: "left",
@@ -199,10 +199,10 @@
       safeSet(windowStorage, WINDOW_ID_KEY, windowId);
     }
     var sessionOverrides = {};
-    // Browser visibility is an explicit session choice, never a startup preference.
-    // Mask older saved layouts in this owner without rewriting device settings.
+    // Workspace content references belong to this window session. Older saved
+    // tabs must not turn the New tab button into a stale side-chat restore.
     if (['browser','workspace'].includes(deviceState.surfaces['right-panel'].properties.content)) {
-      sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, deviceState.surfaces['right-panel'], {visible:false,properties:Object.assign({},deviceState.surfaces['right-panel'].properties,{layout:'split'})}));
+      sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, deviceState.surfaces['right-panel'], {visible:false,properties:Object.assign({},deviceState.surfaces['right-panel'].properties,{layout:'split',items:[],active_item:''})}));
     }
     var effectiveRevision = deviceState.revision;
     var listeners = [];
@@ -248,7 +248,15 @@
     }
 
     function persist() {
-      safeSet(storage, STORAGE_KEY, JSON.stringify(deviceState));
+      // A device-scoped split resize can include the current session's tabs.
+      // Keep them in memory, but persist only reusable layout preferences.
+      var durable = clone(deviceState);
+      var panel = durable.surfaces['right-panel'];
+      if (['browser','workspace'].includes(panel.properties.content)) {
+        panel.properties.items = [];
+        panel.properties.active_item = '';
+      }
+      safeSet(storage, STORAGE_KEY, JSON.stringify(durable));
     }
 
     function emit() {
@@ -590,6 +598,7 @@
       CONVERSATION_PIN_ACTION_ID,
       CONVERSATION_UNPIN_ACTION_ID,
       CONVERSATION_RENAME_ACTION_ID,
+      "conversation.message.edit",
       CONVERSATION_SPACE_ACTION_ID,
       "conversation.project.set",
       CONVERSATION_ARCHIVE_ACTION_ID,

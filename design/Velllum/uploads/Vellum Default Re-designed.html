@@ -106,6 +106,8 @@
 <script type="text/babel" data-presets="react" src="components/DvkMotionBackground.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <script type="module" src="/composer-entry.js"></script>
+<script type="module" src="/droplets-entry.js"></script>
+<script type="text/babel" src="components/droplets-background.jsx"></script>
 <script type="module" src="/commands-entry.js"></script>
 <script type="module" src="/workspace-entry.js"></script>
 <script type="text/babel" data-presets="react" src="components/workspace-content.jsx"></script>
@@ -980,6 +982,22 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .msgs{flex:1;overflow-y:auto;padding:26px 24px 10px;display:flex;flex-direction:column;align-items:center}
 .msgs-inner{width:100%;max-width:680px;display:flex;flex-direction:column;gap:18px}
 .bubble-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.user-message{align-self:flex-end;width:fit-content;max-width:78%;margin-left:auto;border-radius:16px}
+.user-message>.bubble{max-width:100%;box-sizing:border-box}
+.user-message-meta{display:flex;align-items:center;justify-content:flex-end;gap:2px;min-height:28px;opacity:0;pointer-events:none;transition:opacity .12s ease}
+.user-message:hover>.user-message-meta,.user-message:focus-within>.user-message-meta,.user-message[data-editing=true]>.user-message-meta,.user-message[data-error=true]>.user-message-meta{opacity:1;pointer-events:auto}
+.user-message-meta time,.user-message-time-unavailable{font-size:11px;line-height:1.4;color:var(--dim);margin-right:8px;font-variant-numeric:tabular-nums}
+.user-message .act-btn:disabled{opacity:.45;cursor:default}
+.user-message:focus-visible,.user-message .act-btn:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
+.user-message[data-editing=true]{width:78%;max-width:640px}
+.user-message-editor{width:100%;padding:12px;box-sizing:border-box;border:1px solid var(--line);border-radius:16px;background:var(--bubble)}
+.user-message-editor textarea{display:block;width:100%;min-height:72px;max-height:360px;box-sizing:border-box;resize:vertical;padding:4px;border:0;border-radius:4px;outline:none;background:transparent;color:var(--txt2);font:inherit;font-size:13.5px;line-height:1.55;caret-color:var(--ember)}
+.user-message-editor textarea:focus-visible{outline:1px solid var(--ember);outline-offset:3px}
+.user-message-edit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.user-message-error{margin:0;font-size:12px;color:var(--txt2)}
+.user-message-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+@media(hover:none){.user-message-meta{opacity:1;pointer-events:auto}}
+@media(prefers-reduced-motion:reduce){.user-message-meta{transition:none}}
 .bubble{max-width:78%;background:var(--bubble);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:16px;padding:9px 14px;font-size:13.5px;color:var(--txt2);white-space:pre-wrap;line-height:1.55}
 .areply{font-size:14px;line-height:1.7;color:var(--txt);white-space:pre-wrap}
 .shimmer{background:none;background-size:240% auto;-webkit-background-clip:text;background-clip:text;color:var(--txt2);animation:none;filter:drop-shadow(0 0 8px var(--glow));-webkit-text-fill-color:currentColor}
@@ -1076,7 +1094,7 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .act-btn.on{color:var(--ember)}
 .copied{font-size:11px;color:var(--dim);align-self:center;padding:0 6px}
 /* reusable vertical preview rail - shared by chats and sub-agent chats */
-.conversation-preview-anchor{position:absolute;inset:0;z-index:24;pointer-events:none;container-type:inline-size}
+.conversation-preview-anchor{position:absolute;inset:56px 0 24px;z-index:24;pointer-events:none;container-type:inline-size}
 .preview-rail{position:absolute;inset-block:0;left:4px;width:52px;display:flex;align-items:center;overflow:visible;isolation:isolate;pointer-events:none}
 .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:56px}
 [data-preview-rail-position=right] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:24px;padding-right:56px}
@@ -1087,8 +1105,12 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
   [data-preview-rail-visibility=hover] .preview-rail-nav{opacity:0}
   [data-preview-rail-visibility=hover] .preview-rail-nav:is(:hover,:focus-within){opacity:1}
 }
-.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:safe center;width:48px;max-height:calc(100% - 24px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto}
+.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:safe center;width:48px;max-height:min(72%,640px);padding-block:8px;box-sizing:border-box;scroll-padding-block:32px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto}
 .preview-rail-nav::-webkit-scrollbar{display:none}
+.preview-rail-nav[data-overflow=true]{mask-image:linear-gradient(to bottom,transparent,#000 32px,#000 calc(100% - 32px),transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 32px,#000 calc(100% - 32px),transparent)}
+.preview-rail-nav[data-overflow=true]:focus-within{mask-image:none;-webkit-mask-image:none}
+.workspace-side-chat .conversation-preview-anchor{inset-block-start:16px}
+.workspace-content[data-layout=full] .main .conversation-preview-anchor{inset-block-start:16px}
 .preview-rail-item{position:relative;display:flex;width:48px;height:20px;align-items:center;border:0;background:transparent;color:var(--dim2);padding:0 0 0 8px;cursor:pointer;outline:none}
 [data-preview-rail-position=right] .preview-rail-item{justify-content:flex-end;padding:0 8px 0 0}
 .preview-rail-item:focus-visible{border-radius:7px;box-shadow:0 0 0 2px color-mix(in srgb,var(--ember) 62%,transparent),0 0 0 4px var(--bg)}
@@ -3195,9 +3217,10 @@ const BackgroundRenderer = ({entry, preview=false, paused=false}) => {
   return <Component preview={preview} {...(entry.props || {})} {...(preview ? (entry.previewProps || {}) : {})} paused={paused}/>;
 };
 const AppBackground = () => {
-  const {background,paused,themeProfile} = useBackground();
-  if (themeProfile) return null;
-  return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><BackgroundRenderer entry={background} paused={paused}/></div></div>;
+  const {background,paused,themeProfile,droplets} = useBackground();
+  if (themeProfile && !droplets) return null;
+  const scene=themeProfile ? <div style={{position:'absolute',inset:0,background:'var(--bg)'}}/> : <BackgroundRenderer entry={background} paused={paused}/>;
+  return <div className="app-background" aria-hidden="true"><div className="app-background-layer">{droplets ? <window.VellumUI.Droplets>{scene}</window.VellumUI.Droplets> : scene}</div></div>;
 };
 const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
   const [previewing,setPreviewing]=useState(false);
@@ -4402,6 +4425,75 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
   );
 };
 
+const userMessageTime = (message, now = new Date()) => {
+  const raw = message.sent_at ?? message.created_at ?? message.timestamp;
+  if (raw == null || raw === '') return null;
+  const date = new Date(typeof raw === 'number' && raw < 1e12 ? raw * 1000 : raw);
+  if (!Number.isFinite(date.getTime())) return null;
+  const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  const day = sameDay ? 'Today' : date.toLocaleDateString(undefined,
+    {weekday:'long', ...(now - date >= 7 * 86400000 || date.getFullYear() !== now.getFullYear()
+      ? {month:'short',day:'numeric', ...(date.getFullYear() !== now.getFullYear() ? {year:'numeric'} : {})} : {})});
+  const time = date.toLocaleTimeString(undefined, {hour:'numeric',minute:'2-digit'});
+  return {iso:date.toISOString(), label:day + ' ' + time, full:date.toLocaleString(undefined,
+    {weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})};
+};
+
+const UserMessage = ({msg, onViewImage, onEdit, busy=false}) => {
+  const [editing,setEditing] = useState(false),[draft,setDraft] = useState('');
+  const [saving,setSaving] = useState(false),[copied,setCopied] = useState(false),[error,setError] = useState('');
+  const [now,setNow] = useState(() => new Date());
+  const editor = useRef(null),editButton = useRef(null),copyTimer = useRef(null);
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
+  useLayoutEffect(() => {
+    if (!editing || !editor.current) return;
+    editor.current.style.height = 'auto';
+    editor.current.style.height = Math.min(360,Math.max(72,editor.current.scrollHeight)) + 'px';
+  }, [editing,draft]);
+  const stamp = userMessageTime(msg,now);
+  const cancel = () => {setEditing(false);setError('');requestAnimationFrame(() => editButton.current?.focus({preventScroll:true}));};
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(msg.text || '');
+      setError('');setCopied(true);clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false),1500);
+    } catch {setError('Could not copy. Try again.');}
+  };
+  const save = async event => {
+    event.preventDefault();
+    if (saving || busy || !draft.trim()) return;
+    if (draft === msg.text) {cancel();return;}
+    setSaving(true);setError('');
+    try {await onEdit(msg.id,draft);cancel();}
+    catch (failure) {setError(failure.message || 'Could not save your edit. Try again.');}
+    finally {setSaving(false);}
+  };
+  return <div id={'m-' + msg.id} data-preview-message-id={String(msg.id)} className="bubble-wrap user-message"
+    tabIndex={0} aria-label="Your message" data-editing={editing} data-error={!!error}
+    onMouseEnter={() => setNow(new Date())} onFocus={() => setNow(new Date())}>
+    {msg.attachments?.length > 0 && <div className="attach-strip">{msg.attachments.map((a,i) => a.url
+      ? <span key={i} className="msg-att-img" onClick={() => onViewImage?.(a.url)}><img src={a.url} alt={a.name}/></span>
+      : <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}</div>}
+    {editing ? <form className="user-message-editor" onSubmit={save}>
+      <textarea ref={editor} autoFocus aria-label="Edit your message" value={draft} maxLength={100000} disabled={saving}
+        onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+          if (event.key === 'Escape' && !saving) {event.preventDefault();event.stopPropagation();cancel();}
+          else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {event.preventDefault();save(event);}
+        }}/>
+      <div className="user-message-edit-actions"><button type="button" className="btn" onClick={cancel} disabled={saving}>Cancel</button>
+        <button type="submit" className="btn" disabled={saving || busy || !draft.trim()}>{saving ? 'Saving…' : 'Save'}</button></div>
+    </form> : <div className="bubble">{msg.text}</div>}
+    <div className="user-message-meta">
+      {stamp ? <time dateTime={stamp.iso} title={stamp.full}>{stamp.label}</time> : <span className="user-message-time-unavailable">Time unavailable</span>}
+      <button type="button" className="act-btn" aria-label={copied ? 'Message copied' : 'Copy message'} data-tip={copied ? 'Copied' : 'Copy message'} onClick={copy}>{copied ? <IcCheck size={14}/> : <IcCopy size={14}/>}</button>
+      {onEdit && !editing && <button ref={editButton} type="button" className="act-btn" aria-label="Edit message" data-tip={busy ? 'Wait for the response to finish' : 'Edit message'} disabled={busy || msg.transcribing}
+        onClick={() => {setDraft(msg.text || '');setError('');setEditing(true);}}><window.VellumUI.AppIcon name="Edit" size={14}/></button>}
+    </div>
+    {error && <p className="user-message-error" role="alert">{error}</p>}
+    <span className="user-message-status" role="status">{copied ? 'Message copied' : ''}</span>
+  </div>;
+};
+
 const MsgActions = ({msg, onRegen, onFork, onShare}) => {
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState(null);
@@ -4629,9 +4721,20 @@ const ActivityDrawer = ({msg, onClose}) => {
 
 const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPreview, className = '', railClassName = '', previewClassName = ''}) => {
   const navRef = useRef(null);
+  const [overflowing,setOverflowing] = useState(false);
   const [internalActiveId, setInternalActiveId] = useState(defaultActiveId || (items[0] && items[0].id) || '');
   const [hoveredId, setHoveredId] = useState(null);
   const [focusedId, setFocusedId] = useState(null);
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const measure = () => setOverflowing(nav.scrollHeight > nav.clientHeight + 1);
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(nav);
+    window.addEventListener('resize',measure);
+    return () => {observer?.disconnect();window.removeEventListener('resize',measure);};
+  }, [items.length]);
   const requestedActiveId = activeId === undefined ? internalActiveId : activeId;
   const selectedId = items.some(item => item.id === requestedActiveId) ? requestedActiveId : ((items[0] && items[0].id) || '');
   const displayedId = hoveredId || focusedId || '';
@@ -4647,12 +4750,16 @@ const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPr
     const index = items.findIndex(item => item.id === selectedId);
     const button = nav && nav.children[index];
     if (!button || nav.scrollHeight <= nav.clientHeight) return;
-    button.scrollIntoView({block:'nearest', inline:'nearest', behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+    // Scroll only the rail; revealing a marker must not move the chat/header.
+    const top = button.offsetTop, bottom = top + button.offsetHeight;
+    const target = top < nav.scrollTop + 32 ? top - 32
+      : bottom > nav.scrollTop + nav.clientHeight - 32 ? bottom - nav.clientHeight + 32 : nav.scrollTop;
+    nav.scrollTo({top:Math.max(0,target),behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
   }, [selectedId, items.length]);
   const previewOffset = displayedIndex < 0 ? 0 : (displayedIndex - (items.length - 1) / 2) * 20;
   return (
     <div className={'preview-rail ' + className}>
-      <nav ref={navRef} aria-label="Conversation preview navigation" className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
+      <nav ref={navRef} aria-label="Conversation preview navigation" data-overflow={overflowing} className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
         {items.map((item, index) => {
           const distance = displayedIndex < 0 ? Infinity : Math.abs(index - displayedIndex);
           const scale = distance === 0 ? 1 : distance === 1 ? .68 : distance === 2 ? .44 : .25;
@@ -5472,7 +5579,7 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, sideChat=false}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, onEditMessage, sideChat=false}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -5503,17 +5610,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
         {sideChat && !msgs.length && <div className="side-chat-identity"><IcChat size={30}/><h1>Side chat</h1></div>}
         <div className="msgs-inner">
           {msgs.map(m => m.role === 'user' ? (
-            <div key={m.id} id={'m-' + m.id} data-preview-message-id={String(m.id)} className="bubble-wrap">
-              {m.attachments && m.attachments.length > 0 && (
-                <div className="attach-strip">
-                  {m.attachments.map((a, i) => a.url
-                    ? <span key={i} className="msg-att-img" onClick={() => onViewImage && onViewImage(a.url)}><img src={a.url} alt={a.name}/></span>
-                    : <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
-                </div>
-              )}
-              <div className="bubble">{m.text}</div>
-              {onFork && <div className="act-row" style={{justifyContent:'flex-end'}}><button className="act-btn" title="Fork chat from here" onClick={() => onFork(m.id)}><IcBranch size={14}/></button></div>}
-            </div>
+            <UserMessage key={m.id} msg={m} onViewImage={onViewImage} onEdit={onEditMessage} busy={busy}/>
           ) : (
             <div key={m.id} id={'m-' + m.id}>
               <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onFork={onFork ? () => onFork(m.id) : undefined} onShare={onShare} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
@@ -7791,6 +7888,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
                 </span>
               </div>
               <window.VellumUI.AppThemeSettings appearance={appearancePreferences} mode={theme} onDeviceSettings={onDeviceSettings}/>
+              <window.VellumUI.DropletsSetting enabled={appearancePreferences?.droplets===true} onDeviceSettings={onDeviceSettings}/>
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
                   <div className="appearance-backgrounds-title">Live &amp; animated</div>
@@ -8470,7 +8568,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
                 <span className="au-task-meta" title={exactNext ? 'Next run ' + exactNext + ' · ' + scheduleLabel(record.schedule) : scheduleLabel(record.schedule)}>{next ? next + ' · ' : status + ' · '}{scheduleLabel(record.schedule)}</span>
               </button>
               <button type="button" className="au-icon-btn au-task-menu" data-tip="Task actions" aria-label={'Actions for ' + record.name} aria-expanded={menu?.id===record.id}
-                onClick={event=>{const trigger=event.currentTarget,rect=trigger.getBoundingClientRect();setMenu(menu?.id===record.id?null:{id:record.id,trigger,x:rect.right-174,y:rect.bottom+4});setFilterOpen(false);}}><IcDots size={16}/></button>
+                onClick={event=>{const trigger=event.currentTarget,rect=trigger.getBoundingClientRect();setMenu(menu?.id===record.id?null:{id:record.id,trigger,x:rect.right+8,y:rect.top});setFilterOpen(false);}}><IcDots size={16}/></button>
             </div>;
           })}
         </section>;
@@ -9824,7 +9922,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const ag = availableAgents.find(a => a.id === activeAgentId)
       || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle);
     if (!ag) return;
-    const userMsg = {id: uid(), role: 'user', text, attachments: attach};
+    const userMsg = {id: uid(), role: 'user', text, attachments: attach, sent_at:new Date().toISOString()};
     const playbackRequest = FEATURE_FLAGS.realChat ? window.VellumSpotifyPlayback?.beginRequest?.(text) : undefined;
     const reply = agentReply(ag, text);
     const act = activitySeedForMode(text);
@@ -10409,7 +10507,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const turnReasoningMode = existingChat ? existingChat.reasoning_mode || '' : opts.reasoningMode ?? draftReasoningMode;
     const requestedModel = (existingChat && existingChat.model) || selModel;
     const turnModel = models.some(model => model.id === requestedModel) ? requestedModel : selModel;
-    const userMsg = {id: uid(), role: 'user', text, attachments: attach};
+    const userMsg = {id: uid(), role: 'user', text, attachments: attach, sent_at:new Date().toISOString()};
     const playbackRequest = FEATURE_FLAGS.realChat ? window.VellumSpotifyPlayback?.beginRequest?.(text) : undefined;
     const reply = vellumReply(text);
     const act = activitySeedForMode(text);
@@ -10456,6 +10554,14 @@ const [slashSkills, setSlashSkills] = useState([]);
     sendMessage(text, attach, {...opts, forceNew: true, projectId: projId});
     setExpandedProj(e => ({...e, [projId]: true}));
     setView('chat');
+  };
+
+  const editUserMessage = async (conversationId, messageId, text) => {
+    const chat = chats.find(row => row.id === conversationId);
+    if (!chat || chat.messages.some(message => message.streaming)) throw new Error('Wait for the response to finish before editing.');
+    const receipt = await dispatchConversationAction('conversation.message.edit',
+      {conversation_id:conversationId,message_id:messageId,text}, {conversationId,applyNavigation:false,notify:false});
+    if (receipt?.status !== 'applied') throw new Error(receipt?.message || 'Could not save your edit. Try again.');
   };
 
   const regenerate = (msgId, conversationId = activeChatId) => {
@@ -11516,7 +11622,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
   },[workspaceRouteKey]);
   return (
-    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,themeProfile:window.VellumUI.AppThemes.resolve(deviceSettings.values.appearance,theme),paused:desktopWorkspace && settingsOpen}}>
+    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds,droplets:deviceSettings.values.appearance?.droplets===true,themeProfile:window.VellumUI.AppThemes.resolve(deviceSettings.values.appearance,theme),paused:desktopWorkspace && settingsOpen}}>
     <window.VellumUI.ResponsePreferencesProvider value={deviceSettings.values.streaming}>
     <div className="stage" data-ui-reference="workspace" data-preview-rail-position={previewRail.position} data-preview-rail-visibility={previewRail.visibility} onMouseMove={e => { if(desktopWorkspace)return;const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
@@ -11564,6 +11670,7 @@ const [slashSkills, setSlashSkills] = useState([]);
 
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
               onEditVoiceTranscript={(messageId, value) => updateTurn(activeChatId, messageId, m => ({...m, text:value, transcriptEdited:true}), true)}
+              onEditMessage={(messageId,value) => editUserMessage(activeChatId,messageId,value)}
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
               onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
@@ -11617,6 +11724,7 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onRegen={messageId=>regenerate(messageId,chat.id)} onViewImage={setViewer}
                 onAnswerNow={messageId=>answerNow(messageId)} onOpenActivity={message=>{setActivityMsg(message);configureChatDetails({visible:true},{notify:false,persistence:'session'});}}
                 onEditVoiceTranscript={(messageId,value)=>updateTurn(chat.id,messageId,m=>({...m,text:value,transcriptEdited:true}),true)}
+                onEditMessage={(messageId,value)=>editUserMessage(chat.id,messageId,value)}
                 composerExtras={{library,projects,chats,browserTabs:browserState.tabs||[],apps,skills:slashSkills,agents:availableAgents,appSel:chat.appIds||[],onOpenLibrary:()=>nav('library'),onOpenProject:openProject,onOpenPlugins:()=>nav('apps'),onOpenSkills:()=>nav('skills'),presentation:composerPresentation,
                   onToggleSel:id=>setChats(previous=>previous.map(row=>{if(row.id!==chat.id)return row;const selected=row.appIds||[];return {...row,appIds:selected.includes(id)?selected.filter(value=>value!==id):[...selected,id]};})),onConnectApp:connectApp,onOpenAgent:openAgent,onAppActionReceipt:applyAppActionReceipt,
                   voiceEnabled:deviceSettings.values.personalization.voice !== false,

@@ -20,6 +20,7 @@ function findRoot() {
 
 export const root = findRoot();
 export const MODULE_SOURCE_FILES = [
+  "design/Velllum/uploads/droplets-entry.js",
   "design/Velllum/uploads/workspace-entry.js",
   "frontend/ui/terminal/terminal-workspace.js",
   "frontend/ui/terminal/commands.js",
@@ -48,6 +49,7 @@ export const MODULE_SOURCE_FILES = [
   "design/Velllum/uploads/components/bookshelf/components/ui/textarea.tsx",
 ];
 export const SOURCE_FILES = [
+  "design/Velllum/uploads/components/droplets-background.jsx",
   "design/Velllum/uploads/components/workspace-resources.js",
   "design/Velllum/uploads/components/workspace-content.jsx",
   "design/Velllum/uploads/components/command-menu.jsx",

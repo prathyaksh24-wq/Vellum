@@ -113,18 +113,35 @@
     };
   }
 
+  function requestPayload(payload) {
+    if (!Array.isArray(payload.attachments)) return payload;
+    return {...payload, attachments:payload.attachments.map(attachment => {
+      // The composer uses url for previews; send image bytes only as data_url.
+      if (!attachment || !String(attachment.url || '').startsWith('data:image/')) return attachment;
+      const record = {...attachment, data_url:attachment.data_url || attachment.url};
+      delete record.url;
+      return record;
+    })};
+  }
+
   async function stream(payload, handlers = {}) {
     const controller = new AbortController();
     if (handlers.controller) handlers.controller(controller);
     if (handlers.playbackRequest) await handlers.playbackRequest.ready;
     if (controller.signal.aborted) throw new DOMException('Stopped.', 'AbortError');
-    const options=client.jsonOptions("POST", payload, controller.signal);
+    const options=client.jsonOptions("POST", requestPayload(payload), controller.signal);
     options.headers={...options.headers,Accept:'text/event-stream'};
     options.cache='no-store';
     const response = await fetch(client.backendBase() + "/api/chat/stream", options);
     if (!response.ok || !response.body) {
       const failure = new Error("Backend stream failed: HTTP " + response.status);
       failure.vellumHttpStatus = response.status;
+      if (response.status === 422 && typeof response.json === 'function') {
+        const body = await response.json().catch(() => null);
+        if (Array.isArray(body?.detail) && body.detail.some(item => Array.isArray(item.loc) && item.loc.includes('attachments'))) {
+          failure.vellumDisplayMessage = 'Vellum could not read this attachment. Remove it and attach the image again.';
+        }
+      }
       throw failure;
     }
     const reader = response.body.getReader(), decoder = new TextDecoder();
@@ -299,7 +316,7 @@
 
   function failureMessage(error) {
     if (error && error.vellumPlaybackError) return error.message;
-    if (error && error.vellumStreamInterrupted) return error.vellumDisplayMessage;
+    if (error && error.vellumDisplayMessage) return error.vellumDisplayMessage;
     if (error && error.vellumHttpStatus) return 'Vellum API returned HTTP ' + error.vellumHttpStatus + '. Try again shortly.';
     if (error && error.name === 'TypeError' && /fetch|network|load failed|terminated/i.test(error.message || '')) {
       return 'Backend unreachable. Check the Vellum API connection and try again.';

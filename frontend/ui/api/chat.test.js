@@ -305,3 +305,30 @@ describe("Vellum default chat stream trace", () => {
     }]);
   });
 });
+
+
+test('image submissions send the canonical bytes once while retaining the composer preview',async()=>{
+  let submitted;
+  const api=await loadChatApi(async(_url,options)=>{
+    submitted=JSON.parse(options.body);
+    return {ok:true,body:sseStream(['event: response.completed\ndata: {"response":{"output_text":"Image answer"}}\n\n'])};
+  });
+  const dataUrl='data:image/png;base64,'+'A'.repeat(8192);
+  const attachment={name:'screenshot.png',mime_type:'image/png',data_url:dataUrl,url:dataUrl,egress_scope:'current_turn',metadata_stripped:true};
+  await api.stream({message:'What can you see?',attachments:[attachment]},{});
+  expect(submitted.attachments[0].data_url).toBe(dataUrl);
+  expect(submitted.attachments[0]).not.toHaveProperty('url');
+  expect(submitted.attachments[0]).toMatchObject({egress_scope:'current_turn',metadata_stripped:true});
+  expect(attachment.url).toBe(dataUrl);
+});
+
+test('attachment validation failures identify the attachment and never echo its payload',async()=>{
+  const api=await loadChatApi(async()=>({ok:false,status:422,json:async()=>({detail:[
+    {loc:['body','attachments',0,'url'],type:'string_too_long',input:'PRIVATE_IMAGE_PAYLOAD'},
+  ]})}));
+  let failure;
+  try {await api.stream({message:'Describe the image'},{});}catch(error){failure=error;}
+  expect(api.failureMessage(failure)).toContain('attachment');
+  expect(api.failureMessage(failure)).not.toContain('PRIVATE_IMAGE_PAYLOAD');
+  expect(api.failureMessage(failure)).not.toContain('Backend unreachable');
+});

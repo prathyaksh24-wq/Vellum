@@ -6,6 +6,18 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Add an independent Droplets appearance toggle over the selected live or static background, using the original Canvas UI renderer and supplied preset. Preserve the effect when switching backgrounds.
+
+- Start refreshed windows without stale temporary workspace tabs while retaining split and sidebar preferences.
+
+- Open Scheduled task action menus to the right of their three-dot trigger, keeping the existing viewport bounds.
+
+- Send image bytes once through the canonical attachment data field, accept previously saved image-preview aliases without the short URL limit, and identify attachment validation failures in chat.
+
+- Keep conversation preview markers clear of the chat header, bound and fade overflowing long-session rails, and increase the chat title size and contrast. Marker navigation scrolls only its rail.
+
+- Replace the fork control under user requests with hover/focus Copy and Edit controls and the recorded local sent day/time. Save inline edits through the revisioned conversation writer without changing the original sent timestamp.
+
 - Close the selected workspace tab immediately, capture Ctrl+W before terminal input, keep side-chat drafts editable during setup, and preserve the landing background in browser split view. Remove browser Resume, Expand, and download toolbar buttons.
 
 - Keep the workspace add-tab control visible when tabs overflow and show local content previews on tab hover or keyboard focus.

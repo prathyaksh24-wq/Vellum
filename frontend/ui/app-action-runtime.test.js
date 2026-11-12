@@ -116,6 +116,30 @@ test.each(['browser','workspace','files'])('new windows restore %s content with 
   expect(AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot().surfaces['right-panel'].visible).toBe(!['browser','workspace'].includes(content));
 });
 
+test('refresh drops legacy temporary tabs without changing saved geometry or sidebar preferences', async()=> {
+  const AppActions=await loadRuntime();
+  const storage=memoryStorage();
+  const initial=AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot();
+  initial.surfaces['right-panel']={...initial.surfaces['right-panel'],visible:true,properties:{...initial.surfaces['right-panel'].properties,content:'workspace',layout:'full',chat_ratio:0.61,items:[{id:'side-tab',kind:'chat',ref:'temporary-chat',title:'Side chat'}],active_item:'side-tab'}};
+  initial.surfaces.sidebar={...initial.surfaces.sidebar,visible:false};
+  storage.setItem('vellum-workspace-layout-v1',JSON.stringify(initial));
+  const fresh=AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot();
+  expect(fresh.surfaces['right-panel']).toMatchObject({visible:false,properties:{layout:'split',chat_ratio:0.61,items:[],active_item:''}});
+  expect(fresh.surfaces.sidebar.visible).toBe(false);
+});
+
+test('device geometry receipts retain tabs in the current window but never restore them in a new one', async()=> {
+  const AppActions=await loadRuntime();
+  const storage=memoryStorage();
+  const runtime=AppActions.createWorkspaceLayoutRuntime({storage,client:{}});
+  const properties={content:'workspace',layout:'split',chat_ratio:0.55,items:[{id:'terminal-tab',kind:'terminal',ref:'terminal-1',title:'Terminal'}],active_item:'terminal-tab'};
+  runtime.applyReceipt(surfaceReceipt({reference:'right-panel',presentation:{visible:true,properties},baseRevision:0,revision:1}));
+  expect(runtime.snapshot().surfaces['right-panel'].properties.items).toEqual(properties.items);
+  expect(JSON.parse(storage.value('vellum-workspace-layout-v1')).surfaces['right-panel'].properties).toMatchObject({items:[],active_item:'',chat_ratio:0.55});
+  const fresh=AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot();
+  expect(fresh.surfaces['right-panel']).toMatchObject({visible:false,properties:{items:[],active_item:'',chat_ratio:0.55}});
+});
+
 describe("Workspace Layout App Action adapter", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

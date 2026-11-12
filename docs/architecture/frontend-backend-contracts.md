@@ -263,3 +263,51 @@ state; the backend retains approval, save location, completion and persistence.
 A transfer without a known total is indeterminate. Failed/unacknowledged saved
 items drive attention. Approval-pending downloads cannot be resumed through
 ordinary transfer controls. Unsupported browser options are absent.
+
+
+### User request metadata and corrections
+
+Main chat and temporary side chats project per-message `sent_at` in the user's
+local time zone. The client records the ISO timestamp when a request is submitted;
+reloads and edits do not replace it. Historical records without a valid timestamp
+show Time unavailable. Copy uses the system clipboard only. Hover and keyboard
+focus reveal the metadata and actions without moving the message.
+
+`conversation.message.edit` accepts a conversation ID, user-message ID, text and
+optional target revision through the existing conversation App Action runtime.
+The canonical lifecycle writer validates the role and revision, rejects edits
+while a response is streaming, updates only the request text plus `edited_at`,
+and retains attachments, sent time and existing replies. Save returns the updated
+conversation in the ordinary receipt; it does not resend the request or execute
+a model. Drafts and Cancel remain local presentation.
+
+
+### Image attachment preview compatibility
+
+The composer preview `url` may contain a full image data URL. Chat transport
+removes that display alias and submits the bytes once in `data_url`, retaining
+all prepared privacy/metadata fields. The canonical attachment contract also
+normalizes old `data:image/…` URL aliases before field validation, including
+saved attachments used to restore or fork context. Normal URLs keep their
+4,096-character limit; image data retains its existing 10 MB bound. No file is
+fetched and no disclosure grant or metadata-stripping status is inferred.
+Local Ollama conversion and cloud DisclosureBroker conversion keep their owners.
+Attachment validation errors are described as attachment failures, rather than
+as backend connectivity failures. No image or validation payload is echoed.
+
+
+### Droplets and temporary workspace references
+
+DeviceAppearanceSettings adds a strict boolean `droplets`, default false. The
+Appearance switch saves through `settings.device.update`; selecting a background
+or theme preserves this independent overlay preference. The existing background
+owner wraps only the decorative scene in the locally bundled Canvas UI renderer.
+The supplied parameters remain fixed, pointer input never intercepts controls,
+and the renderer is released while the document is hidden. Reduced motion and
+unsupported-browser fallbacks remain with Canvas UI. Full refraction requires
+HTML-in-canvas; other browsers retain its transparent animated-drop fallback.
+
+Workspace Layout keeps `right-panel.items` and `active_item` available in the
+current window, but excludes these temporary references from device storage.
+Startup masks references in older snapshots as well as hiding the pane. Saved
+geometry and the canonical conversation/browser/terminal records are unchanged.

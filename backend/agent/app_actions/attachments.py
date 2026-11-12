@@ -18,7 +18,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zipfile import BadZipFile, ZipFile
 import xml.etree.ElementTree as ET
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agent.privacy.classifier import DataClass, classify
 
@@ -86,6 +86,19 @@ class ConversationAttachment(BaseModel):
     privacy_class: str = ""
     metadata_stripped: bool = False
     reference: ComposerReference | None = None
+
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_image_preview(cls, value: Any) -> Any:
+        # Older composers saved the full image in both data_url and the UI's
+        # preview url. Keep the binary in its bounded canonical field so the
+        # ordinary URL limit cannot reject images or silently drop saved ones.
+        if isinstance(value, dict) and str(value.get("url") or "").startswith("data:image/"):
+            value = dict(value)
+            value["data_url"] = value.get("data_url") or value["url"]
+            value["url"] = None
+        return value
 
 
 class AttachmentImportError(ValueError):

@@ -142,6 +142,7 @@ CONVERSATION_OPEN_ACTION_ID = "conversation.open"
 CONVERSATION_PIN_ACTION_ID = "conversation.pin"
 CONVERSATION_UNPIN_ACTION_ID = "conversation.unpin"
 CONVERSATION_RENAME_ACTION_ID = "conversation.rename"
+CONVERSATION_MESSAGE_EDIT_ACTION_ID = "conversation.message.edit"
 CONVERSATION_SPACE_ACTION_ID = "conversation.space.set"
 CONVERSATION_PROJECT_ACTION_ID = "conversation.project.set"
 PROJECT_CREATE_ACTION_ID = "project.create"
@@ -3598,6 +3599,7 @@ class AppActionRuntime:
         self._register(CONVERSATION_PIN_ACTION_ID, "Pin conversation", self._pin_conversation)
         self._register(CONVERSATION_UNPIN_ACTION_ID, "Unpin conversation", self._unpin_conversation)
         self._register(CONVERSATION_RENAME_ACTION_ID, "Rename conversation", self._rename_conversation)
+        self._register(CONVERSATION_MESSAGE_EDIT_ACTION_ID, "Edit request", self._edit_conversation_message)
         self._register(CONVERSATION_SPACE_ACTION_ID, "Change conversation Space", self._set_conversation_space)
         self._register(CONVERSATION_PROJECT_ACTION_ID, "Move conversation to project", self._set_conversation_project)
         for action_id in (PROJECT_CREATE_ACTION_ID, PROJECT_UPDATE_ACTION_ID, PROJECT_REMOVE_ACTION_ID):
@@ -3899,6 +3901,21 @@ class AppActionRuntime:
                 if shared.get("provider_id") == "local_export"
                 else "Conversation shared."
             ),
+        }
+
+    def _edit_conversation_message(self, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get("arguments") or {})
+        context = AppActionContext.model_validate(payload.get("context"))
+        conversation_id = self._conversation_target(arguments, context)
+        mutation = self._conversation_service().edit_user_message(
+            conversation_id, str(arguments.get("message_id") or ""), arguments.get("text"),
+            expected_revision=self._expected_target_revision(arguments),
+        )
+        conversation = mutation["conversation"]
+        return {
+            "changed": bool(mutation["changed"]), "target_kind": "conversation",
+            "target_id": conversation_id, "target_revision": int(conversation.get("revision", 0)),
+            "conversation": conversation, "message": "Request updated.",
         }
 
     def _rename_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -4645,6 +4662,7 @@ class AppActionRuntime:
             (CONVERSATION_PIN_ACTION_ID, "Pin a chat", "Pin a conversation in the sidebar.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_UNPIN_ACTION_ID, "Unpin a chat", "Remove a conversation from the pinned group.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_RENAME_ACTION_ID, "Rename a chat", "Change a conversation title.", True, False, "none", {"conversation_id": {"type": "string"}, "title": {"type": "string", "minLength": 1, "maxLength": 160}, "target_revision": {"type": "integer"}, **reference}),
+            (CONVERSATION_MESSAGE_EDIT_ACTION_ID, "Edit a request", "Correct a saved user message while retaining its sent timestamp and replies.", False, False, "none", {"conversation_id": {"type": "string"}, "message_id": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1, "maxLength": 100000}, "target_revision": {"type": "integer"}}),
             (CONVERSATION_SPACE_ACTION_ID, "Change chat Space", "Move a conversation to a Space.", True, False, "none", {"conversation_id": {"type": "string"}, "assignment": {"enum": ["automatic", "manual"]}, "space_id": {"type": "string"}, "space_label": {"type": "string"}, "topic_id": {"type": "string"}, "topic_label": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_PROJECT_ACTION_ID, 'Move chat to project', 'Assign a conversation to a folder without changing its messages or memory Space.', True, False, 'none', {'conversation_id': {'type': 'string'}, 'project_id': {'type': ['string', 'null'], 'maxLength': 80}, 'target_revision': {'type': 'integer'}, **reference}),
             (PROJECT_CREATE_ACTION_ID, 'Create project', 'Create a conversation folder.', False, False, 'none', {'name': {'type': 'string', 'minLength': 1, 'maxLength': 80}, 'memory': {'enum': ['default', 'project-only']}}),

@@ -189,3 +189,40 @@ async def test_mixed_path_action_feeds_path_free_attachment_into_same_agent_turn
     assert seen[0]["attachments"][0].text_content == "Quarterly plan"
     assert str(source) not in seen[0]["clean_message"]
     assert "app.action.receipt" in body
+
+
+def test_large_composer_image_preview_reaches_multimodal_content() -> None:
+    from random import Random
+
+    buffer = BytesIO()
+    Image.frombytes("RGB", (64, 64), Random(4).randbytes(64 * 64 * 3)).save(buffer, format="PNG")
+    prepared = AttachmentImportService().import_uploads([{
+        "name": "screenshot.png", "mime_type": "image/png",
+        "data_url": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(),
+    }])[0].model_dump()
+    assert len(prepared["data_url"]) > 4096
+    request = api.ChatRequest.model_validate({
+        "message": "What is in this image?",
+        "attachments": [{**prepared, "url": prepared["data_url"]}],
+    })
+    attachment = request.attachments[0]
+    assert attachment.url is None
+    assert attachment.data_url == prepared["data_url"]
+    assert attachment.egress_scope == "current_turn"
+    assert attachment.metadata_stripped is True
+    content = api._agent_content_with_attachments(request.message, request.attachments)
+    assert content[1]["type"] == "vellum_attachment_image"
+    assert content[1]["data_url"] == prepared["data_url"]
+
+
+def test_saved_image_url_alias_does_not_create_disclosure_permissions() -> None:
+    from pydantic import ValidationError
+
+    data_url = "data:image/png;base64," + base64.b64encode(_png_bytes()).decode()
+    legacy = api.ChatAttachment.model_validate({"name": "legacy.png", "mime_type": "image/png", "url": data_url})
+    assert legacy.data_url == data_url
+    assert legacy.url is None
+    assert legacy.egress_scope == ""
+    assert legacy.metadata_stripped is False
+    with pytest.raises(ValidationError):
+        api.ChatAttachment.model_validate({"url": "https://example.com/" + "x" * 4096})

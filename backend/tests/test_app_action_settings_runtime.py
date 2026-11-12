@@ -695,3 +695,29 @@ def test_unwired_settings_actions_are_truthfully_unavailable() -> None:
     assert DEFAULT_MODEL_SET_ACTION_ID not in ids
     receipt = runtime.dispatch(AppActionRequest(action_id=DEFAULT_MODEL_SET_ACTION_ID), context())
     assert (receipt.status, receipt.error_code) == ("unavailable", "ACTION_UNAVAILABLE")
+
+
+def test_droplets_toggle_preserves_the_selected_background_and_other_appearance_values():
+    runtime, *_ = make_runtime()
+    ctx=context('ui').model_copy(update={'device_settings':{'version':1,'revision':2,'values':{'background':'meadow','appearance':{'light_theme':'default','dark_theme':'default','background_opacity':0.6}}}})
+    receipt=runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,arguments={'patch':{'appearance':{'droplets':True}}}),ctx)
+    assert receipt.status=='applied'
+    values=receipt.result['device_settings_patch']['values']
+    assert 'background' not in values
+    assert values['appearance']=={'light_theme':'default','dark_theme':'default','background_opacity':0.6,'droplets':True}
+
+
+def test_changing_scenes_preserves_the_droplets_overlay():
+    runtime, *_ = make_runtime()
+    ctx=context('ui').model_copy(update={'device_settings':{'version':1,'revision':2,'values':{'background':'meadow','appearance':{'light_theme':'catppuccin','dark_theme':'catppuccin','droplets':True}}}})
+    receipt=runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,arguments={'patch':{'background':'nimbus'}}),ctx)
+    assert receipt.status=='applied'
+    assert receipt.result['device_settings_patch']['values']['appearance']=={'light_theme':'default','dark_theme':'default','droplets':True}
+
+
+@pytest.mark.parametrize('value',['false',1,None,{}])
+def test_droplets_rejects_non_boolean_preferences(value):
+    runtime, *_ = make_runtime()
+    receipt=runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,arguments={'patch':{'appearance':{'droplets':value}}}),context('ui'))
+    assert receipt.status!='applied'
+    assert 'device_settings_patch' not in receipt.result

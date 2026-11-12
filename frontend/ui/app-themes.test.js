@@ -156,3 +156,14 @@ test('failed selection keeps the saved profile and exposes a recovery error',asy
   expect(picker.value).toBe('catppuccin');expect(picker.disabled).toBe(false);
   expect(host.querySelector('[role="alert"]').textContent).toContain('Theme could not be saved');
 });
+
+
+test('named themes keep an enabled droplets background layer visible in both modes',()=>{
+  for(const mode of ['light','dark']) {
+    themes.apply({light_theme:'zen-linen',dark_theme:'zen-linen',droplets:true},mode);
+    expect(document.documentElement.style.getPropertyValue('--app-background-opacity')).toBe('1');
+    expect(document.documentElement.dataset.appTheme).toBe('zen-linen');
+    themes.apply({light_theme:'zen-linen',dark_theme:'zen-linen',droplets:false},mode);
+    expect(document.documentElement.style.getPropertyValue('--app-background-opacity')).toBe('0');
+  }
+});

@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1011,
-      "sha256": "723b563ba8896be9e2d81babf50d9da361d5dcbd8f1db3b8b6b1669f5a9f3399"
+      "count": 1023,
+      "sha256": "76d68176b0995ec1c9f3073a4e70c36179c823a824e3c37c39ed50ab4764f481"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -312,6 +312,14 @@
     "design/Velllum/uploads/components/app-theme-settings.jsx": {
       "count": 1,
       "sha256": "dcb09e8006cb91d85df4c77bb27e4ddfd10d9489d63b0b489320cb005faa6486"
+    },
+    "design/Velllum/uploads/components/droplets-background.jsx": {
+      "count": 1,
+      "sha256": "9e37f496cfe13344128e7bf1288b8474f40f4425c98793347002ced4b1e03b9b"
+    },
+    "design/Velllum/uploads/droplets-entry.js": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
   "covered": [
@@ -2447,6 +2455,24 @@
         "path": "design/Velllum/uploads/components/app-theme-settings.jsx",
         "text": "onDeviceSettings({appearance:patch})"
       }
+    },
+    {
+      "surface": "User messages",
+      "name": "Save edited request",
+      "actionId": "conversation.message.edit",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "dispatchConversationAction('conversation.message.edit',"
+      }
+    },
+    {
+      "surface": "Appearance",
+      "name": "Droplets overlay on the selected background",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/droplets-background.jsx",
+        "text": "onDeviceSettings({appearance:{droplets:!enabled}})"
+      }
     }
   ],
   "exemptions": [
@@ -2645,6 +2671,10 @@
     {
       "scope": "Workspace pane setup previews and tab hover or focus content previews",
       "reason": "Transient presentation in the existing layout owner. Pending previews are excluded from action context and persistence and removed on a failed receipt. Browser thumbnails use the existing trusted desktop bridge without selecting or navigating the page."
+    },
+    {
+      "scope": "Request hover controls, sent-time labels, clipboard copy and inline edit drafts",
+      "reason": "The row projects saved per-message sent_at timestamps in local time. Missing historical timestamps are disclosed. Hover/focus, clipboard copying and unsaved text/Cancel are local presentation. Save dispatches conversation.message.edit with the existing revisioned conversation runtime; the lifecycle writer preserves IDs, attachments, timestamps and existing replies."
     }
   ],
   "deferred": [

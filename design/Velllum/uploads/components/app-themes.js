@@ -114,7 +114,7 @@
     if(!profile)Object.assign(variables,{'--txt':readable(foreground,surface,7),'--txt2':readable(legacyPalette?.foregroundStrong||foreground,surface,7),'--dim':secondary,'--dim2':secondary});
     root.dataset.appTheme=profile?.preset.id||'default';
     // Scenes retain their original pixels. Legacy visibility settings are ignored.
-    variables['--app-background-opacity']=profile?'0':'1';
+    variables['--app-background-opacity']=profile&&settings.droplets!==true?'0':'1';
     for(const [name,value] of Object.entries(variables)) {
       root.style.setProperty(name,value);
       ownedProperties.add(name);

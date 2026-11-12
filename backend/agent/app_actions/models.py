@@ -140,6 +140,7 @@ class DeviceAppearanceSettings(BaseModel):
     light_theme: AppThemeId = "default"
     dark_theme: AppThemeId = "default"
     background_opacity: float = Field(default=0.4, ge=0, le=1, allow_inf_nan=False)
+    droplets: bool = Field(default=False, strict=True)
 
 
 class DeviceSettingsValues(BaseModel):

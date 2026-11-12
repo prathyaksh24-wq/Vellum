@@ -286,6 +286,26 @@ class ConversationLifecycle:
                 }
         raise ConversationLifecycleError("CONVERSATION_NOT_FOUND", "Conversation not found.")
 
+    def edit_user_message(
+        self, conversation_id: str, message_id: str, text: str, *,
+        expected_revision: int | None = None,
+    ) -> dict[str, Any]:
+        """Correct a saved request through the conversation writer; retain its sent time."""
+        if not message_id or not isinstance(text, str) or not text.strip() or len(text) > 100_000:
+            raise ConversationLifecycleError("INVALID_MESSAGE_EDIT", "Enter a message of 1 to 100,000 characters.")
+        with self._lock:
+            conversation = self.get(conversation_id)
+            messages = deepcopy(conversation.get("messages") or [])
+            message = next((row for row in messages if str(row.get("id")) == message_id), None)
+            if message is None or message.get("role") != "user":
+                raise ConversationLifecycleError("USER_MESSAGE_NOT_FOUND", "The request is no longer available to edit.")
+            if message.get("transcribing") or any(row.get("streaming") for row in messages):
+                raise ConversationLifecycleError("CONVERSATION_BUSY", "Wait for the current response before editing a request.")
+            if message.get("text") != text:
+                message["text"] = text
+                message["edited_at"] = self._now().isoformat(timespec="seconds")
+            return self.patch(conversation_id, {"messages": messages}, expected_revision=expected_revision)
+
     def set_organization(
         self,
         conversation_id: str,
