@@ -656,7 +656,7 @@ class DedicatedBrowser(BrowserSettingsMixin):
                 if page.url != "about:blank" and id(page) not in self._tab_loads:
                     title = self._tab_titles.get(id(page)) or urlsplit(page.url).hostname or "Page"
                     self._request_title(page)
-                tabs.append(BrowserTab(id=key, index=index, title=title or "New tab", url=page.url, active=page is self.active_page,
+                tabs.append(BrowserTab(id=key, native_target_id=self.context.target_for_page(page) if self._native is not None and self.context is not None else '', index=index, title=title or "New tab", url=page.url, active=page is self.active_page,
                     loading=id(page) in self._tab_loads, error=self._tab_errors.get(id(page), "")))
                 if id(page) not in self._tab_loads:
                     self._remember_address(page.url, title)

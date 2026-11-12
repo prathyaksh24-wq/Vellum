@@ -65,6 +65,65 @@
     };
     return {available,visible,mode,tabs:state.tabs||[],trigger,pending,error,show,layout,select,hide};
   }
+  function WorkspaceTab({tab,active,icon,onSelect,onClose}) {
+    const trigger=useRef(null),timer=useRef(null),previewBody=useRef(null);
+    const [preview,setPreview]=useState(null),[image,setImage]=useState(''),[phase,setPhase]=useState('closed');
+    const showing=useRef(false);
+    const dismiss=()=>{
+      showing.current=false;clearTimeout(timer.current);setPhase('leaving');
+      timer.current=setTimeout(()=>{setPreview(null);setPhase('closed');},200);
+    };
+    const reveal=()=>{
+      clearTimeout(timer.current);showing.current=true;
+      timer.current=setTimeout(()=>{
+        if(!showing.current||!trigger.current?.isConnected)return;
+        const bounds=trigger.current.getBoundingClientRect(),width=Math.min(320,innerWidth-24);
+        setImage('');setPreview({left:Math.max(12,Math.min(bounds.left,innerWidth-width-12)),top:Math.min(bounds.bottom+8,Math.max(12,innerHeight-250)),width});setPhase('entering');
+      },100);
+    };
+    useEffect(()=>()=>{clearTimeout(timer.current);},[]);
+    useEffect(()=>{if(active)trigger.current?.scrollIntoView?.({block:'nearest',inline:'nearest'});},[active]);
+    useEffect(()=>{
+      window.dispatchEvent(new Event('vellum:shell-overlay'));
+      return()=>{requestAnimationFrame(()=>window.dispatchEvent(new Event('vellum:shell-overlay')));};
+    },[!!preview]);
+    useEffect(()=>{
+      if(!preview)return;
+      const close=event=>{if(event.type==='keydown'){if(event.key!=='Escape')return;event.preventDefault();event.stopPropagation();}dismiss();};
+      window.addEventListener('resize',close);window.addEventListener('blur',close);document.addEventListener('keydown',close);
+      return()=>{window.removeEventListener('resize',close);window.removeEventListener('blur',close);document.removeEventListener('keydown',close);};
+    },[!!preview]);
+    useLayoutEffect(()=>{
+      if(!preview)return;
+      let live=true;
+      const frame=requestAnimationFrame(()=>{if(showing.current)setPhase('open');});
+      if(tab.kind==='browser'){
+        const target=tab.preview_target_id;
+        if(target)window.VellumDesktop?.browser?.mount({preview_only:true,target_id:target}).then(result=>{if(live&&result?.preview)setImage(result.preview);}).catch(()=>{});
+      }else{
+        const source=tab.kind==='main'?document.querySelector('.workspace-split > .main'):[...document.querySelectorAll('[data-workspace-item]')].find(node=>node.dataset.workspaceItem===tab.id);
+        if(source&&previewBody.current){
+          const copy=source.cloneNode(true),width=source.clientWidth||800,height=source.clientHeight||500;
+          copy.removeAttribute('hidden');copy.removeAttribute('inert');copy.removeAttribute('data-workspace-item');
+          copy.querySelectorAll('script,iframe,video,audio,object,embed').forEach(node=>node.remove());
+          copy.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+          copy.querySelectorAll('input[type=password]').forEach(node=>{node.value='';node.removeAttribute('value');});
+          const originals=source.querySelectorAll('canvas');
+          copy.querySelectorAll('canvas').forEach((node,index)=>{try{node.getContext('2d').drawImage(originals[index],0,0);}catch{}});
+          Object.assign(copy.style,{display:'flex',position:'absolute',inset:'0 auto auto 0',width:width+'px',height:height+'px',transform:'scale('+preview.width/width+')',transformOrigin:'top left',animation:'none',pointerEvents:'none'});
+          copy.inert=true;previewBody.current.replaceChildren(copy);
+        }
+      }
+      return()=>{live=false;cancelAnimationFrame(frame);previewBody.current?.replaceChildren();};
+    },[preview,tab.id,tab.preview_target_id,tab.url]);
+    return <div className={'workspace-view-tab'+(active?' active':'')} onMouseEnter={reveal} onMouseLeave={dismiss}>
+      <button ref={trigger} type="button" role="tab" data-workspace-tab={tab.id} aria-selected={active} onFocus={reveal} onBlur={dismiss} onClick={()=>{dismiss();onSelect(tab);}}><Icon name={icon} size={15}/><span>{tab.title}</span></button>
+      {onClose&&<button type="button" aria-label={'Close '+tab.title} onClick={()=>{dismiss();onClose(tab);}}><Icon name="X" size={13}/></button>}
+      {preview&&ReactDOM.createPortal(<aside className="workspace-tab-preview" data-phase={phase} role="tooltip" aria-label={tab.title+' preview'} data-shell-overlay="true" style={preview}><strong>{tab.title}</strong><div className="workspace-tab-preview-body" aria-hidden="true" ref={previewBody}>
+        {tab.kind==='browser'&&(image?<img src={image} alt=""/>:<div className="workspace-tab-preview-empty"><Icon name="Globe" size={24}/><span>{tab.title}</span></div>)}
+      </div></aside>,document.body)}
+    </div>;
+  }
   function WorkspaceToolbar({controller:c,workspace:w,sidebar,title,conversation,project,sidebarVisible=true,onNewChat,onOpenProject,onDetails,detailsOpen,onOptions}) {
     const full=w.mode==='full'&&w.tabs.length>0;
     const tabIcon=tab=>tab.kind==='chat'?'Chat':['files','directory'].includes(tab.kind)?'Files':tab.kind==='terminal'?'Terminal':tab.kind==='integration'?'ConnectApps':tab.kind==='launcher'?'Tabs':'Globe';
@@ -79,11 +138,11 @@
       {!full&&!w.visible&&<>{conversation&&<span className="workspace-control-divider"/>}{newTab}</>}
     </div>;
     return <header className={'workspace-header'+(full?' workspace-unified-tabs':'')} aria-label="Workspace controls">
-      {full?<div className="workspace-view-tabs" role="tablist" aria-label="Workspace views" onKeyDown={event=>{
+      {full?<div className="workspace-tabs-group"><div className="workspace-view-tabs" role="tablist" aria-label="Workspace views" onKeyDown={event=>{
         if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
         const tabs=[...event.currentTarget.querySelectorAll('[role=tab]')],index=tabs.indexOf(document.activeElement);
         if(index<0)return;event.preventDefault();tabs[event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:tabs.length-1))%tabs.length].focus();
-      }}><button type="button" role="tab" aria-selected={!w.visible} className={'workspace-chat-tab'+(!w.visible?' active':'')} onClick={w.showMain}><Icon name="Chat" size={15}/><span>{title||'Current chat'}</span></button>{w.tabs.map(tab=><div className={'workspace-view-tab'+(w.visible&&w.activeId===tab.id?' active':'')} key={tab.id}><button type="button" role="tab" aria-selected={w.visible&&w.activeId===tab.id} onClick={()=>w.select(tab)}><Icon name={tabIcon(tab)} size={15}/><span>{tab.title}</span></button><button type="button" aria-label={'Close '+tab.title} onClick={()=>w.close(tab)}><Icon name="X" size={13}/></button></div>)}{newTab}</div>:<div className="workspace-header-start">{sidebar}{conversation&&!sidebarVisible&&<button type="button" className="tbtn" aria-label="New chat" data-command="chat.new" onClick={onNewChat}><Icon name="PencilSquare" size={18}/></button>}{conversation&&project&&!sidebarVisible&&<button type="button" className="tbtn workspace-project-context" aria-label={'Project: '+project.name} onClick={()=>onOpenProject(project.id)}><Icon name="Folder" size={17}/></button>}<span className="workspace-title">{title}</span></div>}
+      }}><WorkspaceTab tab={{id:'main',kind:'main',title:title||'Current chat'}} active={!w.visible} icon="Chat" onSelect={w.showMain}/>{w.tabs.map(tab=><WorkspaceTab key={tab.id} tab={tab} active={w.visible&&w.activeId===tab.id} icon={tabIcon(tab)} onSelect={w.select} onClose={w.close}/>)}</div>{newTab}</div>:<div className="workspace-header-start">{sidebar}{conversation&&!sidebarVisible&&<button type="button" className="tbtn" aria-label="New chat" data-command="chat.new" onClick={onNewChat}><Icon name="PencilSquare" size={18}/></button>}{conversation&&project&&!sidebarVisible&&<button type="button" className="tbtn workspace-project-context" aria-label={'Project: '+project.name} onClick={()=>onOpenProject(project.id)}><Icon name="Folder" size={17}/></button>}<span className="workspace-title">{title}</span></div>}
       {full&&<button type="button" className="tbtn" aria-label={w.visible?'Enter split view':'Enter full view'} data-tip={w.visible?'Enter split view':'Enter full view'} onClick={()=>w.layout(w.visible?'split':'full')}><Icon name={w.visible?'Split':'Full'} size={18}/></button>}
       {actions}{(c.error||w.error)&&<div className="workspace-control-error" role="alert">{w.error||c.error}</div>}
     </header>;
@@ -93,12 +152,9 @@
     const sideChatActive=w.tabs.some(tab=>tab.id===w.activeId&&tab.kind==='chat');
     return <header className="workspace-pane-tabs">
       <div className="workspace-view-tabs" role="tablist" aria-label="Open workspace views">
-        {w.tabs.map(tab=><div className={'workspace-view-tab'+(w.activeId===tab.id?' active':'')} key={tab.id}>
-          <button type="button" role="tab" aria-selected={w.activeId===tab.id} onClick={()=>w.select(tab)}><Icon name={tabIcon(tab)} size={15}/><span>{tab.title}</span></button>
-          <button type="button" aria-label={'Close '+tab.title} onClick={()=>w.close(tab)}><Icon name="X" size={13}/></button>
-        </div>)}
-        <button type="button" ref={c.trigger} className="tbtn" aria-label="New workspace tab" onClick={()=>w.open('launcher','split')}><Icon name="Plus" size={18}/></button>
+        {w.tabs.map(tab=><WorkspaceTab key={tab.id} tab={tab} active={w.activeId===tab.id} icon={tabIcon(tab)} onSelect={w.select} onClose={w.close}/>)}
       </div>
+      <button type="button" ref={c.trigger} className="tbtn workspace-new-tab" aria-label="New workspace tab" onClick={()=>w.open('launcher','split')}><Icon name="Plus" size={18}/></button>
       {!sideChatActive&&<div className="workspace-pane-actions">
         <button type="button" className="tbtn" aria-label="Enter full view" onClick={()=>w.layout('full')}><Icon name="Full" size={16}/></button>
         <button type="button" className="tbtn" aria-label="Hide workspace views" onClick={w.hide}><Icon name="X" size={16}/></button>

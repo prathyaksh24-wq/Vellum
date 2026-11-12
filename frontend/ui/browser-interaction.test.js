@@ -453,10 +453,9 @@ test('native home never streams frames or forwards typing, and switching engines
     expect(rootContainer.querySelector('.browser-home').dataset.engine).toBe('brave');
     await act(async()=>rootContainer.querySelector('.browser-home-search').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
     expect(api.control).toHaveBeenLastCalledWith({operation:'navigate',url:'https://search.brave.com/search?q=browser%20tools'},undefined);
-    await act(async()=>rootContainer.querySelector('[title="Expand browser"]').click());
-    expect(rootContainer.querySelector('.browser-expanded')).not.toBeNull();
-    await act(async()=>rootContainer.querySelector('[title="Restore split view"]').click());
-    expect(rootContainer.querySelector('.browser-expanded')).toBeNull();
+    expect(rootContainer.querySelector('[title="Expand browser"]')).toBeNull();
+    expect(rootContainer.querySelector('[title="Resume agent"]')).toBeNull();
+    expect(rootContainer.querySelector('.browser-download-indicator')).toBeNull();
     expect(braveSearch.value).toBe('browser tools');
   } finally {await act(async()=>root.unmount());rootContainer.remove();}
 });

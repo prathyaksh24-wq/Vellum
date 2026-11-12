@@ -128,6 +128,7 @@ class BrowserControl(BaseModel):
 
 class BrowserTab(BaseModel):
     id: str
+    native_target_id: str = ""
     index: int
     title: str
     url: str

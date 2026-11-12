@@ -12,6 +12,11 @@ function workspace(){
   const code=html.slice(html.indexOf('  const openWorkspace='),html.indexOf('  const workspaceResources='));
   const bindings={
     state,
+    pendingSideChatCreates:{current:new Map()},
+    closingWorkspaceIds:{current:new Set()},workspaceCloseSelection:{current:null},setClosingWorkspaceTabs:()=>{},
+    workspaceViews:{get activeId(){return state.properties.active_item;}},
+    workspaceTerminalAvailable:true,
+    workspaceActionRuntimeRef:{current:{previewSurface:vi.fn(()=>()=>{}),context:()=>({workspace_layout:{surfaces:{'right-panel':state}}})}},
     runWorkspace:work=>work(),
     getWorkspacePresentation:()=>state,
     setWorkspace:async(p,visible=true)=>{state.properties={...state.properties,...p};state.visible=visible;},
@@ -30,7 +35,7 @@ function workspace(){
     API:{browser:{addressUrl:()=> 'https://www.google.com/search?q=hello'},conversations:{get:async()=>({conversation:sideChat})}},
     browserState:{tabs:[],preferences:{}},
   };
-  const owner=Function(...Object.keys(bindings),'const getChats=()=>state.chats;'+code.replace(/\bchats\.find\(/g,'getChats().find(')+';return {openWorkspace,closeWorkspaceItem};')(...Object.values(bindings));
+  const owner=Function(...Object.keys(bindings),'const getChats=()=>state.chats;const getWorkspaceTabs=()=>state.properties.items;'+code.replace(/\bchats\.find\(/g,'getChats().find(').replace(/workspaceTabs\.filter\(/g,'getWorkspaceTabs().filter(')+';return {openWorkspace,closeWorkspaceItem};')(...Object.values(bindings));
   return {state,dispatch,confirm,openBrowser,...owner};
 }
 test('side chat opens from a temporary record and confirms deletion of that record on close',async()=>{
@@ -61,4 +66,16 @@ test('closing one launcher retains and selects the remaining workspace tab',asyn
 test('launcher search passes its results URL into browser creation',async()=>{
   const owner=workspace();await owner.openWorkspace('browser','split','hello');
   expect(owner.openBrowser).toHaveBeenCalledExactlyOnceWith({mode:'split',newTab:true,initialUrl:'https://www.google.com/search?q=hello',throwOnError:true});
+});
+
+
+test('separate terminal views keep independent identities when reopened',async()=>{
+  const owner=workspace();
+  await owner.openWorkspace('terminal');await owner.openWorkspace('terminal');
+  const [first,second]=owner.state.properties.items;
+  expect(first.kind).toBe('terminal');expect(second.kind).toBe('terminal');
+  expect(first.id).not.toBe(second.id);
+  expect(first.reference_id).not.toBe(second.reference_id);
+  await owner.closeWorkspaceItem(second);
+  expect(owner.state.properties.items.map(item=>item.id)).toEqual([first.id]);
 });

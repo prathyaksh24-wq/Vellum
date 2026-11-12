@@ -61,6 +61,7 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
     for (const [id, tab] of tabs) {
       const visible = mount && mount.visible && id === active && !tab.background && tab.view.webContents.getURL() !== 'about:blank';
       if (!visible) {
+        if (tab.parent)captureTabPreview(tab).catch(()=>{});
         if (tab.parent && !tab.parent.isDestroyed()) tab.parent.contentView.removeChildView(tab.view);
         tab.parent = null;
         continue;
@@ -74,6 +75,25 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       tab.view.setBounds({x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height});
       tab.view.setVisible(true);
     }
+  }
+  async function captureTabPreview(tab) {
+    const page=tab?.view.webContents;
+    if(!page || page.isDestroyed() || page.getURL()==='about:blank')return '';
+    const url=page.getURL();
+    if(tab.preview && tab.previewURL===url && Date.now()-tab.previewAt<2000)return tab.preview;
+    if(tab.previewRequest)return tab.previewRequest;
+    const pending=(async()=>{
+      try {
+        // Capturing a background tab must not bring it forward or change focus.
+        const image=await page.capturePage(undefined,{stayHidden:true,stayAwake:true});
+        if(page.isDestroyed() || image.isEmpty() || page.getURL()!==url)return tab.previewURL===url?tab.preview||'':'';
+        tab.preview='data:image/jpeg;base64,'+image.resize({width:480}).toJPEG(70).toString('base64');
+        tab.previewAt=Date.now();tab.previewURL=url;
+        return tab.preview;
+      }catch{return tab.previewURL===url?tab.preview||'':'';}
+    })();
+    tab.previewRequest=pending;
+    try{return await pending;}finally{if(tab.previewRequest===pending)tab.previewRequest=null;}
   }
   async function create(background = false) {
     if (!profile) throw new Error('Open the browser profile first.');
@@ -89,6 +109,7 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
     const target = contents.getOrCreateDevToolsTargetId();
     const tab = {view, background, parent:null, fullscreen:false};
     tabs.set(target, tab);
+    contents.on('did-finish-load',()=>{captureTabPreview(tab).catch(()=>{});});
     if (!background) active = target;
     const navigate = (event, url) => { try { webURL(url); } catch { event.preventDefault(); } };
     contents.on('will-navigate', navigate);
@@ -300,6 +321,11 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
   await fs.writeFile(descriptorPath,JSON.stringify(descriptor),{mode:0o600});
   return {
     async mount(window, data) {
+      // Read only, via the existing trusted-workspace IPC guard. Never select,
+      // navigate or mount a page just to show its tab preview.
+      if (data.preview_only === true) {
+        return {preview:await captureTabPreview(tabs.get(data.target_id))};
+      }
       if (data.focus_chrome === true) { window.webContents.focus(); return; }
       if (data.prepare_only === true) {
         const page=tabs.get(active)?.view.webContents;

@@ -6,6 +6,12 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Close the selected workspace tab immediately, capture Ctrl+W before terminal input, keep side-chat drafts editable during setup, and preserve the landing background in browser split view. Remove browser Resume, Expand, and download toolbar buttons.
+
+- Keep the workspace add-tab control visible when tabs overflow and show local content previews on tab hover or keyboard focus.
+
+- Show workspace panes while their existing owners finish setup, allow separate terminal views, label empty side chats, and shorten dock auto-hide without pinning mouse focus.
+
 - Preserve the original brightness and colors of static and live backgrounds in Light and Dark. Remove the full-page visibility limiter, its slider, Galaxy inversion, and ambient tint layers; keep text and controls on their existing local surfaces.
 
 - Add ten app-wide community themes with one theme chooser and Light/Dark variants. Show named themes on a plain surface; selecting a static or live background replaces the app theme. Keep background text readable, save appearance through the existing device settings action, and update open terminals when colors change.

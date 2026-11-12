@@ -581,3 +581,18 @@ test('plugin sidebar persists independently of the main sidebar in the existing 
   await restored.dispatchSurface('plugin-sidebar',{visible:true});
   expect(restored.snapshot().surfaces['plugin-sidebar'].visible).toBe(true);
 });
+
+test('session pane preview is immediate, stays out of action context, and rolls back on rejection',async()=>{
+  const AppActions=await loadRuntime(),storage=memoryStorage();
+  let finish;
+  const client={dispatch:vi.fn(()=>new Promise(resolve=>{finish=resolve;}))};
+  const runtime=AppActions.createWorkspaceLayoutRuntime({storage,client});
+  const before=runtime.snapshot(),writes=storage.setItem.mock.calls.length;
+  const pending=runtime.dispatchSurface('right-panel',{visible:true,properties:{content:'workspace'}},{persistence:'session'});
+  expect(runtime.snapshot().surfaces['right-panel'].visible).toBe(true);
+  expect(runtime.context('ui','chat').workspace_layout).toEqual(before);
+  await Promise.resolve();
+  finish({status:'failed',message:'Unavailable'});await pending;
+  expect(runtime.snapshot()).toEqual(before);
+  expect(storage.setItem).toHaveBeenCalledTimes(writes);
+});

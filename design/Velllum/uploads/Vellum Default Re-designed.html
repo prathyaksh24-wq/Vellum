@@ -1858,7 +1858,7 @@ body{font-size:14px;font-family:var(--font-ui)}
 .dock-handle.right{right:0;top:50%;width:18px;height:40px;transform:translateY(-50%)}
 .dock-handle.right::after{right:5px;top:3px;bottom:3px;width:4px;border-radius:5px 0 0 5px}
 .dock-layer.open .dock-handle{opacity:0;pointer-events:none}
-.dock-shell{position:absolute;z-index:3;visibility:hidden;pointer-events:none;opacity:0;filter:blur(8px);transition:opacity .18s ease,filter .28s ease,transform .46s cubic-bezier(.22,1,.36,1),visibility 0s linear .46s}
+.dock-shell{position:absolute;z-index:3;visibility:hidden;pointer-events:none;opacity:0;filter:blur(8px);transition:opacity .16s ease,filter .18s ease,transform .22s cubic-bezier(.22,1,.36,1),visibility 0s linear .22s}
 .dock-shell.top{top:24px;left:50%;transform:translate(-50%,-18px) scale(.94)}
 .dock-shell.bottom{bottom:26px;left:50%;transform:translate(-50%,18px) scale(.94)}
 .dock-shell.left{left:26px;top:50%;transform:translate(-18px,-50%) scale(.94)}
@@ -3299,8 +3299,11 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
   const closeDock = () => {
     clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => {
-      if (!locked && !rootRef.current?.contains(document.activeElement)) setNear(false);
-    }, 360);
+      const keyboardFocus=rootRef.current?.contains(document.activeElement) && document.activeElement?.matches(':focus-visible');
+      if (!locked && !rootRef.current?.matches(':hover') && !keyboardFocus) {
+        setNear(false);setAgentsOpen(false);onDismissMusic?.();
+      }
+    }, 80);
   };
   useEffect(() => () => clearTimeout(closeTimer.current), []);
   useEffect(() => {
@@ -3309,7 +3312,7 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
       setNear(true);
     } else if (wasLocked.current && !rootRef.current?.matches(':hover')) {
       clearTimeout(closeTimer.current);
-      closeTimer.current = setTimeout(() => setNear(false), 360);
+      closeTimer.current = setTimeout(() => setNear(false), 80);
     }
     wasLocked.current = locked;
   }, [locked]);
@@ -5497,6 +5500,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
 
       <ConversationPreviewRail messages={msgs}/>
       <div className="msgs">
+        {sideChat && !msgs.length && <div className="side-chat-identity"><IcChat size={30}/><h1>Side chat</h1></div>}
         <div className="msgs-inner">
           {msgs.map(m => m.role === 'user' ? (
             <div key={m.id} id={'m-' + m.id} data-preview-message-id={String(m.id)} className="bubble-wrap">
@@ -9971,6 +9975,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   const turnQueueRef = useRef({});
   const closingSideChats = useRef(new Set());
   const sideChatSaves = useRef(new Map());
+  const pendingSideChatCreates = useRef(new Map());
+  const closingWorkspaceIds = useRef(new Set());
+  const workspaceCloseSelection = useRef(null);
+  const [closingWorkspaceTabs,setClosingWorkspaceTabs] = useState([]);
   const enqueueTurn = (queueKey, task) => {
     const previous = turnQueueRef.current[queueKey] || Promise.resolve();
     const queued = previous.catch(() => {}).then(task);
@@ -10475,8 +10483,9 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   useEffect(() => {
     const h = e => shortcutRef.current && shortcutRef.current(e);
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    // Capture app shortcuts before xterm consumes terminal key events.
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
   }, []);
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
   const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
@@ -10977,13 +10986,13 @@ const [slashSkills, setSlashSkills] = useState([]);
   const openBrowser = async ({mode='split',newTab=false,initialUrl='',throwOnError=false}={}) => {
     try {
       const requestEpoch=++browserRequestEpoch.current;
-      const status=await refreshBrowser();
+      const present=async()=>{const receipt=await dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser',layout:mode,active_item:''}},{notify:false,persistence:'session'});if(receipt?.status!=='applied')throw new Error(receipt?.message||'Workspace tabs could not be shown.');};
+      const [status]=await Promise.all([refreshBrowser(),present()]);
       if(requestEpoch!==browserRequestEpoch.current)return null;
       if(!status.available)throw new Error(status.reason || 'The embedded browser is unavailable. Check Browser settings.');
       if(desktopWorkspace && view==='apps')nav('chat');
       browserSuppressed.current=false;
-      const present=async()=>{const receipt=await dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser',layout:mode,active_item:''}},{notify:false,persistence:'session'});if(receipt?.status!=='applied')throw new Error(receipt?.message||'Workspace tabs could not be shown.');};
-      if(!initialUrl)await present();
+
       if(requestEpoch!==browserRequestEpoch.current)return null;
       if(!status.running){
         const receipt=await API.browser.control({operation:'open'},{invocation_conversation_id:activeChatId || ''});
@@ -10993,7 +11002,6 @@ const [slashSkills, setSlashSkills] = useState([]);
         const applied=await commandWorkspaceBrowser('new_tab',initialUrl?{url:initialUrl}:{});
         if(!applied)throw new Error('A new browser tab could not be created.');
       }
-      if(initialUrl)await present();
       if(requestEpoch===browserRequestEpoch.current)return await refreshBrowser();
     }catch(error){if(throwOnError)throw error;pushToast(error.message);return null;}
   };
@@ -11287,19 +11295,25 @@ const [slashSkills, setSlashSkills] = useState([]);
     if(kind==='chat'&&referenceId&&!isSideChat(chats.find(chat=>chat.id===referenceId)))return;
     const properties=getWorkspacePresentation().properties,items=(properties.items||[]).filter(item=>item.id!==replaceId);
     const reference=referenceId || (kind==='files'?(activeChatId||'library'):['launcher','directory'].includes(kind)?'workspace':'');
-    let item=items.find(item=>item.kind===kind && (kind==='terminal'||['files','directory','integration','chat'].includes(kind)&&reference&&item.reference_id===reference));
+    let item=items.find(item=>item.kind===kind && (['files','directory','integration','chat'].includes(kind)&&reference&&item.reference_id===reference));
     if(!item){
       if(items.length>=12)throw new Error('Close a workspace view before opening another.');
-      let chat;
+      let chat,opening;
       if(kind==='chat'){
-        const receipt=referenceId
-          ? await dispatchConversationAction('conversation.open',{conversation_id:referenceId},{applyNavigation:false,notify:false})
-          : await dispatchConversationAction('conversation.new',{create_record:true,...(activeChatId?{parent_conversation_id:activeChatId}:{})},{applyNavigation:false,notify:false});
+        opening={id:'view:'+crypto.randomUUID(),kind:'chat',reference_id:'',title:'Side chat'};
+        const finishOpening=workspaceActionRuntimeRef.current.previewSurface('right-panel',{visible:true,properties:{items:[...items,opening],content:'workspace',active_item:opening.id,layout:mode}});
+        try {
+        const creating=referenceId
+          ? dispatchConversationAction('conversation.open',{conversation_id:referenceId},{applyNavigation:false,notify:false})
+          : dispatchConversationAction('conversation.new',{create_record:true,...(activeChatId?{parent_conversation_id:activeChatId}:{})},{applyNavigation:false,notify:false});
+        pendingSideChatCreates.current.set(opening.id,creating);
+        const receipt=await creating;
         if(receipt?.status!=='applied'||!receipt.result?.conversation?.id)throw new Error(receipt?.message||'The side chat could not be created.');
         chat=receipt.result.conversation;
         setChats(previous=>previous.some(row=>row.id===chat.id)?previous:[chat,...previous]);
+        } finally {finishOpening();}
       }
-      item={id:'view:'+crypto.randomUUID(),kind,reference_id:chat?.id||reference,title:kind==='launcher'?'New tab':kind==='chat'?'Side chat':kind==='terminal'?'Terminal':kind==='directory'?'Workspace files':kind==='integration'?(apps.find(app=>app.id===reference)?.name||'Plugin'):'Files and previews'};
+      item={id:opening?.id||'view:'+crypto.randomUUID(),kind,reference_id:chat?.id||(kind==='terminal'?crypto.randomUUID():reference),title:kind==='launcher'?'New tab':kind==='chat'?'Side chat':kind==='terminal'?'Terminal '+(items.filter(row=>row.kind==='terminal').length+1):kind==='directory'?'Workspace files':kind==='integration'?(apps.find(app=>app.id===reference)?.name||'Plugin'):'Files and previews'};
       try {
         await setWorkspace({items:[...items,item],content:'workspace',active_item:item.id,layout:mode});
       } catch (error) {
@@ -11337,16 +11351,37 @@ const [slashSkills, setSlashSkills] = useState([]);
       throw error;
     }
   };
-  const closeWorkspaceItem=item=>runWorkspace(async()=>{
+  const closeWorkspaceItem=item=>{
+    item={...item,id:item.id||(item.kind==='browser'?'browser:'+item.reference_id:item.id)};
+    if(closingWorkspaceIds.current.has(item.id))return;
+    item=(getWorkspacePresentation().properties.items||[]).find(row=>row.id===item.id)||item;
+    const properties=getWorkspacePresentation().properties;
+    const before=workspaceTabs.filter(row=>!closingWorkspaceIds.current.has(row.id));
+    const index=before.findIndex(row=>row.id===item.id),remainingTabs=before.filter(row=>row.id!==item.id);
+    const next=(workspaceViews.activeId!==item.id?remainingTabs.find(row=>row.id===workspaceViews.activeId):remainingTabs[index]||remainingTabs[index-1])||remainingTabs[0];
+    workspaceCloseSelection.current=next?.id||null;
+    closingWorkspaceIds.current.add(item.id);setClosingWorkspaceTabs([...closingWorkspaceIds.current]);
+    const finishClose=workspaceActionRuntimeRef.current.previewSurface('right-panel',{visible:!!next,properties:{
+      items:(properties.items||[]).filter(row=>row.id!==item.id),content:next?.kind==='browser'?'browser':'workspace',active_item:next?.kind==='browser'?'':next?.id||''}});
+    return runWorkspace(async()=>{
+    // Setup may have finished while this close waited in the action queue.
+    // Resolve against confirmed layout, not the local removal preview.
+    const confirmed=workspaceActionRuntimeRef.current.context('ui',activeChatId).workspace_layout.surfaces['right-panel'].properties;
+    item=(confirmed.items||[]).find(row=>row.id===item.id)||item;
     if(item.kind==='browser'){
-      await commandWorkspaceBrowser(browserState.tabs.length===1?'close':'close_tab',browserState.tabs.length===1?{}:{tab_id:item.reference_id});
+      // Always address the requested tab. A stale tab count must never close
+      // another page or the entire session.
+      await commandWorkspaceBrowser('close_tab',{tab_id:item.reference_id});
       const status=await refreshBrowser();
       if(status.tabs?.length)return;
     }else{
-      if (item.kind === 'chat') await discardSideChat(chats.find(chat => chat.id === item.reference_id));
+      if (item.kind === 'chat') {
+        const ready=await pendingSideChatCreates.current.get(item.id);
+        await discardSideChat(ready?.result?.conversation||chats.find(chat => chat.id === item.reference_id));
+      }
       const properties=getWorkspacePresentation().properties,remaining=(properties.items||[]).filter(row=>row.id!==item.id);
       if (properties.content === 'browser' && browserState.tabs.length) {
-        await setWorkspace({items:remaining, active_item:''}, getWorkspacePresentation().visible);
+        await setWorkspace({items:remaining,content:'browser',active_item:''},getWorkspacePresentation().visible);
         return;
       }
       const active=properties.active_item===item.id?remaining[0]:remaining.find(row=>row.id===properties.active_item);
@@ -11356,7 +11391,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
     const items=getWorkspacePresentation().properties.items||[];
     if(items.length)await setWorkspace({content:'workspace',active_item:items[0].id});else await hideBrowserPanel();
-  });
+    }).finally(()=>{
+      pendingSideChatCreates.current.delete(item.id);
+      closingWorkspaceIds.current.delete(item.id);setClosingWorkspaceTabs([...closingWorkspaceIds.current]);finishClose();
+    });
+  };
   const workspaceResources=window.VellumUI.taskResources(workspaceConversation,{chats,automations,browser:browserState,environment:workspaceEnvironment,sideChatIds:workspaceItems.filter(item=>item.kind==='chat').map(item=>item.reference_id)});
   const openWorkspaceResource=(row,replaceId)=>{
     if(row.kind==='url')return openWorkspace('browser',workspaceMode,row.url,replaceId);
@@ -11367,9 +11406,9 @@ const [slashSkills, setSlashSkills] = useState([]);
     if(row.messageId)document.getElementById('m-'+row.messageId)?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'});
   };
   const closeWorkspaceSummary=()=>{setActivityMsg(null);configureChatDetails({visible:false},{notify:false,persistence:'session'});requestAnimationFrame(()=>document.querySelector('.workspace-summary-toggle')?.focus({preventScroll:true}));};
-  const workspaceTabs=[...(browserState.tabs||[]).map(tab=>({id:'browser:'+tab.id,kind:'browser',reference_id:tab.id,title:tab.title||'New tab'})),...workspaceItems.map(item=>item.kind==='chat'?{...item,title:chats.find(chat=>chat.id===item.reference_id)?.title||item.title}:item)];
+  const workspaceTabs=[...(browserState.tabs||[]).map(tab=>({id:'browser:'+tab.id,kind:'browser',reference_id:tab.id,preview_target_id:tab.native_target_id||(tab.active?browserState.native_target_id:''),title:tab.title||'New tab',url:tab.url})),...workspaceItems.map(item=>item.kind==='chat'?{...item,title:chats.find(chat=>chat.id===item.reference_id)?.title||item.title}:item)].filter(item=>!closingWorkspaceTabs.includes(item.id));
   const workspaceViews={
-    tabs:workspaceTabs,activeId:workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item,
+    tabs:workspaceTabs,activeId:closingWorkspaceTabs.includes(workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item)?workspaceCloseSelection.current:(workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item),
     visible:workspacePanelVisible,mode:workspaceMode,error:workspaceError,browserAvailable:browserFeature,terminalAvailable:workspaceTerminalAvailable,
     open:openWorkspace,select:showWorkspaceItem,close:closeWorkspaceItem,hide:workspaceController.hide,showMain:workspaceController.hide,
     reveal:()=>runWorkspace(()=>setWorkspace({},true)),
@@ -11434,7 +11473,13 @@ const [slashSkills, setSlashSkills] = useState([]);
     'files.add':()=>window.dispatchEvent(new CustomEvent('vellum-composer',{detail:'addfiles'})),
     'code.copy':copyLastCodeBlock,'dev.toggle':()=>{setDevMode(value=>!value);pushToast(devMode?'Dev mode off':'Dev mode on');},
     'browser.new':()=>workspaceBrowserVisible&&browserPanelRef.current?browserPanelRef.current.newTab():workspaceController.show('split',true),
-    'browser.close':()=>{const item=workspaceTabs.find(tab=>tab.id===workspaceViews.activeId);if(item)return closeWorkspaceItem(item);},
+    'browser.close':()=>{
+      const selected=document.querySelector('.workspace-pane-tabs [role=tab][aria-selected=true],.workspace-unified-tabs [role=tab][aria-selected=true]');
+      const id=selected?.dataset.workspaceTab||workspaceViews.activeId;
+      const item=workspaceTabs.find(tab=>tab.id===id&&!closingWorkspaceIds.current.has(tab.id));
+      if(item)return closeWorkspaceItem(item);
+      return false;
+    },
     'window.close':()=>window.close(),
     'browser.reopen':async()=>{if(!workspaceBrowserVisible)await workspaceController.show('split');await commandWorkspaceBrowser('reopen_tab');},
     'browser.next':()=>cycleTab(1),'browser.previous':()=>cycleTab(-1),
@@ -11567,8 +11612,8 @@ const [slashSkills, setSlashSkills] = useState([]);
               directoryAvailable={directoryAvailable} plugins={apps} catalogState={pluginCatalog} suggestions={workspaceResources.outputs} onOpenResource={openWorkspaceResource} onEnvironment={setWorkspaceEnvironment} fileFocus={workspaceFileFocus}
               renderIntegration={item=><BackendConnectorsView key={item.reference_id} sidebarVisible={false} initialRoute={{v:'detail',p:item.reference_id}} apps={apps} catalogState={pluginCatalog} onRetry={refreshPlugins} onPluginState={(pluginId,enabled)=>dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}}/>}
               onOpenTool={(kind,referenceId,replaceId)=>openWorkspace(kind,workspaceMode,referenceId,replaceId)}
-              renderChat={chat=><ChatView key={chat.id} sideChat chat={chat} model={chat.model||selModel} setModel={id=>updateSideSession(chat,{model:id},'model.select',{model_id:id})} models={models}
-                onSend={(text,attachments)=>sendMessage(text,attachments,{conversationId:chat.id,background:true})} onStop={()=>stopActiveTurn(chat.id)}
+              renderChat={(chat,itemId)=><ChatView key={itemId} sideChat chat={chat} model={chat.model||selModel} setModel={id=>updateSideSession(chat,{model:id},'model.select',{model_id:id})} models={models}
+                onSend={async(text,attachments)=>{try{const receipt=await pendingSideChatCreates.current.get(itemId);const id=receipt?.result?.conversation?.id||chat.id;if(closingWorkspaceIds.current.has(itemId))return;if(receipt&&receipt.status!=='applied')throw new Error(receipt.message||'The side chat could not be opened.');return await sendMessage(text,attachments,{conversationId:id,background:true});}catch(error){pushToast(error.message||'The side chat could not send.');}}} onStop={()=>stopActiveTurn(chat.id)}
                 onRegen={messageId=>regenerate(messageId,chat.id)} onViewImage={setViewer}
                 onAnswerNow={messageId=>answerNow(messageId)} onOpenActivity={message=>{setActivityMsg(message);configureChatDetails({visible:true},{notify:false,persistence:'session'});}}
                 onEditVoiceTranscript={(messageId,value)=>updateTurn(chat.id,messageId,m=>({...m,text:value,transcriptEdited:true}),true)}

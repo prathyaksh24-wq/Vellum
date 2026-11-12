@@ -7,7 +7,7 @@
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
       "count": 1011,
-      "sha256": "06b3e564a1daf2961e2d2f54bd32e18ef2f9ec79a0266f631fd5231182276ff3"
+      "sha256": "723b563ba8896be9e2d81babf50d9da361d5dcbd8f1db3b8b6b1669f5a9f3399"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -30,8 +30,8 @@
       "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
-      "count": 79,
-      "sha256": "89ff4d90e0341366f4828a6fe19e035312b33045d1d5de466009c6918c20f749"
+      "count": 76,
+      "sha256": "78c61157baed3db7beb0baabd8bf814856dc3837726f75e47c5c8d3dd7282a74"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
@@ -266,8 +266,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/workspace-controller.jsx": {
-      "count": 23,
-      "sha256": "0500d784639013c5fe5b4eeb154f393b25b66ee837be7704463be475ab59ac15"
+      "count": 29,
+      "sha256": "80aecbbe698867f46899bb618a80e99d3d64c46da1a1587b05857f2c14c040d8"
     },
     "design/Velllum/uploads/components/workspace-content.jsx": {
       "count": 14,
@@ -2641,6 +2641,10 @@
     {
       "scope": "Theme palette projection",
       "reason": "Theme tokens, terminal colors and native caption colors project the applied device receipt without executing imported CSS. Named themes hide scene renderers; background mode preserves source brightness and colors."
+    },
+    {
+      "scope": "Workspace pane setup previews and tab hover or focus content previews",
+      "reason": "Transient presentation in the existing layout owner. Pending previews are excluded from action context and persistence and removed on a failed receipt. Browser thumbnails use the existing trusted desktop bridge without selecting or navigating the page."
     }
   ],
   "deferred": [

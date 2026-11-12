@@ -27,7 +27,7 @@ const commands=Object.freeze([
   command('chat.delete','Delete chat','Chats',['Ctrl+Shift+Backspace'],{requires:'chat'}),
   command('dev.toggle','Toggle development mode','App',['Ctrl+Period']),
   command('browser.new','New browser tab','Browser',['Ctrl+T']),
-  command('browser.close','Close active browser tab','Browser',['Ctrl+W','Ctrl+F4'],{requires:'tabs'}),
+  command('browser.close','Close active workspace tab','Browser',['Ctrl+W','Ctrl+F4'],{requires:'tabs'}),
   command('window.close','Close Vellum window','App',['Ctrl+W','Ctrl+F4'],{requires:'desktop',scope:'app',native:false}),
   command('browser.reopen','Reopen closed browser tab','Browser',['Ctrl+Shift+T']),
   command('browser.next','Next browser tab','Browser',['Ctrl+Tab','Ctrl+PageDown','Ctrl+Shift+BracketRight'],{requires:'tabs'}),

@@ -828,10 +828,8 @@
         <div className="browser-heading-actions">
           <span className="browser-status" title={state.control === 'user' ? 'You have control' : state.control === 'agent' ? 'Agent can browse' : state.running ? 'Paused' : 'Starting Brave'}><i className={state.control === 'agent' ? 'live' : ''}/>{state.control === 'user' ? 'Your turn' : state.control === 'agent' ? 'Ready' : state.running ? 'Paused' : 'Starting…'}</span>
           {state.running ? <>
-            <button className="browser-button" title={state.control === 'agent' ? 'Pause agent' : 'Resume agent'} onClick={() => command(state.control === 'agent' ? 'pause' : 'resume')} disabled={busy}>{state.control === 'agent' ? <Icon name="pause"/> : 'Resume'}</button>
             {state.control !== 'user' && <button className="browser-button secondary" onClick={() => command('take_over')} disabled={busy}>Take over</button>}
           </> : null}
-          <button className="browser-icon" title={expanded ? 'Restore split view' : 'Expand browser'} aria-pressed={expanded} onClick={() => onLayoutModeChange?.(expanded?'split':'full')}><Icon name={expanded ? 'restore' : 'expand'}/></button>
           <button className="browser-icon" title="Browser menu" aria-expanded={moreOpen} onClick={() => { setMoreOpen(!moreOpen); setDownloadsOpen(false); }}><Icon name="more"/></button>
           <button className="browser-icon" title="Hide tabs" aria-label="Hide browser tabs" onClick={onHide}><Icon name="close"/></button>
         </div>
@@ -853,7 +851,6 @@
               {completions.query === addressQuery && completions.engine === engine.id && completions.status === 'unavailable' && <small className="browser-suggestions-status" role="status">{engine.name} suggestions unavailable</small>}
             </div>}
           </div>
-          <button type="button" title={downloadLabel} aria-label={downloadLabel} className="browser-icon browser-download-indicator" aria-expanded={downloadsOpen} data-attention={attention?.state} data-paused={allPaused} onClick={toggleDownloads}><Icon name={allPaused?'pause':'download'}/>{!!activeTransfers.length&&<progress aria-hidden="true" max="100" value={percent===null?undefined:percent}/>}</button>
         </form>
       </>
       {moreOpen && <section className="browser-session-menu" aria-label="Browser options"><strong>{preferences.profiles?.find(profile => profile.id===preferences.active_profile_id)?.name || 'Browser'}</strong>

@@ -95,11 +95,11 @@
   function WorkspaceContent({items,activeId,visible,chats,library,renderChat,renderIntegration,browserAvailable,terminalAvailable,directoryAvailable,plugins=[],catalogState,suggestions,onOpenTool,onOpenResource,onEnvironment,fileFocus}){
     return <>{items.map(item=>{
       const active=item.id===activeId,chat=chats.find(chat=>chat.id===item.reference_id);
-      return <div className="workspace-content-view" key={item.id} hidden={!active} inert={!active?'':undefined}>
+      return <div className="workspace-content-view" data-workspace-item={item.id} key={item.id} hidden={!active} inert={!active?'':undefined}>
         {item.kind==='launcher'?<WorkspaceLauncher item={item} browserAvailable={browserAvailable} terminalAvailable={terminalAvailable} directoryAvailable={directoryAvailable} suggestions={suggestions} onOpenTool={onOpenTool} onOpenResource={onOpenResource}/>:item.kind==='directory'?(directoryAvailable?<WorkspaceDirectory onEnvironment={onEnvironment}/>:<div className="workspace-empty"><p>Workspace files are available in the desktop app.</p></div>):item.kind==='integration'?(plugins.some(plugin=>plugin.id===item.reference_id&&plugin.enabled&&plugin.installed)?renderIntegration(item):<div className="workspace-empty" role="status"><p>{catalogState?.loading?'Loading connected tools…':catalogState?.error||'This integration is no longer available.'}</p></div>):item.kind==='terminal'?<WorkspaceTerminal visible={visible&&active}/>:item.kind==='files'?<WorkspaceFiles chat={chat} library={item.reference_id==='library'?library:[]} selectedFile={fileFocus?.chatId===item.reference_id?fileFocus.file:null}/>:<section className="workspace-side-chat" aria-label="Side chat">
           {chat&&(chat.temporary_side_chat||chat.parent_conversation_id)
-            ?renderChat(chat)
-            :<div className="workspace-empty"><p>Open a new side chat from the tab bar.</p></div>}
+            ?renderChat(chat,item.id)
+            :renderChat({id:'draft:'+item.id,title:'Side chat',messages:[],temporary_side_chat:true,store_to_memory:false},item.id)}
         </section>}
       </div>;
     })}</>;

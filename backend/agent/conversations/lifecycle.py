@@ -495,6 +495,8 @@ class ConversationLifecycle:
         conversation: dict[str, Any],
         previous: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        if conversation.get("temporary_side_chat") and not conversation.get("messages"):
+            return self._empty_update_effects()
         if previous is None or previous.get("title") != conversation.get("title"):
             thread_id = str(conversation.get("thread_id") or conversation.get("id") or "")
             self._rename_session(thread_id, str(conversation.get("title") or "New chat"))

@@ -207,6 +207,7 @@
     var effectiveRevision = deviceState.revision;
     var listeners = [];
     var dispatchTail = Promise.resolve();
+    var presentationPreviews = [];
 
     function composeState() {
       var next = normalizeLayout(deviceState);
@@ -220,7 +221,30 @@
     var state = composeState();
 
     function snapshot() {
-      return clone(state);
+      var projected = clone(state);
+      presentationPreviews.forEach(function (preview) {
+        var base = projected.surfaces[preview.reference];
+        projected.surfaces[preview.reference] = normalizePresentation(preview.reference, Object.assign({}, base, preview.presentation, {
+          properties: Object.assign({}, base.properties, preview.presentation.properties || {}),
+        }));
+      });
+      return projected;
+    }
+
+    // Reversible chrome projection only. Actions still validate against confirmed
+    // state, and a rejected receipt removes the preview without saving it.
+    function previewSurface(reference, presentation) {
+      if (reference !== 'right-panel') throw new Error('UNSUPPORTED_PRESENTATION_PREVIEW');
+      var preview = {reference: reference, presentation: clone(presentation)};
+      presentationPreviews.push(preview);
+      emit();
+      var disposed = false;
+      return function () {
+        if (disposed) return;
+        disposed = true;
+        presentationPreviews = presentationPreviews.filter(function (item) {return item !== preview;});
+        emit();
+      };
     }
 
     function persist() {
@@ -238,7 +262,7 @@
         invocation_conversation_id: conversationId || "",
         device_id: "local-device",
         window_id: windowId,
-        workspace_layout: snapshot(),
+        workspace_layout: clone(state),
       }, contextResolver() || {});
     }
 
@@ -323,13 +347,16 @@
       dispatchOptions = dispatchOptions || {};
       var actionArguments = Object.assign({ reference: reference }, presentation || {});
       if (dispatchOptions.persistence === "session") actionArguments.persistence = "session";
-      return dispatch(SURFACE_ACTION_ID, actionArguments, dispatchOptions);
+      var finish = reference === 'right-panel' && dispatchOptions.persistence === 'session'
+        ? previewSurface(reference, presentation) : function () {};
+      return dispatch(SURFACE_ACTION_ID, actionArguments, dispatchOptions).finally(finish);
     }
 
     function dismissRightPanel(dispatchOptions) {
       // Closing local chrome cannot depend on a live backend. Keep this
       // transient dismissal in the existing layout owner, never a second store
       // or a fabricated applied receipt. Older show receipts become stale.
+      presentationPreviews = [];
       sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, state.surfaces['right-panel'], {visible:false}));
       effectiveRevision += 1;
       state = composeState();
@@ -414,6 +441,7 @@
       dispatch: dispatch,
       dispatchSidebar: dispatchSidebar,
       dispatchSurface: dispatchSurface,
+      previewSurface: previewSurface,
       dismissRightPanel: dismissRightPanel,
       reset: reset,
       maybeApply: maybeApply,
