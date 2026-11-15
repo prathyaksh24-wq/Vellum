@@ -301,11 +301,15 @@ as backend connectivity failures. No image or validation payload is echoed.
 DeviceAppearanceSettings adds a strict boolean `droplets`, default false. The
 Appearance switch saves through `settings.device.update`; selecting a background
 or theme preserves this independent overlay preference. The existing background
-owner wraps only the decorative scene in the locally bundled Canvas UI renderer.
+owner retains the selected scene. The Canvas UI wrapper captures the workspace
+surface so the original shader refracts its real background and UI pixels.
 The supplied parameters remain fixed, pointer input never intercepts controls,
 and the renderer is released while the document is hidden. Reduced motion and
 unsupported-browser fallbacks remain with Canvas UI. Full refraction requires
-HTML-in-canvas; other browsers retain its transparent animated-drop fallback.
+HTML-in-canvas. Desktop enables CanvasDrawElement only for trusted workspace
+and conversation windows; native browser guests retain their existing preferences.
+Without native capture, the wrapper keeps the scene visible and suppresses the
+gray decorative fallback.
 
 Workspace Layout keeps `right-panel.items` and `active_item` available in the
 current window, but excludes these temporary references from device storage.

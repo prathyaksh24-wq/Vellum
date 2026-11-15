@@ -13,12 +13,13 @@ Retrieved 2026-11-12. Original source Git blob identifiers:
 The shader and renderer are unchanged; helper imports use this directory.
 The React wrapper in ../droplets-background.jsx adapts the original wrapper
 (Droplets.tsx blob 1512caceba6124348ebd3fd2ad2b8918a0c9be7d) to the existing
-React 18 shell, forwards pointer positions through the decorative layer, and
+React 18 shell, retains native pointer/input geometry in the captured workspace, and
 releases the renderer while the document is hidden. Its values are the supplied
 Droplets preset. No remote assets or network requests are needed at runtime.
 
-Full content refraction uses the browser's HTML-in-canvas API. Without it, the
-original transparent WebGL overlay keeps the background visible and renders
-the same drops and pointer wipe. Without WebGL2, the original background remains.
+Full content refraction uses the browser's HTML-in-canvas API. Vellum desktop
+enables CanvasDrawElement only for trusted workspace and conversation windows.
+The wrapper leaves the original background visible without gray fallback drops
+when native capture is unavailable. Without WebGL2, the original background remains.
 
 Distributed as part of Vellum under the included MIT + Commons Clause license.

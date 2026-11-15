@@ -79,6 +79,9 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
       webPreferences: {
         preload: key === 'overlay' ? undefined : path.join(__dirname, 'preload.cjs'),
         contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,
+        // Canvas UI refraction needs live pixels from the decorative scene.
+        // Opt in only trusted Vellum UI windows, never native browser guests.
+        ...((key==='workspace'||key.startsWith('conversation-'))?{enableBlinkFeatures:'CanvasDrawElement'}:{}),
         partition: 'persist:vellum-workspace',
         additionalArguments:customChrome?['--vellum-workspace-chrome']:[],
       },

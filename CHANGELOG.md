@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Use live background refraction for desktop Droplets by enabling CanvasDrawElement only in trusted workspace windows. Remove the gray overlay fallback when native capture is unavailable.
+
 - Add an independent Droplets appearance toggle over the selected live or static background, using the original Canvas UI renderer and supplied preset. Preserve the effect when switching backgrounds.
 
 - Start refreshed windows without stale temporary workspace tabs while retaining split and sidebar preferences.

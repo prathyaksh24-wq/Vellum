@@ -8,11 +8,11 @@
     interactionRadius:0.3,interactionStrength:0.6,interactionDistortion:3,
     tintStrength:0,tint:[0.5608,0.7059,1]});
 
-  function Droplets({children}) {
+  function Droplets({children,enabled=false}) {
     const source=useRef(null),content=useRef(null),output=useRef(null),host=useRef(null);
     const [ready,setReady]=useState(!!window.VellumDroplets);
     const [failed,setFailed]=useState(false);
-    const native=ready&&!failed&&window.VellumDroplets.supportsHtmlInCanvas();
+    const native=enabled&&ready&&!failed&&window.VellumDroplets.supportsHtmlInCanvas();
     useEffect(()=>{
       const loaded=()=>setReady(true);
       window.addEventListener('vellum:droplets-ready',loaded);
@@ -20,7 +20,7 @@
       return()=>window.removeEventListener('vellum:droplets-ready',loaded);
     },[]);
     useEffect(()=>{
-      if(!ready)return;
+      if(!native)return;
       let instance=null;
       const stop=()=>{instance?.destroy();instance=null;};
       const sync=()=>{
@@ -31,25 +31,17 @@
           if(native&&!instance)setFailed(true);
         }catch {stop();if(native)setFailed(true);}
       };
-      // The decorative layer never intercepts clicks. Forward pointer position
-      // from the window to the original renderer for its wipe interaction.
-      const move=event=>host.current?.dispatchEvent(new PointerEvent('pointermove',{clientX:event.clientX,clientY:event.clientY}));
-      const leave=()=>host.current?.dispatchEvent(new PointerEvent('pointerleave'));
       sync();
       document.addEventListener('visibilitychange',sync);
-      window.addEventListener('pointermove',move,{passive:true});
-      document.documentElement.addEventListener('pointerleave',leave,{passive:true});
       return()=>{
         stop();document.removeEventListener('visibilitychange',sync);
-        window.removeEventListener('pointermove',move);
-        document.documentElement.removeEventListener('pointerleave',leave);
       };
     },[ready,native]);
     const body=<div ref={content} style={{position:'relative',width:'100%',height:'100%',overflow:'hidden'}}>{children}</div>;
-    return <div ref={host} className="droplets-background" style={{position:'absolute',inset:0,pointerEvents:'none'}}>
+    return <div ref={host} className="droplets-background" data-droplets-renderer={native?'refractive':enabled?'unavailable':'disabled'} style={{position:'absolute',inset:0,zIndex:1}}>
       <canvas ref={source} layoutsubtree="true" style={native?{position:'absolute',inset:0,width:'100%',height:'100%'}:{display:'none'}}>{native?body:null}</canvas>
       {!native?body:null}
-      <canvas ref={output} aria-hidden="true" style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}}/>
+      <canvas ref={output} aria-hidden="true" style={{display:native?'block':'none',position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}}/>
     </div>;
   }
 

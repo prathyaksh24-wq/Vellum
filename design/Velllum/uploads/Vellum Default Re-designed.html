@@ -3220,7 +3220,7 @@ const AppBackground = () => {
   const {background,paused,themeProfile,droplets} = useBackground();
   if (themeProfile && !droplets) return null;
   const scene=themeProfile ? <div style={{position:'absolute',inset:0,background:'var(--bg)'}}/> : <BackgroundRenderer entry={background} paused={paused}/>;
-  return <div className="app-background" aria-hidden="true"><div className="app-background-layer">{droplets ? <window.VellumUI.Droplets>{scene}</window.VellumUI.Droplets> : scene}</div></div>;
+  return <div className="app-background" aria-hidden="true"><div className="app-background-layer">{scene}</div></div>;
 };
 const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
   const [previewing,setPreviewing]=useState(false);
@@ -11631,6 +11631,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       <div className="bg-orb orb2"></div>
       <div className="bg-orb orb3"></div>
       <div className="cursor-glow"></div>
+      <window.VellumUI.Droplets enabled={deviceSettings.values.appearance?.droplets===true}>
       <div className="win">
         <AppBackground/>
         {view !== '404' && <React.Fragment>
@@ -11831,6 +11832,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         }
         <div hidden={settingsOpen}><AutomationNotificationCenter suspended={settingsOpen} onAction={dispatchAutomationAction} onPing={pushToast} onStateChange={setNotificationState} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned && view!=='apps'}/></div>{toast && <div className={'toast'+(toast.notificationPing?' notification-ping'+(browserPanelVisible && view !== 'music'?' browser-notification-ping':''):'')+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true"><IcBell size={18}/></span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
+      </window.VellumUI.Droplets>
     </div>
     </window.VellumUI.ResponsePreferencesProvider>
     </BackgroundContext.Provider>
