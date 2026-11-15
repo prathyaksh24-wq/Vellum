@@ -726,7 +726,8 @@ def test_droplets_toggle_preserves_the_selected_background_and_other_appearance_
     assert receipt.status=='applied'
     values=receipt.result['device_settings_patch']['values']
     assert 'background' not in values
-    assert values['appearance']=={'light_theme':'default','dark_theme':'default','background_opacity':0.6,'droplets':True}
+    # Default themes are omitted from patches; the client merges appearance values.
+    assert values['appearance']=={'background_opacity':0.6,'droplets':True}
 
 
 def test_changing_scenes_preserves_the_droplets_overlay():

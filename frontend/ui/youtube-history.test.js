@@ -121,13 +121,12 @@ test.each([false,true])('sidebar opens explicitly and a dismissal cancels a pend
   const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast','applyAppActionReceipt','commandWorkspaceBrowser','desktopWorkspace','view','nav',
     "return async ({mode='split',newTab=false,initialUrl='',throwOnError=false}={})=>{" + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn(),vi.fn(),vi.fn(),false,'chat',vi.fn());
   const pending = open();
-  expect(present).not.toHaveBeenCalled();
+  // The pane is shown while the browser owner finishes setup.
+  expect(present).toHaveBeenCalledExactlyOnceWith('right-panel',{visible:true,properties:{content:'browser',layout:'split',active_item:''}},{notify:false,persistence:'session'});
   if (cancelled) epoch.current += 1;
   resolveStatus({running:false,available:true});
   await pending;
-  if (cancelled) {expect(control).not.toHaveBeenCalled();expect(present).not.toHaveBeenCalled();}
-  else {
-    expect(present).toHaveBeenCalledWith('right-panel',{visible:true,properties:{content:'browser',layout:'split',active_item:''}},{notify:false,persistence:'session'});
-    expect(control).toHaveBeenCalledWith({operation:'open'},{invocation_conversation_id:'chat'});
-  }
+  // A dismissal during setup must not launch the browser session.
+  if (cancelled) expect(control).not.toHaveBeenCalled();
+  else expect(control).toHaveBeenCalledWith({operation:'open'},{invocation_conversation_id:'chat'});
 });

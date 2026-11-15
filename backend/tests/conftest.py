@@ -14,6 +14,9 @@ os.environ["KNOWLEDGE_CORE_DB_PATH"] = str((_ROOT / "knowledge" / "core.db").res
 os.environ["KNOWLEDGE_BLOB_PATH"] = str((_ROOT / "knowledge" / "blobs").resolve())
 os.environ.setdefault("COMPUTER_USE_SCREENSHOT_DIR", str((_ROOT / "computer-use" / "screenshots").resolve()))
 os.environ.setdefault("COMPUTER_USE_EXCLUSIVE_CONTROL", "false")
+# A developer .env may point Playwright at a local Node runtime; tests expect the default launcher.
+os.environ["PLAYWRIGHT_MCP_COMMAND"] = "npx"
+os.environ["PLAYWRIGHT_MCP_ARGS"] = "-y @playwright/mcp@latest --isolated"
 
 
 @pytest.fixture(autouse=True, scope="session")

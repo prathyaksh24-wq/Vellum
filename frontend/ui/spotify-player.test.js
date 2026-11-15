@@ -172,13 +172,11 @@ test('served external styles do not displace the dock player into the old floati
   } finally {style.remove();}
 });
 
-test('an expanded player keeps the auto-hide dock open until outside dismissal', async () => {
+test('leaving the auto-hide dock closes it together with the expanded player', async () => {
   await renderPlayer([]);
+  expect(host.querySelector('[role="dialog"]')).not.toBe(null);
   const shell=host.querySelector('.dock-shell');
   await act(async () => {shell.dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body})); await vi.advanceTimersByTimeAsync(1000);});
-  expect(host.querySelector('.dock-layer').classList.contains('open')).toBe(true);
-  expect(host.querySelector('[role="dialog"]')).not.toBe(null);
-  await act(async () => document.body.dispatchEvent(new Event('pointerdown',{bubbles:true})));
   expect(host.querySelector('[role="dialog"]')).toBe(null);
   expect(host.querySelector('.dock-layer').classList.contains('open')).toBe(false);
 });

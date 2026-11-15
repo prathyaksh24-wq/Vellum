@@ -39,7 +39,10 @@ def test_account_returns_allow_exact_desktop_origin_without_widening_local_acces
 
 
 def test_workspace_lease_blocks_second_process_and_recovers_after_exit(tmp_path):
-    environment = {**os.environ, "VELLUM_WORKSPACE_ROOT": str(tmp_path)}
+    # Child interpreters need the backend package path whichever folder pytest runs from.
+    backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    python_path = os.pathsep.join(item for item in (backend, os.environ.get("PYTHONPATH", "")) if item)
+    environment = {**os.environ, "VELLUM_WORKSPACE_ROOT": str(tmp_path), "PYTHONPATH": python_path}
     code = "from agent.desktop_runtime import acquire_workspace_lease; acquire_workspace_lease(); print('ready',flush=True); input()"
     owner = subprocess.Popen([sys.executable, "-c", code], env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     try:

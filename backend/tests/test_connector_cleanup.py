@@ -48,12 +48,17 @@ def test_background_auth_failure_explains_reconnect_without_exposing_provider_te
     assert failure.status == 'authorization_required'
     assert 'Sign in with Linear' in str(failure)
 
-def test_sdk_initialization_restores_the_expiration_deadline():
+def test_sdk_initialization_restores_the_expiration_deadline(monkeypatch):
+    import time
+    from mcp.client.auth import oauth2
     storage = OAuthStorage()
     storage.tokens = {'access_token': 'expired-fixture', 'token_type': 'Bearer', 'expires_in': 0}
     provider = ExpiringOAuthClientProvider(SERVER, metadata(), storage)
     asyncio.run(provider._initialize())
     assert provider.context.token_expiry_time is not None
+    # Windows clocks can repeat a timestamp; check validity just after the deadline.
+    later = provider.context.token_expiry_time + 1
+    monkeypatch.setattr(oauth2.time, 'time', lambda: later)
     assert provider.context.is_token_valid() is False
 
 def test_linear_popup_return_closes_without_rendering_a_workspace_inside_auth(monkeypatch):

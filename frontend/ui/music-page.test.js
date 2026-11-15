@@ -220,7 +220,8 @@ test('local sidebar shows imported artwork and restores playlist and downloads l
 });
 
 test('Ctrl+[ and Ctrl+] step through Music pages without jumping to the landing page',async()=>{
-  const html=readFileSync(resolve(rootPath,'design/Velllum/uploads/Vellum Default Re-designed.html'),'utf8');
+  // Windows checkouts may use CRLF; the slice markers below use LF.
+  const html=readFileSync(resolve(rootPath,'design/Velllum/uploads/Vellum Default Re-designed.html'),'utf8').replace(/\r\n/g,'\n');
   const history=html.slice(html.indexOf('  const desktopHistoryRef ='),html.indexOf('  useEffect(() => {\n    const open = async () => {\n      const receipt=await dispatchSurfacePresentation'));
   const handlers=html.split('\n').find(line=>line.includes("'history.back':"));
   const registry=require('../../desktop/electron/commands.cjs');
