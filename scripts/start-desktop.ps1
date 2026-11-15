@@ -11,9 +11,15 @@ if (-not $SkipHoncho) {
 
 Push-Location (Join-Path $Root 'desktop')
 try {
+  # start.cjs prefers the provisioned protected-audio Electron over the stock
+  # download, so either one means the desktop dependencies are ready.
+  $electronCli = Test-Path -LiteralPath 'node_modules/electron/cli.js'
+  $stockElectron = Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe'
+  $protectedElectron = Test-Path -LiteralPath (Join-Path $Root '.desktop-runtime/protected-audio/electron.exe')
+  $needsInstall = -not $electronCli -or -not ($stockElectron -or $protectedElectron)
   $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
   if ($null -ne $npm) {
-    if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) {
+    if ($needsInstall) {
       & $npm.Source ci --no-fund
       if ($LASTEXITCODE -ne 0) { throw 'Desktop dependency installation failed.' }
     }
@@ -27,11 +33,13 @@ try {
       throw 'Node.js and npm are required to launch Vellum desktop.'
     }
     $env:Path = (Split-Path $node) + ';' + $env:Path
-    if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) {
+    if ($needsInstall) {
       & $node $pnpm dlx npm@11 ci --no-fund
       if ($LASTEXITCODE -ne 0) { throw 'Desktop dependency installation failed.' }
     }
-    & $node $pnpm run dev
+    # Run the dev entry directly. `pnpm run` checks dependencies first and calls
+    # `pnpm install`, which fails here: pnpm is not on PATH and this package uses npm.
+    & $node scripts/start.cjs --watch .
   }
   if ($LASTEXITCODE -ne 0) { throw 'Vellum desktop exited with an error.' }
 } finally {
