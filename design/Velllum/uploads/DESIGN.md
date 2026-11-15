@@ -592,3 +592,13 @@ Update only with deliberate intent. Add references as the product matures. Subtr
 
 The goal is not to follow these principles.
 The goal is for these principles to become invisible because the product simply *is* them.
+
+### Supplied Vellum face (2026-11-05)
+
+The user-supplied cloud face and matching desktop icon override the earlier mascot and blue restrictions for this identity component. Glow Blue is the default. Appearance settings permit any six-digit hex face color, with a live app/icon preview and an explicit Apply action through the canonical device settings owner. Face color is independent of the background and accent palette. Preserve supplied cloud geometry, floating, pointer-following eyes, blinking, squish and wink; honor reduced motion and pause hidden faces. Small navigation marks and icon previews stay still. The packaged desktop icon remains the supplied blue asset.
+
+The landing face uses a 56px footprint with reduced saturation and opacity, no halo or shadow, and a rim mixed with the active text palette. It sits beside the existing wordmark and must blend into the selected background. Navigation and Appearance previews retain the full identity treatment.
+
+The default desktop icon uses the supplied Glow Blue cloud and rounded sky tile. Glow Orange keeps its original orange palette and rounded tile. Appearance previews both supplied icons and saves the selected face color through Apply color. The alternate orange Windows icon is available as a separate asset. The landing face and wordmark form one compact identity group; the page's 26px content gap applies only between that group, greeting and composer.
+
+The landing identity uses one horizontal row: the 56px cloud immediately to the left of the Vellum wordmark, vertically centered, with a 4px layout gap. It does not stack above the name.

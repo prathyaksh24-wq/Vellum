@@ -6,12 +6,16 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1023,
-      "sha256": "76d68176b0995ec1c9f3073a4e70c36179c823a824e3c37c39ed50ab4764f481"
+      "count": 1024,
+      "sha256": "b0c9a035ad1708d701a7de79db7858a4ee935be15d5682f0d115d22192820fae"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
       "sha256": "4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"
+    },
+    "design/Velllum/uploads/components/vellum-face.jsx": {
+      "count": 5,
+      "sha256": "ec2219bd6c81e5f2a02dcbe0e4e4467e70657f85fbbb77f5d40f9d67ee8ee86a"
     },
     "design/Velllum/uploads/components/profile.jsx": {
       "count": 29,
@@ -2473,6 +2477,15 @@
         "path": "design/Velllum/uploads/components/droplets-background.jsx",
         "text": "onDeviceSettings({appearance:{droplets:!enabled}})"
       }
+    },
+    {
+      "surface": "Device settings",
+      "name": "Apply a custom Vellum face color",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/vellum-face.jsx",
+        "text": "onDeviceSettings({face_color:draft})"
+      }
     }
   ],
   "exemptions": [
@@ -2675,6 +2688,10 @@
     {
       "scope": "Request hover controls, sent-time labels, clipboard copy and inline edit drafts",
       "reason": "The row projects saved per-message sent_at timestamps in local time. Missing historical timestamps are disclosed. Hover/focus, clipboard copying and unsaved text/Cancel are local presentation. Save dispatches conversation.message.edit with the existing revisioned conversation runtime; the lifecycle writer preserves IDs, attachments, timestamps and existing replies."
+    },
+    {
+      "scope": "Face color drafts, Glow Orange and reset-to-blue presets, and cloud pointer/keyboard animation",
+      "reason": "Color input and Reset update only the unsaved preview. Apply dispatches settings.device.update and projects its revisioned receipt through the canonical device owner. Cloud pointer tracking, wink, floating and blinking are local presentation; visibility and reduced-motion controls do not persist data."
     }
   ],
   "deferred": [

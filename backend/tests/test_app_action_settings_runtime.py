@@ -358,6 +358,28 @@ def test_device_settings_return_revisioned_patch_for_client_owned_persistence() 
     }
 
 
+@pytest.mark.parametrize("color", ["#12ABef", "#000000", "#ffffff", "#06a3ff"])
+def test_face_color_uses_revisioned_device_settings(color: str) -> None:
+    runtime, *_ = make_runtime()
+    receipt = runtime.dispatch(
+        AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"face_color": color}}),
+        context("ui"),
+    )
+    assert receipt.status == "applied"
+    assert receipt.result["device_settings_patch"]["values"]["face_color"] == color.lower()
+
+
+@pytest.mark.parametrize("color", ["blue", "#abc", "#1234567", "url(bad)", "#gg0000", 123, None])
+def test_invalid_face_color_returns_no_device_patch(color) -> None:
+    runtime, *_ = make_runtime()
+    receipt = runtime.dispatch(
+        AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"face_color": color}}),
+        context("ui"),
+    )
+    assert receipt.status != "applied"
+    assert "device_settings_patch" not in receipt.result
+
+
 @pytest.mark.parametrize("theme", ["matrix-green", "zen-linen", "catppuccin", "twitter", "vintage-paper", "quantum-rose", "cosmic-night", "sage-garden", "sage-mist", "cyberpunk-neon"])
 def test_app_theme_selection_links_both_mode_variants(theme: str) -> None:
     runtime, *_ = make_runtime()

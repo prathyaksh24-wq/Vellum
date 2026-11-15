@@ -151,6 +151,7 @@ class DeviceSettingsValues(BaseModel):
     profile: dict[str, str] = Field(default_factory=dict)
     accent: str | None = None
     appearance: DeviceAppearanceSettings = Field(default_factory=DeviceAppearanceSettings)
+    face_color: str = Field(default="#06a3ff", pattern=r"^#[0-9a-fA-F]{6}$")
     dock_position: str | None = None
     dock_locked: bool | None = None
     preview_rail_position: Literal["left", "right"] = "left"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import re
 from typing import Any
 from pydantic import ValidationError
 
@@ -102,6 +103,7 @@ _DEVICE_SETTING_KEYS = frozenset({
     "background",
     "accent",
     "appearance",
+    "face_color",
     "dock_position",
     "number_shortcuts",
     "dock_locked",
@@ -423,6 +425,10 @@ class SettingsRuntimeActionService:
                 if value not in ("visible", "hover", "hidden"):
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose when the preview rail appears.")
                 normalized[key] = value
+            elif key == "face_color":
+                if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+                    raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose a six-digit hex face color, such as #06a3ff.")
+                normalized[key] = value.lower()
             elif key == "accent":
                 accent = str(value or "").strip().casefold()
                 if accent not in {
@@ -997,6 +1003,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'streaming': DeviceStreamingSettings.model_json_schema(),
         'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
         'accent':{'type':'string'},
+        'face_color':{'type':'string','pattern':'^#[0-9a-fA-F]{6}$'},
         'dock_position':{'type':'string','enum':['auto','top','right','bottom','left']},
         'preview_rail_position':{'type':'string','enum':['left','right']},
         'preview_rail_visibility':{'type':'string','enum':['visible','hover','hidden']},
@@ -1024,6 +1031,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "background": {"type": "string", "enum": [*BACKGROUND_IDS, "next", "previous"]},
                 "accent": {"type": "string"},
                 "appearance": device_properties['appearance'],
+                "face_color": device_properties['face_color'],
                 "dock_position": {"type": "string"},
                 "number_shortcuts": {"type":"string", "enum":["tabs","chats"]},
                 "dock_locked": {"type": "boolean"},

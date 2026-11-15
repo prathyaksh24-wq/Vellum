@@ -74,6 +74,7 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
     const win = new BrowserWindow({
       width: 1280, height: 820, minWidth: 700, minHeight: 500,
       title: 'Vellum', backgroundColor: '#10141c', show: false,
+      icon: path.join(__dirname, '../assets/icon.ico'),
       ...options,
       ...(customChrome?workspaceChromeOptions():{}),
       webPreferences: {

@@ -21,6 +21,7 @@ function copyStaticUiAssets() {
       cpSync(resolve(designUploadsRoot, 'assets/browser-home'), resolve(here, 'ui-dist/assets/browser-home'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/backgrounds'), resolve(here, 'ui-dist/assets/backgrounds'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/music'), resolve(here, 'ui-dist/assets/music'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/brand'), resolve(here, 'ui-dist/assets/brand'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/plugins'), resolve(here, 'ui-dist/assets/plugins'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'assets/icons/openai'), resolve(here, 'ui-dist/assets/icons/openai'), { recursive: true });
       // Vite emits hashed WOFF2 assets. Keep their redistribution license and

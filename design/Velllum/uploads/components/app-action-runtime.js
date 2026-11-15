@@ -27,6 +27,7 @@
     previous_background: null,
     accent: "default",
     appearance: {light_theme:'default',dark_theme:'default',background_opacity:0.4,droplets:false},
+    face_color: "#06a3ff",
     dock_position: "auto",
     dock_locked: false,
     preview_rail_position: "left",
