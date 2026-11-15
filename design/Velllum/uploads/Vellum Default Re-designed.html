@@ -9076,6 +9076,7 @@ const App = () => {
     () => window.VellumUI.ObservabilityActions.initialState()
   );
   const theme = workspaceLayout.surfaces.workspace.properties.theme;
+  const [pendingSidebarVisibility, setPendingSidebarVisibility] = useState({});
   const sidebarPinned = pendingSidebarVisibility.sidebar?.visible ?? workspaceLayout.surfaces.sidebar.visible;
   const pluginSidebarVisible = pendingSidebarVisibility['plugin-sidebar']?.visible ?? (workspaceLayout.surfaces['plugin-sidebar']?.visible !== false);
   const [scheduledSidebarOpen,setScheduledSidebarOpen]=useState(()=>!window.matchMedia('(max-width: 760px)').matches);

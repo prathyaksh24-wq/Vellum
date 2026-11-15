@@ -32,6 +32,7 @@
     dock_locked: false,
     preview_rail_position: "left",
     preview_rail_visibility: "visible",
+    number_shortcuts: "tabs",
     computer_use_preview: false,
     profile: {},
     personalization: {
@@ -461,7 +462,13 @@
 
   function normalizeDeviceSettings(value) {
     var source = value && typeof value === "object" ? value : {};
-    var rawValues = source.values && typeof source.values === "object" ? source.values : {};
+    var storedValues = source.values && typeof source.values === "object" ? source.values : {};
+    // Saved settings travel with every App Action and the backend forbids unknown
+    // keys, so drop values from retired settings instead of failing every action.
+    var rawValues = {};
+    Object.keys(storedValues).forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(DEVICE_SETTINGS_DEFAULTS, key)) rawValues[key] = storedValues[key];
+    });
     return {
       version: Number.isInteger(source.version) && source.version > 0 ? source.version : 1,
       revision: Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,

@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Fix desktop development startup: copy static UI scripts and assets (including pets) into the actual build output, restore the missing sidebar visibility state that left the window blank, accept the saved number-shortcut preference, and drop retired saved settings so App Actions are no longer rejected.
+
 - Add the supplied animated Vellum cloud face beside the landing wordmark and in navigation. Appearance settings preview any hex face color, offer Glow Orange and Reset to blue, and save through the existing device settings action. Desktop windows and packaging use the supplied rounded Glow Blue icon.
 
 - Use live background refraction for desktop Droplets by enabling CanvasDrawElement only in trusted workspace windows. Remove the gray overlay fallback when native capture is unavailable.

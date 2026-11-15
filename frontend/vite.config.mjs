@@ -9,28 +9,28 @@ const here = dirname(fileURLToPath(import.meta.url));
 const designUploadsRoot = resolve(here, '../design/Velllum/uploads');
 
 function copyStaticUiAssets() {
+  let outDir;
   return {
     name: 'copy-static-ui-assets',
+    apply: 'build',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
     closeBundle() {
-      const target = resolve(here, 'ui-dist/ui/terminal/vellum');
+      const target = resolve(outDir, 'ui/terminal/vellum');
       rmSync(target, { recursive: true, force: true });
       cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'components'), resolve(here, 'ui-dist/components'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'provider-icons'), resolve(here, 'ui-dist/provider-icons'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/browser-home'), resolve(here, 'ui-dist/assets/browser-home'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/backgrounds'), resolve(here, 'ui-dist/assets/backgrounds'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/music'), resolve(here, 'ui-dist/assets/music'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/brand'), resolve(here, 'ui-dist/assets/brand'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/plugins'), resolve(here, 'ui-dist/assets/plugins'), { recursive: true });
-      cpSync(resolve(designUploadsRoot, 'assets/icons/openai'), resolve(here, 'ui-dist/assets/icons/openai'), { recursive: true });
+      for (const directory of ['api', 'components', 'provider-icons', 'assets/browser-home',
+        'assets/backgrounds', 'assets/music', 'assets/brand', 'assets/pets', 'assets/plugins', 'assets/icons/openai']) {
+        cpSync(resolve(designUploadsRoot, directory), resolve(outDir, directory), { recursive: true });
+      }
       // Vite emits hashed WOFF2 assets. Keep their redistribution license and
       // source provenance in both web and desktop distributions as well.
-      mkdirSync(resolve(here, 'ui-dist/assets/fonts'), {recursive:true});
+      mkdirSync(resolve(outDir, 'assets/fonts'), {recursive:true});
       for (const name of ['LICENSE.SN-Pro.txt','SN-Pro.provenance.json']) {
-        cpSync(resolve(designUploadsRoot, 'assets/fonts', name), resolve(here, 'ui-dist/assets/fonts', name));
+        cpSync(resolve(designUploadsRoot, 'assets/fonts', name), resolve(outDir, 'assets/fonts', name));
       }
-      const apiTarget = resolve(here, 'ui-dist/api');
+      const apiTarget = resolve(outDir, 'api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
       }

@@ -156,6 +156,7 @@ class DeviceSettingsValues(BaseModel):
     dock_locked: bool | None = None
     preview_rail_position: Literal["left", "right"] = "left"
     preview_rail_visibility: Literal["visible", "hover", "hidden"] = "visible"
+    number_shortcuts: Literal["tabs", "chats"] = "tabs"
     computer_use_preview: bool | None = None
     streaming: DeviceStreamingSettings = Field(default_factory=DeviceStreamingSettings)
     personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)

@@ -29,3 +29,22 @@ test('plain API scripts are served unchanged without an HTML runtime transform',
   expect(transformIndexHtml).not.toHaveBeenCalled();
   expect(response.end.mock.calls[0][0].toString()).toContain('/api/app-actions/books/import');
 });
+
+test('static UI scripts and assets are copied into the configured build output', async () => {
+  const {mkdtempSync, existsSync, rmSync} = await import('node:fs');
+  const {tmpdir} = await import('node:os');
+  const {join} = await import('node:path');
+  // Desktop development builds into a temporary folder; static files must follow it.
+  const outDir = mkdtempSync(join(tmpdir(), 'vellum-ui-out-'));
+  try {
+    const plugin = config.plugins.find(item => item.name === 'copy-static-ui-assets');
+    plugin.configResolved({root: outDir, build: {outDir}});
+    plugin.closeBundle();
+    for (const file of ['api/client.js', 'components/vellum-face.jsx', 'assets/brand/vellum-icon-orange.png', 'assets/pets/boba.webp']) {
+      expect(existsSync(join(outDir, file)), file).toBe(true);
+    }
+    expect(existsSync(join(outDir, 'api/client.test.js'))).toBe(false);
+  } finally {
+    rmSync(outDir, {recursive: true, force: true});
+  }
+});

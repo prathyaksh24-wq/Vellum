@@ -499,6 +499,21 @@ describe("Device Settings App Action adapter", () => {
     expect(JSON.parse(storage.value(AppActions.DEVICE_SETTINGS_STORAGE_KEY)).values.accent).toBe("blue-eclipse");
   });
 
+  test("saved settings from retired controls are dropped so App Actions stay valid", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage({
+      [AppActions.DEVICE_SETTINGS_STORAGE_KEY]: JSON.stringify({
+        version: 1, revision: 4,
+        values: { accent: "autumn-leaves", number_shortcuts: "chats", speech: { provider: "local", voice: "coral", speed: 1 } },
+      }),
+    });
+
+    const values = AppActions.createDeviceSettingsRuntime({ storage, client: {} }).snapshot().values;
+
+    expect(values).toMatchObject({ accent: "autumn-leaves", number_shortcuts: "chats" });
+    expect(values).not.toHaveProperty("speech");
+  });
+
   test("visible controls and NLP receipts converge on the same persisted state", async () => {
     const AppActions = await loadRuntime();
     const storage = memoryStorage();
