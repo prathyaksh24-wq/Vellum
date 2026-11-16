@@ -50,7 +50,9 @@ and completion checks are explicit.
 - Keep the main Vellum agent capable and user-facing. Specialists use the shared
   catalog, typed delegation, and permissioned capabilities; they do not own raw
   integrations or silently become a second orchestration runtime.
-- Runtime instructions live in `backend/agent/graph/agent.py`; `AGENTS.md` guides
+- Runtime instructions are `docs/main.md` (the main agent's runtime contract),
+  `docs/SOUL.md` (identity) and `docs/PERSONALITY.md` (expression), loaded with
+  the Vellum-specific rules in `backend/agent/graph/agent.py`; `AGENTS.md` guides
   repository development. Keep the runtime contract provider-neutral. Learning
   uses the existing memory, skill, and profile owners with provenance and their
   approval policies; prompt wording must not imply unimplemented evaluation,
@@ -138,7 +140,8 @@ Before declaring completion:
 
 ## Context pointers
 
-- Product behavior, restraint, and privacy posture: `docs/SOUL.md`.
+- Main agent behavior, authority and verification: `docs/main.md`; identity:
+  `docs/SOUL.md`; communication style: `docs/PERSONALITY.md`.
 - Repository topology and canonical runtime surfaces: `docs/ARCHITECTURE.md`.
 - Frontend/API capability and contract work:
   `docs/architecture/frontend-backend-contracts.md`.

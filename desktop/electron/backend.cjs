@@ -26,7 +26,7 @@ function sourceBuildId(root) {
     }
   }
   for (const directory of ['backend/agent','plugins','scripts']) visit(path.join(root,directory));
-  for (const name of ['backend/pyproject.toml','docs/SOUL.md']) if(fs.existsSync(path.join(root,name)))files.push(path.join(root,name));
+  for (const name of ['backend/pyproject.toml','docs/main.md','docs/SOUL.md','docs/PERSONALITY.md']) if(fs.existsSync(path.join(root,name)))files.push(path.join(root,name));
   const relative=file=>path.relative(root,file).split(path.sep).join('/');
   files.sort((a,b)=>Buffer.compare(Buffer.from(relative(a)),Buffer.from(relative(b))));
   const hash=createHash('sha256');

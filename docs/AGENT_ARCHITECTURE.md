@@ -619,7 +619,9 @@ Response displayed to user
 | `.skills/proposed/` | Agent-proposed skills awaiting approval |
 | `.skills/active/` | Approved, active skills |
 | `.env` | Configuration (never committed) |
-| `SOUL.md` | Identity and learning philosophy |
+| `main.md` | Main agent runtime contract (loaded every turn) |
+| `SOUL.md` | Identity and character (loaded every turn) |
+| `PERSONALITY.md` | Communication style (loaded every turn) |
 | `docker-compose.yml` | Honcho API, deriver, pgvector, and Redis services |
 | `CLAUDE.md` | Technical operations manual |
 | `AGENT_ARCHITECTURE.md` | This file |

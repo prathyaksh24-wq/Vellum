@@ -65,7 +65,7 @@ function watchDevelopment(root, update) {
     observe('frontend', 'ui', file => /^vite(?:-desktop)?\.config\.mjs$/.test(file), false);
     for (const directory of ['backend/agent', 'plugins', 'scripts']) observe(directory, 'backend', backendSource);
     observe('backend', 'backend', file => file === 'pyproject.toml', false);
-    observe('docs', 'backend', file => file === 'SOUL.md', false);
+    observe('docs', 'backend', file => ['main.md', 'SOUL.md', 'PERSONALITY.md'].includes(file), false);
     observe('desktop/electron', 'desktop');
     observe('desktop/assets', 'desktop');
   } catch (error) {

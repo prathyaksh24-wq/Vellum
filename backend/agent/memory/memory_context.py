@@ -25,10 +25,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ── SOUL.md (personality) ─────────────────────────────────────────────
-_SOUL_CACHE: str | None = None
+# ── Runtime instruction files (docs/main.md, SOUL.md, PERSONALITY.md) ──
+# main.md is the main agent's runtime contract; SOUL.md and PERSONALITY.md
+# supply identity and expression defaults beneath it.
+INSTRUCTION_FILES = ("main.md", "SOUL.md", "PERSONALITY.md")
+_DOC_CACHE: dict[str, str] = {}
 _SOUL_LOCK = threading.Lock()
-_MAX_SOUL_CHARS = 12_000  # ~4k tokens; head-heavy truncation like Hermes
+_MAX_SOUL_CHARS = 16_000  # ~4k tokens per file; head-heavy truncation like Hermes
 
 # ── user model (Honcho dialectic), cached per thread ──────────────────
 _USER_MODEL: dict[str, str] = {}
@@ -53,30 +56,34 @@ _DIALECTIC_QUERY = (
 )
 
 
-def load_soul() -> str:
-    """Read docs/SOUL.md once (cached), head-heavy truncation if oversized."""
-    global _SOUL_CACHE
-    if _SOUL_CACHE is not None:
-        return _SOUL_CACHE
+def load_instruction_doc(name: str) -> str:
+    """Read one docs/ instruction file once (cached); "" when it is absent."""
+    if name in _DOC_CACHE:
+        return _DOC_CACHE[name]
     with _SOUL_LOCK:
-        if _SOUL_CACHE is None:
+        if name not in _DOC_CACHE:
             text = ""
             try:
                 from agent.config import REPO_ROOT, SOURCE_ROOT
 
-                path = REPO_ROOT / "docs" / "SOUL.md"
+                path = REPO_ROOT / "docs" / name
                 if not path.exists():
-                    path = SOURCE_ROOT / "docs" / "SOUL.md"
+                    path = SOURCE_ROOT / "docs" / name
                 if path.exists():
                     text = path.read_text(encoding="utf-8", errors="ignore")
             except Exception as exc:  # pragma: no cover - filesystem edge
-                logger.warning("[MEMORY] SOUL.md load failed: %s", exc)
+                logger.warning("[MEMORY] %s load failed: %s", name, exc)
             if len(text) > _MAX_SOUL_CHARS:
                 head = int(_MAX_SOUL_CHARS * 0.7)
                 tail = int(_MAX_SOUL_CHARS * 0.2)
                 text = f"{text[:head]}\n\n…\n\n{text[-tail:]}"
-            _SOUL_CACHE = text.strip()
-    return _SOUL_CACHE
+            _DOC_CACHE[name] = text.strip()
+    return _DOC_CACHE[name]
+
+
+def load_soul() -> str:
+    """Read docs/SOUL.md once (cached), head-heavy truncation if oversized."""
+    return load_instruction_doc("SOUL.md")
 
 
 def get_user_model(thread_id: str) -> str:

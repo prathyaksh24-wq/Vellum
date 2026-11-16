@@ -52,7 +52,11 @@ def test_prompt_keeps_learning_context_below_kernel_and_preserves_correction(mon
     )
 
     system = messages[0].content
-    assert system.startswith(agent_graph.VELLUM_SYSTEM_PROMPT)
+    from agent.memory.memory_context import load_instruction_doc
+    contract, soul, personality = (load_instruction_doc(name) for name in ("main.md", "SOUL.md", "PERSONALITY.md"))
+    # The runtime contract leads; Vellum specifics follow; identity and style sit beneath them.
+    assert contract and system.startswith(contract)
+    assert system.index(contract) < system.index(agent_graph.VELLUM_SYSTEM_PROMPT) < system.index(soul) < system.index(personality)
     evidence = messages[1]
     assert evidence.additional_kwargs['vellum_context_layer'] == 'personal_memory'
     boundary = evidence.content.index("## Personal context boundary")

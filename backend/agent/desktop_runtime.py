@@ -31,7 +31,7 @@ def source_files(root: Path = SOURCE_ROOT) -> list[Path]:
                      if p.is_file() and not p.is_symlink() and p.suffix in {".py", ".json", ".yaml", ".yml", ".ps1", ".md", ".txt"}
                      and not any(part in {"__pycache__", "node_modules", ".git", "tests"} for part in p.relative_to(root).parts)
                      and p.name not in {"auth.json", "oauth-flow.json"})
-    for name in ("backend/pyproject.toml", "docs/SOUL.md"):
+    for name in ("backend/pyproject.toml", "docs/main.md", "docs/SOUL.md", "docs/PERSONALITY.md"):
         if (root / name).is_file():
             files.append(root / name)
     return sorted(files, key=lambda p: p.relative_to(root).as_posix())
