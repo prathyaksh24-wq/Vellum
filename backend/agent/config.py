@@ -281,9 +281,13 @@ class Settings(BaseSettings):
     memory_extension_providers: str = Field(default="", alias="MEMORY_EXTENSION_PROVIDERS")
     hindsight_memory_enabled: bool = Field(default=False, alias="HINDSIGHT_MEMORY_ENABLED")
     hindsight_api_key: SecretStr = Field(default=SecretStr(""), alias="HINDSIGHT_API_KEY", repr=False)
-    hindsight_api_url: str = Field(default="https://api.hindsight.vectorize.io", alias="HINDSIGHT_API_URL")
+    hindsight_api_url: str = Field(default="http://localhost:8888", alias="HINDSIGHT_API_URL")
     hindsight_bank_id: str = Field(default="vellum", alias="HINDSIGHT_BANK_ID")
     hindsight_budget: str = Field(default="mid", alias="HINDSIGHT_BUDGET")
+    # Local model for memory work: picking relevant memories, writing the
+    # About-you summary, planning memory edits and parsing imports.
+    memory_llm_model: str = Field(default="gemma4:12b", alias="MEMORY_LLM_MODEL")
+    memory_recall_timeout_seconds: float = Field(default=3.0, ge=0.5, le=60, alias="MEMORY_RECALL_TIMEOUT_SECONDS")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
         alias="LOG_LEVEL",

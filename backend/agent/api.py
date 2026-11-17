@@ -2857,6 +2857,30 @@ def _audit_memory_off(thread_id: str, source: str) -> None:
         pass
 
 
+def _memory_save_activities(query: str, agent_name: str = "VellumAgent") -> list[dict[str, Any]]:
+    """Lessons the background learner will save from this turn, for the live stream.
+
+    Uses the same extractor as ``extract_memory_candidates`` so the activity
+    matches what is saved. Only user-stated items (saved immediately) appear.
+    """
+    if agent_name == "MusicAgent":
+        return []
+    store = getattr(_memory_orchestrator, "store", None)
+    if store is None:
+        return []
+    settings = store.get_settings()
+    if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
+        return []
+    from agent.memory.orchestrator import _extract_candidates, _memory_title
+
+    if classify(query)[0] == DataClass.RED:
+        return []
+    return [
+        {"label": f"Saved to memory · {_memory_title(item['text'])}", "text": item["text"], "kind": item["kind"]}
+        for item in _extract_candidates(query, "") if item["confidence"] >= 0.8
+    ]
+
+
 async def _background_learn(
     query: str,
     answer: str,
@@ -4218,6 +4242,9 @@ _ACTIVITY_LABELS = {
     "computer_use": "Used the desktop",
     "tool_search": "Searched the tool catalog",
     "tool_describe": "Inspected a tool",
+    "conversation_history": "Searched past chats",
+    "memory_orchestrator": "Checked memory",
+    "MemoryAgent": "Asked MemoryAgent",
 }
 
 
@@ -5000,6 +5027,13 @@ async def _stream_agent_turn_scoped(
                         str(live_result.agent_name or "specialist").casefold(),
                     )
                 )
+                if store:
+                    for saved in _memory_save_activities(clean_message, str(live_result.agent_name or "VellumAgent")):
+                        yield _agent_activity_event(
+                            response_id=response_id, thread_id=active_thread_id, activity_type="memory_save",
+                            label=saved["label"], status="completed", name="memory",
+                            metadata={"text": saved["text"], "kind": saved["kind"], "thread_id": active_thread_id},
+                        )
             yield _agent_activity_event(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -5693,6 +5727,15 @@ async def _stream_agent_turn_scoped(
                     if store
                     else _audit_memory_off(active_thread_id, source)
                 )
+                if store:
+                    for saved in _memory_save_activities(
+                        clean_message, 'MusicAgent' if 'MusicAgent' in completed_specialists else 'VellumAgent'
+                    ):
+                        yield _agent_activity_event(
+                            response_id=response_id, thread_id=active_thread_id, activity_type="memory_save",
+                            label=saved["label"], status="completed", name="memory",
+                            metadata={"text": saved["text"], "kind": saved["kind"], "thread_id": active_thread_id},
+                        )
             yield _sse("final", response.model_dump_json())
             if message_item_started:
                 yield _response_output_item_done(

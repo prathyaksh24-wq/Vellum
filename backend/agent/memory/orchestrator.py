@@ -73,6 +73,8 @@ _MEMORY_ITEM_COLUMNS = {
     "last_used_at": "TEXT",
     "use_count": "INTEGER NOT NULL DEFAULT 0",
     "suppressed": "INTEGER NOT NULL DEFAULT 0",
+    # Relevance feedback from the "Recalled from memory" chip: +1 relevant, -1 not.
+    "feedback_score": "INTEGER NOT NULL DEFAULT 0",
 }
 
 
@@ -395,6 +397,15 @@ class SQLiteMemoryStore:
                 (1 if suppressed else 0, self._now(), int(memory_id)),
             )
         self.audit("suppressed" if suppressed else "unsuppressed", memory_id, "")
+        return self.get_memory(memory_id)
+
+    def adjust_feedback(self, memory_id: int, delta: int) -> dict[str, Any]:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE memory_items SET feedback_score = MAX(-5, MIN(5, feedback_score + ?)) WHERE id = ?",
+                (int(delta), int(memory_id)),
+            )
+        self.audit("feedback", memory_id, "relevant" if delta > 0 else "not_relevant")
         return self.get_memory(memory_id)
 
     def set_meta(self, memory_id: int, **fields: Any) -> dict[str, Any]:
@@ -852,6 +863,7 @@ class MemoryOrchestrator:
         live_honcho: bool = True,
         include_history: bool = True,
         include_external: bool = True,
+        select_with_model: bool = False,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
@@ -870,15 +882,20 @@ class MemoryOrchestrator:
                 "settings": settings,
             }
         saved: list[dict[str, Any]] = []
+        recall_method = "none"
         if self.store is not None:
             baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
             if agent_name == 'MusicAgent' and 'agent:MusicAgent' in scopes:
                 # Vague suggestions still need this agent's approved preferences.
                 # Keep the existing scope policy; do not read global history.
                 baseline_scopes.append('agent:MusicAgent')
-            baseline = _durable_memories(self.store.list_saved(scopes=baseline_scopes))[:4] if baseline_scopes else []
-            matched = _durable_memories(self.store.search_saved(clean_query, limit=12, scopes=scopes))
-            saved = _dedupe_memories([*baseline, *matched])[:8]
+            if select_with_model:
+                saved, recall_method = self._select_for_prompt(clean_query, scopes, baseline_scopes, settings)
+            else:
+                baseline = _durable_memories(self.store.list_saved(scopes=baseline_scopes))[:4] if baseline_scopes else []
+                matched = _durable_memories(self.store.search_saved(clean_query, limit=12, scopes=scopes))
+                saved = _dedupe_memories([*baseline, *matched])[:8]
+                recall_method = "keyword"
         strict_profile_scope = read_scopes is not None
         docs = (
             self.fts5.search(_memory_search_query(clean_query), limit=5)
@@ -917,12 +934,39 @@ class MemoryOrchestrator:
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
             "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
             "external_providers": external_context,
+            "recall_method": recall_method if self.store is not None else "none",
             "scopes": scopes,
             "settings": settings,
         }
         if cloud_safe:
             packet = _scrub_packet(packet)
         return packet
+
+    def _select_for_prompt(self, query: str, scopes: list[str], baseline_scopes: list[str],
+                           settings: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+        """Standing rules always apply; a small model picks up to 5 more.
+
+        Pinned memories, preferences and corrections act like an always-loaded
+        index. Everything else competes for the remaining slots by relevance.
+        Archived memories stay recallable while ``use_archived_memories`` is on.
+        """
+        from agent.memory.recall import select_relevant_memories
+
+        assert self.store is not None
+        standing = [
+            item for item in _durable_memories(self.store.list_saved(scopes=baseline_scopes))
+            if item.get("pinned") or item.get("kind") in {"preference", "correction"}
+        ][:6] if baseline_scopes else []
+        standing_ids = {item["id"] for item in standing}
+        pool = _durable_memories(self.store.list_saved(scopes=scopes))
+        if settings.get("use_archived_memories", True):
+            pool += _durable_memories(self.store.list_archived(scopes=scopes))
+        pool = [item for item in pool if item["id"] not in standing_ids]
+        chosen, method = select_relevant_memories(query, pool, limit=5)
+        selected = _dedupe_memories([*standing, *chosen])[:10]
+        if not method.startswith("cached"):
+            self.store.mark_used([item["id"] for item in chosen])
+        return selected, method
 
     def build_agent_handoff(self, *, source, recipient, query: str, thread_id: str,
                            user_id: str, recent: dict | None = None) -> dict[str, Any]:
@@ -1323,7 +1367,10 @@ def _is_durable_memory_text(text: str, *, explicit: bool = False) -> bool:
 
 
 def _durable_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [item for item in memories if _is_durable_memory_text(str(item.get("text") or ""))]
+    return [
+        item for item in memories
+        if not item.get("suppressed") and _is_durable_memory_text(str(item.get("text") or ""))
+    ]
 
 
 def _safe_global_summary(store: SQLiteMemoryStore, *, use_stored_fallback: bool = True) -> str:
