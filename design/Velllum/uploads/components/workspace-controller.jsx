@@ -129,7 +129,7 @@
     const tabIcon=tab=>tab.kind==='chat'?'Chat':['files','directory'].includes(tab.kind)?'Files':tab.kind==='terminal'?'Terminal':tab.kind==='integration'?'ConnectApps':tab.kind==='launcher'?'Tabs':'Globe';
     const count=w.tabs.length,showRetained=!w.visible&&count>0;
     const fullSideChat=full&&w.visible&&w.tabs.some(tab=>tab.id===w.activeId&&tab.kind==='chat');
-    const newTab=<button ref={c.trigger} type="button" className="tbtn workspace-new-tab" aria-label={showRetained?'Show tabs':'New workspace tab'} data-tip={showRetained?'Show tabs':'New tab'} onClick={()=>showRetained?w.reveal():w.open('launcher',w.mode==='full'?'full':'split')}>
+    const newTab=<button ref={c.trigger} type="button" className="tbtn workspace-new-tab" aria-label={showRetained?'Show tabs':'New workspace tab'} data-tip={showRetained?'Show tabs':'New tab'} {...pressAction(()=>showRetained?w.reveal():w.open('launcher',w.mode==='full'?'full':'split'))}>
       <Icon name={full&&!showRetained?'Plus':count?'Tabs':'PlusSquareAdd'} size={18}/>{showRetained&&<span className="workspace-tab-count" aria-hidden="true">{count>9?'9+':count}</span>}
     </button>;
     const actions=<div className="workspace-header-actions">
@@ -147,6 +147,16 @@
       {actions}{(c.error||w.error)&&<div className="workspace-control-error" role="alert">{w.error||c.error}</div>}
     </header>;
   }
+  // Act on the primary-button press, not on a full click: a click is dropped
+  // when anything re-renders between press and release (tab previews, focus
+  // changes), which made "+" need a second click. Keyboard activation (a click
+  // with detail 0) still works.
+  function pressAction(run){
+    return {
+      onPointerDown:event=>{if(event.button===0&&event.pointerType!=='touch'){event.preventDefault();run();}},
+      onClick:event=>{if(event.detail===0||event.nativeEvent?.pointerType==='touch')run();},
+    };
+  }
   function WorkspacePaneTabs({workspace:w,controller:c}){
     const tabIcon=tab=>tab.kind==='chat'?'Chat':['files','directory'].includes(tab.kind)?'Files':tab.kind==='terminal'?'Terminal':tab.kind==='integration'?'ConnectApps':tab.kind==='launcher'?'Tabs':'Globe';
     const sideChatActive=w.tabs.some(tab=>tab.id===w.activeId&&tab.kind==='chat');
@@ -154,7 +164,7 @@
       <div className="workspace-view-tabs" role="tablist" aria-label="Open workspace views">
         {w.tabs.map(tab=><WorkspaceTab key={tab.id} tab={tab} active={w.activeId===tab.id} icon={tabIcon(tab)} onSelect={w.select} onClose={w.close}/>)}
       </div>
-      <button type="button" ref={c.trigger} className="tbtn workspace-new-tab" aria-label="New workspace tab" onClick={()=>w.open('launcher','split')}><Icon name="Plus" size={18}/></button>
+      <button type="button" ref={c.trigger} className="tbtn workspace-new-tab" aria-label="New workspace tab" {...pressAction(()=>w.open('launcher','split'))}><Icon name="Plus" size={18}/></button>
       {!sideChatActive&&<div className="workspace-pane-actions">
         <button type="button" className="tbtn" aria-label="Enter full view" onClick={()=>w.layout('full')}><Icon name="Full" size={16}/></button>
         <button type="button" className="tbtn" aria-label="Hide workspace views" onClick={w.hide}><Icon name="X" size={16}/></button>

@@ -21,6 +21,7 @@ class SkillRegistry:
         platform_name: str | None = None,
         available_toolsets: set[str] | None = None,
         available_tools: set[str] | None = None,
+        disabled_external=None,
     ):
         self.local_root = Path(local_root)
         self.external_dirs = [Path(path) for path in external_dirs or []]
@@ -31,6 +32,8 @@ class SkillRegistry:
         self.available_toolsets = available_toolsets or set()
         self.available_tools = available_tools or set()
         self._diagnostics: list[dict[str, str]] = []
+        # Names of external/plugin skills the person turned off in Vellum.
+        self.disabled_external = disabled_external or (lambda: set())
 
     def list_skills(self, *, include_unavailable: bool = False) -> list[SkillIndexEntry]:
         packages = self._packages()
@@ -119,6 +122,8 @@ class SkillRegistry:
 
     def _availability(self, package: SkillPackage) -> tuple[bool, str | None]:
         metadata = package.metadata
+        if package.is_external and metadata.name in self.disabled_external():
+            return False, "turned off in Vellum"
         if metadata.platforms and self.platform_name not in metadata.platforms:
             return False, f"skill is unavailable on {self.platform_name}"
         hermes = metadata.metadata.hermes

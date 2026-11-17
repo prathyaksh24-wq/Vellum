@@ -6636,12 +6636,31 @@ const DiscordWorkspace = () => {
 const CalendarWorkspace = window.VellumUI.CalendarWorkspace;
 const BackendConnectorsView = props => <window.VellumUI.PluginWorkspace {...props} Logo={ConnLogo} SidebarIcon={IcPanel} renderDiscord={()=><DiscordWorkspace/>}/>;
 
-const ArchiveView = ({chats, onRestore, onDelete}) => {
+const ArchiveView = ({chats, onRestore, onDelete, onDeleteAll}) => {
   const archived = chats.filter(c => c.archived);
+  // Two-step: the first press asks, the second deletes every archived chat.
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  useEffect(() => { if (!archived.length) setConfirmAll(false); }, [archived.length]);
+  const deleteAll = async () => {
+    if (!confirmAll) { setConfirmAll(true); return; }
+    setDeletingAll(true);
+    try { await onDeleteAll?.(archived.map(c => c.id)); }
+    finally { setDeletingAll(false); setConfirmAll(false); }
+  };
   return (
     <div className="page">
       <div className="page-inner" style={{maxWidth: 700}}>
-        <div className="page-head"><div className="page-title">Archive</div></div>
+        <div className="page-head" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+          <div className="page-title">Archive</div>
+          {onDeleteAll && archived.length > 0 && <span className="arc-act" style={{display:'flex',gap:8}}>
+            {confirmAll && !deletingAll && <button className="btn" onClick={() => setConfirmAll(false)}>Cancel</button>}
+            <button className="btn" style={{color: 'var(--danger)'}} disabled={deletingAll} onClick={deleteAll}
+              aria-label={confirmAll ? `Permanently delete all ${archived.length} archived chats` : 'Delete all archived chats'}>
+              {deletingAll ? 'Deleting…' : confirmAll ? `Delete ${archived.length} chats permanently` : 'Delete all'}
+            </button>
+          </span>}
+        </div>
         {archived.length === 0 && <div className="s-none">Nothing archived.</div>}
         {archived.map(c => (
           <div key={c.id} className="arc-row">
@@ -7620,7 +7639,7 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
@@ -7741,7 +7760,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
         </div>
         <div className="set-body">
           <div className="settings-content">
-          {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat}/>}
+          {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat} onDeleteAll={onDeleteArchivedChats}/>}
           {tab === 'Analytics' && <ObservabilityView control={analyticsControl} onAction={onAnalyticsAction}/>}
           {tab === 'Profile' && <window.VellumUI.Profile.Page key={profile.accountId} profile={profile} onSave={onProfileSave}/>}
           {tab === 'Account' && <window.VellumUI.Accounts.Settings details={<window.VellumUI.Profile.AccountDetails key={profile.accountId} profile={profile} onSave={onProfileSave}/>}/>}
@@ -9956,6 +9975,22 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.delete', {conversation_id:id});
     else setChats(cs => cs.filter(c => c.id !== id));
   };
+  // The Archive page's "Delete all" is the person's explicit confirmation, so
+  // each chat's delete confirmation is completed here in one pass.
+  const deleteArchivedChats = async ids => {
+    if (!FEATURE_FLAGS.realConversations) { setChats(cs => cs.filter(c => !ids.includes(c.id))); return; }
+    const runtime = conversationActionRuntimeRef.current;
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        let receipt = await runtime.dispatch('conversation.delete', {conversation_id:id}, {conversationId:id});
+        if (receipt?.status === 'confirmation_required') receipt = await runtime.confirm(receipt, {conversationId:id});
+        if (receipt?.status === 'applied') deleted += 1;
+      } catch (_) {}
+    }
+    scheduleConversationLibraryRefresh();
+    pushToast(deleted === ids.length ? `Deleted ${deleted} archived chat${deleted === 1 ? '' : 's'}.` : `Deleted ${deleted} of ${ids.length} archived chats. Try again for the rest.`);
+  };
 
   const addSource = () => dispatchKnowledgeAction('composer.attachment.import', {source:'picker'});
   const renameProject = (id, name) => {
@@ -11220,6 +11255,10 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
     sidebarHoverSuppressed.current=sidebarPinned&&!!document.querySelector('.app-destination-rail:hover');setSidebarPeeking(false);dispatchSidebarVisibility(!sidebarPinned,{learn:true});
   };
+  // Scheduled follows the main sidebar's pin preference: with hover mode on,
+  // its sidebar hides when the cursor leaves, like every other sidebar. Its own
+  // toggle still pins or collapses it for the current session.
+  useEffect(()=>{if(!window.matchMedia('(max-width: 760px)').matches)setScheduledSidebarOpen(sidebarPinned);},[sidebarPinned]);
   const collapseScheduledSidebar=()=>{
     sidebarHoverSuppressed.current='scheduled';
     dismissSidebarPreview();
@@ -11654,7 +11693,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} faceColor={deviceSettings.values.face_color} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} onDeleteArchivedChats={deleteArchivedChats} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} faceColor={deviceSettings.values.face_color} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }

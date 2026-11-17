@@ -6,6 +6,13 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Never reload or relaunch the Vellum window on its own. New development UI builds are used on the next manual reload (Ctrl+R) or launch, and desktop host edits apply on the next start. Backend health supervision ignores sleep, screen lock and idle throttling (a 60-second grace after resume/unlock) and only restarts a backend that keeps failing for about 30 seconds while the computer is awake.
+- Fade chat messages out before they scroll under the floating chat title, instead of drawing them over it.
+- Workspace "+" (new tab) buttons act on the first press.
+- The Scheduled sidebar follows the main sidebar's pin setting, so it hides on mouse-out in hover mode like the other sidebars.
+- Archive has "Delete all", with a second confirming press, which permanently deletes every archived chat.
+- External and plugin-provided skills can be switched on and off. Vellum records the switch in `.skills/external-disabled.json` without touching the skill's files; a switched-off skill is not loaded by the agent. Removing such skills is still unavailable.
+
 - Store chat history per conversation. `data/ui/conversations.json` is now a small index (about 0.5 MB) and each chat's messages live in `data/ui/conversations/<id>.json`; saving a message rewrites only that chat (about 2 s → 0.16 s for a 56 MB history). The backend converts an existing single-file history at startup and keeps it as `conversations.v1-backup.json`.
 - Restore the Books shelf and Knowledge Core API (`/api/knowledge/core/...`), which were unmounted together with the retired Knowledge Wiki.
 - Development reloads and backend restarts wait until no reply is streaming and no agent turn is running, and backend-only edits no longer reload the window, so a chat is never cut off mid-answer. Sidebar "working" spinners for several chats now turn in sync.

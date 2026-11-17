@@ -81,9 +81,11 @@ if (!app.requestSingleInstanceLock()) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     };
+    // Vellum never reloads the window on its own: someone may come back to it
+    // after hours and must find it exactly as they left it. A new development
+    // build is served on the next manual reload (Ctrl+R) or launch.
     const reloadWorkspace = async () => {
-      await waitUntilIdle('reloading the window');
-      if (!quitting) host?.windows.get('workspace')?.webContents.reloadIgnoringCache();
+      console.log('[Vellum dev] A new UI build is ready. Reload the window (Ctrl+R) to use it.');
     };
     if (devNode) {
       devBundle = createDevBundle(sourceRoot, devNode);
@@ -142,10 +144,22 @@ if (!app.requestSingleInstanceLock()) {
     }
     backend=manage(backendSpec);
     launchBackend(message=>{if(startup&&!startup.isDestroyed())startup.setTitle(message);}).then(state=>{recordStartup('backend_ready');return state;}).catch(()=>{});
+    // Only a backend that keeps failing while the computer is awake is replaced.
+    // Sleep, screen lock and timer throttling of an idle app reset the count and
+    // start a grace period, so returning to Vellum never triggers a restart.
+    let lastTick = Date.now(), graceUntil = 0;
+    const settle = () => {healthFailures = 0; graceUntil = Date.now() + 60000;};
+    try {
+      const {powerMonitor} = require('electron');
+      for (const event of ['resume', 'unlock-screen', 'user-did-become-active']) powerMonitor.on(event, settle);
+    } catch {}
     supervisor = setInterval(async () => {
-      if (quitting || restarting || lifecycleBusy || !backendUp || !backend.owned) return;
-      if (await backendResponds()) {healthFailures = 0; return;}
-      if (++healthFailures >= 4) restartBackend('it stopped responding');
+      const now = Date.now(), gap = now - lastTick;
+      lastTick = now;
+      if (gap > 15000) settle();
+      if (quitting || restarting || lifecycleBusy || !backendUp || !backend.owned || now < graceUntil) return;
+      if (await backendResponds(undefined, 8000)) {healthFailures = 0; return;}
+      if (++healthFailures >= 6) restartBackend('it stopped responding for about 30 seconds');
     }, 5000);
     const protectedAudioReady=initializeProtectedAudio(require('electron'))
       .then(state=>{recordStartup('protected_audio_ready');return state;})
@@ -202,10 +216,7 @@ if (!app.requestSingleInstanceLock()) {
     if (devBundle && !quitting) {
       stopWatching = watchDevelopment(sourceRoot, async changed => {
         if (changed.has('desktop')) {
-          await waitUntilIdle('restarting Vellum');
-          relaunch = true;
-          app.quit();
-          return;
+          console.log('[Vellum dev] Desktop host files changed. Restart Vellum to apply them.');
         }
         let reload = false;
         if (changed.has('backend')) {

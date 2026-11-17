@@ -32,7 +32,11 @@ class SkillSurfaceService:
         self.root = Path(root)
         config = SkillConfigStore(self.root / "config.yaml")
         external_dirs = [Path(os.path.expandvars(os.path.expanduser(str(path)))) for path in config.get_option("external_dirs", []) or []]
-        self.registry = SkillRegistry(local_root=self.root / "packages", external_dirs=external_dirs, owned_external_dirs=owned_external_dirs)
+        from agent.skills.external_switches import ExternalSkillSwitches
+
+        self.external_switches = ExternalSkillSwitches(self.root)
+        self.registry = SkillRegistry(local_root=self.root / "packages", external_dirs=external_dirs, owned_external_dirs=owned_external_dirs,
+                                      disabled_external=self.external_switches.disabled)
         self.manager = SkillManager(self.root)
         self.mutations = SkillMutationCoordinator(self.root)
         self.migrator = JsonSkillMigrator(self.root)
@@ -155,6 +159,10 @@ class SkillSurfaceService:
             return self.mutations.set_write_approval(False)
         if normalized == "approve":
             return self.mutations.submit("approve_proposed", name=name, origin="foreground")
+        if normalized in {"archive", "restore"} and self._is_external(name):
+            # Skills Vellum does not own are switched off/on without touching files.
+            enabled = self.external_switches.set_enabled(name, normalized == "restore")
+            return {"ok": True, "name": name, "state": "active" if enabled else "archived", "external": True}
         if normalized in {"retire", "archive", "restore", "delete"}:
             return self.mutations.submit(normalized, name=name, origin="foreground", **payload)
         if normalized == "create":
@@ -250,8 +258,16 @@ class SkillSurfaceService:
                 continue
         return packages
 
+    def _is_external(self, name: str) -> bool:
+        try:
+            return bool(self.registry.view(name, include_unavailable=True).is_external)
+        except (KeyError, SkillPackageError):
+            return False
+
     def _card(self, package, state: str) -> dict[str, Any]:
         name = package.metadata.name
+        if package.is_external and name in self.external_switches.disabled():
+            state = "archived"
         usage = self.usage.get(name)
         vellum = package.metadata.metadata.vellum
         trigger_values = vellum.trigger or package.metadata.metadata.hermes.tags

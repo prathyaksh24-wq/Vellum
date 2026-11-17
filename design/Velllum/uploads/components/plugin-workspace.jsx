@@ -565,7 +565,11 @@
         busy
       } = useX(),
       [open, setOpen] = useState(false),
-      owned = s.read_only || s.is_external || s.origin === 'builtin' || s.source === 'external';
+      // External and plugin skills are switched on/off without touching their files;
+      // only built-in skills stay locked.
+      owned = s.origin === 'builtin',
+      // Removing still needs files Vellum owns.
+      removable = !(s.read_only || s.is_external || s.origin === 'builtin' || s.source === 'external');
     return <div className="sr2" role="button" tabIndex={0} onClick={() => setDlg({
       t: 'skill',
       s
@@ -595,7 +599,7 @@
       }, {
         label: 'Remove',
         danger: true,
-        disabled: owned,
+        disabled: !removable,
         reason: 'Owned by an external installation.',
         action: () => skillAction('remove', s)
       }]} />}</div>;
@@ -857,7 +861,7 @@
     return <Dlg w={750} close={close} label={n + ' skill'}><div className="dh"><Ic n="cubeo" s={36} /><div><h2>{n}</h2><span className="tg" style={{
             marginTop: 6,
             display: 'inline-block'
-          }}>SKILL.md</span></div><Sw label={'Enable ' + n} value={s.state !== 'archived'} disabled={busy || detail?.read_only || s.is_external || s.origin === 'builtin' || s.source === 'external'} onChange={v => skillAction(v ? 'restore' : 'archive', s)} /><button className="ib" aria-label="Close" onClick={close}><Ic n="x" /></button></div><div className="mdc"><span>Name</span><span>{n}</span><span>Description</span><span>{detail?.description || s.description}</span>{details && <><span>Source</span><span>{detail?.provenance?.repository_url || detail?.provenance?.source || s.source}</span><span>Owner</span><span>{detail?.owner_plugin || s.owner_plugin || 'Personal'}</span></>}</div>{error ? <p className="error" role="alert">{error}</p> : detail ? <><div className="df"><button className="bs" onClick={() => setRaw(!raw)}>{raw ? 'Preview' : 'Source'}</button><button className="bs" disabled={!detail.skill_md} onClick={() => navigator.clipboard.writeText(detail.skill_md).catch(() => setError('Clipboard is unavailable. Select and copy the source.'))}>Copy Markdown</button>{window.VellumDesktop && <button className="bs" onClick={() => window.VellumDesktop.invoke('skill_file', {
+          }}>SKILL.md</span></div><Sw label={'Enable ' + n} value={s.state !== 'archived'} disabled={busy || s.origin === 'builtin'} onChange={v => skillAction(v ? 'restore' : 'archive', s)} /><button className="ib" aria-label="Close" onClick={close}><Ic n="x" /></button></div><div className="mdc"><span>Name</span><span>{n}</span><span>Description</span><span>{detail?.description || s.description}</span>{details && <><span>Source</span><span>{detail?.provenance?.repository_url || detail?.provenance?.source || s.source}</span><span>Owner</span><span>{detail?.owner_plugin || s.owner_plugin || 'Personal'}</span></>}</div>{error ? <p className="error" role="alert">{error}</p> : detail ? <><div className="df"><button className="bs" onClick={() => setRaw(!raw)}>{raw ? 'Preview' : 'Source'}</button><button className="bs" disabled={!detail.skill_md} onClick={() => navigator.clipboard.writeText(detail.skill_md).catch(() => setError('Clipboard is unavailable. Select and copy the source.'))}>Copy Markdown</button>{window.VellumDesktop && <button className="bs" onClick={() => window.VellumDesktop.invoke('skill_file', {
             name: n,
             operation: 'open'
           }).catch(() => setError('The file could not be opened.'))}>Open file</button>}</div><div className="md">{detail.skill_md ? raw || !Markdown ? <pre>{detail.skill_md}</pre> : <Markdown text={detail.skill_md} /> : <p>SKILL.md is unavailable from this source.</p>}</div></> : <p className="notice" role="status">Loading SKILL.md…</p>}</Dlg>;
