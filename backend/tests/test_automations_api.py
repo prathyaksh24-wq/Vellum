@@ -13,6 +13,7 @@ import pytest
 from agent import api
 from agent.automations import api as automations_api
 from agent.automations.store import AutomationStore
+from agent.conversations.lifecycle import ConversationLifecycle
 
 
 @pytest.fixture(autouse=True)
@@ -296,7 +297,7 @@ def test_run_now_delivers_new_chat_to_feed(monkeypatch, tmp_path) -> None:
 
     assert ran.status_code == 200
     assert ran.json()["run"]["status"] == "complete"
-    conversations = json.loads(conversations_path.read_text(encoding="utf-8"))["conversations"]
+    conversations = ConversationLifecycle(path=conversations_path).list()
     assert len(conversations) == 1
     assert conversations[0]["title"] == "Automation: Morning brief"
     texts = [message["text"] for message in conversations[0]["messages"]]
@@ -346,7 +347,7 @@ def test_run_now_appends_to_pinned_existing_chat(monkeypatch, tmp_path) -> None:
 
     assert ran.status_code == 200
     assert ran.json()["run"]["status"] == "complete"
-    conversations = json.loads(conversations_path.read_text(encoding="utf-8"))["conversations"]
+    conversations = ConversationLifecycle(path=conversations_path).list()
     assert len(conversations) == 1
     texts = [message["text"] for message in conversations[0]["messages"]]
     assert texts == ["old question", "old answer", "Summarize what changed overnight.", "Pinned summary."]
@@ -375,4 +376,4 @@ def test_run_now_keeps_result_when_pinned_thread_missing(monkeypatch, tmp_path) 
     assert ran.status_code == 200
     assert ran.json()["run"]["status"] == "complete"
     assert ran.json()["run"]["output"] == "Orphaned summary."
-    assert json.loads(conversations_path.read_text(encoding="utf-8"))["conversations"] == []
+    assert ConversationLifecycle(path=conversations_path).list() == []

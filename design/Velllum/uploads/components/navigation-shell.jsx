@@ -172,7 +172,9 @@
     if(chat.unread)return {id:'unread',label:'Unread'};
     return null;
   }
-  function ChatStatus({chat}){const status=chatStatus(chat);return status?<span className={'shell-chat-status is-'+status.id} title={status.label} aria-label={status.label}>{status.icon&&<Icon name={status.icon} size={13}/>}</span>:null;}
+  // Spinners share one clock: a negative delay places each new spinner at the
+  // same point of the 1s rotation, so several running chats turn together.
+  function ChatStatus({chat}){const status=chatStatus(chat);const working=status?.id==='working';const phase=useMemo(()=>working?{animationDelay:-(performance.now()%1000)+'ms'}:undefined,[working]);return status?<span className={'shell-chat-status is-'+status.id} style={phase} title={status.label} aria-label={status.label}>{status.icon&&<Icon name={status.icon} size={13}/>}</span>:null;}
   function ChatHoverCard({chat,project,anchor,hoverId,hoverCardRef,onOpen,onClose,onEnter,onDismiss}){
     const fallback=useRef(null),card=hoverCardRef||fallback,position=useSidebarCardPosition(anchor,card,onDismiss);useShellOverlay(true);
     const date=new Date(chat.updated_at||chat.created_at||'');

@@ -75,6 +75,7 @@ from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import REPO_ROOT, SOURCE_ROOT, get_settings
 from agent.desktop_api import router as desktop_router
+from agent.knowledge.api import router as _knowledge_core_router
 from agent.account_api import router as account_router
 from agent.llm.context import ContextBudgetExceeded
 from agent.contracts.capabilities import public_capability_contract
@@ -343,6 +344,8 @@ class _ThreadTurnCoordinator:
 
 
 _agent_turns = _ThreadTurnCoordinator()
+from agent.desktop_api import set_activity_provider as _set_desktop_activity
+_set_desktop_activity(lambda: _agent_turns._active_turns)
 _agent_catalog = get_agent_catalog()
 _delegation_runtime = get_delegation_runtime()
 _live_dispatcher = LiveAgentDispatcher(
@@ -1661,10 +1664,13 @@ async def lifespan(app: FastAPI):
         await prestart_worker_threads(asyncio.get_running_loop())
         # Read the chat history once in the background so the first chat a
         # person opens after launch does not pay for parsing the whole file.
-        asyncio.get_running_loop().run_in_executor(None, ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).list_view)
+        asyncio.get_running_loop().run_in_executor(None, ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).prepare_storage)
     watchdog = start_loop_watchdog(asyncio.get_running_loop())
+    from agent.desktop_runtime import startup_mark
+    startup_mark("workers started")
     scheduler = start_scheduler()
     app.state.scheduler = scheduler
+    startup_mark("scheduler started")
     try:
         yield
     finally:
@@ -7107,6 +7113,10 @@ async def terminal_ws(websocket: WebSocket) -> None:
 
 
 router.include_router(app_actions_router)
+# Knowledge Core (books, sources, context packs) lives under /api/knowledge/core.
+_knowledge_router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+_knowledge_router.include_router(_knowledge_core_router)
+router.include_router(_knowledge_router)
 router.include_router(account_router)
 router.include_router(browser_router)
 router.include_router(llm_routing_router)

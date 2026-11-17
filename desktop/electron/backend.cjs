@@ -148,7 +148,7 @@ function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupi
         env:{...process.env,PYTHONPATH:[path.join(spec.codeRoot,'backend'),spec.codeRoot].join(path.delimiter),
           ...(spec.pythonHome?{PYTHONHOME:spec.pythonHome}:{}),
           VELLUM_WORKSPACE_ROOT:spec.workspaceRoot,PYTHONNOUSERSITE:'1',PYTHONDONTWRITEBYTECODE:'1',
-          VELLUM_DESKTOP_LAUNCH_ID:launchId,
+          VELLUM_DESKTOP_LAUNCH_ID:launchId,VELLUM_DESKTOP_BUILD_ID:spec.buildId,
           API_HOST:'127.0.0.1',API_PORT:'8000'},
       });
     } finally {fs.closeSync(output);fs.closeSync(errors);}

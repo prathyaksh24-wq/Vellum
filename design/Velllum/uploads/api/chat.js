@@ -120,7 +120,7 @@
     })};
   }
 
-  async function stream(payload, handlers = {}) {
+  async function streamOnce(payload, handlers = {}) {
     const controller = new AbortController();
     if (handlers.controller) handlers.controller(controller);
     if (handlers.playbackRequest) await handlers.playbackRequest.ready;
@@ -319,5 +319,13 @@
     }
     return 'Vellum could not finish this response. Try again.';
   }
-  window.VellumApi.chat = { stream: stream, failureMessage: failureMessage };
+  // Replies in progress. The desktop host defers development reloads and
+  // backend restarts while any reply is streaming, so a chat is never cut off.
+  let activeStreams = 0;
+  async function stream(payload, handlers = {}) {
+    activeStreams++;
+    try { return await streamOnce(payload, handlers); }
+    finally { activeStreams = Math.max(0, activeStreams - 1); }
+  }
+  window.VellumApi.chat = { stream: stream, failureMessage: failureMessage, get activeStreams() { return activeStreams; } };
 })();

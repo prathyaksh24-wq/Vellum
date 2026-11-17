@@ -55,7 +55,15 @@ def source_build_id(root: Path = SOURCE_ROOT) -> str:
 
 def runtime_identity() -> dict:
     manifest = SOURCE_ROOT / "desktop-backend.json"
-    build_id = json.loads(manifest.read_text(encoding="utf-8"))["build_id"] if manifest.is_file() else source_build_id()
+    # The desktop host already hashed this source tree to launch it; reuse that
+    # value instead of reading every source file again during startup.
+    launched = os.environ.get("VELLUM_DESKTOP_BUILD_ID", "")
+    if manifest.is_file():
+        build_id = json.loads(manifest.read_text(encoding="utf-8"))["build_id"]
+    elif len(launched) == 64 and all(c in "0123456789abcdef" for c in launched):
+        build_id = launched
+    else:
+        build_id = source_build_id()
     return {"service": "vellum", "protocol_version": PROTOCOL_VERSION,
             "workspace_root": str(workspace_root()), "build_id": build_id,
             "pid": os.getpid(), "launch_id": os.environ.get("VELLUM_DESKTOP_LAUNCH_ID") or None}
@@ -167,8 +175,22 @@ async def prestart_worker_threads(loop, *, executor_workers: int = 32, threadpoo
         pass
 
 
+_STARTED = None
+
+
+def startup_mark(phase: str) -> None:
+    """Write one startup timing line to the backend log (stderr)."""
+    import time
+
+    if _STARTED is not None:
+        print(f"[Vellum startup] {phase}: {time.perf_counter() - _STARTED:.2f}s", file=sys.stderr, flush=True)
+
+
 def main(*, standalone: bool = False) -> None:
-    global _serving
+    global _serving, _STARTED
+    import time
+
+    _STARTED = time.perf_counter()
     _serving = True
     acquire_workspace_lease()
     os.chdir(workspace_root())
@@ -176,7 +198,9 @@ def main(*, standalone: bool = False) -> None:
     for key, value in {"OMP_NUM_THREADS": "4", "MKL_NUM_THREADS": "4", "HF_HUB_DISABLE_XET": "1"}.items():
         os.environ.setdefault(key, value)
     import uvicorn
+    startup_mark("runtime ready")
     from agent.api import app
+    startup_mark("API imported")
 
     host = os.environ.get("API_HOST", "127.0.0.1") if standalone else "127.0.0.1"
     port = int(os.environ.get("API_PORT", "8000")) if standalone else 8000

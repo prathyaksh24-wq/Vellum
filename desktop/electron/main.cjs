@@ -6,7 +6,7 @@ const path = require('node:path');
 const CommandRegistry=require('./commands.cjs');
 const {createNativeBrowser,readDebuggerEndpoint} = require('./native-browser.cjs');
 const {initializeProtectedAudio} = require('./protected-audio.cjs');
-const {createBackendManager,launchSpec,backendResponds,UI_PORT} = require('./backend.cjs');
+const {BACKEND,createBackendManager,launchSpec,backendResponds,UI_PORT} = require('./backend.cjs');
 const {selectWorkspace} = require('./workspace.cjs');
 const {claimDesktopWorkspace} = require('./workspace-lock.cjs');
 const {createDevBundle, watchDevelopment} = require('./dev-reload.cjs');
@@ -60,6 +60,31 @@ if (!app.requestSingleInstanceLock()) {
     workspaceLock=await claimDesktopWorkspace(workspaceRoot,reveal);
     if(!workspaceLock){app.quit();return;}
     recordStartup('workspace_selected');
+    // Development reloads and backend restarts wait while a reply is streaming
+    // in any window or an agent turn is running, so a chat is never cut off.
+    const busy = async () => {
+      let active = 0;
+      for (const win of BrowserWindow.getAllWindows()) {
+        try {active += Number(await win.webContents.executeJavaScript('window.VellumApi?.chat?.activeStreams||0', true)) || 0;} catch {}
+      }
+      try {
+        const response = await fetch(BACKEND+'/api/desktop/activity', {signal:AbortSignal.timeout(2000)});
+        if (response.ok) active += Number((await response.json()).active_turns) || 0;
+      } catch {}
+      return active > 0;
+    };
+    const waitUntilIdle = async what => {
+      const until = Date.now() + 30*60*1000;
+      let told = false;
+      while (!quitting && Date.now() < until && await busy()) {
+        if (!told) {console.log('[Vellum dev] Waiting for the reply in progress before '+what+'.'); told = true;}
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    };
+    const reloadWorkspace = async () => {
+      await waitUntilIdle('reloading the window');
+      if (!quitting) host?.windows.get('workspace')?.webContents.reloadIgnoringCache();
+    };
     if (devNode) {
       devBundle = createDevBundle(sourceRoot, devNode);
       const previous = devBundle.current;
@@ -70,7 +95,7 @@ if (!app.requestSingleInstanceLock()) {
       else {
         // Open on the last good build now; swap in the fresh one only if it differs.
         initialBuild.then(changed => {
-          if (changed && !quitting) host?.windows.get('workspace')?.webContents.reloadIgnoringCache();
+          if (changed && !quitting) reloadWorkspace();
         }).catch(error => console.error('[Vellum dev]', error.stderr || error.message));
       }
     }
@@ -177,6 +202,7 @@ if (!app.requestSingleInstanceLock()) {
     if (devBundle && !quitting) {
       stopWatching = watchDevelopment(sourceRoot, async changed => {
         if (changed.has('desktop')) {
+          await waitUntilIdle('restarting Vellum');
           relaunch = true;
           app.quit();
           return;
@@ -188,6 +214,7 @@ if (!app.requestSingleInstanceLock()) {
             if (backendState?.reused) {
               console.warn('[Vellum dev] Restart the independently started API to apply backend edits.');
             } else {
+              await waitUntilIdle('restarting the backend');
               try {
                 await serially(async () => {
                   await backend.stop();
@@ -197,7 +224,7 @@ if (!app.requestSingleInstanceLock()) {
                   await launchBackend();
                 });
               } catch (error) {restartBackend('it did not start after an edit');}
-              reload = true;
+              // No window reload: the API client waits for the backend and refreshes.
             }
           }
         }
@@ -205,7 +232,7 @@ if (!app.requestSingleInstanceLock()) {
           await devBundle.build();
           reload = true;
         }
-        if (reload && !quitting) host.windows.get('workspace')?.webContents.reloadIgnoringCache();
+        if (reload && !quitting) await reloadWorkspace();
       });
       console.log('[Vellum dev] Watching workspace source changes.');
     }

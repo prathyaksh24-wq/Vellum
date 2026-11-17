@@ -6,8 +6,11 @@ from collections import OrderedDict
 from copy import deepcopy
 from contextlib import suppress
 from datetime import datetime, timezone
+from hashlib import sha256
 import json
 from pathlib import Path
+import re
+import shutil
 from threading import Lock, RLock
 from time import sleep
 from typing import Any, Callable
@@ -21,6 +24,14 @@ _PATH_LOCKS: dict[str, RLock] = {}
 _PATH_LOCKS_GUARD = Lock()
 _READ_SNAPSHOTS: OrderedDict[str, tuple[tuple[int, int, int], dict[str, Any]]] = OrderedDict()
 _READ_SNAPSHOTS_LOCK = RLock()
+# Parsed per-chat message files keyed by file identity, so re-reading the index
+# after a write only parses the chats that actually changed.
+_MESSAGE_FILES: dict[str, tuple[tuple[int, int], list[Any]]] = {}
+_MESSAGE_FILES_LOCK = Lock()
+# Storage v2: conversations.json is a small index of chat details; each chat's
+# messages live in conversations/<id>.json and only changed chats are written.
+STORAGE_VERSION = 2
+_SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9_.-]{0,99}")
 
 
 def _path_lock(path: Path) -> RLock:
@@ -59,6 +70,38 @@ class ConversationLifecycle:
         self._conversation_id_factory = conversation_id_factory or (lambda: f"chat_{uuid4().hex}")
         self._lock = _path_lock(self.path)
 
+    def _messages_dir(self) -> Path:
+        return self.path.with_name(self.path.stem)
+
+    def _message_file(self, conversation_id: Any) -> Path:
+        cid = str(conversation_id or "")
+        # Windows paths are case-insensitive, so only lower-case ids are used
+        # verbatim; anything else gets a stable hashed name.
+        name = cid if _SAFE_NAME.fullmatch(cid) else "id-" + sha256(cid.encode("utf-8")).hexdigest()[:40]
+        return self._messages_dir() / f"{name}.json"
+
+    def _load_messages(self, conversation_id: Any) -> list[Any]:
+        target = self._message_file(conversation_id)
+        try:
+            stat = target.stat()
+        except OSError:
+            return []
+        key = str(target)
+        signature = (stat.st_mtime_ns, stat.st_size)
+        with _MESSAGE_FILES_LOCK:
+            cached = _MESSAGE_FILES.get(key)
+        if cached and cached[0] == signature:
+            return cached[1]
+        try:
+            loaded = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        messages = loaded.get("messages") if isinstance(loaded, dict) else loaded
+        messages = messages if isinstance(messages, list) else []
+        with _MESSAGE_FILES_LOCK:
+            _MESSAGE_FILES[key] = (signature, messages)
+        return messages
+
     def _read_payload(self) -> dict[str, Any]:
         """Private, file-versioned read cache; the JSON writer remains authoritative."""
         key = str(self.path.resolve(strict=False)).casefold()
@@ -75,12 +118,44 @@ class ConversationLifecycle:
         payload = {'conversations': payload} if isinstance(payload, list) else payload
         if not isinstance(payload, dict):
             return {}
+        if payload.get('storage_version') == STORAGE_VERSION and isinstance(payload.get('conversations'), list):
+            rows = []
+            for meta in payload['conversations']:
+                if not isinstance(meta, dict):
+                    continue
+                record = {k: v for k, v in meta.items() if k != 'message_count'}
+                if 'message_count' in meta:
+                    record['messages'] = self._load_messages(meta.get('id'))
+                rows.append(record)
+            payload = {**payload, 'conversations': rows}
+        elif isinstance(payload.get('conversations'), list) and self._messages_dir().is_dir():
+            # An older build may have rewritten the index without messages;
+            # recover them from the per-chat files instead of losing them.
+            payload = {**payload, 'conversations': [
+                {**row, 'messages': self._load_messages(row.get('id'))}
+                if isinstance(row, dict) and 'messages' not in row and self._message_file(row.get('id')).is_file() else row
+                for row in payload['conversations']
+            ]}
         with _READ_SNAPSHOTS_LOCK:
             _READ_SNAPSHOTS[key] = (signature, payload)
             _READ_SNAPSHOTS.move_to_end(key)
             while len(_READ_SNAPSHOTS) > 4:
                 _READ_SNAPSHOTS.popitem(last=False)
         return payload
+
+    def prepare_storage(self) -> bool:
+        """Convert a single-file history to per-chat files and warm the cache.
+
+        Returns True when a conversion ran. A backup of the original file is
+        kept as conversations.v1-backup.json.
+        """
+        with self._lock:
+            payload = self._read_payload()
+            if payload.get('storage_version') == STORAGE_VERSION or not self.path.exists():
+                return False
+            self._write(self.list())
+            self._read_payload()
+            return True
 
     def list(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -474,21 +549,14 @@ class ConversationLifecycle:
                 "fork_boundary": boundary or None,
             }
 
-    def _write(self, conversations: list[dict[str, Any]], *, projects: list[dict[str, Any]] | None = None) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = dict(self._read_payload())
-        payload['conversations'] = conversations
-        if projects is not None:
-            payload['projects'] = projects
-        temporary = self.path.with_name(f".{self.path.name}.{uuid4().hex}.tmp")
+    @staticmethod
+    def _replace_file(target: Path, text: str) -> None:
+        temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
-            temporary.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
+            temporary.write_text(text, encoding="utf-8")
             for attempt in range(7):
                 try:
-                    temporary.replace(self.path)
+                    temporary.replace(target)
                     break
                 except PermissionError:
                     # A Windows reader or scanner can briefly deny replacement.
@@ -497,10 +565,54 @@ class ConversationLifecycle:
                         raise
                     sleep(.025 * (2 ** attempt))
         finally:
-            with _READ_SNAPSHOTS_LOCK:
-                _READ_SNAPSHOTS.pop(str(self.path.resolve(strict=False)).casefold(), None)
             with suppress(OSError):
                 temporary.unlink(missing_ok=True)
+
+    def _write(self, conversations: list[dict[str, Any]], *, projects: list[dict[str, Any]] | None = None) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        current = self._read_payload()
+        migrating = current.get('storage_version') != STORAGE_VERSION
+        if migrating and self.path.exists():
+            # Keep the original single-file history once, before the first v2 write.
+            backup = self.path.with_name(f"{self.path.stem}.v1-backup.json")
+            if not backup.exists():
+                shutil.copy2(self.path, backup)
+        previous = {str(item.get('id') or ''): item for item in current.get('conversations', []) if isinstance(item, dict)}
+        directory = self._messages_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        index_rows: list[dict[str, Any]] = []
+        kept_files: set[str] = set()
+        try:
+            for record in conversations:
+                if not isinstance(record, dict):
+                    continue
+                meta = {key: value for key, value in record.items() if key != 'messages'}
+                if 'messages' in record:
+                    messages = record.get('messages') if isinstance(record.get('messages'), list) else []
+                    meta['message_count'] = len(messages)
+                    cid = str(record.get('id') or '')
+                    target = self._message_file(cid)
+                    kept_files.add(target.name.casefold())
+                    old = previous.get(cid)
+                    # Only chats whose messages changed are written.
+                    if migrating or old is None or old.get('messages') != messages or not target.exists():
+                        self._replace_file(target, json.dumps({'id': cid, 'messages': messages}, ensure_ascii=False, separators=(',', ':')))
+                index_rows.append(meta)
+            payload = {key: value for key, value in current.items() if key != 'conversations'}
+            payload['storage_version'] = STORAGE_VERSION
+            payload['conversations'] = index_rows
+            if projects is not None:
+                payload['projects'] = projects
+            self._replace_file(self.path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        finally:
+            with _READ_SNAPSHOTS_LOCK:
+                _READ_SNAPSHOTS.pop(str(self.path.resolve(strict=False)).casefold(), None)
+        # Remove message files of deleted chats only after the index stops naming them.
+        for removed in set(previous) - {str(row.get('id') or '') for row in index_rows}:
+            target = self._message_file(removed)
+            if target.name.casefold() not in kept_files:
+                with suppress(OSError):
+                    target.unlink(missing_ok=True)
 
     def _update_effects(
         self,

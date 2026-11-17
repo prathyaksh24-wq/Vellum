@@ -79,12 +79,11 @@ class ConversationAdapter:
 
     @staticmethod
     def load(path: Path) -> list[dict[str, Any]]:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return []
-        conversations = payload.get("conversations") if isinstance(payload, dict) else payload
-        return [item for item in conversations if isinstance(item, dict)] if isinstance(conversations, list) else []
+        # The conversation store owns the on-disk layout (an index plus one
+        # message file per chat); read through it rather than the raw file.
+        from agent.conversations.lifecycle import ConversationLifecycle
+
+        return [item for item in ConversationLifecycle(path=Path(path)).list_view() if isinstance(item, dict)]
 
     def import_records(
         self,
