@@ -232,7 +232,7 @@ def test_memory_settings_can_disable_recent_context_without_disabling_saved_memo
     assert packet["recent_context"] == ""
 
 
-def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Path) -> None:
+def _extractor_orchestrator(tmp_path: Path) -> tuple[MemoryOrchestrator, SQLiteMemoryStore]:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
@@ -242,6 +242,11 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
         honcho=FakeHoncho(),
         memory_dir=tmp_path / "memory-files",
     )
+    return orchestrator, store
+
+
+def test_user_stated_memories_apply_immediately_and_inferences_wait_for_dreaming(tmp_path: Path) -> None:
+    orchestrator, store = _extractor_orchestrator(tmp_path)
 
     candidates = orchestrator.extract_memory_candidates(
         thread_id="t1",
@@ -251,17 +256,31 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
     )
 
     assert len(candidates) == 1
-    assert candidates[0]["status"] == "pending"
-    assert candidates[0]["scope"] == "global"
-    assert store.list_saved() == []
+    assert candidates[0]["status"] == "saved"
+    assert "Evidence sections" in store.list_saved()[0]["text"]
+    assert store.list_pending() == []
+
+    inferred = orchestrator.extract_memory_candidates(
+        thread_id="t1",
+        user_message="The Vellum backend moved to per-conversation chat storage.",
+        agent_name="VellumAgent",
+    )
+    assert inferred[0]["status"] == "pending"
+    assert inferred[0]["scope"] == "global"
 
     dream = orchestrator.run_dreaming()
 
-    assert "Evidence sections" in dream["new_memories"][0]["text"]
+    assert "per-conversation" in dream["new_memories"][0]["text"]
     assert store.list_pending() == []
-    assert store.list_saved()[0]["status"] == "saved"
     assert "Evidence sections" in dream["global_summary"]
     assert dream["audit_log"]
+
+    again = orchestrator.extract_memory_candidates(
+        thread_id="t2",
+        user_message="Remember that I do not want YouTube answers to include Evidence sections.",
+        agent_name="VellumAgent",
+    )
+    assert again[0]["status"] == "pending"  # duplicate of a saved memory; Dreaming archives it
 
     specialist = orchestrator.extract_memory_candidates(
         thread_id="sports-thread",
@@ -269,6 +288,41 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
         agent_name="SportsAgent",
     )
     assert specialist[0]["scope"] == "agent:SportsAgent"
+    assert specialist[0]["status"] == "pending"
+
+
+def test_corrections_become_lessons_that_specialists_can_read(tmp_path: Path) -> None:
+    orchestrator, store = _extractor_orchestrator(tmp_path)
+
+    lessons = orchestrator.extract_memory_candidates(
+        thread_id="t1",
+        user_message="You got that wrong again. Check whether a tool actually succeeded before saying it is done.",
+        agent_name="VellumAgent",
+    )
+    assert [(item["kind"], item["scope"], item["status"]) for item in lessons] == [
+        ("correction", "user_profile", "saved")
+    ]
+    assert lessons[0]["text"] == "Check whether a tool actually succeeded before saying it is done."
+
+    rule = orchestrator.extract_memory_candidates(
+        thread_id="t1",
+        user_message="Whenever an MCP call fails, inspect the error and try the supported fallback.",
+        agent_name="VellumAgent",
+    )
+    assert rule[0]["scope"] == "user_profile" and rule[0]["status"] == "saved"
+
+    for complaint in ("You got that wrong.", "Never mind, play some jazz.", "Stop the music."):
+        assert orchestrator.extract_memory_candidates(thread_id="t1", user_message=complaint) == []
+
+    packet = orchestrator.build_memory_packet(
+        thread_id="t9",
+        query="call the calendar tool",
+        agent_name="CalendarAgent",
+        read_scopes=["user_profile", "shared", "agent:CalendarAgent"],
+        live_honcho=False,
+    )
+    texts = [item["text"] for item in packet["saved_memories"]]
+    assert "Check whether a tool actually succeeded before saying it is done." in texts
 
 
 def test_memory_intake_keeps_operational_queries_out_of_durable_memory(tmp_path: Path) -> None:
@@ -402,11 +456,11 @@ def test_memory_context_files_are_bounded(tmp_path: Path) -> None:
     assert len(Path(files["memory_path"]).read_text(encoding="utf-8")) <= 2200
 
 
-def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Path) -> None:
+def test_dreaming_no_longer_archives_by_age(tmp_path: Path) -> None:
+    """Age-based archiving moved to the retention job, which keeps stated memories."""
     store = SQLiteMemoryStore(tmp_path / "memory.db")
-    stale_id = store.save_memory(kind="project", text="Old unpinned memory", source_thread_id="t1", confidence=0.8)
-    pinned_id = store.save_memory(kind="preference", text="Pinned memory", source_thread_id="t1", confidence=0.9)
-    store.pin(pinned_id, True)
+    stated_id = store.save_memory(kind="project", text="Old stated project note", source_thread_id="t1",
+                                  confidence=0.8)
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
@@ -418,7 +472,123 @@ def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Pa
 
     dream = orchestrator.run_dreaming(stale_days=0)
 
-    assert stale_id in [item["id"] for item in dream["archived_memories"]]
-    assert pinned_id not in [item["id"] for item in dream["archived_memories"]]
-    assert store.get_memory(pinned_id)["status"] == "saved"
-    assert store.get_memory(stale_id)["status"] == "archived"
+    assert stated_id not in [item["id"] for item in dream["archived_memories"]]
+    assert store.get_memory(stated_id)["status"] == "saved"
+
+
+class FakeHindsight:
+    id = "hindsight"
+    name = "Hindsight"
+    provider_type = "knowledge_graph"
+    optional = True
+    capabilities: list[str] = []
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.docs: dict[str, str] = {}
+        self.fail = fail
+
+    def is_enabled(self) -> bool:
+        return True
+
+    def is_configured(self) -> bool:
+        return True
+
+    def health(self) -> bool:
+        return True
+
+    def setup_notes(self) -> str:
+        return ""
+
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
+        return ""
+
+    def sync_turn(self, *args, **kwargs):
+        return "vellum-turn-test"
+
+    def retain_memory(self, memory):
+        if self.fail:
+            raise RuntimeError("server busy")
+        doc_id = f"vellum-memory-{memory['id']}"
+        self.docs[doc_id] = memory["text"]
+        return doc_id
+
+    def forget_document(self, doc_id: str) -> None:
+        self.docs.pop(doc_id, None)
+
+    def shutdown(self) -> None:
+        return None
+
+
+def _orchestrator_with(tmp_path: Path, provider) -> tuple[MemoryOrchestrator, SQLiteMemoryStore]:
+    from agent.memory.provider_extensions import MemoryProviderExtensionManager
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+        provider_extensions=MemoryProviderExtensionManager([provider]),
+    )
+    return orchestrator, store
+
+
+def test_memory_items_gain_title_topic_origin_and_typed_settings(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    memory_id = store.save_memory(kind="preference", text="I prefer concise answers with examples.",
+                                  source_thread_id="t1", confidence=0.9, scope="user_profile")
+    item = store.get_memory(memory_id)
+    assert item["origin"] == "stated"
+    assert item["title"] == "Prefer concise answers with examples"
+    assert item["topic"] == "How to talk to me"
+    assert item["use_count"] == 0 and item["suppressed"] == 0
+
+    settings = store.update_settings({"archive_after_days": "45", "include_sensitive": 1, "bogus": True})
+    assert settings["archive_after_days"] == 45 and settings["delete_after_days"] == 90
+    assert settings["include_sensitive"] is True and "bogus" not in settings
+
+    store.mark_used([memory_id])
+    assert store.get_memory(memory_id)["use_count"] == 1
+
+
+def test_deleting_a_memory_scrubs_its_text_from_the_audit_log(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    memory_id = store.save_memory(kind="fact", text="Secret project codename Bluebird.",
+                                  source_thread_id="t1", confidence=0.9)
+    store.update(memory_id, text="Secret project codename Bluebird II.")
+    store.delete(memory_id)
+    details = " ".join(row["detail"] for row in store.audit_log(limit=50))
+    assert "Bluebird" not in details
+    assert any(row["event"] == "deleted" and row["memory_id"] == memory_id for row in store.audit_log())
+
+
+def test_saved_memories_mirror_to_hindsight_and_forgets_follow(tmp_path: Path) -> None:
+    provider = FakeHindsight()
+    orchestrator, store = _orchestrator_with(tmp_path, provider)
+    memory = orchestrator.save_explicit_memory(kind="preference", text="Prefers dark roast coffee.",
+                                               source_thread_id="t1", confidence=0.95)
+    assert orchestrator.flush_provider_sync()["retained"] == 1
+    assert provider.docs == {f"vellum-memory-{memory['id']}": "Prefers dark roast coffee."}
+    assert store.sync_status("hindsight") == {"synced": 1}
+
+    store.delete(memory["id"])
+    assert orchestrator.flush_provider_sync()["forgotten"] == 1
+    assert provider.docs == {}
+    assert store.sync_status("hindsight") == {}
+
+
+def test_failed_hindsight_sends_stay_queued_and_unsent_deletes_need_nothing(tmp_path: Path) -> None:
+    provider = FakeHindsight(fail=True)
+    orchestrator, store = _orchestrator_with(tmp_path, provider)
+    memory = orchestrator.save_explicit_memory(kind="fact", text="Lives near the coast.",
+                                               source_thread_id="t1", confidence=0.95)
+    assert orchestrator.flush_provider_sync()["failed"] == 1
+    assert store.sync_status("hindsight") == {"failed": 1}
+    provider.fail = False
+    assert orchestrator.flush_provider_sync()["retained"] == 1
+
+    other = orchestrator.save_explicit_memory(kind="fact", text="Never synced memory.",
+                                              source_thread_id="t1", confidence=0.95)
+    store.delete(other["id"])
+    assert store.sync_status("hindsight") == {"synced": 1}

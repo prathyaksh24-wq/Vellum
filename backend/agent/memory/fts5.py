@@ -123,6 +123,27 @@ class FTS5Memory:
             ).fetchone()
         return row is not None
 
+    def delete_history_before(self, cutoff_iso: str) -> int:
+        """Retention: drop indexed conversation turns older than the cutoff.
+
+        Rows that project a saved memory ("memory:<id>") follow that memory's
+        own lifecycle instead.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM qa_fts WHERE created < ? AND source_paths NOT LIKE '%\"memory:%'",
+                (cutoff_iso,),
+            )
+            return max(int(cursor.rowcount), 0)
+
+    def delete_source_path(self, source_path: str) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM qa_fts WHERE source_paths LIKE ?",
+                (f'%"{source_path}"%',),
+            )
+            return max(int(cursor.rowcount), 0)
+
     def delete_thread(self, thread_id: str) -> int:
         """Remove all derived search rows for a deleted canonical thread."""
         with self._connect() as conn:

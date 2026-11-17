@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1015,
-      "sha256": "0cbf4b7c6fc4b213fee2e50b5d09797e79886b32fc58b3b4d611d626b2be2558"
+      "count": 966,
+      "sha256": "d3d4776754323447f86fc000c6b60747487d5558d3cdd7316ac309b9712e7dda"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -234,8 +234,8 @@
       "sha256": "77ff8ad08ad3efc28dffe6c68a606617204c8e98896dd000a1d9b91a8a89a17b"
     },
     "design/Velllum/uploads/components/agent-response.js": {
-      "count": 14,
-      "sha256": "7c4b7188894b4d834ac123be0153d8f2bb403a45c4832c4e5ddcf45e23452788"
+      "count": 19,
+      "sha256": "425e2db7dbeb616b78e742b164457fe7af916f58744d28cb43c17ba82023e0a7"
     },
     "design/Velllum/uploads/components/streaming-text.js": {
       "count": 8,
@@ -324,6 +324,10 @@
     "design/Velllum/uploads/droplets-entry.js": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/memory-page.jsx": {
+      "count": 58,
+      "sha256": "0aa3082b18a2bbf0247dcdcafd038971826e800ff6d4a8a3cac7695836a295eb"
     }
   },
   "covered": [
@@ -674,7 +678,7 @@
       "name": "create memory",
       "actionId": "memory.entry.create",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
         "text": "onMemoryAction('memory.entry.create'"
       }
     },
@@ -683,7 +687,7 @@
       "name": "edit memory",
       "actionId": "memory.entry.update",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
         "text": "onMemoryAction('memory.entry.update'"
       }
     },
@@ -692,8 +696,8 @@
       "name": "pin memory",
       "actionId": "memory.entry.pin",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onMemoryAction('memory.entry.pin'"
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "run('memory.entry.pin'"
       }
     },
     {
@@ -701,8 +705,8 @@
       "name": "archive memory",
       "actionId": "memory.entry.archive",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onMemoryAction('memory.entry.archive'"
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "run('memory.entry.archive'"
       }
     },
     {
@@ -710,8 +714,8 @@
       "name": "delete memory",
       "actionId": "memory.entry.delete",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onMemoryAction('memory.entry.delete'"
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "run('memory.entry.delete'"
       }
     },
     {
@@ -719,8 +723,8 @@
       "name": "run dreaming",
       "actionId": "memory.dreaming.run",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onMemoryAction('memory.dreaming.run'"
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "act('memory.dreaming.run'"
       }
     },
     {
@@ -728,8 +732,44 @@
       "name": "import old conversations",
       "actionId": "memory.conversations.import",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onMemoryAction('memory.conversations.import'"
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "act('memory.conversations.import'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "stop using a memory",
+      "actionId": "memory.entry.suppress",
+      "probe": {
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "run('memory.entry.suppress'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "rate a recalled memory",
+      "actionId": "memory.entry.feedback",
+      "probe": {
+        "path": "design/Velllum/uploads/components/agent-response.js",
+        "text": "memoryApi().memoryFeedback(memory.id"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "correct the About-you summary",
+      "actionId": "memory.correction.create",
+      "probe": {
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "onMemoryAction('memory.correction.create'"
+      }
+    },
+    {
+      "surface": "Memory",
+      "name": "import memory from another assistant",
+      "actionId": "memory.import.apply",
+      "probe": {
+        "path": "design/Velllum/uploads/components/memory-page.jsx",
+        "text": "onMemoryAction('memory.import.apply'"
       }
     },
     {

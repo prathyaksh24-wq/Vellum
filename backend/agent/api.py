@@ -91,6 +91,7 @@ from agent.conversations.sharing import ConversationShareService
 from agent.agents.books import INSTALLED_BOOK_CONTEXT_END, INSTALLED_BOOK_CONTEXT_START
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
+from agent.memory.quality import user_words as memory_user_words
 from agent.memory.honcho_client import HonchoMemory
 from agent.memory.runtime import get_memory_orchestrator
 from agent.memory.sessions import SessionsReader
@@ -1596,7 +1597,7 @@ def _import_ui_conversations_to_memory(limit: int | None = None) -> dict[str, in
             content = (
                 f"Conversation: {title}\n"
                 f"Thread: {cid}\n"
-                f"Q: {turn['user']}\n"
+                f"Q: {memory_user_words(turn['user'])}\n"
                 f"A: {turn['assistant']}"
             )
             fts5.add_document(content=content, thread_id=cid, source_paths=[source_id, f"ui-conversation:{cid}"])
@@ -1618,7 +1619,7 @@ def _index_ui_conversation(conversation: dict[str, Any]) -> dict[str, int]:
         content = (
             f"Conversation: {title}\n"
             f"Thread: {cid}\n"
-            f"Q: {turn['user']}\n"
+            f"Q: {memory_user_words(turn['user'])}\n"
             f"A: {turn['assistant']}"
         )
         fts5.add_document(content=content, thread_id=cid, source_paths=[source_id, f"ui-conversation:{cid}"])
@@ -1794,6 +1795,10 @@ _settings_runtime_actions = SettingsRuntimeActionService(
     dictation_store_provider=lambda:get_dictation_store(),
     memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
     conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
+    memory_cleaner=lambda mode: (
+        _memory_orchestrator.undo_noise_cleanup() if mode == "undo"
+        else _memory_orchestrator.clean_up_noise(apply=mode == "apply")
+    ),
 )
 _app_action_runtime.set_settings_runtime_handler(_settings_runtime_actions.execute)
 
@@ -2855,6 +2860,30 @@ def _audit_memory_off(thread_id: str, source: str) -> None:
             }) + "\n")
     except Exception:
         pass
+
+
+def _memory_save_activities(query: str, agent_name: str = "VellumAgent") -> list[dict[str, Any]]:
+    """Lessons the background learner will save from this turn, for the live stream.
+
+    Uses the same extractor as ``extract_memory_candidates`` so the activity
+    matches what is saved. Only user-stated items (saved immediately) appear.
+    """
+    if agent_name == "MusicAgent":
+        return []
+    store = getattr(_memory_orchestrator, "store", None)
+    if store is None:
+        return []
+    settings = store.get_settings()
+    if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
+        return []
+    from agent.memory.orchestrator import _extract_candidates, _memory_title
+
+    if classify(query)[0] == DataClass.RED:
+        return []
+    return [
+        {"label": f"Saved to memory · {_memory_title(item['text'])}", "text": item["text"], "kind": item["kind"]}
+        for item in _extract_candidates(query, "") if item["confidence"] >= 0.8
+    ]
 
 
 async def _background_learn(
@@ -4218,6 +4247,9 @@ _ACTIVITY_LABELS = {
     "computer_use": "Used the desktop",
     "tool_search": "Searched the tool catalog",
     "tool_describe": "Inspected a tool",
+    "conversation_history": "Searched past chats",
+    "memory_orchestrator": "Checked memory",
+    "MemoryAgent": "Asked MemoryAgent",
 }
 
 
@@ -5000,6 +5032,13 @@ async def _stream_agent_turn_scoped(
                         str(live_result.agent_name or "specialist").casefold(),
                     )
                 )
+                if store:
+                    for saved in _memory_save_activities(clean_message, str(live_result.agent_name or "VellumAgent")):
+                        yield _agent_activity_event(
+                            response_id=response_id, thread_id=active_thread_id, activity_type="memory_save",
+                            label=saved["label"], status="completed", name="memory",
+                            metadata={"text": saved["text"], "kind": saved["kind"], "thread_id": active_thread_id},
+                        )
             yield _agent_activity_event(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -5693,6 +5732,15 @@ async def _stream_agent_turn_scoped(
                     if store
                     else _audit_memory_off(active_thread_id, source)
                 )
+                if store:
+                    for saved in _memory_save_activities(
+                        clean_message, 'MusicAgent' if 'MusicAgent' in completed_specialists else 'VellumAgent'
+                    ):
+                        yield _agent_activity_event(
+                            response_id=response_id, thread_id=active_thread_id, activity_type="memory_save",
+                            label=saved["label"], status="completed", name="memory",
+                            metadata={"text": saved["text"], "kind": saved["kind"], "thread_id": active_thread_id},
+                        )
             yield _sse("final", response.model_dump_json())
             if message_item_started:
                 yield _response_output_item_done(
@@ -6432,6 +6480,9 @@ class MemorySettingsRequest(BaseModel):
     save_new_memories: bool | None = None
     auto_archive_enabled: bool | None = None
     use_archived_memories: bool | None = None
+    include_sensitive: bool | None = None
+    archive_after_days: int | None = None
+    delete_after_days: int | None = None
 
 
 @router.get("/memory/summary")
@@ -6556,6 +6607,228 @@ async def update_memory(memory_id: int, request: UpdateMemoryRequest) -> dict[st
         arguments,
     )
     return {"memory": receipt.result["memory"]}
+
+
+# -- About you, topics, corrections, import/export ---------------------------
+# Writes go through App Actions like the routes above; reads are direct.
+
+
+class MemoryCorrectionRequest(BaseModel):
+    correction: str
+    selection: str = ""
+
+
+class MemorySuppressRequest(BaseModel):
+    memory_id: int | None = None
+    selection: str = ""
+    suppressed: bool = True
+
+
+class MemoryFeedbackRequest(BaseModel):
+    memory_id: int
+    relevant: bool
+
+
+class MemoryAskRequest(BaseModel):
+    text: str
+
+
+class MemoryUndoSaveRequest(BaseModel):
+    text: str
+    thread_id: str = ""
+
+
+class MemoryImportPlanRequest(BaseModel):
+    text: str
+
+
+class MemoryImportApplyRequest(BaseModel):
+    items: list[dict[str, Any]]
+
+
+def _memory_action(action_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    return dict(_dispatch_compat_action(action_id, arguments).result)
+
+
+@router.get("/memory/about-you")
+async def memory_about_you() -> dict[str, Any]:
+    from agent.memory import summary as about_you
+
+    return await asyncio.to_thread(about_you.current, _memory_orchestrator)
+
+
+@router.api_route("/memory/about-you/stream", methods=["GET", "POST"])
+async def memory_about_you_stream(force: bool = False) -> StreamingResponse:
+    """Stream the About-you summary: the cached copy instantly, or a fresh one as it is written."""
+    from agent.memory import summary as about_you
+
+    def events():
+        try:
+            for kind, value in about_you.generate(_memory_orchestrator, force=force):
+                if kind == "delta":
+                    yield _sse("delta", {"text": value})
+                elif kind == "generating":
+                    yield _sse("status", {"status": "generating"})
+                else:
+                    yield _sse("summary", {"summary": value, "cached": kind == "cached"})
+        except Exception:  # noqa: BLE001 - the page shows a retry state
+            _LOGGER.exception("About-you summary generation failed")
+            yield _sse("error", {"message": "The summary could not be generated. Try again."})
+        yield _sse("done", {})
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.post("/memory/about-you/correct")
+async def memory_about_you_correct(request: MemoryCorrectionRequest) -> dict[str, Any]:
+    from agent.app_actions.settings_runtime import MEMORY_CORRECTION_CREATE_ACTION_ID
+
+    result = await asyncio.to_thread(_memory_action, MEMORY_CORRECTION_CREATE_ACTION_ID, request.model_dump())
+    return {"memory": result["memory"]}
+
+
+@router.post("/memory/suppress")
+async def memory_suppress(request: MemorySuppressRequest) -> dict[str, Any]:
+    """"Don't mention this again": a memory id, or text selected in the summary."""
+    from agent.app_actions.settings_runtime import (
+        MEMORY_CORRECTION_CREATE_ACTION_ID,
+        MEMORY_ENTRY_SUPPRESS_ACTION_ID,
+    )
+    from agent.memory.recall import keyword_rank
+
+    if request.memory_id is not None:
+        result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_SUPPRESS_ACTION_ID,
+                                         {"memory_id": request.memory_id, "suppressed": request.suppressed})
+        return {"suppressed": [result["memory"]["id"]], "memory": result["memory"]}
+    selection = request.selection.strip()
+    if not selection:
+        raise HTTPException(status_code=400, detail="memory_id or selection is required")
+    # Corrections quote the text they correct; never suppress the correction itself.
+    pool = [item for item in _memory_orchestrator.store.list_saved() if item.get("kind") != "correction"]
+    matches = keyword_rank(selection, pool, limit=3)
+    suppressed = []
+    for memory in matches:
+        result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_SUPPRESS_ACTION_ID,
+                                         {"memory_id": memory["id"], "suppressed": True})
+        suppressed.append(result["memory"]["id"])
+    if not suppressed:
+        # The text came from long-term memory, not a saved item: record the rule itself.
+        await asyncio.to_thread(_memory_action, MEMORY_CORRECTION_CREATE_ACTION_ID,
+                                {"correction": f"Don't bring up: {selection[:200]}", "selection": ""})
+    return {"suppressed": suppressed}
+
+
+@router.post("/memory/feedback")
+async def memory_feedback(request: MemoryFeedbackRequest) -> dict[str, Any]:
+    from agent.app_actions.settings_runtime import MEMORY_ENTRY_FEEDBACK_ACTION_ID
+
+    result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_FEEDBACK_ACTION_ID, request.model_dump())
+    return {"memory": result["memory"]}
+
+
+@router.post("/memory/undo-save")
+async def memory_undo_save(request: MemoryUndoSaveRequest) -> dict[str, Any]:
+    """Undo a "Saved to memory" step from chat: stop using it and archive it (reversible)."""
+    from agent.app_actions.settings_runtime import MEMORY_ENTRY_SUPPRESS_ACTION_ID
+
+    target = " ".join(request.text.casefold().split())
+    candidates = [
+        item for item in _memory_orchestrator.store.list_saved() + _memory_orchestrator.store.list_pending()
+        if " ".join(str(item.get("text") or "").casefold().split()) == target
+        and (not request.thread_id or item.get("source_thread_id") in {request.thread_id, "memory-agent"})
+    ]
+    if not candidates:
+        raise HTTPException(status_code=404, detail="That memory was not found.")
+    memory = candidates[0]
+    await asyncio.to_thread(_memory_action, MEMORY_ENTRY_SUPPRESS_ACTION_ID, {"memory_id": memory["id"], "suppressed": True})
+    result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_ARCHIVE_ACTION_ID, {"memory_id": memory["id"]})
+    return {"memory": result["memory"]}
+
+
+@router.post("/memory/ask")
+async def memory_ask(request: MemoryAskRequest) -> dict[str, Any]:
+    """"Ask or update": plan edits, apply the safe ones, return deletions for confirmation."""
+    from agent.app_actions.settings_runtime import MEMORY_ENTRY_SUPPRESS_ACTION_ID
+    from agent.memory.ask import plan_edits
+
+    memories = [item for item in _memory_orchestrator.store.list_saved() if not item.get("suppressed")]
+    plan = await asyncio.to_thread(plan_edits, request.text, memories)
+    applied: list[dict[str, Any]] = []
+    needs_confirmation: list[dict[str, Any]] = []
+    for op in plan["ops"]:
+        if op["op"] == "add":
+            from agent.memory.orchestrator import _candidate_kind
+
+            kind = _candidate_kind(op["text"])
+            result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_CREATE_ACTION_ID, {
+                "text": op["text"], "kind": kind, "source_thread_id": "memory-page",
+                "scope": "user_profile" if kind == "preference" else "global", "confidence": 1.0,
+            })
+        elif op["op"] == "update":
+            result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_UPDATE_ACTION_ID,
+                                             {"memory_id": op["memory_id"], "text": op["text"]})
+        elif op["op"] == "suppress":
+            result = await asyncio.to_thread(_memory_action, MEMORY_ENTRY_SUPPRESS_ACTION_ID,
+                                             {"memory_id": op["memory_id"], "suppressed": True})
+        else:
+            memory = _memory_orchestrator.store.get_memory(op["memory_id"])
+            needs_confirmation.append({"op": "delete", "memory_id": op["memory_id"], "text": memory["text"]})
+            continue
+        applied.append({"op": op["op"], "memory": result.get("memory")})
+    return {"applied": applied, "needs_confirmation": needs_confirmation,
+            "reply": plan.get("reply") or "", "planner": plan.get("planner")}
+
+
+@router.get("/memory/topics")
+async def memory_topics() -> dict[str, Any]:
+    topics = await asyncio.to_thread(_memory_orchestrator.topics_view)
+    return {"topics": topics}
+
+
+@router.get("/memory/growth")
+async def memory_growth() -> dict[str, Any]:
+    from agent.memory.retention import growth_view
+
+    return await asyncio.to_thread(growth_view, _memory_orchestrator.store)
+
+
+@router.get("/memory/import/prompt")
+async def memory_import_prompt() -> dict[str, str]:
+    from agent.memory.import_export import EXPORT_PROMPT
+
+    return {"prompt": EXPORT_PROMPT}
+
+
+@router.post("/memory/import/plan")
+async def memory_import_plan(request: MemoryImportPlanRequest) -> dict[str, Any]:
+    from agent.memory.import_export import plan_import
+
+    store = _memory_orchestrator.store
+    existing = [str(item.get("text") or "") for item in store.list_saved() + store.list_archived()]
+    return await asyncio.to_thread(plan_import, request.text, existing,
+                                   include_sensitive=bool(store.get_settings().get("include_sensitive")))
+
+
+@router.post("/memory/import/apply")
+async def memory_import_apply(request: MemoryImportApplyRequest) -> dict[str, Any]:
+    from agent.app_actions.settings_runtime import MEMORY_IMPORT_APPLY_ACTION_ID
+
+    result = await asyncio.to_thread(_memory_action, MEMORY_IMPORT_APPLY_ACTION_ID, {"items": request.items})
+    return {"saved": result["saved"], "memory_ids": result["memory_ids"]}
+
+
+@router.get("/memory/export")
+async def memory_export() -> Response:
+    from datetime import date
+
+    from agent.memory.import_export import export_zip
+
+    store = _memory_orchestrator.store
+    memories = [item for item in store.list_saved() + store.list_archived() if not item.get("suppressed")]
+    payload = await asyncio.to_thread(export_zip, memories)
+    return Response(payload, media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="vellum-memory-{date.today().isoformat()}.zip"'})
 
 
 class PrivacyClassifyRequest(BaseModel):

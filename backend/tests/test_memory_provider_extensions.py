@@ -133,19 +133,34 @@ def test_hindsight_provider_prefetch_and_sync_with_client(monkeypatch):
         def recall(self, bank_id, query, *, budget):
             return {"memories": [{"content": f"remembered {query}", "score": 0.9}]}
 
-        def retain(self, bank_id, content, *, metadata):
-            calls.append((content, bank_id, metadata))
+        def retain(self, bank_id, content, *, metadata, **kwargs):
+            calls.append((content, bank_id, metadata, kwargs))
 
     monkeypatch.setenv("MEMORY_EXTENSION_PROVIDERS", "hindsight")
     monkeypatch.setenv("HINDSIGHT_API_KEY", "test-key")
     provider = HindsightProviderExtension(client=FakeClient())
 
     assert "remembered Giannis" in provider.prefetch("Giannis", session_id="t1")
-    provider.sync_turn("user", "assistant", session_id="t1", metadata={"agent_name": "SportsAgent"})
+    doc_id = provider.sync_turn("user", "assistant", session_id="t1", metadata={"agent_name": "SportsAgent"})
 
     assert calls
     assert calls[0][1] == "vellum"
     assert calls[0][2]["session_id"] == "t1"
+    assert calls[0][3]["document_id"] == doc_id and doc_id.startswith("vellum-turn-")
+    assert calls[0][3]["retain_async"] is True
+
+
+def test_local_hindsight_needs_no_key_but_must_answer_health(monkeypatch):
+    for key in ("HINDSIGHT_API_KEY",):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("MEMORY_EXTENSION_PROVIDERS", "hindsight")
+    monkeypatch.setenv("HINDSIGHT_API_URL", "http://127.0.0.1:1")  # nothing listens here
+    provider = HindsightProviderExtension()
+    assert provider.is_configured()
+    status = build_default_memory_provider_extensions().statuses()[0]
+    assert status["status"] == "unreachable"
+    assert "docker compose up -d hindsight" in status["notes"]
+    assert provider.recall_items("anything") == []
 
 
 def test_hindsight_uses_workspace_settings_without_process_environment(tmp_path, monkeypatch):

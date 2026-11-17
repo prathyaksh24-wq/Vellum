@@ -10,10 +10,13 @@ def test_watchdog_records_stacks_when_the_event_loop_stops_answering(tmp_path):
     log = tmp_path / "backend-stall.log"
     stop = start_loop_watchdog(loop, interval=0.05, stall_after=0.1, log_path=log)
     try:
+        # Wait for the report itself, not just the file: the watchdog creates
+        # the log before it finishes writing, and reading in between saw "".
         deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and not log.exists():
+        text = ""
+        while time.monotonic() < deadline and "Event loop unresponsive" not in text:
             time.sleep(0.05)
-        text = log.read_text(encoding="utf-8")
+            text = log.read_text(encoding="utf-8") if log.exists() else ""
         assert "Event loop unresponsive" in text
         assert "vellum-loop-watchdog" in text or "Thread" in text
         # One stall is reported once, not on every check.

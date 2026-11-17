@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
 const pluginWorkspace = readFileSync(resolve(here, "../../design/Velllum/uploads/components/plugin-workspace.jsx"), "utf8");
+const memoryPage = readFileSync(resolve(here, "../../design/Velllum/uploads/components/memory-page.jsx"), "utf8");
 const composerEditor = readFileSync(resolve(here, "../../design/Velllum/uploads/components/composer-editor.js"), "utf8");
 const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
@@ -281,7 +282,7 @@ describe("Vellum default redesigned frontend", () => {
     const overview=readFileSync(resolve(here,"../../design/Velllum/uploads/components/settings-overview.jsx"),"utf8");
     expect(overview).toContain("Direct model selection for this connection is not available");
     expect(html).toContain("backendSettings?.provider_connections");
-    expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
+    expect(memoryPage).toContain("act('memory.dreaming.run', {})");
     expect(pluginWorkspace).toContain('aria-label="Plugin information"');
     expect(pluginWorkspace).toContain("p.source");
     expect(pluginWorkspace).toContain("components(p).filter(row=>row.kind==='mcp')");
@@ -290,8 +291,9 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("uses one live memory state without the retired Vault or wiki views", () => {
-    expect(html).toContain("<MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData}");
-    expect(html).toContain("Array.isArray(summary.sections)");
+    expect(html).toContain("{view === 'memory' && <window.VellumUI.MemoryPage onMemoryAction={dispatchMemoryAction}");
+    expect(html).toContain('src="components/memory-page.jsx?v=');
+    expect(html).not.toContain("MemoryConsole");
     expect(html).not.toContain("KnowledgeGraphView");
     expect(html).not.toContain("API.knowledge.search(");
     expect(html).not.toContain("API.conversations.attachContext");

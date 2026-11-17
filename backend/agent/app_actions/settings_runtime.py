@@ -32,6 +32,12 @@ MEMORY_ENTRY_ARCHIVE_ACTION_ID = "memory.entry.archive"
 MEMORY_ENTRY_DELETE_ACTION_ID = "memory.entry.delete"
 MEMORY_DREAMING_RUN_ACTION_ID = "memory.dreaming.run"
 MEMORY_CONVERSATIONS_IMPORT_ACTION_ID = "memory.conversations.import"
+MEMORY_ENTRY_SUPPRESS_ACTION_ID = "memory.entry.suppress"
+MEMORY_ENTRY_FEEDBACK_ACTION_ID = "memory.entry.feedback"
+MEMORY_CORRECTION_CREATE_ACTION_ID = "memory.correction.create"
+MEMORY_IMPORT_APPLY_ACTION_ID = "memory.import.apply"
+MEMORY_CLEANUP_PREVIEW_ACTION_ID = "memory.cleanup.preview"
+MEMORY_CLEANUP_RUN_ACTION_ID = "memory.cleanup.run"
 PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID = "provider.credential.configure"
 ROUTING_POLICY_SET_ACTION_ID = "llm.routing.policy.set"
 ROUTING_MODEL_POLICY_SET_ACTION_ID = "llm.routing.model_policy.set"
@@ -61,6 +67,12 @@ SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_ENTRY_SUPPRESS_ACTION_ID,
+    MEMORY_ENTRY_FEEDBACK_ACTION_ID,
+    MEMORY_CORRECTION_CREATE_ACTION_ID,
+    MEMORY_IMPORT_APPLY_ACTION_ID,
+    MEMORY_CLEANUP_PREVIEW_ACTION_ID,
+    MEMORY_CLEANUP_RUN_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     ROUTING_POLICY_SET_ACTION_ID,
     ROUTING_MODEL_POLICY_SET_ACTION_ID,
@@ -80,6 +92,8 @@ CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_IMPORT_APPLY_ACTION_ID,
+    MEMORY_CLEANUP_RUN_ACTION_ID,
     ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
     ROUTING_CREDENTIAL_ADD_ACTION_ID,
     ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
@@ -92,7 +106,11 @@ _MEMORY_SETTING_KEYS = frozenset({
     "save_new_memories",
     "auto_archive_enabled",
     "use_archived_memories",
+    "include_sensitive",
+    "archive_after_days",
+    "delete_after_days",
 })
+_MEMORY_NUMERIC_SETTING_KEYS = frozenset({"archive_after_days", "delete_after_days"})
 _CREDENTIAL_PROVIDERS = frozenset(PROVIDER_KEY_ENV)
 _ROUTING_PROVIDERS = frozenset({"openrouter", "openai"})
 _DEVICE_SETTING_KEYS = frozenset({
@@ -143,6 +161,7 @@ class SettingsRuntimeActionService:
         credential_writer: Callable[[str, str], None],
         memory_dreaming_runner: Callable[[], dict[str, Any]],
         conversation_memory_importer: Callable[[int | None], dict[str, int]],
+        memory_cleaner: Callable[[str], dict[str, Any]] | None = None,
         provider_selection_resumer: Callable[[str, AppActionContext], dict[str, Any]] | None = None,
         dictation_store_provider: Callable[[], Any] | None = None,
         config_writer: Callable[[str, str], None] | None = None,
@@ -154,6 +173,7 @@ class SettingsRuntimeActionService:
         self._credential_writer = credential_writer
         self._memory_dreaming_runner = memory_dreaming_runner
         self._conversation_memory_importer = conversation_memory_importer
+        self._memory_cleaner = memory_cleaner
         self._provider_selection_resumer = provider_selection_resumer
         self._dictation_store_provider = dictation_store_provider
         self._config_writer = config_writer
@@ -234,6 +254,20 @@ class SettingsRuntimeActionService:
         if action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
             self._require_confirmation(confirmed)
             return self._import_conversation_memories(arguments)
+        if action_id == MEMORY_CLEANUP_PREVIEW_ACTION_ID:
+            return self._clean_up_memory("preview")
+        if action_id == MEMORY_CLEANUP_RUN_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._clean_up_memory("undo" if arguments.get("undo") is True else "apply")
+        if action_id == MEMORY_ENTRY_SUPPRESS_ACTION_ID:
+            return self._suppress_memory(arguments)
+        if action_id == MEMORY_ENTRY_FEEDBACK_ACTION_ID:
+            return self._memory_feedback(arguments)
+        if action_id == MEMORY_CORRECTION_CREATE_ACTION_ID:
+            return self._create_correction(arguments)
+        if action_id == MEMORY_IMPORT_APPLY_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._apply_memory_import(arguments)
         if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID:
             return self._configure_provider_credential(arguments, confirmed=confirmed, context=_context)
         if action_id == ROUTING_POLICY_SET_ACTION_ID:
@@ -509,11 +543,16 @@ class SettingsRuntimeActionService:
                 "INVALID_ACTION_ARGUMENTS",
                 "Unknown memory setting: " + ", ".join(sorted(unknown)),
             )
-        invalid = [key for key, value in patch.items() if not isinstance(value, bool)]
+        invalid = [
+            key for key, value in patch.items()
+            if (key in _MEMORY_NUMERIC_SETTING_KEYS and (isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 3650))
+            or (key not in _MEMORY_NUMERIC_SETTING_KEYS and not isinstance(value, bool))
+        ]
         if invalid:
             raise SettingsRuntimeActionError(
                 "INVALID_ACTION_ARGUMENTS",
-                "Memory settings must be true or false: " + ", ".join(sorted(invalid)),
+                "Memory toggles must be true or false and retention days a whole number from 1 to 3650: "
+                + ", ".join(sorted(invalid)),
             )
         store = self._memory_store_provider()
         if store is None:
@@ -563,6 +602,96 @@ class SettingsRuntimeActionService:
             "_target_kind": "memory_entry",
             "_target_id": str(memory["id"]),
             "_message": "Memory saved.",
+        }
+
+    def _suppress_memory(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        memory_id = self._memory_id(arguments)
+        suppressed = bool(arguments.get("suppressed", True))
+        try:
+            memory = self._memory_store().set_suppressed(memory_id, suppressed)
+        except KeyError as exc:
+            raise SettingsRuntimeActionError("MEMORY_NOT_FOUND", "Memory not found.", unavailable=True) from exc
+        return {
+            "changed": True,
+            "memory": memory,
+            "_target_kind": "memory_entry",
+            "_target_id": str(memory_id),
+            "_message": "Vellum won't mention this again." if suppressed else "Vellum can use this memory again.",
+        }
+
+    def _memory_feedback(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        memory_id = self._memory_id(arguments)
+        relevant = arguments.get("relevant")
+        if not isinstance(relevant, bool):
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "relevant must be true or false")
+        try:
+            memory = self._memory_store().adjust_feedback(memory_id, 1 if relevant else -1)
+        except KeyError as exc:
+            raise SettingsRuntimeActionError("MEMORY_NOT_FOUND", "Memory not found.", unavailable=True) from exc
+        return {
+            "changed": True,
+            "memory": memory,
+            "_target_kind": "memory_entry",
+            "_target_id": str(memory_id),
+            "_message": "Thanks. Vellum will use this more." if relevant else "Thanks. Vellum will use this less.",
+        }
+
+    def _create_correction(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        correction = str(arguments.get("correction") or "").strip()
+        selection = str(arguments.get("selection") or "").strip()
+        if not correction:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "correction text is required")
+        text = correction if not selection else f"{correction.rstrip('.')}. (Corrects: \"{selection[:200]}\")"
+        memory = self._memory_creator(
+            kind="correction",
+            text=text,
+            source_thread_id="memory-summary",
+            confidence=1.0,
+            scope="user_profile",
+            origin="stated",
+        )
+        return {
+            "changed": True,
+            "memory": memory,
+            "_target_kind": "memory_entry",
+            "_target_id": str(memory["id"]),
+            "_message": "Correction saved. The summary will update.",
+        }
+
+    def _apply_memory_import(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        items = arguments.get("items")
+        if not isinstance(items, list) or not items:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "items from an import plan are required")
+        existing = {
+            " ".join(str(item.get("text") or "").casefold().split())
+            for item in self._memory_store().list_saved()
+        }
+        saved: list[int] = []
+        for item in items[:500]:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or "").strip()
+            if not text or " ".join(text.casefold().split()) in existing:
+                continue
+            kind = str(item.get("kind") or "fact")
+            memory = self._memory_creator(
+                kind=kind if kind in {"fact", "preference", "project", "correction"} else "fact",
+                text=text,
+                source_thread_id="import",
+                confidence=0.9,
+                scope="user_profile" if kind in {"preference", "correction"} else "global",
+                origin="imported",
+                topic=str(item.get("topic") or ""),
+            )
+            existing.add(" ".join(text.casefold().split()))
+            saved.append(int(memory["id"]))
+        return {
+            "changed": bool(saved),
+            "saved": len(saved),
+            "memory_ids": saved,
+            "_target_kind": "memory_import",
+            "_target_id": str(len(saved)),
+            "_message": f"Imported {len(saved)} {'memory' if len(saved) == 1 else 'memories'}.",
         }
 
     def _update_memory(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -657,6 +786,26 @@ class SettingsRuntimeActionService:
             "_target_id": "dreaming",
             "_message": "Memory dreaming completed.",
         }
+
+    def _clean_up_memory(self, mode: str) -> dict[str, Any]:
+        """Count, archive, or restore memories that are prompt scaffolding or one-off requests."""
+        if self._memory_cleaner is None:
+            raise SettingsRuntimeActionError("MEMORY_UNAVAILABLE", "Memory is unavailable.", unavailable=True)
+        result = dict(self._memory_cleaner(mode) or {})
+        if mode == "undo":
+            restored = int(result.get("restored") or 0)
+            return {"changed": restored > 0, "restored": restored, "_target_kind": "memory_runtime",
+                    "_target_id": "cleanup", "_message": f"Restored {restored} cleaned-up memories."}
+        archived = int(result.get("archived") or 0)
+        counts = {"archived": archived, "by_reason": dict(result.get("by_reason") or {}),
+                  "topics_filled": int(result.get("topics_filled") or 0)}
+        if mode == "preview":
+            return {"changed": False, **counts, "_target_kind": "memory_runtime", "_target_id": "cleanup",
+                    "_message": f"{archived} memories look like prompt text or one-off requests."}
+        return {"changed": bool(archived or counts["topics_filled"]), **counts, "_target_kind": "memory_runtime",
+                "_target_id": "cleanup",
+                "_message": f"Archived {archived} memories that were prompt text or one-off requests. "
+                            "Run the cleanup with undo to restore them."}
 
     def _import_conversation_memories(self, arguments: dict[str, Any]) -> dict[str, Any]:
         raw_limit = arguments.get("limit")
@@ -1038,7 +1187,8 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "operation_bound",
             {
                 "patch": {"type": "object"},
-                **{key: {"type": "boolean"} for key in sorted(_MEMORY_SETTING_KEYS)},
+                **{key: ({"type": "integer", "minimum": 1, "maximum": 3650} if key in _MEMORY_NUMERIC_SETTING_KEYS else {"type": "boolean"})
+                   for key in sorted(_MEMORY_SETTING_KEYS)},
             },
             "settings-memory",
         ),
@@ -1097,12 +1247,66 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "memory-dreaming",
         ),
         (
+            MEMORY_CLEANUP_PREVIEW_ACTION_ID,
+            "Preview memory cleanup",
+            "Count saved memories that are prompt text or one-off requests, without changing anything.",
+            "user",
+            "none",
+            {},
+            "settings-memory",
+        ),
+        (
+            MEMORY_CLEANUP_RUN_ACTION_ID,
+            "Clean up memory",
+            "Archive saved memories that are prompt text or one-off requests, or restore them with undo.",
+            "user",
+            "operation_bound",
+            {"undo": {"type": "boolean"}},
+            "settings-memory",
+        ),
+        (
             MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
             "Import conversation memories",
             "Index existing local conversation turns into memory without returning their content.",
             "user",
             "operation_bound",
             {"limit": {"type": "integer", "minimum": 1, "maximum": 100000}},
+            "memory-import",
+        ),
+        (
+            MEMORY_ENTRY_SUPPRESS_ACTION_ID,
+            "Stop using a memory",
+            "Keep a memory but stop Vellum from mentioning or using it, or allow it again.",
+            "user",
+            "none",
+            {"memory_id": {"type": "integer"}, "suppressed": {"type": "boolean"}},
+            "settings-memory",
+        ),
+        (
+            MEMORY_ENTRY_FEEDBACK_ACTION_ID,
+            "Rate a recalled memory",
+            "Mark a memory Vellum recalled as relevant or not relevant to tune future recall.",
+            "user",
+            "none",
+            {"memory_id": {"type": "integer"}, "relevant": {"type": "boolean"}},
+            "settings-memory",
+        ),
+        (
+            MEMORY_CORRECTION_CREATE_ACTION_ID,
+            "Correct the memory summary",
+            "Save the user's correction to something in the memory summary as a stated correction.",
+            "user",
+            "none",
+            {"correction": {"type": "string"}, "selection": {"type": "string"}},
+            "settings-memory",
+        ),
+        (
+            MEMORY_IMPORT_APPLY_ACTION_ID,
+            "Import memories",
+            "Save the reviewed items from a memory import plan. Additive only.",
+            "user",
+            "operation_bound",
+            {"items": {"type": "array"}},
             "memory-import",
         ),
         (
@@ -1227,7 +1431,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             title=title,
             description=description,
             scope=scope,
-            access_class=CapabilityAccess.READ.value if action_id == DEVICE_SETTINGS_INSPECT_ACTION_ID else CapabilityAccess.WRITE.value,
+            access_class=CapabilityAccess.READ.value if action_id in {DEVICE_SETTINGS_INSPECT_ACTION_ID, MEMORY_CLEANUP_PREVIEW_ACTION_ID} else CapabilityAccess.WRITE.value,
             confirmation_rule=confirmation,
             executor_location="server_and_client" if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID else "server",
             supports_undo=False,

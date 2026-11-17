@@ -134,7 +134,7 @@ def _refresh_user_model_now(thread_id: str, honcho) -> None:
 
 
 def build_memory_block(thread_id: str, *, query: str = "", active_project: str | None = None, cloud_safe: bool = True,
-                       include_soul: bool = True) -> str:
+                       include_soul: bool = True, include_external: bool = True) -> str:
     """System-prompt block: SOUL personality + the evolving user model.
 
     Returns "" when nothing is available (e.g. day one, no SOUL.md), so the
@@ -156,6 +156,9 @@ def build_memory_block(thread_id: str, *, query: str = "", active_project: str |
             "back unless they ask what you remember.\n\n" + user_model
         )
     try:
+        announce = _first_build_this_turn(thread_id, query)
+        if announce:
+            _emit_recall(thread_id, query, status="in_progress")
         packet = orchestrator.build_memory_packet(
             thread_id=thread_id,
             query=query,
@@ -164,7 +167,11 @@ def build_memory_block(thread_id: str, *, query: str = "", active_project: str |
             cloud_safe=cloud_safe,
             live_honcho=False,
             include_history=False,
+            include_external=include_external,
+            select_with_model=True,
         )
+        if announce:
+            _emit_recall(thread_id, query, status="completed", packet=packet)
         packet_block = _format_memory_packet(packet)
         if packet_block:
             parts.append(packet_block)
@@ -173,6 +180,49 @@ def build_memory_block(thread_id: str, *, query: str = "", active_project: str |
     # Snapshots are derived from this same store. Do not inject a duplicate copy
     # (or silently revive a deleted fact from a stale generated file).
     return "\n\n".join(parts).strip()[:6000]
+
+
+_ANNOUNCED: dict[tuple[str, str], float] = {}
+_ANNOUNCE_TTL_SECONDS = 180.0
+
+
+def _first_build_this_turn(thread_id: str, query: str) -> bool:
+    """The prompt is rebuilt at every tool step; announce recall only once."""
+    import time
+
+    key = (str(thread_id), str(query or "").strip()[:500])
+    now = time.monotonic()
+    with _MODEL_LOCK:
+        for stale in [k for k, at in _ANNOUNCED.items() if now - at > _ANNOUNCE_TTL_SECONDS]:
+            _ANNOUNCED.pop(stale, None)
+        if key in _ANNOUNCED:
+            return False
+        _ANNOUNCED[key] = now
+        return True
+
+
+def _emit_recall(thread_id: str, query: str, *, status: str, packet: dict[str, Any] | None = None) -> None:
+    from agent.observability.activity import emit_activity
+
+    item_id = f"memory-recall-{abs(hash((thread_id, query))) % 10**12}"
+    if status != "completed" or packet is None:
+        emit_activity("memory_recall", "memory", item_id=item_id, label="Checking memory…", status="in_progress")
+        return
+    memories = [
+        {"id": item.get("id"), "title": item.get("title") or str(item.get("text") or "")[:60],
+         "topic": item.get("topic") or "", "origin": item.get("origin") or ""}
+        for item in packet.get("saved_memories") or [] if isinstance(item, dict) and item.get("id") is not None
+    ]
+    external = [item for item in packet.get("external_providers") or [] if item.get("context")]
+    count = len(memories)
+    label = (f"Recalled {count} {'memory' if count == 1 else 'memories'}" if count
+             else "No saved memories needed")
+    if external:
+        label += " · long-term memory checked"
+    emit_activity("memory_recall", "memory", item_id=item_id, label=label, status="completed",
+                  detail="\n".join(f"- {item['title']}" for item in memories),
+                  memories=memories, method=packet.get("recall_method") or "",
+                  providers=[item.get("provider") for item in external])
 
 
 def load_memory_files(memory_dir: Path | None = None) -> str:

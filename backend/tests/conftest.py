@@ -20,6 +20,31 @@ def test_environment() -> None:
     return None
 
 
+@pytest.fixture(autouse=True)
+def no_local_memory_model():
+    """Memory features call local Ollama; tests must not depend on it running.
+
+    Tests that exercise the model path pass their own selector or patch
+    ``agent.memory.local_llm`` explicitly.
+
+    Uses a private MonkeyPatch: requesting the shared ``monkeypatch`` fixture
+    here would set it up before the cache-reset fixture below, so a test's own
+    patches (e.g. of ``get_provider_registry``) would still be active when the
+    caches are cleared at teardown.
+    """
+    from agent.memory import local_llm, recall
+
+    def unavailable(*args, **kwargs):
+        raise local_llm.LocalLLMError("local model disabled in tests")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(local_llm, "complete", unavailable)
+        patch.setattr(local_llm, "complete_json", unavailable)
+        patch.setattr(local_llm, "stream", unavailable)
+        recall.clear_cache()
+        yield
+
+
 @pytest.fixture(scope="module")
 def repo_root_cwd() -> Path:
     """Run tests with cwd at the repository root (plugins/, design/ are root-relative)."""
