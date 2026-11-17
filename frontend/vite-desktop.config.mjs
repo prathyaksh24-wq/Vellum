@@ -43,8 +43,6 @@ export function desktopWorkspaceBuild(root=uploads) {
       }
       const title=nodes.find(node=>node.tagName==='title');
       if(title){title.childNodes=[];append(title,'Vellum');}
-      const rootNode=nodes.find(node=>attribute(node,'id')==='root');
-      if(rootNode && !rootNode.childNodes.length)append(rootNode,'<div role="status" aria-live="polite" style="display:grid;min-height:100vh;place-content:center;gap:12px;text-align:center;font-family:system-ui"><strong style="font-size:28px">Vellum</strong><span style="opacity:.65">Opening your workspace…</span></div>');
       append(nodes.find(node=>node.tagName==='head'),'<script type="module">import "'+prefix+'boot";</script>');
       // Serialize the parsed tree so removing a node cannot join surrounding
       // text into fresh executable HTML on the browser's subsequent parse.
@@ -62,7 +60,8 @@ export function desktopWorkspaceBuild(root=uploads) {
           window.ReactDOM={...DOM,createRoot,hydrateRoot};
           async function initializeWorkspace(){
             try {
-              if(window.VellumDesktop?.runtime==='electron')await window.VellumDesktop.invoke('workspace_ready');
+              // The workspace renders at once; the API client waits for the backend
+              // and shows last-known data meanwhile, so nothing blocks on startup.
               ${sources.map((_,index)=>'init'+index+'();').join('\n')}
             } catch(error){
               const root=document.getElementById('root');

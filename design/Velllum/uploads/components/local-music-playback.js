@@ -90,6 +90,26 @@
       start:tick,
       wake,
       snapshot:() => ({...(desired || {}),observed:observed(),shared,error}),
+      // Apply a transport command to the audio at once so controls feel
+      // immediate; the backend's confirmed state follows on the next report.
+      preview:args => {
+        if (shared || stopped || !args) return;
+        if (args.action==='pause') {
+          commandEpoch++;
+          if (desired) desired={...desired,playing:false};
+          audio.pause();publish();
+        } else if (args.action==='resume' && current) {
+          if (desired) desired={...desired,playing:true};
+          const epoch=++commandEpoch;
+          Promise.resolve(beforePlay()).then(() => {if (epoch===commandEpoch && !stopped && !shared) return audio.play();}).catch(() => {});
+          publish();
+        } else if (args.action==='seek' && current && Number.isFinite(args.seconds)) {
+          try {audio.currentTime=args.seconds;} catch (_) {}
+          publish();
+        } else if (args.action==='volume' && Number.isFinite(args.volume)) {
+          audio.volume=Math.max(0,Math.min(1,args.volume));
+        }
+      },
       pause:async () => {
         if (shared || stopped || (audio.paused && !desired?.playing)) return;
         commandEpoch++;

@@ -4,6 +4,7 @@ import importlib.util
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+import threading
 from types import ModuleType
 from typing import Any, Callable
 
@@ -171,7 +172,30 @@ def register_portable_plugins(
     return context
 
 
+# Parsed manifests keyed by file identity. A manifest is re-read whenever its
+# size or modification time changes, so this never serves stale metadata; it
+# only avoids re-parsing ~35 unchanged YAML files on every plugin check.
+_MANIFEST_CACHE: dict[str, tuple[int, int, "PortablePluginManifest"]] = {}
+_MANIFEST_CACHE_LOCK = threading.Lock()
+
+
 def _read_manifest(path: Path) -> PortablePluginManifest:
+    try:
+        stat = path.stat()
+    except OSError:
+        return _parse_manifest(path)
+    key = str(path)
+    with _MANIFEST_CACHE_LOCK:
+        cached = _MANIFEST_CACHE.get(key)
+    if cached and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
+        return cached[2]
+    manifest = _parse_manifest(path)
+    with _MANIFEST_CACHE_LOCK:
+        _MANIFEST_CACHE[key] = (stat.st_mtime_ns, stat.st_size, manifest)
+    return manifest
+
+
+def _parse_manifest(path: Path) -> PortablePluginManifest:
     data = _parse_simple_yaml(path)
     return PortablePluginManifest(
         id=str(data["id"]),
@@ -199,7 +223,8 @@ def _parse_simple_yaml(path: Path) -> dict[str, Any]:
     try:
         import yaml
 
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+        loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=loader) or {}
         if isinstance(loaded, dict):
             return loaded
     except Exception:

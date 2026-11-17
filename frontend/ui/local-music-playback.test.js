@@ -72,3 +72,16 @@ test('destroy releases audio and cancels subsequent polling',async () => {
   const f=await fixture();controller.destroy();const count=f.api.report.mock.calls.length;
   await vi.advanceTimersByTimeAsync(20000);expect(f.api.report).toHaveBeenCalledTimes(count);expect(f.audio.paused).toBe(true);
 });
+test('transport controls act on the audio before the backend confirms them',async () => {
+  const f=await fixture();
+  expect(f.audio.paused).toBe(false);
+  controller.preview({action:'pause'});
+  expect(f.audio.paused).toBe(true);
+  controller.preview({action:'seek',seconds:42});
+  expect(f.audio.currentTime).toBe(42);
+  controller.preview({action:'volume',volume:.3});
+  expect(f.audio.volume).toBe(.3);
+  controller.preview({action:'resume'});await flush();
+  expect(f.beforePlay).toHaveBeenCalledBefore(f.audio.play);
+  expect(f.audio.paused).toBe(false);
+});

@@ -147,8 +147,10 @@
   }
 
   function AccountRoot({children}) {
-    const [state, setState] = useState(empty);
-    const [loading, setLoading] = useState(true);
+    // The last known account state opens the app at once; it is refreshed below.
+    const remembered = (() => {try {const value = window.VellumApi.client?.snapshot?.('/api/accounts/status'); return value && Array.isArray(value.accounts) ? value : null;} catch {return null;}})();
+    const [state, setState] = useState(remembered || empty);
+    const [loading, setLoading] = useState(!remembered);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [adding, setAdding] = useState(false);
@@ -181,9 +183,12 @@
     useEffect(() => {
       const sync = () => {refresh().catch(() => {});};
       const storage = event => {if (event.key === ACCOUNT_CHANGE || event.key === LOCAL_CHOICE) {try {setLocal(localStorage.getItem(LOCAL_CHOICE) === '1');} catch {} sync();}};
+      const refreshed = event => {if (!event.detail || event.detail.path === '/api/accounts/status') sync();};
       window.addEventListener('focus', sync);
       window.addEventListener('storage', storage);
-      return () => {window.removeEventListener('focus', sync); window.removeEventListener('storage', storage);};
+      window.addEventListener('vellum:backend-online', sync);
+      window.addEventListener('vellum:data-refreshed', refreshed);
+      return () => {window.removeEventListener('focus', sync); window.removeEventListener('storage', storage); window.removeEventListener('vellum:backend-online', sync); window.removeEventListener('vellum:data-refreshed', refreshed);};
     }, []);
     useEffect(() => {
       if (!adding) return;

@@ -153,18 +153,42 @@ backend build identity and workspace before reusing a server. Otherwise it start
 the bundled interpreter on loopback port 8000, waits for readiness, and opens the
 workspace. The backend takes an OS-held workspace lease before importing API
 stores. The development `start-api.ps1` uses the same lease-aware entry point.
-An unrelated service, older unidentifiable backend or different backend build
-produces an explicit startup error; it is not killed or silently adopted. An old
+An unrelated service or different backend build produces an explicit startup
+error; it is not killed or silently adopted. The one exception is a Vellum
+backend (`-m agent.desktop_entry`) that holds port 8000 but has not answered for
+20 seconds: it is a hung earlier run of this app and is replaced. An old
 server needs one explicit restart onto the new entry point. Use separate data
 workspaces to run different development and installed backend builds together.
 
 ### Startup performance
 
-The packaged window opens while its backend starts, showing a local startup
-surface. Its compiled workspace waits on the trusted `workspace_ready` command
-before mounting account and conversation views, so a cold backend cannot be
-mistaken for an empty account. The desktop API adapter uses the host's fixed
-verified backend instead of a stale renderer-local URL override.
+The workspace window opens immediately and renders without waiting for the
+backend. `design/Velllum/uploads/api/client.js` makes that safe:
+
+- Reads that hit a backend which is still starting (or restarting) wait for it
+  instead of failing; writes are held until it answers and are never re-sent.
+- The first lists people see (conversations, plugins, skills, models, settings,
+  automations, subagents, local music, accounts, the App Action catalog) are
+  remembered on the device. When the backend has not answered within 300 ms the
+  last known copy is shown, and `vellum:data-refreshed` / `vellum:backend-online`
+  events make the shell, account gate and music page load the fresh copy.
+- With no remembered account, the account gate waits for the backend, so a cold
+  backend is never mistaken for an empty account.
+
+Development launches (`start-desktop.ps1`) keep the last good UI build in
+`.desktop-runtime/ui-dev`, open on it at once and rebuild in the background,
+reloading only when the build changed. There is no separate startup window.
+
+### Backend supervision
+
+The desktop host supervises the backend it owns for the whole session. A backend
+that exits unexpectedly is restarted; one whose `/health` fails four checks in a
+row (about 20 seconds) is stopped and restarted; a failed restart is retried with
+backoff. Quitting or a development restart waits 15 seconds for a clean shutdown
+and then stops the process tree, so a slow shutdown never leaves Vellum without a
+backend. Inside the backend a watchdog thread pings the event loop; if it stops
+answering for 10 seconds, every thread's stack is appended to
+`.api-runtime/backend-stall.log` to show what blocked it.
 
 `frontend/vite-desktop.config.mjs` compiles the canonical HTML entry's Babel/JSX
 scripts at build time. It uses the frontend's installed React/ReactDOM dependency

@@ -73,12 +73,69 @@ function launchSpec({packaged,resourcesPath,sourceRoot,workspaceRoot}) {
   return {python,pythonHome:runtime?path.join(runtime,'python'):null,codeRoot,workspaceRoot,buildId:manifest?.build_id || sourceBuildId(codeRoot)};
 }
 
-function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupied=portOccupied,timeoutMs=120000,pollMs=300,stopTimeoutMs=20000}={}) {
+// Stop a process and everything it started. On Windows the venv python.exe is
+// a launcher whose real interpreter is a child process, so the tree must go.
+function killTree(pid) {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      require('node:child_process').spawnSync('taskkill',['/PID',String(pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
+    } else process.kill(pid,'SIGKILL');
+  } catch {}
+}
+
+// Find a Vellum backend that holds port 8000 but no longer answers. Only a
+// process running Vellum's own backend entry point qualifies.
+function stalledVellumBackend(port=8000) {
+  if (process.platform !== 'win32') return null;
+  try {
+    const script=`$c=Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue|Select-Object -First 1;if($c){$p=Get-CimInstance Win32_Process -Filter ("ProcessId="+$c.OwningProcess);if($p){[string]$p.ProcessId+"|"+[string]$p.ParentProcessId+"|"+$p.CommandLine}}`;
+    const result=require('node:child_process').spawnSync('powershell',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,encoding:'utf8',timeout:15000});
+    const [pid,parent,...command]=String(result.stdout||'').trim().split('|');
+    if (!/^\d+$/.test(pid) || !/-m\s+agent\.desktop_entry\b/.test(command.join('|'))) return null;
+    return {pid:Number(pid),parent:Number(parent)};
+  } catch { return null; }
+}
+
+function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupied=portOccupied,findStalled=stalledVellumBackend,terminate=killTree,timeoutMs=120000,pollMs=300,stopTimeoutMs=15000,busyWaitMs=20000,onExit=()=>{}}={}) {
   let child=null, exitPromise=null, exited=false, stopping=false;
+  const outdated=identity=>{
+    try {
+      return identity?.service==='vellum' && identity.protocol_version===1 && Number.isInteger(identity.pid) && identity.pid>0 &&
+        typeof identity.workspace_root==='string' && normalized(identity.workspace_root)===normalized(spec.workspaceRoot) &&
+        identity.build_id!==spec.buildId;
+    } catch { return false; }
+  };
   async function start(onProgress=()=>{}) {
-    const existing=await probe();
+    let existing=await probe();
+    // An older build of this same workspace's backend (left by a crash, a
+    // restart race or an earlier session) is replaced, never reused. A
+    // shutdown in progress can still answer briefly, so check until it is gone.
+    for (let attempt=0; existing && outdated(existing) && attempt<3; attempt++) {
+      terminate(existing.pid);
+      const freed=Date.now()+10000;
+      while (Date.now()<freed && await occupied()) await new Promise(resolve=>setTimeout(resolve,pollMs));
+      existing=await probe();
+    }
     if (existing) {validateIdentity(existing,spec.workspaceRoot,spec.buildId);return {url:BACKEND,reused:true};}
-    if (await occupied()) throw new Error('Port 8000 is in use, but its backend could not be identified. Vellum will not stop or replace it. Quit the older server and try again.');
+    if (await occupied()) {
+      // A backend that is still booting answers shortly; give it time first.
+      const until=Date.now()+busyWaitMs;
+      while (!existing && Date.now()<until && await occupied()) {
+        await new Promise(resolve=>setTimeout(resolve,pollMs));
+        existing=await probe();
+      }
+      if (existing) {validateIdentity(existing,spec.workspaceRoot,spec.buildId);return {url:BACKEND,reused:true};}
+      if (await occupied()) {
+        // A hung Vellum backend from an earlier run is replaced; anything else is left alone.
+        const stalled=findStalled();
+        if (!stalled) throw new Error('Port 8000 is in use, but its backend could not be identified. Vellum will not stop or replace it. Quit the older server and try again.');
+        terminate(stalled.parent && stalled.parent!==process.pid ? stalled.parent : stalled.pid);
+        terminate(stalled.pid);
+        const freed=Date.now()+10000;
+        while (Date.now()<freed && await occupied()) await new Promise(resolve=>setTimeout(resolve,pollMs));
+      }
+    }
     onProgress('Starting your workspace…');
     const directory=path.join(spec.workspaceRoot,'.api-runtime');
     fs.mkdirSync(directory,{recursive:true});
@@ -98,7 +155,7 @@ function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupi
     let launchError;
     child.once('error',()=>{launchError=true;});
     child.stdin.on('error',()=>{});
-    exitPromise=new Promise(resolve=>child.once('exit',()=>{exited=true;resolve();}));
+    exitPromise=new Promise(resolve=>child.once('exit',code=>{exited=true;resolve();if(!stopping){try{onExit(code);}catch{}}}));
     const deadline=Date.now()+timeoutMs;
     while(Date.now()<deadline) {
       if (launchError || exited) throw new Error('The Vellum backend could not start. Open the startup logs for details.');
@@ -117,12 +174,29 @@ function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupi
   }
   async function stop() {
     if (!child?.pid || exited) return; // Never stop a reused development backend.
-    if(!stopping){stopping=true;child.stdin.end('stop\n');}
+    if(!stopping){stopping=true;try{child.stdin.end('stop\n');}catch{}}
     let timer;
-    try {await Promise.race([exitPromise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Vellum is still finishing background work. Wait a moment and quit again.')),stopTimeoutMs);})]);}
-    finally{clearTimeout(timer);}
+    const timedOut=await Promise.race([exitPromise.then(()=>false),new Promise(resolve=>{timer=setTimeout(()=>resolve(true),stopTimeoutMs);})]);
+    clearTimeout(timer);
+    // A backend that cannot finish shutting down must never block quitting or
+    // restarting Vellum; its SQLite stores are transactional.
+    if (timedOut) {terminate(child.pid);await Promise.race([exitPromise,new Promise(resolve=>setTimeout(resolve,5000))]);}
   }
-  return {start,stop,get workspaceRoot(){return spec.workspaceRoot;},get owned(){return Boolean(child?.pid&&!exited);}};
+  // Replace an owned backend that crashed or stopped answering.
+  function kill() {
+    if (!child?.pid || exited) return Promise.resolve();
+    stopping=true;terminate(child.pid);
+    return Promise.race([exitPromise,new Promise(resolve=>setTimeout(resolve,5000))]);
+  }
+  return {start,stop,kill,get workspaceRoot(){return spec.workspaceRoot;},get owned(){return Boolean(child?.pid&&!exited);}};
 }
 
-module.exports={BACKEND,UI_PORT,sourceBuildId,validateIdentity,launchSpec,createBackendManager};
+// Health of the backend's HTTP loop, independent of identity checks.
+async function backendResponds(base=BACKEND,timeoutMs=4000) {
+  try {
+    const response=await fetch(base+'/health',{signal:AbortSignal.timeout(timeoutMs),redirect:'error'});
+    return response.ok;
+  } catch { return false; }
+}
+
+module.exports={BACKEND,UI_PORT,sourceBuildId,validateIdentity,launchSpec,createBackendManager,backendResponds,killTree};

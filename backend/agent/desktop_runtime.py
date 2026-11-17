@@ -15,6 +15,12 @@ import threading
 PROTOCOL_VERSION = 1
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _lease = None
+_serving = False
+
+
+def serving() -> bool:
+    """True only inside the real backend process started by main()."""
+    return _serving
 
 
 def workspace_root() -> Path:
@@ -80,7 +86,90 @@ def acquire_workspace_lease() -> None:
     _lease = handle  # OS releases the lock on process exit, including a crash.
 
 
+def start_loop_watchdog(loop, *, interval: float = 5.0, stall_after: float = 10.0, log_path: Path | None = None) -> threading.Event:
+    """Record every thread's stack when the event loop stops answering.
+
+    A blocked loop makes the whole API unreachable while the process looks
+    alive. The desktop host restarts it; this log says what blocked it.
+    """
+    import faulthandler
+    import time
+
+    stop = threading.Event()
+    path = log_path or workspace_root() / ".api-runtime" / "backend-stall.log"
+
+    def watch() -> None:
+        reported = False
+        while not stop.wait(interval):
+            answered = threading.Event()
+            try:
+                loop.call_soon_threadsafe(answered.set)
+            except RuntimeError:
+                return  # The loop has closed.
+            if answered.wait(stall_after):
+                reported = False
+                continue
+            if reported:
+                continue
+            reported = True
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a", encoding="utf-8") as log:
+                    log.write(f"\n=== Event loop unresponsive for {stall_after:.0f}s at "
+                              f"{time.strftime('%Y-%m-%d %H:%M:%S')} (pid {os.getpid()}) ===\n")
+                    log.flush()
+                    faulthandler.dump_traceback(file=log, all_threads=True)
+            except OSError:
+                pass
+
+    threading.Thread(target=watch, name="vellum-loop-watchdog", daemon=True).start()
+    return stop
+
+
+async def prestart_worker_threads(loop, *, executor_workers: int = 32, threadpool_workers: int = 40) -> None:
+    """Start every worker thread the API will use before it serves requests.
+
+    On Windows, starting a thread waits for the process loader lock. A long
+    native-library load (scipy, torch, spaCy) holds that lock, so a request that
+    had to create a worker at that moment froze the whole event loop. Workers
+    created up front are reused for the life of the process.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    executor = ThreadPoolExecutor(max_workers=executor_workers, thread_name_prefix="vellum-worker")
+    loop.set_default_executor(executor)
+    gate = threading.Barrier(executor_workers + 1)
+    for _ in range(executor_workers):
+        executor.submit(gate.wait, 30)
+    try:
+        # Startup only: nothing is served yet, so waiting here is harmless.
+        gate.wait(30)
+    except threading.BrokenBarrierError:
+        pass
+
+    # Starlette runs sync endpoints on AnyIO's pool, whose idle workers would
+    # otherwise exit after 10 seconds and be re-created later on demand.
+    try:
+        import anyio
+        from anyio._backends import _asyncio as anyio_asyncio
+
+        worker = getattr(anyio_asyncio, "WorkerThread", None)
+        if worker is not None and hasattr(worker, "MAX_IDLE_TIME"):
+            worker.MAX_IDLE_TIME = 24 * 60 * 60
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        count = min(threadpool_workers, int(limiter.total_tokens))
+        anyio_gate = threading.Barrier(count)
+        async with anyio.create_task_group() as group:
+            for _ in range(count):
+                group.start_soon(anyio.to_thread.run_sync, anyio_gate.wait, 30)
+    except Exception:
+        pass
+
+
 def main(*, standalone: bool = False) -> None:
+    global _serving
+    _serving = True
     acquire_workspace_lease()
     os.chdir(workspace_root())
     # Child workers inherit these defaults, including the packaged interpreter.

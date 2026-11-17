@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -648,7 +649,13 @@ _UI_CONVERSATIONS_PATH = REPO_ROOT / "data" / "ui" / "conversations.json"
 
 
 def _read_ui_conversations() -> list[dict[str, Any]]:
-    return ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).list()
+    """Read-only conversation rows; never mutate them (copy one first).
+
+    Deep-copying a large history on every read made chat opens, the sidebar
+    and each chat turn wait on the whole file. Mutations go through
+    ConversationLifecycle, which owns its own copies.
+    """
+    return ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).list_view()
 
 
 def _write_ui_conversations(conversations: list[dict[str, Any]]) -> None:
@@ -956,7 +963,8 @@ def _conversation_by_thread_id(thread_id: str) -> dict[str, Any] | None:
     for conversation in _read_ui_conversations():
         candidate = str(conversation.get("thread_id") or conversation.get("id") or "")
         if candidate == str(thread_id):
-            return conversation
+            # Callers receive a private copy of just this conversation.
+            return deepcopy(conversation)
     return None
 
 
@@ -1647,13 +1655,20 @@ def _conversation_http_error(exc: ConversationLifecycleError) -> HTTPException:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from agent.desktop_runtime import acquire_workspace_lease
+    from agent.desktop_runtime import acquire_workspace_lease, prestart_worker_threads, serving, start_loop_watchdog
     acquire_workspace_lease()
+    if serving():
+        await prestart_worker_threads(asyncio.get_running_loop())
+        # Read the chat history once in the background so the first chat a
+        # person opens after launch does not pay for parsing the whole file.
+        asyncio.get_running_loop().run_in_executor(None, ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).list_view)
+    watchdog = start_loop_watchdog(asyncio.get_running_loop())
     scheduler = start_scheduler()
     app.state.scheduler = scheduler
     try:
         yield
     finally:
+        watchdog.set()
         if scheduler is not None:
             shutdown = getattr(scheduler, "shutdown", None)
             if shutdown is not None:
@@ -3035,13 +3050,21 @@ def _vector_health() -> dict[str, Any]:
 
 
 def _embedding_health() -> dict[str, Any]:
-    try:
-        import sentence_transformers  # noqa: F401
+    # Never import the ML stack here: loading scipy/torch DLLs holds the Windows
+    # loader lock, which stops new threads (including the event loop's workers)
+    # from starting and freezes every request until the load finishes.
+    import importlib.util
 
-        return {"ok": True, "provider": "sentence-transformers"}
+    backend = str(getattr(get_settings(), "embedding_backend", "") or "sentence_transformers").replace("-", "_")
+    if backend == "ollama":
+        return {"ok": True, "provider": "ollama"}
+    try:
+        installed = importlib.util.find_spec("sentence_transformers") is not None
     except Exception:
-        _LOGGER.exception("Embedding health check failed")
-        return {"ok": False, "provider": "sentence-transformers", "error": "unavailable"}
+        installed = False
+    if installed:
+        return {"ok": True, "provider": "sentence-transformers"}
+    return {"ok": False, "provider": "sentence-transformers", "error": "unavailable"}
 
 
 
@@ -3148,15 +3171,17 @@ async def search_conversation_library(
     archived: bool = False,
     limit: int = Query(default=20, ge=1, le=100),
 ) -> ConversationSearchResponse:
+    # Reading the history happens in the worker too, never on the event loop.
     hits = await asyncio.to_thread(
-        search_conversations,
-        _read_ui_conversations(),
-        q,
-        space=space,
-        source=source,
-        status=status,
-        archived=archived,
-        limit=limit,
+        lambda: search_conversations(
+            _read_ui_conversations(),
+            q,
+            space=space,
+            source=source,
+            status=status,
+            archived=archived,
+            limit=limit,
+        )
     )
     filters = {key: value for key, value in {
         "space": space,
@@ -3183,10 +3208,15 @@ async def rebuild_conversation_library() -> ConversationLibraryResponse:
 
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str) -> dict[str, Any]:
-    for conversation in _read_ui_conversations():
-        if str(conversation.get("id")) == conversation_id:
-            return {"conversation": conversation}
-    raise HTTPException(status_code=404, detail="Conversation not found.")
+    # Copy only the requested chat, off the event loop. Normalizing every
+    # stored conversation to open one made each click wait on the whole file.
+    try:
+        conversation = await asyncio.to_thread(ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).get, conversation_id)
+    except ConversationLifecycleError:
+        conversation = None
+    if conversation is None or str(conversation.get("id")) != conversation_id:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"conversation": conversation}
 
 
 @router.patch(

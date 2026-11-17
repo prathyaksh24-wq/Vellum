@@ -6,7 +6,7 @@ const path = require('node:path');
 const CommandRegistry=require('./commands.cjs');
 const {createNativeBrowser,readDebuggerEndpoint} = require('./native-browser.cjs');
 const {initializeProtectedAudio} = require('./protected-audio.cjs');
-const {createBackendManager,launchSpec,UI_PORT} = require('./backend.cjs');
+const {createBackendManager,launchSpec,backendResponds,UI_PORT} = require('./backend.cjs');
 const {selectWorkspace} = require('./workspace.cjs');
 const {claimDesktopWorkspace} = require('./workspace-lock.cjs');
 const {createDevBundle, watchDevelopment} = require('./dev-reload.cjs');
@@ -34,6 +34,7 @@ if (!app.requestSingleInstanceLock()) {
   let initialBuild;
   let stopWatching;
   let relaunch = false;
+  let supervisor;
   let booting = true;
   let quitting = false;
   const launchedAt=performance.now();
@@ -59,23 +60,68 @@ if (!app.requestSingleInstanceLock()) {
     workspaceLock=await claimDesktopWorkspace(workspaceRoot,reveal);
     if(!workspaceLock){app.quit();return;}
     recordStartup('workspace_selected');
-    startup=new BrowserWindow({width:420,height:170,resizable:false,minimizable:false,maximizable:false,
-      title:'Opening Vellum',backgroundColor:'#14181e',webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});
-    startup.on('close',()=>{if(booting&&!quitting)app.quit();});
-    const opening='<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>Opening Vellum</title><style>body{background:#14181e;color:#eee;font:15px system-ui;padding:24px}h1{font-size:22px;margin:0 0 12px}p{color:#abb3bd}</style><h1>Vellum</h1><p>Opening your workspace…</p>';
-    await startup.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(opening));
     if (devNode) {
-      startup.setTitle('Building the development UI…');
       devBundle = createDevBundle(sourceRoot, devNode);
+      const previous = devBundle.current;
       initialBuild = devBundle.build();
-      await initialBuild;
+      // No progress popup: the first ever build is awaited silently, later
+      // launches open on the last good build at once.
+      if (!previous) await initialBuild;
+      else {
+        // Open on the last good build now; swap in the fresh one only if it differs.
+        initialBuild.then(changed => {
+          if (changed && !quitting) host?.windows.get('workspace')?.webContents.reloadIgnoringCache();
+        }).catch(error => console.error('[Vellum dev]', error.stderr || error.message));
+      }
     }
     if (quitting) return;
     const backendOptions = {packaged:app.isPackaged, resourcesPath:process.resourcesPath, sourceRoot, workspaceRoot};
     let backendSpec = launchSpec(backendOptions);
-    backend=createBackendManager(backendSpec);
-    let workspaceReady=backend.start(message=>{if(!startup.isDestroyed())startup.setTitle(message);}).then(state=>{recordStartup('backend_ready');return state;});
-    workspaceReady.catch(()=>{}); // The startup owner and trusted preload await it below.
+    // The backend is supervised for the whole session: a crash, a hang or a
+    // failed restart is repaired here instead of leaving the app without data.
+    let backendState = null, backendUp = false, restarting = null, healthFailures = 0, restartDelay = 2000;
+    let workspaceReady;
+    const onBackendExit = () => {if(!quitting)setTimeout(()=>restartBackend('it exited unexpectedly'),1000);};
+    const manage = spec => createBackendManager(spec,{onExit:onBackendExit});
+    const launchBackend = progress => {
+      backendUp = false;
+      workspaceReady = backend.start(progress).then(state=>{backendState=state;backendUp=true;healthFailures=0;restartDelay=2000;return state;});
+      workspaceReady.catch(()=>{});
+      return workspaceReady;
+    };
+    // Every stop/start runs one at a time, so a crash restart and an edit
+    // restart can never race and orphan a backend on port 8000.
+    let lifecycle = Promise.resolve(), lifecycleBusy = 0;
+    const serially = task => {
+      lifecycleBusy++;
+      const run = lifecycle.then(task).finally(() => {lifecycleBusy--;});
+      lifecycle = run.catch(() => {});
+      return run;
+    };
+    function restartBackend(reason) {
+      if (quitting || restarting) return restarting;
+      console.warn('[Vellum] Restarting the backend because '+reason+'.');
+      restarting = serially(async () => {
+        await backend.kill();
+        if (quitting) return;
+        backendSpec = launchSpec(backendOptions);
+        backend = manage(backendSpec);
+        await launchBackend();
+        host?.windows.get('workspace')?.webContents.send('vellum:backend-restarted');
+      }).catch(error => {
+        console.error('[Vellum] The backend did not restart:', error.message);
+        const delay = restartDelay; restartDelay = Math.min(restartDelay*2, 60000);
+        setTimeout(() => restartBackend('the previous restart failed'), delay);
+      }).finally(() => {restarting = null;});
+      return restarting;
+    }
+    backend=manage(backendSpec);
+    launchBackend(message=>{if(startup&&!startup.isDestroyed())startup.setTitle(message);}).then(state=>{recordStartup('backend_ready');return state;}).catch(()=>{});
+    supervisor = setInterval(async () => {
+      if (quitting || restarting || lifecycleBusy || !backendUp || !backend.owned) return;
+      if (await backendResponds()) {healthFailures = 0; return;}
+      if (++healthFailures >= 4) restartBackend('it stopped responding');
+    }, 5000);
     const protectedAudioReady=initializeProtectedAudio(require('electron'))
       .then(state=>{recordStartup('protected_audio_ready');return state;})
       .catch(()=>({status:'unavailable'}));
@@ -123,9 +169,12 @@ if (!app.requestSingleInstanceLock()) {
     recordStartup('workspace_window_requested');
     window.webContents.once('did-finish-load',()=>recordStartup('workspace_document_loaded'));
     startup?.close();
-    let backendState = await workspaceReady;
+    try {await workspaceReady;} catch (error) {
+      // The window is already open; keep retrying instead of closing the app.
+      console.error('[Vellum] The backend did not start:', error.message);
+      restartBackend('it did not start');
+    }
     if (devBundle && !quitting) {
-      let backendReady = true;
       stopWatching = watchDevelopment(sourceRoot, async changed => {
         if (changed.has('desktop')) {
           relaunch = true;
@@ -135,18 +184,19 @@ if (!app.requestSingleInstanceLock()) {
         let reload = false;
         if (changed.has('backend')) {
           const next = launchSpec(backendOptions);
-          if (next.buildId !== backendSpec.buildId || !backendReady || (!backendState.reused && !backend.owned)) {
-            if (backendState.reused) {
+          if (next.buildId !== backendSpec.buildId || !backendUp) {
+            if (backendState?.reused) {
               console.warn('[Vellum dev] Restart the independently started API to apply backend edits.');
             } else {
-              await backend.stop();
-              if (quitting) return;
-              backend = createBackendManager(next);
-              backendReady = false;
-              workspaceReady = backend.start();
-              backendState = await workspaceReady;
-              backendReady = true;
-              backendSpec = next;
+              try {
+                await serially(async () => {
+                  await backend.stop();
+                  if (quitting) return;
+                  backend = manage(next);
+                  backendSpec = next;
+                  await launchBackend();
+                });
+              } catch (error) {restartBackend('it did not start after an edit');}
               reload = true;
             }
           }
@@ -175,6 +225,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', event => {
     if (quitting) return;
     event.preventDefault();quitting=true;
+    clearInterval(supervisor);
     Promise.all([initialBuild?.catch(()=>{}), stopWatching?.()]).then(()=>nativeBrowser?.stop()).then(()=>backend?.stop()).then(()=>{
       uiServer?.close();workspaceLock?.close();tray?.destroy();
       devBundle?.close();

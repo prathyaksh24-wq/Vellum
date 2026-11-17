@@ -5544,6 +5544,12 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
   const busy = msgs.some(m => m.streaming);
   useConversationFollow(endRef, msgs, chat?.id);
 
+  // The sidebar list carries only summaries. While an existing chat's messages
+  // load, keep the thread area quiet instead of flashing the new-chat landing.
+  if (chat && msgs.length === 0 && Number(chat.message_count) > 0) {
+    return <div className="thread-wrap" aria-busy="true" aria-label={'Opening '+(chat.title || 'chat')}/>;
+  }
+
   if (msgs.length === 0 && !sideChat) {
     return (
       <div className="thread-wrap">
@@ -8816,6 +8822,8 @@ const mergeConversationRecords = (current, serverConversations) => {
       thread_id: serverChat.thread_id,
       updated_at: serverChat.updated_at,
       organization: serverChat.organization,
+      // Keep the server's count so an unloaded chat is never mistaken for an empty one.
+      message_count: Math.max(Number(serverChat.message_count) || 0, (localChat.messages || []).length),
     };
   });
   return [...localOnly, ...merged];
@@ -9382,9 +9390,11 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    // Runs on open and again whenever the backend comes (back) online or fresh
+    // data replaces the last-known lists, so the shell never stays empty.
+    const loadShell = async (initial) => {
       try {
-        const startupNavigationEpoch = navigationEpochRef.current;
+        const startupNavigationEpoch = initial ? navigationEpochRef.current : -1;
         // Each essential result becomes usable immediately; plugin/skill discovery
         // must not hold the model picker or landing page behind a shared barrier.
         const modelsReady=API.settings.models().then(modelData=>{
@@ -9434,8 +9444,17 @@ const [slashSkills, setSlashSkills] = useState([]);
       } catch (err) {
         console.warn('Vellum backend metadata load failed', err);
       }
-    })();
-    return () => { alive = false; };
+    };
+    loadShell(true);
+    let reloadTimer = null;
+    const reloadShell = () => {clearTimeout(reloadTimer); reloadTimer = setTimeout(() => {if (alive) loadShell(false);}, 300);};
+    window.addEventListener('vellum:backend-online', reloadShell);
+    window.addEventListener('vellum:data-refreshed', reloadShell);
+    return () => {
+      alive = false; clearTimeout(reloadTimer);
+      window.removeEventListener('vellum:backend-online', reloadShell);
+      window.removeEventListener('vellum:data-refreshed', reloadShell);
+    };
   }, []);
 
   useEffect(() => {
@@ -9578,7 +9597,12 @@ const [slashSkills, setSlashSkills] = useState([]);
     const existing = chats.find(chat=>chat.id===id);
     if (existing) {
       setScheduledChatId(id);
-      return applyOpenChatNavigation(id);
+      const navigated = applyOpenChatNavigation(id);
+      // The sidebar holds summaries; load this task's messages like any chat.
+      if (!(existing.messages || []).length && FEATURE_FLAGS.realConversations) {
+        dispatchConversationAction('conversation.open', {conversation_id:id}, {applyNavigation:false,notify:false});
+      }
+      return navigated;
     }
     const introId = id+'-intro';
     const draft = {id,thread_id:id,title:task.name,created_at:task.created_at,messages:[
@@ -10455,10 +10479,15 @@ const [slashSkills, setSlashSkills] = useState([]);
     getConversation: id => chats.find(chat => chat.id === id) || null,
     upsertConversation: conversation => {
       if (conversation.id && conversation.thread_id) threadRef.current[conversation.id] = conversation.thread_id;
+      // Opening a chat returns it unchanged; only a change to what the
+      // sidebar shows needs the library re-read.
+      const prior = chats.find(chat => chat.id === conversation.id);
+      const listChanged = !prior || ['title', 'pinned', 'archived', 'revision', 'updated_at', 'projectId', 'project_id']
+        .some(key => key in conversation && prior[key] !== conversation[key]);
       setChats(current => current.some(chat => chat.id === conversation.id)
         ? current.map(chat => chat.id === conversation.id ? mergeConversationUpdate(chat, conversation) : chat)
         : [conversation, ...current]);
-      scheduleConversationLibraryRefresh();
+      if (listChanged) scheduleConversationLibraryRefresh();
     },
     removeConversation: id => {
       setChats(current => current.filter(chat => chat.id !== id));

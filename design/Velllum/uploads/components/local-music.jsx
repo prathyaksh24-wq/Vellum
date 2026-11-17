@@ -22,10 +22,15 @@
     const guard=useRef(false),alive=useRef(true),audioInput=useRef(null),manifestInput=useRef(null),folderInput=useRef(null);
     const controller=useRef(null),api=window.VellumApi?.localMusic;
     const autoImports=useRef(new Set());
+    const librarySignature=useRef('');
     const available=name => !!api && !!catalog?.actions?.some(action => action.id==='local_music.'+name);
     async function refresh(fresh=false) {
       if(!api)return null;
       const next=await api.library({fresh});
+      // The library is polled; an unchanged answer must not re-render every song.
+      const signature=JSON.stringify(next);
+      if(alive.current && signature===librarySignature.current)return next;
+      librarySignature.current=signature;
       if(alive.current){
         setLibrary(next);setSelected(value => next.collections.some(item => item.id===value)?value:next.collections[0]?.id || '');
         for(const group of next.collections){
@@ -38,8 +43,13 @@
     }
     useEffect(() => {
       alive.current=true;
-      window.VellumApi.appActions.catalog().then(value => {if(alive.current)setCatalog(value);}).catch(err => {if(alive.current)setError(err.message);});
-      return () => {alive.current=false;};
+      const loadCatalog=() => window.VellumApi.appActions.catalog().then(value => {if(alive.current){setCatalog(value);setError('');}}).catch(err => {if(alive.current)setError(err.message);});
+      loadCatalog();
+      // Fresh actions replace the last-known catalog once the backend answers.
+      const refreshed=event => {if(event.detail?.path==='/api/app-actions/catalog')loadCatalog();else if(event.detail?.path==='/api/music/local/library')refresh().catch(() => {});};
+      const online=() => {loadCatalog();refresh().catch(() => {});};
+      window.addEventListener('vellum:backend-online',online);window.addEventListener('vellum:data-refreshed',refreshed);
+      return () => {alive.current=false;window.removeEventListener('vellum:backend-online',online);window.removeEventListener('vellum:data-refreshed',refreshed);};
     },[]);
     const canRead=available('playlist');
     const hasActiveJobs=!!library?.jobs?.some(job => job.status==='queued' || job.status==='running');
@@ -112,6 +122,7 @@
       if(controlGuard.current)return;
       controlGuard.current=true;setControlBusy(true);setError('');
       try{
+        controller.current?.preview?.(args);
         const result=await action('playback',args);
         controller.current?.wake();
         return result;

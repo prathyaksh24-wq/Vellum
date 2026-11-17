@@ -89,6 +89,19 @@ class ConversationLifecycle:
                 return []
             return [self._normalize_loaded(deepcopy(item)) for item in conversations if isinstance(item, dict)]
 
+    def list_view(self) -> list[dict[str, Any]]:
+        """Read-only rows for projections such as the chat list and search.
+
+        Rows share nested data with the read cache, so callers must not mutate
+        them; mutations go through list(). Skipping the deep copy keeps the
+        sidebar and library fast when the history is tens of megabytes.
+        """
+        with self._lock:
+            conversations = self._read_payload().get('conversations', [])
+            if not isinstance(conversations, list):
+                return []
+            return [self._normalize_loaded(item) for item in conversations if isinstance(item, dict)]
+
     def projects(self) -> list[dict[str, Any]]:
         """Conversation folders share the conversation writer, not vault projects."""
         with self._lock:

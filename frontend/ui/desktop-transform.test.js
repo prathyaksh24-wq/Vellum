@@ -28,9 +28,10 @@ test('compiles unquoted JSX in order and preserves ordinary local scripts and bo
   expect(scripts(output).some(node=>attr(node,'src')==='components/app-icons.js')).toBe(true);
   expect(scripts(output).some(node=>attr(node,'src')==='/composer-entry.js')).toBe(true);
   expect(scripts(output).some(node=>['text/babel','text/jsx'].includes(attr(node,'type')))).toBe(false);
-  expect(output).toContain('Opening your workspace');
+  expect(output).not.toContain('Opening your workspace');
   const boot=await plugin.load('\0virtual:vellum-desktop/boot');
-  expect(boot).toContain("invoke('workspace_ready')");
+  // Startup never waits for the backend before rendering the workspace.
+  expect(boot).not.toContain("invoke('workspace_ready')");
   expect(boot.indexOf('init0();')).toBeLessThan(boot.indexOf('init1();'));
   expect(await plugin.load('\0virtual:vellum-desktop/init/0')).toContain('window.first = 1');
   expect(await plugin.load('\0virtual:vellum-desktop/init/1')).toContain('window.second = 2');
