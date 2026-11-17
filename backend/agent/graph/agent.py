@@ -197,8 +197,10 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
     if not thread_id:
         thread_id = get_settings().thread_id
 
-    from agent.personalization import personalization_instructions, use_personal_memory
+    from agent.personalization import fast_answers_enabled, personalization_instructions, use_personal_memory
     include_memory = use_personal_memory(_memory_query_from_user_message(_latest_user_query(state)))
+    # Fast answers keeps local saved memory but skips network provider recall.
+    include_external_memory = not fast_answers_enabled()
     # Hermes-style memory context: SOUL.md personality + the evolving Honcho
     # user model (cached; refreshed on a cadence in the background — no network
     # call here). Empty on day one, richer as Honcho's representation deepens.
@@ -210,6 +212,7 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
             thread_id,
             query=_memory_query_from_user_message(_latest_user_query(state)),
             include_soul=False,
+            include_external=include_external_memory,
         ) if include_memory else ''
     except Exception as exc:
         import logging
@@ -302,7 +305,7 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
         'Pass specialists only the relevant task and permitted memory packet. Skills and tool schemas load on demand.'
     )
     sections.append(
-        'For corrections, recheck evidence, acknowledge the mistake and answer the original question; do not save a note unless asked. '
+        'For corrections, recheck evidence, acknowledge the mistake and answer the original question. Lasting lessons the user states are captured by the memory owner automatically; do not write a separate note unless asked. '
         'Clock answers use the requested location and its current date. Calendar shorthand uses its local clock and sensible daytime hours; respect explicit AM/PM and show the exact date, time and timezone before confirmation. '
         'Use app_action to discover, inspect and execute Vellum settings, personalization, pets and model/provider changes, including typos and bg shorthand. '
         'Use settings.device.inspect for current/previous backgrounds. Use model.select with provider; missing keys open secure entry and leave the switch pending. '

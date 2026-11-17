@@ -564,6 +564,7 @@ class MemoryOrchestrator:
         read_scopes: list[str] | None = None,
         live_honcho: bool = True,
         include_history: bool = True,
+        include_external: bool = True,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
@@ -610,7 +611,7 @@ class MemoryOrchestrator:
         )
         external_context = (
             self.provider_extensions.prefetch(clean_query, session_id=thread_id)
-            if self.provider_extensions and not strict_profile_scope
+            if self.provider_extensions and include_external and not strict_profile_scope
             else []
         )
         packet = {
@@ -751,21 +752,32 @@ class MemoryOrchestrator:
         if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
             return []
         candidates = _extract_candidates(user_message, assistant_message)
+        main_agent = _scope_for_candidate(agent_name) == "global"
+        saved_keys = {_norm(str(item.get("text") or "")) for item in self.store.list_saved()} if main_agent else set()
         stored: list[dict[str, Any]] = []
         for candidate in candidates:
             data_class, _reason = classify(candidate["text"])
             if data_class == DataClass.RED and not _explicit_remember(user_message):
                 continue
+            # Preferences and corrections describe the user, not one project, so
+            # they go to user_profile, which every specialist already reads.
+            user_level = main_agent and candidate["kind"] in {"preference", "correction"}
             memory_id = self.store.add_pending(
                 kind=candidate["kind"],
                 text=candidate["text"],
                 source_thread_id=thread_id,
                 confidence=candidate["confidence"],
-                scope=_scope_for_candidate(agent_name),
+                scope="user_profile" if user_level else _scope_for_candidate(agent_name),
             )
-            item = self.store.get_memory(memory_id)
             self.store.audit("pending_created", memory_id, f"{agent_name}: {candidate['text']}")
-            stored.append(item)
+            # Things the user stated directly must shape the very next answer,
+            # not wait for Dreaming's batch threshold or the 2 a.m. run.
+            key = _norm(candidate["text"])
+            if main_agent and candidate["confidence"] >= 0.8 and key not in saved_keys:
+                self.store.promote(memory_id)
+                self.store.audit("auto_promoted", memory_id, "User-stated; applied immediately")
+                saved_keys.add(key)
+            stored.append(self.store.get_memory(memory_id))
         return stored
 
     def run_dreaming(self, *, stale_days: int = 30) -> dict[str, Any]:
@@ -937,9 +949,53 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
         return _dedupe_candidates(candidates)
     if re.search(r"\b(?:i prefer|i like|i don't like|i do not like|stop adding|don't include|do not include)\b", text, re.I):
         candidates.append({"kind": "preference", "text": _sentence(text), "confidence": 0.82})
+    candidates.extend(_lesson_candidates(text))
     if re.search(r"\b(?:vellum|project|we decided|decision|architecture|backend|frontend)\b", text, re.I):
         candidates.append({"kind": "project", "text": _sentence(text), "confidence": 0.7})
     return _dedupe_candidates(candidates)
+
+
+# A user telling Vellum it was wrong ("you got that wrong again").
+_CORRECTION_MARKER_RE = re.compile(
+    r"\b(?:you (?:got|did|made) (?:that|it|this)\s*(?:\w+\s+)?wrong|"
+    r"(?:that'?s|that is|this is|it'?s|it is) (?:wrong|incorrect|not (?:right|correct|what i (?:asked|wanted|meant)))|"
+    r"you (?:forgot|missed|ignored|didn'?t (?:check|verify|read|listen))|"
+    r"i (?:already )?told you|not again|wrong again)\b",
+    re.IGNORECASE,
+)
+# A standing rule for future behavior ("whenever X, do Y", "from now on ...").
+_STANDING_RULE_RE = re.compile(
+    r"^(?:please\s+)?(?:always|never(?!\s+mind)|whenever|from now on|going forward|in (?:the )?future|next time|"
+    r"don'?t ever|do not ever|each time|every time|make sure (?:you|to) always)\b",
+    re.IGNORECASE,
+)
+_IMPERATIVE_RE = re.compile(
+    r"^(?:please\s+)?(?:check|verify|confirm|make sure|ensure|use|don'?t|do not|avoid|try|inspect|"
+    r"read|look|ask|stop|keep|remember|double-check|test|run|wait|start|prefer)\b",
+    re.IGNORECASE,
+)
+
+
+def _lesson_candidates(text: str) -> list[dict[str, Any]]:
+    """Standing rules and the lesson inside a correction, as durable candidates.
+
+    "You got that wrong again. Check whether a tool actually succeeded before
+    saying it is done." yields the second sentence as a correction; the bare
+    complaint alone carries no lesson and yields nothing.
+    """
+    sentences = [part.strip() for part in re.split(r"(?<=[.!])\s+", text) if part.strip()]
+    corrected = bool(_CORRECTION_MARKER_RE.search(text))
+    out: list[dict[str, Any]] = []
+    for sentence in sentences:
+        if sentence.endswith("?") or _CORRECTION_MARKER_RE.fullmatch(sentence.rstrip(".! ")):
+            continue
+        if len(re.findall(r"[A-Za-z0-9']+", sentence)) < 4 or not _is_durable_memory_text(sentence):
+            continue
+        if _STANDING_RULE_RE.match(sentence):
+            out.append({"kind": "correction" if corrected else "preference", "text": _sentence(sentence), "confidence": 0.85})
+        elif corrected and _IMPERATIVE_RE.match(sentence) and not _CORRECTION_MARKER_RE.search(sentence):
+            out.append({"kind": "correction", "text": _sentence(sentence), "confidence": 0.85})
+    return out
 
 
 _MEMORY_NOISE_RE = re.compile(

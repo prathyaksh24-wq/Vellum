@@ -62,13 +62,19 @@ def request_personalization(context, receipts=()) -> dict | None:
     return values
 
 
-def use_personal_memory(query: str) -> bool:
-    from agent.agents.base import user_query_text
-    query = user_query_text(query)
+def use_personal_memory(query: str = '') -> bool:
+    """Saved, local personal memory always applies.
+
+    Taste matters for requests that never say "my" ("recommend a book"), so
+    the wording of a request must not decide whether Vellum knows the user.
+    Fast answers only skips slower network recall; see fast_answers_enabled().
+    """
+    return True
+
+
+def fast_answers_enabled() -> bool:
     current = _CURRENT.get()
-    if current is None or not current.enabled('fastAnswers'):
-        return True
-    return bool(re.search(r"\b(?:my|me|mine|myself|i|our|we|remember|recall|previous|earlier|personal|vault|notes)\b", query, re.I))
+    return current is not None and current.enabled('fastAnswers')
 
 
 def personalization_instructions() -> str:

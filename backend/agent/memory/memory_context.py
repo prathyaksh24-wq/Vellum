@@ -134,7 +134,7 @@ def _refresh_user_model_now(thread_id: str, honcho) -> None:
 
 
 def build_memory_block(thread_id: str, *, query: str = "", active_project: str | None = None, cloud_safe: bool = True,
-                       include_soul: bool = True) -> str:
+                       include_soul: bool = True, include_external: bool = True) -> str:
     """System-prompt block: SOUL personality + the evolving user model.
 
     Returns "" when nothing is available (e.g. day one, no SOUL.md), so the
@@ -164,6 +164,7 @@ def build_memory_block(thread_id: str, *, query: str = "", active_project: str |
             cloud_safe=cloud_safe,
             live_honcho=False,
             include_history=False,
+            include_external=include_external,
         )
         packet_block = _format_memory_packet(packet)
         if packet_block:

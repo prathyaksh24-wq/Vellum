@@ -36,12 +36,18 @@ def test_personalization_controls_reach_the_actual_model_prompt(prompt):
         assert phrase in system
 
 
-def test_fast_answers_skip_private_context_for_general_facts_but_not_personal_requests(prompt_messages):
-    with personalization_scope({'fastAnswers':True}, 'Why is the sky blue?'):
-        messages = prompt_messages('Why is the sky blue?')
-        content = '\n'.join(message.content for message in messages)
-        assert 'Private memory evidence' not in content
-        assert not any(message.additional_kwargs.get('vellum_context_layer') == 'personal_memory' for message in messages)
+def test_fast_answers_keep_saved_memory_regardless_of_wording_but_skip_network_recall(prompt_messages, monkeypatch):
+    calls = []
+    monkeypatch.setattr('agent.memory.memory_context.build_memory_block',
+                        lambda *a, **k: calls.append(k.get('include_external')) or 'Private memory evidence')
+    for query in ('Recommend a book for the weekend.', 'Give a concise explanation of this code.'):
+        with personalization_scope({'fastAnswers':True}, query):
+            messages = prompt_messages(query)
+            assert any(message.additional_kwargs.get('vellum_context_layer') == 'personal_memory' for message in messages)
+    assert calls == [False, False]
+    with personalization_scope({'fastAnswers':False}, 'Recommend a book.'):
+        prompt_messages('Recommend a book.')
+    assert calls[-1] is True
     with personalization_scope({'fastAnswers':True}, 'What do my notes say?'):
         messages = prompt_messages('What do my notes say?')
         evidence = [message for message in messages if message.additional_kwargs.get('vellum_context_layer') == 'personal_memory']
@@ -50,10 +56,6 @@ def test_fast_answers_skip_private_context_for_general_facts_but_not_personal_re
         assert 'Private memory evidence' in evidence[0].content
         assert 'Private memory evidence' not in messages[0].content
         assert messages[-1].content == 'What do my notes say?'
-    with personalization_scope({'fastAnswers':True}, 'Why is the sky blue?'):
-        messages = prompt_messages('Why is the sky blue?\n\n[Recent Vellum conversation context]\nUser: I am a designer.')
-        content = '\n'.join(message.content for message in messages)
-        assert 'Private memory evidence' not in content
 
 
 def test_preferences_do_not_leak_between_requests(prompt):

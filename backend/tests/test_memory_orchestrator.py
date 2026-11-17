@@ -232,7 +232,7 @@ def test_memory_settings_can_disable_recent_context_without_disabling_saved_memo
     assert packet["recent_context"] == ""
 
 
-def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Path) -> None:
+def _extractor_orchestrator(tmp_path: Path) -> tuple[MemoryOrchestrator, SQLiteMemoryStore]:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
@@ -242,6 +242,11 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
         honcho=FakeHoncho(),
         memory_dir=tmp_path / "memory-files",
     )
+    return orchestrator, store
+
+
+def test_user_stated_memories_apply_immediately_and_inferences_wait_for_dreaming(tmp_path: Path) -> None:
+    orchestrator, store = _extractor_orchestrator(tmp_path)
 
     candidates = orchestrator.extract_memory_candidates(
         thread_id="t1",
@@ -251,17 +256,31 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
     )
 
     assert len(candidates) == 1
-    assert candidates[0]["status"] == "pending"
-    assert candidates[0]["scope"] == "global"
-    assert store.list_saved() == []
+    assert candidates[0]["status"] == "saved"
+    assert "Evidence sections" in store.list_saved()[0]["text"]
+    assert store.list_pending() == []
+
+    inferred = orchestrator.extract_memory_candidates(
+        thread_id="t1",
+        user_message="The Vellum backend moved to per-conversation chat storage.",
+        agent_name="VellumAgent",
+    )
+    assert inferred[0]["status"] == "pending"
+    assert inferred[0]["scope"] == "global"
 
     dream = orchestrator.run_dreaming()
 
-    assert "Evidence sections" in dream["new_memories"][0]["text"]
+    assert "per-conversation" in dream["new_memories"][0]["text"]
     assert store.list_pending() == []
-    assert store.list_saved()[0]["status"] == "saved"
     assert "Evidence sections" in dream["global_summary"]
     assert dream["audit_log"]
+
+    again = orchestrator.extract_memory_candidates(
+        thread_id="t2",
+        user_message="Remember that I do not want YouTube answers to include Evidence sections.",
+        agent_name="VellumAgent",
+    )
+    assert again[0]["status"] == "pending"  # duplicate of a saved memory; Dreaming archives it
 
     specialist = orchestrator.extract_memory_candidates(
         thread_id="sports-thread",
@@ -269,6 +288,41 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
         agent_name="SportsAgent",
     )
     assert specialist[0]["scope"] == "agent:SportsAgent"
+    assert specialist[0]["status"] == "pending"
+
+
+def test_corrections_become_lessons_that_specialists_can_read(tmp_path: Path) -> None:
+    orchestrator, store = _extractor_orchestrator(tmp_path)
+
+    lessons = orchestrator.extract_memory_candidates(
+        thread_id="t1",
+        user_message="You got that wrong again. Check whether a tool actually succeeded before saying it is done.",
+        agent_name="VellumAgent",
+    )
+    assert [(item["kind"], item["scope"], item["status"]) for item in lessons] == [
+        ("correction", "user_profile", "saved")
+    ]
+    assert lessons[0]["text"] == "Check whether a tool actually succeeded before saying it is done."
+
+    rule = orchestrator.extract_memory_candidates(
+        thread_id="t1",
+        user_message="Whenever an MCP call fails, inspect the error and try the supported fallback.",
+        agent_name="VellumAgent",
+    )
+    assert rule[0]["scope"] == "user_profile" and rule[0]["status"] == "saved"
+
+    for complaint in ("You got that wrong.", "Never mind, play some jazz.", "Stop the music."):
+        assert orchestrator.extract_memory_candidates(thread_id="t1", user_message=complaint) == []
+
+    packet = orchestrator.build_memory_packet(
+        thread_id="t9",
+        query="call the calendar tool",
+        agent_name="CalendarAgent",
+        read_scopes=["user_profile", "shared", "agent:CalendarAgent"],
+        live_honcho=False,
+    )
+    texts = [item["text"] for item in packet["saved_memories"]]
+    assert "Check whether a tool actually succeeded before saying it is done." in texts
 
 
 def test_memory_intake_keeps_operational_queries_out_of_durable_memory(tmp_path: Path) -> None:

@@ -1262,7 +1262,9 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
         )
     )
 
-    assert "Evidence sections" in store.list_pending()[0]["text"]
+    # A user-stated memory is saved at once so the next chat can use it.
+    assert "Evidence sections" in store.list_saved()[0]["text"]
+    assert store.list_pending() == []
     assert "Remember that I prefer" in orchestrator.fts5.recent_documents(limit=1)[0]["content"]
 
 
@@ -1393,17 +1395,18 @@ def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypa
     api._dreaming_status.clear()
     api._dreaming_status.update({"status": "idle", "last_run": None, "last_result": None})
 
+    # Inferred project context (not user-stated) still waits for Dreaming.
     asyncio.run(
         api._background_learn(
-            "Remember that I prefer concise Vellum demo answers.",
-            "I will keep Vellum demo answers concise.",
+            "The Vellum backend moved to per-conversation chat storage.",
+            "Noted.",
             thread_id="thread-auto-dream",
             source="api",
         )
     )
 
     assert store.list_pending() == []
-    assert any("concise Vellum demo answers" in item["text"] for item in store.list_saved())
+    assert any("per-conversation chat storage" in item["text"] for item in store.list_saved())
     assert api._dreaming_status["status"] == "completed"
     assert api._dreaming_status["last_result"]["new_memories"]
 
