@@ -44,6 +44,8 @@
       return (/serpapi/i.test(evidence)?'SerpAPI search':human(name) || 'Tool')+(item.status==='blocked'?' blocked':' failed');
     }
     if(item.source)return (/reading/.test(type)?done?'Read ':'Reading ':'Found ')+sourceName(item.source);
+    if(name==='conversation_history')return done?'Searched past chats':'Searching past chats';
+    if(name==='memory_orchestrator')return done?'Checked memory':'Checking memory';
     if(name==='delegate_to_agent') {
       const target=item.metadata?.input?.agent_id;
       return (done?'Delegated':'Delegating')+(target?' to '+human(target):' to an agent');

@@ -1,8 +1,8 @@
 /* beUI's quiet activity disclosure and stable answer surface, using Vellum tokens. */
 .agent-response{width:100%;min-width:0;--agent-muted:var(--t2,#aaa);--agent-border:var(--border,rgba(150,150,150,.18));color:var(--t1,inherit)}
 .agent-activity{margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--agent-muted)}
-.agent-activity button,.agent-citations button,.agent-full-activity{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
-.agent-activity button:focus-visible,.agent-citations button:focus-visible,.agent-citation-marker:focus-visible,.agent-full-activity:focus-visible{outline:2px solid var(--accent,#b59877);outline-offset:3px;border-radius:4px}
+.agent-activity button,.agent-citations button,.agent-memory-recall button,.agent-full-activity{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+.agent-activity button:focus-visible,.agent-citations button:focus-visible,.agent-memory-recall button:focus-visible,.agent-citation-marker:focus-visible,.agent-full-activity:focus-visible{outline:2px solid var(--accent,#b59877);outline-offset:3px;border-radius:4px}
 .agent-activity-heading{display:flex;align-items:center;gap:9px;min-height:32px;max-width:100%;padding:2px 0;line-height:1.5}
 .agent-activity-heading:disabled{cursor:default;opacity:1}.agent-elapsed{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .agent-thinking-orb{display:block;flex:0 0 24px;overflow:visible;color:var(--txt2,var(--t1,currentColor))}
@@ -114,3 +114,19 @@
 @media(prefers-reduced-motion:reduce){.agent-word,.agent-text-ink .agent-word,.agent-loading-character,.agent-loading-swap>span{animation:none!important}}
 @media(max-width:600px){.agent-row-agent{display:none}.agent-citation-domain{max-width:85px}.agent-activity-detail{margin-left:12px;padding:8px}.agent-response-content{font-size:14px}.agent-activity-heading{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.agent-thinking-shimmer,.agent-row-icon.is-active{animation:none}.agent-thinking-shimmer{background:none;color:var(--agent-muted);-webkit-text-fill-color:currentColor;animation:none}.agent-chevron{transition:none}}
+/* Memory: recall chip, recalled titles and "Saved to memory" undo */
+.agent-memory-recall{font-size:13px;color:var(--agent-muted);margin-top:16px}
+.agent-memory-recall+.agent-citations{margin-top:4px}
+.agent-memory-list,.agent-memory-titles{list-style:none;margin:0;padding:4px 0 0}
+.agent-memory-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:8px 6px;border-radius:6px}
+.agent-memory-copy{display:flex;flex-direction:column;min-width:0}
+.agent-memory-title{color:var(--t1,inherit);overflow-wrap:anywhere}
+.agent-memory-meta{font-size:11.5px;color:var(--agent-muted)}
+.agent-memory-actions{display:flex;flex-wrap:wrap;gap:12px;flex-shrink:0}
+.agent-link-button{border:0;background:none;padding:0;color:var(--agent-muted);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.agent-link-button:hover{color:var(--t1,inherit)}
+.agent-link-button:disabled{opacity:.5;cursor:default}
+.agent-memory-error{font-size:12px;color:var(--danger,#d66)}
+.agent-memory-undo{display:flex;gap:10px;align-items:center;padding:0 6px 6px 30px;font-size:12px;color:var(--agent-muted)}
+.agent-memory-titles li{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:12.5px;color:var(--t1,inherit)}
+.agent-memory-titles li span{font-size:11.5px;color:var(--agent-muted)}

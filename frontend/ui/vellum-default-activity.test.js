@@ -4,6 +4,7 @@ import path from "node:path";
 
 const htmlPath = path.resolve("../design/Velllum/uploads/Vellum Default Re-designed.html");
 const settingsClientPath = path.resolve("../design/Velllum/uploads/api/settings.js");
+const memoryPagePath = path.resolve("../design/Velllum/uploads/components/memory-page.jsx");
 
 describe("Vellum default activity status", () => {
   test("shows complete live activity labels with semantic loaders and no typing loop", () => {
@@ -56,53 +57,48 @@ describe("Vellum default activity status", () => {
     expect(html).toContain("mockMemory: false");
     expect(html).toContain("memoryData");
     expect(html).toContain("API.settings.memoryEntries()");
-    expect(html).toContain("MemorySummaryCard");
-    expect(html).toContain("SavedMemoriesCard");
+    expect(html).toContain("<window.VellumUI.MemorySettings settings={memoryData && memoryData.settings}");
+    // The old summary and saved-memories modals were replaced by the Memory page.
+    expect(html).not.toContain("MemorySummaryCard");
+    expect(html).not.toContain("SavedMemoriesCard");
+    expect(html).not.toContain("MemoryConsole");
   });
 
-  test("memory summary controls persist through the live memory API", () => {
-    const html = fs.readFileSync(htmlPath, "utf8");
+  test("the memory page edits memory through App Actions and the live memory API", () => {
+    const page = fs.readFileSync(memoryPagePath, "utf8");
 
-    expect(html).toContain("onMemoryAction('memory.entry.create', {text");
-    expect(html).toContain("onMemoryAction('memory.conversations.import', {})");
-    expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
-    expect(html).toContain('value={draft}');
-    expect(html).toContain('onChange={e => setDraft(e.target.value)}');
-    expect(html).not.toContain("Updated 8 hours ago");
+    expect(page).toContain("onMemoryAction('memory.correction.create', {correction:chip.draft.trim(), selection:chip.text})");
+    expect(page).toContain("api().memorySuppress({selection:chip.text})");
+    expect(page).toContain("api().memoryAboutYouStream({force");
+    expect(page).toContain("api().memoryAsk(value)");
+    expect(page).toContain("act('memory.conversations.import', {})");
+    expect(page).toContain("act('memory.dreaming.run', {})");
+    expect(page).not.toContain("Updated 8 hours ago");
   });
 
-  test("saved memories surface saved, old, and recent backend records", () => {
-    const html = fs.readFileSync(htmlPath, "utf8");
+  test("topic items can be edited, paused, archived and deleted, and imports are reviewed first", () => {
+    const page = fs.readFileSync(memoryPagePath, "utf8");
     const settingsClient = fs.readFileSync(settingsClientPath, "utf8");
 
-    expect(html).toContain("API.settings.memorySaved()");
-    expect(html).toContain("onMemoryAction('memory.entry.archive', {memory_id:m.id})");
-    expect(html).toContain("onMemoryAction('memory.entry.delete', {memory_id:m.id})");
-    expect(html).toContain("onMemoryAction('memory.entry.update', {memory_id:m.id");
-    expect(html).toContain("Saved (");
-    expect(html).toContain("Old (");
-    expect(html).toContain("Recent (");
-    expect(settingsClient).toContain("memorySaved: function");
-    expect(settingsClient).toContain("memoryImportConversations: function");
-    expect(settingsClient).toContain("createMemory: function");
-    expect(settingsClient).toContain("recent_context");
+    expect(page).toContain("onMemoryAction('memory.entry.update', {memory_id:item.id");
+    expect(page).toContain("run('memory.entry.suppress', {memory_id:item.id, suppressed:!item.suppressed})");
+    expect(page).toContain("run('memory.entry.archive', {memory_id:item.id})");
+    expect(page).toContain("run('memory.entry.delete', {memory_id:item.id})");
+    expect(page).toContain("onMemoryAction('memory.import.apply', {items:plan.items}, {confirmedFromUi:true})");
+    for (const method of ["memoryAboutYou", "memoryAboutYouStream", "memoryCorrect", "memorySuppress", "memoryFeedback",
+      "memoryUndoSave", "memoryAsk", "memoryTopics", "memoryGrowth", "memoryImportPrompt", "memoryImportPlan",
+      "memoryImportApply", "memoryExport"]) {
+      expect(settingsClient).toContain(method + ": ");
+    }
   });
 
-  test("memory surfaces format backend records instead of dumping raw transcripts", () => {
-    const html = fs.readFileSync(htmlPath, "utf8");
+  test("suppressed and archived memories stay visible but marked", () => {
+    const page = fs.readFileSync(memoryPagePath, "utf8");
 
-    expect(html).toContain("buildMemorySummarySections");
-    expect(html).toContain("parseRecentMemoryRecord");
-    expect(html).toContain("MemorySummaryDocument");
-    expect(html).toContain("MemoryListRow");
-    expect(html).toContain('className="mem-doc-section"');
-    expect(html).toContain('className="sm-item-title"');
-    expect(html).toContain('className="sm-item-body"');
-    expect(html).toContain('className="sm-item-details"');
-    expect(html).toContain("visibleSaved");
-    expect(html).toContain("isMemoryOperationalNoise");
-    expect(html).not.toContain('<span className="sm-item-text">{m.content}</span>');
-    expect(html).not.toContain('<span className="sm-item-text">{m.text}</span>');
+    expect(page).toContain("(item.suppressed || archived ? ' is-dim' : '')");
+    expect(page).toContain('<span className="mp-flag">Not used</span>');
+    expect(page).toContain('<span className="mp-flag">Archived</span>');
+    expect(page).toContain('className="mp-origin"');
   });
 
   test("sidebar chat menus clamp to the viewport with off-canvas navigation", () => {
@@ -114,10 +110,11 @@ describe("Vellum default activity status", () => {
     expect(html).toContain('data-collapsible="offcanvas"');
   });
 
-  test("dreaming console triggers the backend consolidation job", () => {
+  test("the memory page triggers the backend consolidation job", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
+    const page = fs.readFileSync(memoryPagePath, "utf8");
 
-    expect(html).toContain("onMemoryAction('memory.dreaming.run', {})");
+    expect(page).toContain("act('memory.dreaming.run', {})");
     expect(html).toContain("refreshMemoryData");
     expect(html).not.toContain("setTimeout(() => {\n      setDreams");
   });
@@ -126,9 +123,11 @@ describe("Vellum default activity status", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
     expect(html).toContain("API.settings.memorySettings()");
-    expect(html).toContain("onMemorySettings({[settingsKey]: value})");
-    expect(html).toContain("setMemoryToggle('memory', 'memory_enabled'");
-    expect(html).toContain("setMemoryToggle('refHistory', 'reference_history_enabled'");
-    expect(html).toContain("setMemoryToggle('dreaming', 'dreaming_enabled'");
+    expect(html).toContain("onMemorySettings={onMemorySettings}");
+    const page = fs.readFileSync(memoryPagePath, "utf8");
+    expect(page).toContain("onMemorySettings({[key]: next})");
+    for (const key of ["memory_enabled", "reference_history_enabled", "save_new_memories", "include_sensitive", "auto_archive_enabled"]) {
+      expect(page).toContain("['" + key + "', ");
+    }
   });
 });
