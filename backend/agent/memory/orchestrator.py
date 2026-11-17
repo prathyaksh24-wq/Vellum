@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.memory.fts5 import FTS5Memory
+from agent.memory.quality import is_one_off_request, is_scaffold, junk_reason, user_words
 from agent.memory.provider_extensions import MemoryProviderExtensionManager, build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.memory.specialist_cache import CacheDecision, SpecialistResponseCache
@@ -64,6 +65,8 @@ SYNC_PROVIDER = "hindsight"
 # Where a memory came from. Stated memories are things the user said directly;
 # they are never removed by retention.
 MEMORY_ORIGINS = ("stated", "inferred", "imported", "digest")
+# Audit event for memories the confirmed cleanup archived; undo restores these.
+CLEANUP_AUDIT_EVENT = "quality_cleanup_archived"
 
 _MEMORY_ITEM_COLUMNS = {
     "title": "TEXT NOT NULL DEFAULT ''",
@@ -346,6 +349,33 @@ class SQLiteMemoryStore:
         archived = self.get_memory(memory_id)
         self.audit("archived", memory_id, archived["text"])
         return archived
+
+    def restore(self, memory_id: int) -> dict[str, Any]:
+        """Bring an archived memory back to saved."""
+        now = self._now()
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE memory_items SET status = 'saved', archived_at = NULL, updated_at = ? "
+                "WHERE id = ? AND status = 'archived'",
+                (now, int(memory_id)),
+            )
+        item = self.get_memory(memory_id)
+        self.audit("restored", memory_id, item["text"])
+        if item["status"] == "saved":
+            self.sync_mark(memory_id, SYNC_PROVIDER, state="pending")
+        return item
+
+    def audit_memory_ids(self, event: str) -> list[int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT memory_id FROM memory_audit_log WHERE event = ? AND memory_id IS NOT NULL",
+                (event,),
+            ).fetchall()
+        return [int(row["memory_id"]) for row in rows]
+
+    def set_topic(self, memory_id: int, topic: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE memory_items SET topic = ? WHERE id = ?", (topic, int(memory_id)))
 
     def delete(self, memory_id: int) -> None:
         item = self.get_memory(memory_id)
@@ -786,9 +816,11 @@ class MemoryOrchestrator:
         external_query: str | None = None,
         external_answer: str | None = None,
     ) -> dict[str, Any]:
-        clean_query = query.strip()
+        # History, Honcho and Hindsight learn from what the user said, never
+        # from the context blocks the UI and graph append to the message.
+        clean_query = user_words(query)
         clean_answer = answer.strip()
-        provider_query = clean_query if external_query is None else external_query.strip()
+        provider_query = clean_query if external_query is None else user_words(external_query)
         provider_answer = clean_answer if external_answer is None else external_answer.strip()
         compact_tools = [_compact_tool(tool) for tool in tools or []]
         source_list = [str(source) for source in sources or [] if str(source).strip()]
@@ -1034,7 +1066,7 @@ class MemoryOrchestrator:
             return []
         groups: dict[str, dict[str, Any]] = {}
         for item in self.store.list_saved() + self.store.list_archived():
-            if not _is_durable_memory_text(str(item.get("text") or "")):
+            if not _is_durable_memory_text(str(item.get("text") or "")) or junk_reason(item):
                 continue
             topic = item.get("topic") or _memory_topic(str(item.get("kind") or ""), str(item.get("text") or ""))
             card = groups.setdefault(topic, {"topic": topic, "count": 0, "last_learned": "",
@@ -1164,6 +1196,14 @@ class MemoryOrchestrator:
             archived_memories.append(self.store.archive(item["id"]))
             self.store.audit("noise_archived", item["id"], "Excluded from durable memory during Dreaming")
 
+        # Pending prompt scaffolding and one-off requests are never promoted.
+        # Saved ones are left for the confirmed memory.cleanup.run action.
+        for item in self.store.list_pending():
+            reason = junk_reason(item)
+            if reason:
+                archived_memories.append(self.store.archive(item["id"]))
+                self.store.audit("quality_archived", item["id"], f"Not a durable memory: {reason}")
+
         seen_texts = {_norm(item["text"]) for item in _durable_memories(self.store.list_saved())}
         for pending in _durable_memories(self.store.list_pending()):
             key = _norm(pending["text"])
@@ -1199,6 +1239,58 @@ class MemoryOrchestrator:
             "context_files": context_files,
             "audit_log": audit_log,
         }
+
+    def clean_up_noise(self, *, apply: bool = False) -> dict[str, Any]:
+        """Archive saved memories that are prompt scaffolding or one-off requests.
+
+        Older builds learned from the raw message, so ``[Attachment context]``
+        blocks, ``@Linear ...`` commands and task requests became memories.
+        Without ``apply`` this only counts them. With it, each one is archived
+        (never deleted) under a ``CLEANUP_AUDIT_EVENT`` audit event that
+        :meth:`undo_noise_cleanup` reverses. Memories with no stored topic get
+        one computed from the user's words.
+        """
+        if self.store is None:
+            return {"archived": 0, "by_reason": {}, "memory_ids": [], "topics_filled": 0}
+        by_reason: dict[str, int] = {}
+        memory_ids: list[int] = []
+        for item in self.store.list_saved():
+            reason = junk_reason(item)
+            if not reason:
+                continue
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+            memory_ids.append(int(item["id"]))
+            if apply:
+                self.store.archive(item["id"])
+                self.store.audit(CLEANUP_AUDIT_EVENT, item["id"], f"Not a durable memory: {reason}")
+        topics_filled = 0
+        for item in self.store.list_saved() + self.store.list_archived():
+            if item.get("topic") or junk_reason(item):
+                continue
+            topics_filled += 1
+            if apply:
+                self.store.set_topic(item["id"], _memory_topic(str(item.get("kind") or ""), str(item.get("text") or "")))
+        if apply and (memory_ids or topics_filled):
+            self.sync_context_files()
+        return {"archived": len(memory_ids), "by_reason": by_reason, "memory_ids": memory_ids,
+                "topics_filled": topics_filled, "applied": apply}
+
+    def undo_noise_cleanup(self) -> dict[str, Any]:
+        """Restore every memory a quality cleanup archived that is still archived."""
+        if self.store is None:
+            return {"restored": 0, "memory_ids": []}
+        restored: list[int] = []
+        for memory_id in self.store.audit_memory_ids(CLEANUP_AUDIT_EVENT):
+            try:
+                item = self.store.get_memory(memory_id)
+            except KeyError:
+                continue
+            if item["status"] == "archived":
+                self.store.restore(memory_id)
+                restored.append(memory_id)
+        if restored:
+            self.sync_context_files()
+        return {"restored": len(restored), "memory_ids": restored}
 
     def sync_context_files(self) -> dict[str, str]:
         """Write Hermes-style bounded context files from the orchestrator state."""
@@ -1297,8 +1389,16 @@ def _terms(text: str) -> set[str]:
     return {term for term in re.findall(r"[A-Za-z0-9]+", text.casefold()) if len(term) > 2}
 
 
-def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[str, Any]]:
-    text = _clean_candidate_text(user_message)
+def _extract_candidates(user_message: str, assistant_message: str = "") -> list[dict[str, Any]]:
+    """Durable memory candidates from the user's own words.
+
+    ``assistant_message`` is accepted for callers but never read: an assistant
+    reply is not something the user said. Appended context blocks are stripped
+    first, and one-off requests and @-mention commands yield nothing unless the
+    user explicitly asked Vellum to remember something.
+    """
+    del assistant_message
+    text = _clean_candidate_text(_LEAD_FILLER_RE.sub("", user_words(user_message)))
     if not text:
         return []
     candidates: list[dict[str, Any]] = []
@@ -1311,14 +1411,48 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
         fact = _clean_candidate_text(explicit.group("fact"))
         if _is_durable_memory_text(fact, explicit=True):
             candidates.append({"kind": _candidate_kind(fact), "text": _sentence(fact), "confidence": 0.92})
-    if not _is_durable_memory_text(text):
+    if not _is_durable_memory_text(text) or is_scaffold(text):
+        return _dedupe_candidates(candidates)
+    if is_one_off_request(text) and not _CORRECTION_MARKER_RE.search(text):
+        return _dedupe_candidates(candidates)
+    # Durable facts are short. A long message is a pasted prompt or task brief;
+    # only an explicit "remember ..." inside it is kept.
+    if len(text) > _MAX_INFERRED_CANDIDATE_CHARS:
         return _dedupe_candidates(candidates)
     if re.search(r"\b(?:i prefer|i like|i don't like|i do not like|stop adding|don't include|do not include)\b", text, re.I):
         candidates.append({"kind": "preference", "text": _sentence(text), "confidence": 0.82})
     candidates.extend(_lesson_candidates(text))
-    if re.search(r"\b(?:vellum|project|we decided|decision|architecture|backend|frontend)\b", text, re.I):
+    # Requests and scaffolding are already gone, so a remaining statement that
+    # names the project is a project fact ("The Vellum backend moved to ...").
+    if _PROJECT_STATEMENT_RE.search(text) or re.search(
+            r"\b(?:vellum|project|we decided|decision|architecture|backend|frontend)\b", text, re.I):
         candidates.append({"kind": "project", "text": _sentence(text), "confidence": 0.7})
+    elif _SELF_FACT_RE.search(text):
+        candidates.append({"kind": "fact", "text": _sentence(text), "confidence": 0.8})
+    elif _SELF_ROLE_RE.search(text):
+        candidates.append({"kind": "fact", "text": _sentence(text), "confidence": 0.7})
     return _dedupe_candidates(candidates)
+
+
+_MAX_INFERRED_CANDIDATE_CHARS = 400
+_LEAD_FILLER_RE = re.compile(r"^(?:(?:never ?mind|ok(?:ay)?|so|well|also|actually|btw)[,.!\s]+)+", re.IGNORECASE)
+# The user describing their own work, not asking for a task on it.
+_PROJECT_STATEMENT_RE = re.compile(
+    r"\b(?:(?:i'?m|i am|we'?re|we are|i'?ve been|we'?ve been) (?:building|working on|making|developing|writing|"
+    r"designing|planning|shipping)|(?:i|we) (?:want|plan|intend|hope|am going|are going) to "
+    r"(?:add|build|ship|make|create|launch|finish|support|write|redesign|rewrite)|"
+    r"(?:i'?m|we'?re) going to (?:add|build|ship|make|create|launch|finish|support|write)|"
+    r"(?:i|we) decided (?:to|on|that)|we settled on|my (?:project|app|startup|company|side project))\b",
+    re.IGNORECASE,
+)
+# Plain facts about the user ("I live in Pune", "my name is Sam") are stated
+# outright; "I'm a designer" is likelier to be passing talk, so it waits for Dreaming.
+_SELF_FACT_RE = re.compile(
+    r"^(?:i (?:work|live|study|grew up) (?:at|in|as|for|on|from)\b|i'?m (?:from|based in)\b|my name is\b|"
+    r"call me\b|my (?:job|role|team|company|partner|wife|husband|kids?|birthday|home) (?:is|are)\b)",
+    re.IGNORECASE,
+)
+_SELF_ROLE_RE = re.compile(r"^i(?:'?m| am) an? (?!bit\b|little\b|tad\b|lot\b|fan of this\b)\w+", re.IGNORECASE)
 
 
 # A user telling Vellum it was wrong ("you got that wrong again").
@@ -1403,6 +1537,7 @@ def _durable_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         item for item in memories
         if not item.get("suppressed") and _is_durable_memory_text(str(item.get("text") or ""))
+        and not junk_reason(item)
     ]
 
 
@@ -1506,7 +1641,8 @@ _TOPIC_RULES: tuple[tuple[str, str], ...] = (
     (r"\b(?:sport|football|cricket|nba|match|team|league)\b", "Sports"),
     (r"\b(?:youtube|video|creator|channel)\b", "Videos and creators"),
     (r"\b(?:calendar|meeting|schedule|morning|routine|weekday)\b", "Schedule and routines"),
-    (r"\b(?:tone|concise|format|bullet|answer|answers|reply|replies|explain|style)\b", "How to talk to me"),
+    (r"\b(?:tone|concise|format|bullet|answer|answers|reply|replies|explain|style|call(?:ed|s)? me|nickname)\b",
+     "How to talk to me"),
 )
 
 
@@ -1515,13 +1651,16 @@ def _memory_topic(kind: str, text: str) -> str:
         return "Lessons and corrections"
     if kind == "digest":
         return "Earlier memories"
-    lowered = str(text or "").casefold()
-    if kind == "project" or "vellum" in lowered:
-        if "vellum" in lowered:
-            return "Vellum"
+    # Topic comes from the user's words only: the appended "[Attachment
+    # context] ... Vellum UI ..." block used to file everything under Vellum.
+    lowered = user_words(text).casefold()
+    if kind == "project" and "vellum" in lowered:
+        return "Vellum"
     for pattern, topic in _TOPIC_RULES:
         if re.search(pattern, lowered):
             return topic
+    if "vellum" in lowered:
+        return "Vellum"
     if kind == "project":
         return "Projects"
     if kind == "preference":

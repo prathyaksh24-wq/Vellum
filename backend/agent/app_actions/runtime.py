@@ -60,6 +60,7 @@ from agent.app_actions.settings_runtime import (
     MEMORY_ENTRY_UPDATE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_CLEANUP_RUN_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     ROUTING_CREDENTIAL_ADD_ACTION_ID,
     ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
@@ -1805,6 +1806,13 @@ class AppActionRuntime:
                 elif request.action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
                     target_kind, target_reference = "memory_runtime", "conversation-import"
                     confirmation_message = "Confirm importing existing chats into memory."
+                elif request.action_id == MEMORY_CLEANUP_RUN_ACTION_ID:
+                    target_kind, target_reference = "memory_runtime", "cleanup"
+                    confirmation_message = (
+                        "Confirm restoring the memories an earlier cleanup archived."
+                        if request.arguments.get("undo") is True
+                        else "Confirm archiving memories that are prompt text or one-off requests. Undo restores them."
+                    )
                 elif request.action_id == ROUTING_MODEL_POLICY_REMOVE_ACTION_ID:
                     target_kind = "llm_routing"
                     target_reference = f"model-policy:{str(request.arguments.get('model_id') or '').strip()}"
