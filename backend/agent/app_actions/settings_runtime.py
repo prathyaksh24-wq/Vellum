@@ -36,6 +36,8 @@ MEMORY_ENTRY_SUPPRESS_ACTION_ID = "memory.entry.suppress"
 MEMORY_ENTRY_FEEDBACK_ACTION_ID = "memory.entry.feedback"
 MEMORY_CORRECTION_CREATE_ACTION_ID = "memory.correction.create"
 MEMORY_IMPORT_APPLY_ACTION_ID = "memory.import.apply"
+MEMORY_CLEANUP_PREVIEW_ACTION_ID = "memory.cleanup.preview"
+MEMORY_CLEANUP_RUN_ACTION_ID = "memory.cleanup.run"
 PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID = "provider.credential.configure"
 ROUTING_POLICY_SET_ACTION_ID = "llm.routing.policy.set"
 ROUTING_MODEL_POLICY_SET_ACTION_ID = "llm.routing.model_policy.set"
@@ -69,6 +71,8 @@ SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_FEEDBACK_ACTION_ID,
     MEMORY_CORRECTION_CREATE_ACTION_ID,
     MEMORY_IMPORT_APPLY_ACTION_ID,
+    MEMORY_CLEANUP_PREVIEW_ACTION_ID,
+    MEMORY_CLEANUP_RUN_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     ROUTING_POLICY_SET_ACTION_ID,
     ROUTING_MODEL_POLICY_SET_ACTION_ID,
@@ -89,6 +93,7 @@ CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
     MEMORY_IMPORT_APPLY_ACTION_ID,
+    MEMORY_CLEANUP_RUN_ACTION_ID,
     ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
     ROUTING_CREDENTIAL_ADD_ACTION_ID,
     ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
@@ -156,6 +161,7 @@ class SettingsRuntimeActionService:
         credential_writer: Callable[[str, str], None],
         memory_dreaming_runner: Callable[[], dict[str, Any]],
         conversation_memory_importer: Callable[[int | None], dict[str, int]],
+        memory_cleaner: Callable[[str], dict[str, Any]] | None = None,
         provider_selection_resumer: Callable[[str, AppActionContext], dict[str, Any]] | None = None,
         dictation_store_provider: Callable[[], Any] | None = None,
         config_writer: Callable[[str, str], None] | None = None,
@@ -167,6 +173,7 @@ class SettingsRuntimeActionService:
         self._credential_writer = credential_writer
         self._memory_dreaming_runner = memory_dreaming_runner
         self._conversation_memory_importer = conversation_memory_importer
+        self._memory_cleaner = memory_cleaner
         self._provider_selection_resumer = provider_selection_resumer
         self._dictation_store_provider = dictation_store_provider
         self._config_writer = config_writer
@@ -247,6 +254,11 @@ class SettingsRuntimeActionService:
         if action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
             self._require_confirmation(confirmed)
             return self._import_conversation_memories(arguments)
+        if action_id == MEMORY_CLEANUP_PREVIEW_ACTION_ID:
+            return self._clean_up_memory("preview")
+        if action_id == MEMORY_CLEANUP_RUN_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._clean_up_memory("undo" if arguments.get("undo") is True else "apply")
         if action_id == MEMORY_ENTRY_SUPPRESS_ACTION_ID:
             return self._suppress_memory(arguments)
         if action_id == MEMORY_ENTRY_FEEDBACK_ACTION_ID:
@@ -775,6 +787,26 @@ class SettingsRuntimeActionService:
             "_message": "Memory dreaming completed.",
         }
 
+    def _clean_up_memory(self, mode: str) -> dict[str, Any]:
+        """Count, archive, or restore memories that are prompt scaffolding or one-off requests."""
+        if self._memory_cleaner is None:
+            raise SettingsRuntimeActionError("MEMORY_UNAVAILABLE", "Memory is unavailable.", unavailable=True)
+        result = dict(self._memory_cleaner(mode) or {})
+        if mode == "undo":
+            restored = int(result.get("restored") or 0)
+            return {"changed": restored > 0, "restored": restored, "_target_kind": "memory_runtime",
+                    "_target_id": "cleanup", "_message": f"Restored {restored} cleaned-up memories."}
+        archived = int(result.get("archived") or 0)
+        counts = {"archived": archived, "by_reason": dict(result.get("by_reason") or {}),
+                  "topics_filled": int(result.get("topics_filled") or 0)}
+        if mode == "preview":
+            return {"changed": False, **counts, "_target_kind": "memory_runtime", "_target_id": "cleanup",
+                    "_message": f"{archived} memories look like prompt text or one-off requests."}
+        return {"changed": bool(archived or counts["topics_filled"]), **counts, "_target_kind": "memory_runtime",
+                "_target_id": "cleanup",
+                "_message": f"Archived {archived} memories that were prompt text or one-off requests. "
+                            "Run the cleanup with undo to restore them."}
+
     def _import_conversation_memories(self, arguments: dict[str, Any]) -> dict[str, Any]:
         raw_limit = arguments.get("limit")
         limit = None
@@ -1215,6 +1247,24 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "memory-dreaming",
         ),
         (
+            MEMORY_CLEANUP_PREVIEW_ACTION_ID,
+            "Preview memory cleanup",
+            "Count saved memories that are prompt text or one-off requests, without changing anything.",
+            "user",
+            "none",
+            {},
+            "settings-memory",
+        ),
+        (
+            MEMORY_CLEANUP_RUN_ACTION_ID,
+            "Clean up memory",
+            "Archive saved memories that are prompt text or one-off requests, or restore them with undo.",
+            "user",
+            "operation_bound",
+            {"undo": {"type": "boolean"}},
+            "settings-memory",
+        ),
+        (
             MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
             "Import conversation memories",
             "Index existing local conversation turns into memory without returning their content.",
@@ -1381,7 +1431,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             title=title,
             description=description,
             scope=scope,
-            access_class=CapabilityAccess.READ.value if action_id == DEVICE_SETTINGS_INSPECT_ACTION_ID else CapabilityAccess.WRITE.value,
+            access_class=CapabilityAccess.READ.value if action_id in {DEVICE_SETTINGS_INSPECT_ACTION_ID, MEMORY_CLEANUP_PREVIEW_ACTION_ID} else CapabilityAccess.WRITE.value,
             confirmation_rule=confirmation,
             executor_location="server_and_client" if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID else "server",
             supports_undo=False,

@@ -91,6 +91,7 @@ from agent.conversations.sharing import ConversationShareService
 from agent.agents.books import INSTALLED_BOOK_CONTEXT_END, INSTALLED_BOOK_CONTEXT_START
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
+from agent.memory.quality import user_words as memory_user_words
 from agent.memory.honcho_client import HonchoMemory
 from agent.memory.runtime import get_memory_orchestrator
 from agent.memory.sessions import SessionsReader
@@ -1596,7 +1597,7 @@ def _import_ui_conversations_to_memory(limit: int | None = None) -> dict[str, in
             content = (
                 f"Conversation: {title}\n"
                 f"Thread: {cid}\n"
-                f"Q: {turn['user']}\n"
+                f"Q: {memory_user_words(turn['user'])}\n"
                 f"A: {turn['assistant']}"
             )
             fts5.add_document(content=content, thread_id=cid, source_paths=[source_id, f"ui-conversation:{cid}"])
@@ -1618,7 +1619,7 @@ def _index_ui_conversation(conversation: dict[str, Any]) -> dict[str, int]:
         content = (
             f"Conversation: {title}\n"
             f"Thread: {cid}\n"
-            f"Q: {turn['user']}\n"
+            f"Q: {memory_user_words(turn['user'])}\n"
             f"A: {turn['assistant']}"
         )
         fts5.add_document(content=content, thread_id=cid, source_paths=[source_id, f"ui-conversation:{cid}"])
@@ -1794,6 +1795,10 @@ _settings_runtime_actions = SettingsRuntimeActionService(
     dictation_store_provider=lambda:get_dictation_store(),
     memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
     conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
+    memory_cleaner=lambda mode: (
+        _memory_orchestrator.undo_noise_cleanup() if mode == "undo"
+        else _memory_orchestrator.clean_up_noise(apply=mode == "apply")
+    ),
 )
 _app_action_runtime.set_settings_runtime_handler(_settings_runtime_actions.execute)
 
