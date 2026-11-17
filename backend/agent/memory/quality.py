@@ -16,16 +16,19 @@ import re
 from typing import Any
 
 # Blocks appended after the user's words. Everything from the first marker on
-# is scaffolding. Matches with any whitespace before the marker because stored
-# memory text has its newlines collapsed.
+# is scaffolding, so user_words() cuts the text at the first match. The pattern
+# has no leading or trailing wildcard: with ``\s*...\].*`` a long run of spaces
+# made each scan position retry, which is quadratic on user-controlled text.
 _SCAFFOLD_BLOCK_RE = re.compile(
-    r"\s*\[(?:Attachment context|Conversation follow-up context|Current conversation follow-up|"
+    r"\[(?:Attachment context|Conversation follow-up context|Current conversation follow-up|"
     r"Conversation source context|Recent Vellum conversation context|Conversation knowledge context|"
-    r"Specialist result)\].*",
-    re.IGNORECASE | re.DOTALL,
+    r"Specialist result)\]",
+    re.IGNORECASE,
 )
-# Annotations the UI puts in front of (or inside) the user's words.
-_UI_ANNOTATION_RE = re.compile(r"\[Vellum UI (?:context|mode):[^\]]*\]", re.IGNORECASE)
+# Annotations the UI puts in front of (or inside) the user's words. The body
+# stops at the next "[" as well as "]", so an unclosed annotation repeated many
+# times cannot make every match attempt run to the end of the text.
+_UI_ANNOTATION_RE = re.compile(r"\[Vellum UI (?:context|mode):[^\[\]]*\]", re.IGNORECASE)
 # Whole prompts the UI writes on the user's behalf (buttons, templates).
 _UI_TEMPLATE_RE = re.compile(
     r"^I'd like to create a new automation\b|\bverification (?:only|preview)\b|\bwithout submitting\b",
@@ -47,7 +50,10 @@ SCAFFOLD_MARKERS: tuple[str, ...] = (
 
 def user_words(text: str) -> str:
     """Return only what the user typed: no appended context blocks, no UI annotations."""
-    clean = _SCAFFOLD_BLOCK_RE.sub("", str(text or ""))
+    clean = str(text or "")
+    block = _SCAFFOLD_BLOCK_RE.search(clean)
+    if block:
+        clean = clean[:block.start()]
     clean = _UI_ANNOTATION_RE.sub(" ", clean)
     return " ".join(clean.split()).strip()
 

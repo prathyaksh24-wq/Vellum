@@ -71,6 +71,20 @@ def test_user_words_strips_appended_blocks_and_ui_annotations():
     assert not is_scaffold("I prefer tea.")
 
 
+def test_user_words_stays_linear_on_adversarial_text():
+    # CodeQL: long runs of spaces, and many unclosed UI annotations, made the old
+    # patterns backtrack quadratically on user-controlled text.
+    import time
+
+    spaces = "a" + " " * 50_000 + "b"
+    unclosed = "[vellum ui mode:" * 5_000
+    started = time.perf_counter()
+    assert user_words(spaces) == "a b"
+    assert user_words(unclosed) == unclosed
+    assert user_words("[Vellum UI mode: plan] I prefer tea.") == "I prefer tea."
+    assert time.perf_counter() - started < 1.0
+
+
 @pytest.mark.parametrize("text", [
     "get me my vellum repo on github",
     "@Linear what is my latest issue",
