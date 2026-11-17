@@ -65,7 +65,7 @@ class AgentCatalog:
             MusicAgent(tool_registry=tools),
             XAgent(tool_registry=tools),
             YoutubeAgent(tool_registry=tools, synthesizer=LocalYoutubeSynthesizer(), planner=LocalYoutubeAccountPlanner()),
-            MemoryAgent(tool_registry=tools),
+            MemoryAgent(tool_registry=tools, orchestrator_provider=_memory_orchestrator),
             DiscordAgent(tool_registry=tools, discord_service=discord_runtime_service, summarizer=LocalDiscordSummarizer()),
             CalendarAgent(tool_registry=tools),
             SportsAgent(tool_registry=tools),
@@ -228,3 +228,10 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = value
     return merged
+
+
+def _memory_orchestrator() -> Any:
+    """MemoryAgent's handle on Vellum's real memory store (resolved lazily)."""
+    from agent.memory.runtime import get_memory_orchestrator
+
+    return get_memory_orchestrator()
