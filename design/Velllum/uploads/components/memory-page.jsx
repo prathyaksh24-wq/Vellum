@@ -437,7 +437,7 @@
         <Menu label="Memory settings" icon="gear" items={[
           onOpenSettings && {label:'Memory settings', onSelect:onOpenSettings},
           {label:'Consolidate memories now', onSelect:() => act('memory.dreaming.run', {})},
-          {label:'Learn from old chats', onSelect:() => act('memory.conversations.import', {})},
+          {label:'Index past chats for search', onSelect:() => act('memory.conversations.import', {})},
         ]}/>
       </header>
       <div className="mp-body">
