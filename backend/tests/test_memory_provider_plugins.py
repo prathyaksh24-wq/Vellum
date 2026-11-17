@@ -9,7 +9,7 @@ def test_memory_orchestrator_plugin_reports_builtin_provider_health(tmp_path):
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
     )
@@ -21,7 +21,7 @@ def test_memory_orchestrator_plugin_reports_builtin_provider_health(tmp_path):
     assert providers["fts5"]["status"] == "ready"
     assert providers["chroma"]["type"] == "semantic"
     assert providers["honcho"]["status"] in {"ready", "degraded"}
-    assert providers["obsidian"]["status"] == "ready"
+    assert "obsidian" not in providers
 
 
 def test_memory_orchestrator_plugin_reports_optional_external_extensions(tmp_path, monkeypatch):
@@ -30,7 +30,7 @@ def test_memory_orchestrator_plugin_reports_optional_external_extensions(tmp_pat
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
     )

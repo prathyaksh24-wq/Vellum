@@ -34,7 +34,7 @@ Where a run's results are delivered. Three flavours:
 - **Existing chat** — the automation is pinned to one ongoing conversation (`thread_id`); each run appends a turn/channel into that conversation, preserving its context.
 - **Notification ping** — results appear in the in-app notification list and produce a toast while the UI is open. The Automation store retains notifications and read state without creating conversations. Creator uploads use this destination by default.
 
-Run results are delivered to the UI surface (standalone feed or pinned conversation) only. Vellum is vault-first but automation output is **not** written to the Obsidian vault for this feature.
+Run results are delivered to the UI surface (standalone feed or pinned conversation) only. Automation output is not written to any note store.
 
 ### Scheduler residency
 Codex-style **server-side**: the scheduler lives in the backend API process (uvicorn, detached via `scripts/start-api.ps1` — already a persistent service independent of the desktop app/UI). Automations fire whenever the API service is running, even with the UI closed. On startup the store reloads and jobs re-register; missed runs follow APScheduler misfire-grace behavior (catch-up) like today's built-ins.

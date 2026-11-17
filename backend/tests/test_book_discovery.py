@@ -48,7 +48,6 @@ def build_core(tmp_path: Path, handler) -> KnowledgeCore:
     return KnowledgeCore(
         KnowledgeStore(tmp_path / "core.db", tmp_path / "blobs"),
         conversations_path=tmp_path / "ui" / "conversations.json",
-        vault_root=tmp_path / "unused-vault",
         book_catalog=OpenLibraryCatalog(transport=httpx.MockTransport(handler)),
     )
 
@@ -344,8 +343,7 @@ def test_ready_library_books_are_excluded_on_discovery_and_later_reads(tmp_path,
         )]})
     core = KnowledgeCore(
         KnowledgeStore(tmp_path / "core.db", tmp_path / "blobs"),
-        conversations_path=tmp_path / "ui" / "conversations.json", vault_root=tmp_path / "unused",
-        book_catalog=OpenLibraryCatalog(transport=httpx.MockTransport(handler)),
+        conversations_path=tmp_path / "ui" / "conversations.json", book_catalog=OpenLibraryCatalog(transport=httpx.MockTransport(handler)),
         book_malware_scanner=CleanScanner(), book_embedding_provider=FixedBookEmbedder(),
         book_retrieval_index=RecordingBookIndex(),
     )

@@ -114,7 +114,6 @@ def isolated_history(history_store):
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(api, "start_scheduler", lambda: None)
-    monkeypatch.setattr(api, "start_vault_watcher", lambda: None)
     with TestClient(api.app) as client:
         yield client
 

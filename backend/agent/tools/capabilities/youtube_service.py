@@ -32,7 +32,6 @@ PersonalContextBackend = Callable[[str, int], dict[str, Any]]
 class YoutubeCapabilityService:
     def __init__(
         self,
-        vault_root: Path,
         search_backend: SearchVideosBackend | None = None,
         serpapi_search_backend: SerpApiSearchBackend | None = None,
         serpapi_transcript_backend: SerpApiTranscriptBackend | None = None,
@@ -46,7 +45,6 @@ class YoutubeCapabilityService:
         personal_context_backend: PersonalContextBackend | None = None,
         browser_history_backend: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
-        self.vault_root = Path(vault_root)
         self.serpapi_search_backend = serpapi_search_backend or self._default_serpapi_search_videos
         self.serpapi_transcript_backend = serpapi_transcript_backend or self._default_serpapi_fetch_transcript
         self.web_search_backend = web_search_backend or self._default_web_search_videos
@@ -476,28 +474,10 @@ class YoutubeCapabilityService:
             try:
                 result = self.serpapi_transcript_backend(video_id)
             except Exception as exc:
-                logger.warning("YouTube SerpAPI transcript failed; falling back to local cards: %s", exc)
+                logger.warning("YouTube SerpAPI transcript failed: %s", exc)
                 result = None
             if result and result.get("transcript"):
                 return result
-        query = str(payload.get("query") or "").strip().lower()
-        youtube_root = self.vault_root / "Library" / "Youtube"
-        if not youtube_root.exists():
-            return None
-
-        for path in sorted(youtube_root.rglob("*.md")):
-            text = path.read_text(encoding="utf-8")
-            lowered = text.lower()
-            if video_id and video_id not in text:
-                continue
-            if query and query not in lowered:
-                continue
-            transcript = _extract_transcript(text)
-            return {
-                "video_id": video_id or _frontmatter_value(text, "video_id"),
-                "transcript": transcript,
-                "path": path.relative_to(self.vault_root).as_posix(),
-            }
         return None
 
     def _default_serpapi_fetch_transcript(self, video_id: str) -> dict[str, Any] | None:
@@ -508,19 +488,6 @@ class YoutubeCapabilityService:
         return SerpApiClient(log_path=settings.serpapi_log_path).youtube_transcript(
             video_id
         )
-
-
-def _extract_transcript(text: str) -> str:
-    match = re.search(r"(?is)^##\s+Transcript\s*(.+?)(?:\n##\s+|\Z)", text, flags=re.MULTILINE)
-    if match:
-        return match.group(1).strip()
-    body = re.sub(r"(?s)^---.*?---\s*", "", text).strip()
-    return body
-
-
-def _frontmatter_value(text: str, key: str) -> str:
-    match = re.search(rf"(?m)^{re.escape(key)}:\s*\"?([^\"\n]+)\"?\s*$", text)
-    return match.group(1).strip() if match else ""
 
 
 def _positive_int(value: Any, *, default: int) -> int:

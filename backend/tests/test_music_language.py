@@ -20,7 +20,7 @@ def test_dictated_music_reaches_music_owner_before_unrelated_specialists(tmp_pat
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     state.set_active_agent('dictated-music','YoutubeAgent')
     catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent})
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=catalog,state_store=state,
+    dispatcher=LiveAgentDispatcher(agent_catalog=catalog,state_store=state,
         skill_route_resolver=type('NoSkillRoute',(),{'resolve_all':lambda self,_:[]})())
     result=dispatcher.maybe_handle(text,'dictated-music')
     assert result.agent_name=='MusicAgent'

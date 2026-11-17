@@ -398,7 +398,6 @@ class MemoryOrchestrator:
     memory_dir: Path = Path("data/memory")
     provider_extensions: MemoryProviderExtensionManager | None = None
     specialist_cache: SpecialistResponseCache | None = None
-    knowledge_wiki: Any | None = None
     knowledge_core: Any | None = None
 
     def __post_init__(self) -> None:
@@ -579,7 +578,6 @@ class MemoryOrchestrator:
                 "honcho_context": "",
                 "project_context": "",
                 "recent_context": "",
-                "knowledge_refs": [],
                 "scopes": scopes,
                 "settings": settings,
             }
@@ -615,24 +613,6 @@ class MemoryOrchestrator:
             if self.provider_extensions and not strict_profile_scope
             else []
         )
-        knowledge_refs: list[dict[str, Any]] = []
-        if self.knowledge_wiki is not None and clean_query and not strict_profile_scope:
-            try:
-                wiki_result = self.knowledge_wiki.query(clean_query, limit=4)
-                for item in wiki_result.get("results", []):
-                    if not isinstance(item, dict):
-                        continue
-                    knowledge_refs.append(
-                        {
-                            "ref": str(item.get("ref") or ""),
-                            "title": str(item.get("title") or ""),
-                            "type": str(item.get("type") or ""),
-                            "description": str(item.get("description") or ""),
-                            "updated": str(item.get("updated") or ""),
-                        }
-                    )
-            except Exception:
-                knowledge_refs = []
         packet = {
             "global_summary": (
                 _safe_global_summary(self.store)
@@ -649,7 +629,6 @@ class MemoryOrchestrator:
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
             "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
             "external_providers": external_context,
-            "knowledge_refs": knowledge_refs,
             "scopes": scopes,
             "settings": settings,
         }
@@ -862,46 +841,6 @@ class MemoryOrchestrator:
         self.store.audit("context_files_synced", None, f"{user_path}; {memory_path}")
         return {"user_path": str(user_path), "memory_path": str(memory_path)}
 
-    def import_obsidian_memories(self, vault_root: str | Path) -> dict[str, Any]:
-        if self.store is None:
-            return {"imported_count": 0, "skipped_count": 0, "memories": []}
-        root = Path(vault_root)
-        candidates: list[tuple[Path, str]] = []
-        for folder in ("Agent/Memories", "Agent/Saved"):
-            base = root / folder
-            if base.exists():
-                candidates.extend((path, folder) for path in sorted(base.rglob("*.md")) if path.is_file())
-
-        existing_sources = {str(item.get("source_thread_id") or "") for item in self.store.list_saved()}
-        existing_texts = {_norm(str(item.get("text") or "")) for item in self.store.list_saved()}
-        imported: list[dict[str, Any]] = []
-        skipped = 0
-        for path, folder in candidates:
-            rel = path.relative_to(root).as_posix()
-            if rel in existing_sources:
-                skipped += 1
-                continue
-            text = _memory_text_from_markdown(path)
-            if not text:
-                skipped += 1
-                continue
-            key = _norm(text)
-            if key in existing_texts:
-                skipped += 1
-                continue
-            memory_id = self.store.save_memory(
-                kind="imported",
-                text=text,
-                source_thread_id=rel,
-                confidence=0.82,
-                scope="global" if folder.endswith("Memories") else "user_profile",
-            )
-            item = self.store.get_memory(memory_id)
-            imported.append(item)
-            existing_texts.add(key)
-            existing_sources.add(rel)
-        self.store.audit("obsidian_import_completed", None, f"imported={len(imported)} skipped={skipped}")
-        return {"imported_count": len(imported), "skipped_count": skipped, "memories": imported}
 
 
 def _turn_document(
@@ -1099,21 +1038,6 @@ def _dedupe_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen.add(key)
         out.append(memory)
     return out
-
-
-def _memory_text_from_markdown(path: Path) -> str:
-    try:
-        raw = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return ""
-    text = re.sub(r"\A---\s*.*?\s*---", "", raw, flags=re.DOTALL).strip()
-    lines = []
-    for line in text.splitlines():
-        clean = line.strip()
-        if not clean or clean.startswith("#"):
-            continue
-        lines.append(re.sub(r"^[-*]\s+", "", clean))
-    return _squash(" ".join(lines), limit=1200)
 
 
 def _explicit_remember(text: str) -> bool:

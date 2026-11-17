@@ -13,8 +13,8 @@ from test_specialist_agents import catalog_for, RecordingRuntime, FixedSkillReso
 ])
 def test_explicit_youtube_feed_does_not_match_x_first(tmp_path, query):
     catalog = catalog_for({
-        'XAgent': XAgent(tmp_path, x_service=object()),
-        'YoutubeAgent': YoutubeAgent(tmp_path, youtube_service=object()),
+        'XAgent': XAgent(x_service=object()),
+        'YoutubeAgent': YoutubeAgent(youtube_service=object()),
     })
     assert not catalog.resolve('XAgent').executor.can_handle(query)
     assert catalog.match(query).profile.id == 'YoutubeAgent'
@@ -31,7 +31,7 @@ def test_feed_questions_read_saved_creator_feed_before_planning(tmp_path, query)
             calls.append(payload)
             return {'available': True, 'creators': [], 'uploads': [], 'warnings': [],
                 'coverage': 'Saved creator uploads only; coverage may be incomplete.'}
-    agent = YoutubeAgent(tmp_path, youtube_service=Service(),
+    agent = YoutubeAgent(youtube_service=Service(),
         planner=lambda *_: pytest.fail('Saved creator feed should not need a model planner'))
     response = agent.answer(query)
     assert calls == [{}]
@@ -54,12 +54,12 @@ def test_prior_selected_agent_does_not_capture_explicit_youtube_feed(tmp_path, s
         def subscription_feed(self, payload):
             return {'available':True,'creators':[],'uploads':[],
                 'coverage':'Saved creator uploads; partial coverage.'}
-    catalog=catalog_for({'XAgent':XAgent(tmp_path,x_service=object()),
-        'YoutubeAgent':YoutubeAgent(tmp_path,youtube_service=Service())})
+    catalog=catalog_for({'XAgent':XAgent(x_service=object()),
+        'YoutubeAgent':YoutubeAgent(youtube_service=Service())})
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     state.set_active_agent('thread',selected,selected=explicitly_selected)
     runtime=RecordingRuntime(catalog)
-    dispatcher=LiveAgentDispatcher(tmp_path,agent_catalog=catalog,state_store=state,
+    dispatcher=LiveAgentDispatcher(agent_catalog=catalog,state_store=state,
         delegation_runtime=runtime,skill_route_resolver=FixedSkillResolver(None))
     result=dispatcher.maybe_handle('what can u tell me about my youtube feed?',thread_id='thread')
     assert result.agent_name=='YoutubeAgent'
@@ -70,7 +70,7 @@ def test_prior_selected_agent_does_not_capture_explicit_youtube_feed(tmp_path, s
 
 @pytest.mark.parametrize('query', ['show my X feed', 'show my feed', 'post this YouTube video on X'])
 def test_explicit_x_and_existing_generic_feed_requests_remain_supported(tmp_path, query):
-    assert XAgent(tmp_path,x_service=object()).can_handle(query)
+    assert XAgent(x_service=object()).can_handle(query)
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ def notification_service(tmp_path,monkeypatch):
     store.deliver_notification(youtube['id'],'recent','Creator: Recent saved upload',
         url='https://www.youtube.com/watch?v=recent00001',created_at=(now-timedelta(minutes=1)).isoformat())
     store.deliver_notification(other['id'],'unrelated','Other task private message',created_at=now.isoformat())
-    service=YoutubeCapabilityService(tmp_path,search_backend=lambda *_:pytest.fail('Notification read reached public search'))
+    service=YoutubeCapabilityService(search_backend=lambda *_:pytest.fail('Notification read reached public search'))
     return service,store
 
 
@@ -113,7 +113,7 @@ def test_saved_notifications_filter_owner_before_limit_and_preserve_read_state(n
 
 def test_notification_answer_uses_canonical_inbox_before_planner(notification_service,tmp_path):
     service,store=notification_service
-    agent=YoutubeAgent(tmp_path,tool_registry=service.build_registry(),
+    agent=YoutubeAgent(tool_registry=service.build_registry(),
         planner=lambda *_:pytest.fail('A clear notification question needs no planner'))
     recent=agent.answer_with_context('youtube notifications',{})
     assert recent.status=='answered'

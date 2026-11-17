@@ -118,11 +118,9 @@ class SportsAgent:
 
     def __init__(
         self,
-        vault_root: Path,
         web_searcher: WebSearcher | None = None,
         tool_registry: ToolRegistry | None = None,
     ) -> None:
-        self.vault_root = Path(vault_root)
         self.web_searcher = web_searcher or self._default_web_searcher
         self.tool_registry = tool_registry or ToolRegistry()
         if "sports.web_search" not in self.tool_registry.names():

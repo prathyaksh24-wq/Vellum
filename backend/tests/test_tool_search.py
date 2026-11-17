@@ -275,7 +275,7 @@ def test_build_agent_runtime_compiles_graph_with_vellum_prompt():
     )
     assert result["messages"][-1].content == "done"
     assert any(
-        isinstance(message, SystemMessage) and "Use local vault and memory evidence" in message.content
+        isinstance(message, SystemMessage) and "Use local memory and Knowledge Core evidence" in message.content
         for message in stub.seen
     )
 

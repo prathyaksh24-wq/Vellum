@@ -1,6 +1,6 @@
 # Vellum
 
-Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, an Electron desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, computer-use foundations, and a Hermes-compatible skills system.
+Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, an Electron desktop shell, a local Knowledge Core and Memory Orchestrator, model routing, tools, plugins, computer-use foundations, and a Hermes-compatible skills system.
 
 ![CI](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/release.yml/badge.svg)
@@ -18,8 +18,8 @@ The repository currently has the alpha tag `v0.1.0-alpha.1`. It is a development
 ## Principles
 
 - Privacy first: classify and scrub sensitive input before model or tool use.
-- Local first: keep memory, vault content, audit logs, skill packages, and local indexes on the user's machine.
-- User-controlled data: Obsidian Markdown, SQLite databases, and local package directories remain inspectable and recoverable.
+- Local first: keep memory, knowledge, audit logs, skill packages, and local indexes on the user's machine.
+- User-controlled data: SQLite databases, content-addressed Knowledge Core blobs, and local package directories remain inspectable and recoverable.
 - Model flexible: route through OpenRouter, direct provider keys, local models, or configured specialists where supported.
 - Transparent operation: expose tools, memory, usage, plugins, skills, and routing state through explicit contracts and logs.
 
@@ -30,14 +30,14 @@ The repository currently has the alpha tag `v0.1.0-alpha.1`. It is a development
 - Desktop shell and overlay foundations for local app workflows.
 - OpenRouter model routing with credential pools, provider policy, fallback chains, cooldown handling, and zero-data-retention routing controls.
 - Direct OpenAI provider support for configured `openai/*` models.
-- Obsidian vault integration with folder policy, retention, conversation export, and user-readable memory projections.
+- Knowledge Core for sources, observations, books, preferences and provenance, kept locally in SQLite and content-addressed blobs.
 - Memory Orchestrator for saved memory, summaries, settings, archived items, FTS5 search, Honcho integration, and provider extensions.
-- Maintained Knowledge Wiki under `Vault/Knowledge`, separate from raw `Vault/Library` imports.
 - Hermes-compatible `SKILL.md` package system with approval-gated mutations, catalog rebuilds, duplicate checks, usage intelligence, curator support, and a Skills Hub surface.
 - Plugin surfaces for Spotify, memory, Agent Reach, portable plugins, and Hermes skills.
 - Computer-use routing, guarded sessions, native Windows drivers, and overlay support.
 - Voice STT/TTS modules using Moonshine and Kokoro when enabled.
-- MCP/tool integrations for filesystem, Apify, Playwright, GitHub, Obsidian, Context7, GitMCP, Context Mode, Tavily, Firecrawl, and web/search providers.
+- MCP/tool integrations for Apify, Playwright, GitHub, Context7, GitMCP, Context Mode, Tavily, Firecrawl, and web/search providers.
+- Optional Obsidian connector (Plugins) to read, search and, when allowed, write notes in your own vault. Obsidian is not Vellum's knowledge base.
 - Test coverage across API contracts, memory, routing, skills, computer use, plugins, Spotify, voice, and tool boundaries.
 
 ## Experimental Or Incomplete Areas
@@ -59,12 +59,11 @@ backend/agent/api.py            FastAPI application and HTTP/WebSocket routes
 backend/agent/graph/agent.py    Main LangGraph agent
 backend/agent/llm/              Provider and routing layer
 backend/agent/memory/           Memory Orchestrator, Honcho, FTS5, sessions
-backend/agent/obsidian/         Vault IO, Knowledge Wiki, retention, exports
+backend/agent/knowledge/        Knowledge Core, books, sources and provenance
 backend/agent/skills/           Hermes skill packages, catalog, curator, hub
 backend/agent/tools/            Agent tools and capability registry
 backend/agent/computer_use/     Guarded desktop/browser/computer-use runtime
 plugins/                        Portable connector and memory plugin packages
-Vault/                          Local Obsidian vault used by Vellum
 data/                           Local runtime stores, logs, indexes, caches
 ```
 
@@ -80,7 +79,6 @@ Requirements:
 - Node.js and npm.
 - Docker, for the self-hosted Honcho service.
 - Ollama with `gemma4:12b` and `nomic-embed-text`, for local Honcho reasoning and embeddings.
-- An Obsidian vault path configured in `.env`.
 - Provider credentials for any cloud model or external connector you enable.
 
 Typical Windows startup:
@@ -156,8 +154,6 @@ Configuration is read from `.env` at the repository root. Important settings inc
 
 - `OPENROUTER_API_KEY`
 - `OPENAI_API_KEY` when using direct OpenAI routes
-- `OBSIDIAN_VAULT_PATH`
-- `FILESYSTEM_MCP_PATH`
 - `HONCHO_BASE_URL`
 - `CHROMA_PATH`
 - `OLLAMA_CONTEXT_LENGTH=16384` sets the local inference context window, including chat history and tools. Ollama uses the native `langchain-ollama` adapter for streaming and attachments.
@@ -179,8 +175,7 @@ Vellum treats privacy as part of the runtime boundary:
 - User input is classified as RED, YELLOW, or GREEN before model use.
 - YELLOW input is scrubbed locally with Presidio-style anonymization.
 - RED input is blocked.
-- Folder policy controls which vault content may be sent to a model.
-- Raw `Vault/Library` content is not automatically promoted into the maintained Knowledge Wiki.
+- Book content follows explicit profile consent and per-book `Local only` overrides before it can reach a cloud model.
 - Audit logs store metadata, not prompt or response content.
 - OpenRouter calls are configured for zero-data-retention routing.
 - Local memory, skill packages, usage records, and knowledge files remain on the user's machine.
@@ -192,7 +187,6 @@ Vellum treats privacy as part of the runtime boundary:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Personal Intelligence Architecture](docs/PERSONAL_INTELLIGENCE_ARCHITECTURE.md)
 - [Memory and Knowledge Ownership](docs/memory-knowledge-architecture.md)
-- [Knowledge Wiki](docs/knowledge-wiki.md)
 - [Skills System](docs/SKILLS_SYSTEM.md)
 - [Skills Operations](docs/SKILLS_OPERATIONS.md)
 - [Frontend/Backend Contracts](docs/architecture/frontend-backend-contracts.md)

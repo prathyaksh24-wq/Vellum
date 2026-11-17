@@ -29,14 +29,11 @@ def _client():
 def _edit_image(path: str, temporary: Path) -> Path:
     """Confine explicit edit inputs and strip metadata before cloud upload."""
     from PIL import Image
-    from agent.obsidian.folder_policy import can_send_to_llm
 
     candidate = Path(path).expanduser().resolve()
-    vault = get_settings().obsidian_vault_path.resolve()
     generated = (REPO_ROOT / "data" / "images").resolve()
     if not candidate.is_relative_to(generated):
-        if not candidate.is_relative_to(vault) or not can_send_to_llm(candidate.relative_to(vault).as_posix()):
-            raise ValueError("Choose an image in an allowed vault folder or Vellum's generated image folder.")
+        raise ValueError("Choose an image from Vellum's generated image folder.")
     if not candidate.is_file() or candidate.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
         raise ValueError("Choose an existing PNG, JPEG or WebP image.")
     if candidate.stat().st_size > 10 * 1024 * 1024:

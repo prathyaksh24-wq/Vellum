@@ -46,7 +46,6 @@ def test_ensure_model_refreshes_availability_before_using_the_configured_default
 @pytest.fixture(autouse=True)
 def disable_runtime_services(monkeypatch):
     monkeypatch.setattr(api, "start_scheduler", lambda: None)
-    monkeypatch.setattr(api, "start_vault_watcher", lambda: None)
 
 
 class FakeAgent:
@@ -235,7 +234,7 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert body["frontend"]["canonical_entry"] == "/design-uploads/Vellum%20Default%20Re-designed.html"
 
     features = body["features"]
-    for key in ["chat", "plugins", "spotify", "youtube", "discord", "google_calendar", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
+    for key in ["chat", "plugins", "spotify", "youtube", "discord", "google_calendar", "memory_orchestrator", "hermes_skills", "openrouter", "agent_runtime"]:
         assert key in features
         assert isinstance(features[key]["enabled"], bool)
         assert features[key]["contract"] == "v1"
@@ -400,8 +399,7 @@ def test_kworb_monthly_listener_success_never_calls_public_web_search(monkeypatc
     html='<table><tr><td>14</td><td><a href="artist/guetta_songs.html">David Guetta</a></td><td>83,220,280</td><td>-107</td><td>4</td><td>89,315,609</td></tr></table>'
     reader=KworbCapabilityService(fetch=lambda url:html)
     specialist=MusicAgent(tool_registry=reader.build_registry(),integrations={})
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,
-        agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':specialist}),
+    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':specialist}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
     monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
     monkeypatch.setattr(web,'web_search',SimpleNamespace(invoke=lambda *_:pytest.fail('Kworb success must not spend a search request')))
@@ -441,9 +439,7 @@ def test_chart_followup_and_current_metadata_ignore_old_attached_artist_claims(m
     registry._records['spotify_playback']=replace(original,adapter=playback)
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     state.set_active_agent('music-live-metadata','YoutubeAgent',selected=True)
-    monkeypatch.setattr(api,'_live_dispatcher',LiveAgentDispatcher(vault_root=tmp_path,
-        agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':specialist}),state_store=state))
-    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'An old assistant claimed the artist was Travis Scott.','attachments':[]}))
+    monkeypatch.setattr(api,'_live_dispatcher',LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':specialist}),state_store=state))
     fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
     monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
     async def no_learn(*args,**kwargs):pass
@@ -466,7 +462,6 @@ def test_compound_music_requests_bypass_stale_chat_context_and_return_each_recei
     dispatcher,calls,saved,state=compound_dispatcher(tmp_path)
     dispatcher.maybe_handle('top 20 songs in spain','compound')
     monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
-    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'An older chat discussed a song by Travis Scott.','attachments':[]},clear=lambda *_:None,copy=lambda *_:None))
     fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
     monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
     async def no_learn(*args,**kwargs):pass
@@ -507,7 +502,6 @@ def test_compound_artist_clarification_resumes_controls_through_chat_api(monkeyp
             for key,artist in [('original','The Weeknd'),('cover','Loi')]]
     dispatcher,calls,_,_=compound_dispatcher(tmp_path,tracks=tracks)
     monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
-    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'An older chat mentioned Loi.','attachments':[]},clear=lambda *_:None,copy=lambda *_:None))
     fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
     monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
     async def no_learn(*args,**kwargs):pass
@@ -529,7 +523,6 @@ def test_latest_music_chat_playlist_count_and_correction_bypass_attached_old_con
             for key,artist in [('original','Post Malone'),('other','David Shannon')]]
     dispatcher,calls,_,state=compound_dispatcher(tmp_path,tracks=tracks)
     monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
-    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'Old assistant claimed you have zero saved playlists.','attachments':[]},clear=lambda *_:None,copy=lambda *_:None))
     fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
     monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
     async def no_learn(*args,**kwargs):pass
@@ -740,8 +733,6 @@ def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tm
 def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
     monkeypatch.setattr(api, "_index_ui_conversation", lambda conversation: {"indexed_turns": 1})
-    monkeypatch.setattr(api, "_project_ui_conversation", lambda conversation: {"ok": True, "action": "update"})
-    monkeypatch.setattr(api, "_archive_ui_conversation", lambda conversation: {"ok": True, "archived": True})
 
     payload = {
         "id": "chat-1",
@@ -771,13 +762,12 @@ def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path
     assert patched.json()["conversation"]["pinned"] is True
     assert patched.json()["conversation"]["title"] == "Pinned sports"
     assert deleted.json()["ok"] is True
-    assert deleted.json()["obsidian_projection"]["archived"] is True
+    assert "obsidian_projection" not in deleted.json()
 
 
 def test_conversation_library_search_correction_and_rebuild(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
     monkeypatch.setattr(api, "_index_ui_conversation", lambda conversation: {"indexed_turns": 0})
-    monkeypatch.setattr(api, "_project_ui_conversation", lambda conversation: {"ok": True, "action": "update"})
     conversations = [
         {
             "id": "f1-calendar",
@@ -1164,7 +1154,7 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1204,7 +1194,7 @@ def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1248,7 +1238,7 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1262,7 +1252,6 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
             chat=lambda **kwargs: "",
         ),
     )
-    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
 
     asyncio.run(
         api._background_learn(
@@ -1288,7 +1277,7 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=resolved,
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1301,11 +1290,6 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
             add_message=lambda *args, **kwargs: None,
             chat=lambda **kwargs: "",
         ),
-    )
-    monkeypatch.setattr(
-        api,
-        "_project_context",
-        lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None),
     )
 
     asyncio.run(
@@ -1344,7 +1328,7 @@ def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1358,7 +1342,6 @@ def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch
             chat=lambda **kwargs: "",
         ),
     )
-    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
 
     asyncio.run(
         api._background_learn(
@@ -1400,7 +1383,7 @@ def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypa
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1476,7 +1459,7 @@ def test_import_ui_conversations_indexes_older_chat_history(monkeypatch, tmp_pat
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1505,7 +1488,7 @@ def test_memory_crud_endpoints_create_update_pin_archive_and_delete(monkeypatch,
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -1557,7 +1540,7 @@ def test_memory_summary_includes_indexed_conversation_context(monkeypatch, tmp_p
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
     )
@@ -1610,7 +1593,7 @@ def test_recent_conversation_context_includes_indexed_memory_hits(monkeypatch, t
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
     )
@@ -1644,7 +1627,7 @@ def test_memory_orchestrator_search_returns_indexed_conversation_hits(monkeypatc
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
     )
@@ -2479,44 +2462,14 @@ def test_chat_stream_passes_through_x_agent_result_without_model_rewrite(monkeyp
     )
 
 
-def test_reindex_endpoint_returns_chunk_count(monkeypatch):
-    class FakeIngester:
-        def ingest(self, force=False):
-            assert force is True
-            return 7
-
-    monkeypatch.setattr(api, "VaultIngester", FakeIngester)
-    monkeypatch.setattr(api, "get_settings", lambda: SimpleNamespace(enable_vector_search=True))
-
-    with TestClient(api.app) as client:
-        response = client.post("/api/vault/reindex")
-
-    assert response.status_code == 200
-    assert response.json() == {"chunks": 7}
-
-
-def test_reindex_endpoint_rejects_when_vector_search_disabled(monkeypatch):
-    monkeypatch.setattr(api, "get_settings", lambda: SimpleNamespace(enable_vector_search=False))
-
-    with TestClient(api.app) as client:
-        response = client.post("/api/vault/reindex")
-
-    assert response.status_code == 409
-
-
-def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
+def test_api_lifespan_starts_and_stops_scheduler(monkeypatch):
     events = []
 
     class FakeScheduler:
         def shutdown(self, wait=False):
             events.append(("scheduler_shutdown", wait))
 
-    class FakeWatcher:
-        def stop(self):
-            events.append(("watcher_stop", None))
-
     monkeypatch.setattr(api, "start_scheduler", lambda: events.append(("scheduler_start", None)) or FakeScheduler())
-    monkeypatch.setattr(api, "start_vault_watcher", lambda: events.append(("watcher_start", None)) or FakeWatcher())
 
     with TestClient(api.app) as client:
         response = client.get("/api/status")
@@ -2524,8 +2477,6 @@ def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
     assert response.status_code == 200
     assert events == [
         ("scheduler_start", None),
-        ("watcher_start", None),
-        ("watcher_stop", None),
         ("scheduler_shutdown", False),
     ]
 

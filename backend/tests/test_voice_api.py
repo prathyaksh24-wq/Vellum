@@ -14,7 +14,6 @@ from agent.computer_use_runtime import ComputerUseRuntime
 @pytest.fixture(autouse=True)
 def disable_runtime_services(monkeypatch):
     monkeypatch.setattr(api, "start_scheduler", lambda: None)
-    monkeypatch.setattr(api, "start_vault_watcher", lambda: None)
 
 
 class FakeVoiceAgent:

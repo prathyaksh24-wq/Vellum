@@ -48,7 +48,7 @@ def test_monthly_listeners_routes_to_main_web_search_even_when_music_is_selected
     music,_,_=fixture_agent(planner=lambda *_:pytest.fail('Artist statistics must use public web search'))
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     state.set_active_agent('music','MusicAgent',selected=True)
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':music}),state_store=state)
+    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':music}),state_store=state)
     assert dispatcher.maybe_handle('how many monthly listener does davide guttea have?','music') is None
     from agent import api
     assert api._requests_fresh_public_data('how many monthly listeners does David Guetta have?')
@@ -324,7 +324,7 @@ def test_shared_dispatcher_preserves_seek_distance_and_routes_playlist_inventory
         return {'ok':True,'data':{'track':{'name':'Song','uri':'spotify:track:one'},'progress_ms':position[0],
             'duration_ms':180000,'is_playing':False,'device':{'id':'vellum','volume_percent':volume[0]}}}
     registry.invoke=invoke
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
+    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
     assert dispatcher.maybe_handle('skip 45 secs','music').status=='answered'
     assert dispatcher.maybe_handle('what si playing?','music').status=='answered'

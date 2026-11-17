@@ -81,7 +81,6 @@ def test_real_epub_compiles_book_to_skill_and_is_retrievable(tmp_path: Path) -> 
     core = KnowledgeCore(
         KnowledgeStore(tmp_path / "knowledge.db", tmp_path / "blobs"),
         conversations_path=tmp_path / "data" / "ui" / "conversations.json",
-        vault_root=tmp_path / "Vault",
         book_malware_scanner=WindowsDefenderScanner(),
         book_embedding_provider=AcceptanceEmbedder(),
         book_retrieval_index=AcceptanceIndex(),

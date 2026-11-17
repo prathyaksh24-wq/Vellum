@@ -1,8 +1,9 @@
 """Offline embedding generation migration through existing Vellum owners.
 
 Run with --apply after stopping the API. Source files, old Chroma, and old model
-weights remain available. Only already-indexed vault notes are rebuilt; this
-does not enable vector search or expand the set of indexed private sources.
+weights remain available. Only query vectors and active Book materializations
+are rebuilt; this does not enable vector search or expand the set of indexed
+private sources.
 """
 from __future__ import annotations
 
@@ -40,7 +41,6 @@ def migrate(source: Path, target: Path) -> dict:
     from agent.config import get_settings
     from agent.rag.embedder import get_embedder
     from agent.rag.store import get_vector_store
-    from agent.obsidian.ingester import VaultIngester
     from agent.knowledge.runtime import get_knowledge_core
     from agent.knowledge.models import BookMaterializationRequest
     settings = get_settings()
@@ -71,21 +71,13 @@ def migrate(source: Path, target: Path) -> dict:
     store = get_vector_store()
     report = {'model': embedder.model_name, 'revision': embedder.revision, 'dimensions': embedder.dimensions,
               'source_index': str(source), 'target_index': str(target), 'backup': str(backup),
-              'vault_chunks': 0, 'query_vectors': 0, 'book_materializations': 0,
+              'query_vectors': 0, 'book_materializations': 0,
               'vector_search_enabled': settings.enable_vector_search, 'status': 'running'}
     try:
         names = {item.name for item in old.list_collections()}
         if names - {'obsidian_vault', 'agent_queries', 'books'}:
             raise ValueError('Unknown source collection: extend the migration before changing its embedding model.')
-        if 'obsidian_vault' in names:
-            rows = old.get_collection('obsidian_vault').get(include=['metadatas'])
-            paths = {str(meta.get('path') or '') for meta in rows['metadatas'] if meta}
-            if paths:
-                ingester = VaultIngester(store=store, embedder=embedder)
-                for relative in sorted(paths):
-                    path = (settings.obsidian_vault_path / relative).resolve()
-                    if path.is_file() and path.is_relative_to(settings.obsidian_vault_path.resolve()):
-                        report['vault_chunks'] += ingester.ingest_file(path)
+        # The retired Obsidian vault collection is not migrated; Vellum no longer reads it.
         if 'agent_queries' in names:
             rows = old.get_collection('agent_queries').get(include=['documents', 'metadatas'])
             for identifier, text, metadata in zip(rows['ids'], rows['documents'], rows['metadatas'], strict=True):

@@ -194,7 +194,7 @@ describe("Vellum default chat stream trace", () => {
     expect(traces.some((trace) => trace.steps.some((step) => step.label === "Writing answer"))).toBe(true);
   });
 
-  test("normalizes sub-agent, SerpAPI, notes, and Obsidian activity labels", async () => {
+  test("normalizes sub-agent, SerpAPI, saved-page, and Obsidian activity labels", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
       body: sseStream([
@@ -202,9 +202,9 @@ describe("Vellum default chat stream trace", () => {
         'event: agent.activity\ndata: {"activity":{"id":"yt","type":"sub_agent_started","name":"YoutubeAgent","status":"in_progress"}}\n\n',
         'event: agent.activity\ndata: {"activity":{"id":"x","type":"sub_agent_started","name":"XAgent","status":"in_progress"}}\n\n',
         'event: agent.activity\ndata: {"activity":{"id":"serp","type":"tool_call_started","name":"serpapi","status":"in_progress"}}\n\n',
-        'event: agent.activity\ndata: {"activity":{"id":"notes","type":"tool_call_started","name":"search_my_notes","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"page","type":"tool_call_started","name":"read_file","status":"in_progress"}}\n\n',
         'event: agent.activity\ndata: {"activity":{"id":"obs","type":"tool_call_started","name":"obsidian_api","status":"in_progress"}}\n\n',
-        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Done","tools":["youtube_agent","x_agent","serpapi","search_my_notes","obsidian_api"],"sources":[]}}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Done","tools":["youtube_agent","x_agent","serpapi","read_file","obsidian_api"],"sources":[]}}\n\n',
       ]),
     }));
     const activities = [];
@@ -219,7 +219,7 @@ describe("Vellum default chat stream trace", () => {
     expect(labels).toContain("Calling YouTube Agent");
     expect(labels).toContain("Calling X Agent");
     expect(labels).toContain("Searching with SerpAPI");
-    expect(labels).toContain("Searching your notes");
+    expect(labels).toContain("Reading a saved page");
     expect(labels).toContain("Reading Obsidian");
   });
 

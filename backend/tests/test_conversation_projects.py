@@ -50,10 +50,10 @@ def test_invalid_membership_does_not_mutate(tmp_path):
     assert owner.path.read_bytes() == before
 
 
-def test_folder_removal_refreshes_existing_conversation_projections(tmp_path):
+def test_folder_removal_refreshes_existing_conversation_indexes(tmp_path):
     projected = []
     owner = ConversationLifecycle(path=tmp_path/'conversations.json',
-        projector=lambda chat: projected.append((chat['id'],chat.get('projectId'))) or {})
+        indexer=lambda chat: projected.append((chat['id'],chat.get('projectId'))) or {})
     project = owner.change_project('create', {'name':'Research'})['project']
     owner.save('chat', {'title':'Chat','projectId':project['id'],'messages':[]})
     projected.clear()

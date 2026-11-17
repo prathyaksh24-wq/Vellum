@@ -1,9 +1,11 @@
 # Vellum Personal Intelligence Architecture
 
-This document defines the migration from an Obsidian-centered knowledge system
-to a local-first, Cerebras-style evidence architecture. The migration is
-additive: existing conversations, memory, retrieval, plugins, skills, and wiki
-behavior remain available until their replacement path has reached parity.
+This document defines Vellum's local-first, Cerebras-style evidence
+architecture. Vellum began with an Obsidian-centered knowledge system; that
+vault, its Knowledge Wiki and its importers have been retired. Obsidian remains
+only an optional connector for a user's own vault. The remaining migration is
+additive: conversations, memory, retrieval, plugins and skills stay available
+until their replacement path has reached parity.
 
 ## Outcome
 
@@ -19,7 +21,7 @@ Sources and tools
   -> entities, observations, and claims
   -> temporal preference model
   -> retrieval indexes and context packs
-  -> chat, coding, specialists, frontend, and Obsidian projections
+  -> chat, specialists and frontend
 ```
 
 ## Ownership
@@ -30,9 +32,7 @@ Sources and tools
 | Active thread state | LangGraph checkpoints | LangGraph checkpoints |
 | Durable personal memory | Memory Orchestrator SQLite | Memory Orchestrator SQLite |
 | User model | Honcho | Honcho, fed only approved derived signals |
-| Raw source evidence | `Vault/Library` and legacy source folders | Knowledge Core source records and blobs |
-| Maintained wiki | `Vault/Knowledge` | Karpathy-style Obsidian projection |
-| Human-readable conversations | `Vault/Agent/Conversations` | Obsidian projection |
+| Raw source evidence | Knowledge Core source records and blobs | Knowledge Core source records and blobs |
 | Keyword and semantic indexes | FTS5 and Chroma | Rebuildable indexes |
 | Skills | Hermes `SKILL.md` packages | Hermes `SKILL.md` packages |
 
@@ -89,7 +89,7 @@ KNOWLEDGE_TOOL_OBSERVATION_LEARNING=false
 ```
 
 Shadow writes are best-effort and cannot fail an existing memory write. Reads
-continue through the established Memory Orchestrator and Knowledge Wiki until
+continue through the established Memory Orchestrator until
 retrieval evaluations, privacy checks, and count reconciliation pass.
 
 ## Existing Data Adapters
@@ -100,11 +100,6 @@ The bootstrap API previews by default. Applying it is explicit and repeatable.
 - Memory Orchestrator `memory_items` become private-local source records. Saved,
   pending, and archived status stays in source metadata; the Memory Orchestrator
   remains the current owner.
-- `Library/` notes become raw source records according to folder policy.
-- `Knowledge/` pages are imported as legacy maintained evidence and registered as projections.
-- `Agent/Conversations` and `Agent/Memories` are registered as projections only.
-- Archived conversation projections under `Archive/Agent/Conversations` and
-  `Archive/Legacy Agent Logs` are registered as archived projections only.
 - Memory summaries and generated `data/memory/USER.md` / `MEMORY.md` snapshots
   are registered as projections, not independent source evidence.
 - Existing FTS5 rows and Chroma identifiers are registered by logical reference,
@@ -115,34 +110,14 @@ The bootstrap API previews by default. Applying it is explicit and repeatable.
 All existing stores are opened read-only. The `apply` operation writes only to
 the shadow Knowledge Core. No adapter deletes, renames, or rewrites existing
 files or retrieval indexes. Every generated projection is marked
-`do_not_reingest: true` so a later vault scan cannot turn it into duplicate
-evidence.
+`do_not_reingest: true` so a later import cannot turn it into duplicate
+evidence. The former Obsidian vault importer has been removed.
 
 The CLI supports explicit opt-out for each source group:
 
 ```powershell
-.venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --no-memories --no-archives --no-retrieval-indexes
+.venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --no-memories --no-retrieval-indexes
 ```
-
-## Phase 3 Materialization Canary
-
-Phase 3 does not change read ownership. It proves the existing adapters and
-Knowledge Core can materialize a bounded evidence set safely before any cutover.
-The canary selects exactly one conversation, one non-X vault source, one X item,
-and one generated wiki projection marked `do_not_reingest: true`.
-
-Preview performs no writes. Apply requires the literal confirmation token,
-creates and verifies a pre-canary backup, imports the same selection twice, and
-checks stable source/version/observation/projection counts, stable IDs, retained
-provenance, local citation retrieval, unchanged source files, projection policy,
-and SQLite integrity. A failed gate restores the verified backup automatically
-and retains a local archive of the failed canary state for diagnosis.
-
-The YouTube connector keeps provider boundaries additive: official OAuth owns
-channel identity and subscription snapshots, Google Takeout owns historical
-activity events, and transcript/live-search tools own content evidence. All
-feeds converge on stable YouTube video and channel IDs in Knowledge Core. See
-`docs/YOUTUBE_INTEGRATION.md`.
 
 ## Observation Semantics
 
@@ -292,9 +267,7 @@ Initial additive endpoints:
 - `GET /api/knowledge/core/projections`
 - `POST /api/knowledge/core/context-packs`
 - `POST /api/knowledge/core/bootstrap`
-- `POST /api/knowledge/core/materialization-canary`
 
-The existing wiki endpoints remain stable throughout migration.
 
 ## Cutover Gates
 
@@ -330,15 +303,6 @@ Applying the existing-data bootstrap requires the literal confirmation token:
 
 ```powershell
 .venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --apply --confirm APPLY_KNOWLEDGE_BOOTSTRAP
-```
-
-Run the bounded Phase 3 proof in preview mode first. Apply is CLI-only and
-requires Vellum to be stopped. It runs the same selection twice and rolls back
-automatically if reconciliation fails:
-
-```powershell
-.venv\Scripts\python.exe scripts\knowledge_core.py materialize-canary
-.venv\Scripts\python.exe scripts\knowledge_core.py materialize-canary --apply --confirm APPLY_KNOWLEDGE_CANARY
 ```
 
 Backups use SQLite's online backup API, include content-addressed blobs and a

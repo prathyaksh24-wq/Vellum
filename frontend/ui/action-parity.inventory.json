@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1024,
-      "sha256": "b0c9a035ad1708d701a7de79db7858a4ee935be15d5682f0d115d22192820fae"
+      "count": 1011,
+      "sha256": "dbeb8a1d573aa9da3331c7c79f5cae125ab35a62aadd71b6cc12d46698036dc9"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -730,24 +730,6 @@
       "probe": {
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "onMemoryAction('memory.conversations.import'"
-      }
-    },
-    {
-      "surface": "Knowledge",
-      "name": "check health",
-      "actionId": "knowledge.health.check",
-      "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onAction('knowledge.health.check', {})"
-      }
-    },
-    {
-      "surface": "Knowledge",
-      "name": "rebuild index",
-      "actionId": "knowledge.index.rebuild",
-      "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
-        "text": "onAction('knowledge.index.rebuild', {})"
       }
     },
     {

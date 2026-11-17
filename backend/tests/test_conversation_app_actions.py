@@ -330,16 +330,13 @@ def test_delete_requires_operation_bound_confirmation_and_rejects_tampering(tmp_
         lifecycle.get("chat-1")
 
 
-def test_lifecycle_runs_canonical_projection_index_and_cleanup_hooks(tmp_path) -> None:
+def test_lifecycle_runs_canonical_index_and_cleanup_hooks(tmp_path) -> None:
     calls: list[tuple[str, str]] = []
     lifecycle = ConversationLifecycle(
         path=tmp_path / "conversations.json",
         clock=lambda: FIXED_NOW,
         indexer=lambda conversation: calls.append(("index", conversation["id"])) or {"indexed_turns": 1},
-        projector=lambda conversation: calls.append(("project", conversation["id"])) or {"ok": True},
-        archiver=lambda conversation: calls.append(("archive", conversation["id"])) or {"ok": True},
         delete_fts=lambda thread_id: calls.append(("fts", thread_id)) or 2,
-        clear_context=lambda thread_id: calls.append(("context", thread_id)) or 1,
         delete_session=lambda thread_id: calls.append(("session", thread_id)),
         rename_session=lambda thread_id, title: calls.append(("title", f"{thread_id}:{title}")),
     )
@@ -350,27 +347,21 @@ def test_lifecycle_runs_canonical_projection_index_and_cleanup_hooks(tmp_path) -
     deleted = lifecycle.delete("chat-1", expected_revision=1)
 
     assert updated["memory_index"] == {"indexed_turns": 1}
-    assert updated["obsidian_projection"] == {"ok": True}
+    assert "obsidian_projection" not in updated
     assert deleted["deleted_fts_rows"] == 2
-    assert deleted["deleted_context_refs"] == 1
     assert calls == [
         ("title", "thread-1:Renamed"),
         ("index", "chat-1"),
-        ("project", "chat-1"),
-        ("archive", "chat-1"),
         ("fts", "thread-1"),
-        ("context", "thread-1"),
         ("session", "thread-1"),
     ]
 
 
-def test_fork_copies_messages_through_selected_boundary_and_context(tmp_path) -> None:
-    copied: list[tuple[str, str]] = []
+def test_fork_copies_messages_through_selected_boundary(tmp_path) -> None:
     lifecycle = ConversationLifecycle(
         path=tmp_path / "conversations.json",
         clock=lambda: FIXED_NOW,
         conversation_id_factory=lambda: "chat-fork",
-        copy_context=lambda source, destination: copied.append((source, destination)) or 2,
     )
     lifecycle.save("chat-source", {
         "thread_id": "thread-source",
@@ -396,9 +387,7 @@ def test_fork_copies_messages_through_selected_boundary_and_context(tmp_path) ->
     assert receipt.result["conversation"]["messages"][0]["attachments"] == [{"name": "brief.pdf"}]
     assert receipt.result["conversation"]["fork"]["source_conversation_id"] == "chat-source"
     assert receipt.result["conversation"]["fork"]["message_count"] == 2
-    assert receipt.result["copied_context_refs"] == 2
     assert receipt.result["navigation"]["conversation_id"] == "chat-fork"
-    assert copied == [("thread-source", "chat-fork")]
     assert len(lifecycle.get("chat-source")["messages"]) == 3
 
 
@@ -418,27 +407,6 @@ def test_fork_rejects_a_boundary_outside_the_source_conversation(tmp_path) -> No
 
     assert receipt.status == "failed"
     assert receipt.error_code == "FORK_BOUNDARY_NOT_FOUND"
-    assert [item["id"] for item in lifecycle.list()] == ["chat-source"]
-
-
-def test_failed_context_copy_clears_partial_fork_state(tmp_path) -> None:
-    cleared: list[str] = []
-
-    def fail_copy(_source: str, _destination: str) -> int:
-        raise RuntimeError("copy failed")
-
-    lifecycle = ConversationLifecycle(
-        path=tmp_path / "conversations.json",
-        conversation_id_factory=lambda: "chat-fork",
-        copy_context=fail_copy,
-        clear_context=lambda destination: cleared.append(destination) or 1,
-    )
-    lifecycle.save("chat-source", {"title": "Research", "messages": []})
-
-    with pytest.raises(RuntimeError, match="copy failed"):
-        lifecycle.fork("chat-source")
-
-    assert cleared == ["chat-fork"]
     assert [item["id"] for item in lifecycle.list()] == ["chat-source"]
 
 

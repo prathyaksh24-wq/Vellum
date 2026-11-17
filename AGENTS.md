@@ -38,15 +38,15 @@ and completion checks are explicit.
 ## Product and architecture invariants
 
 - Vellum is privacy-first and local-first. Canonical conversations, identity,
-  memory, vault data, mappings, keys, exports, deletion, and backups remain
+  memory, knowledge, mappings, keys, exports, deletion, and backups remain
   user-owned and local.
 - Cloud inference is optional and uses minimized, purpose-specific disclosure.
   Preserve `Ask before sharing`, `Protect for me`, and bounded `Full context`.
   Describe external processing truthfully; ordinary cloud prompts are not local.
 - Follow the active ownership table in
   `docs/memory-knowledge-architecture.md`. Knowledge Core migrations remain
-  additive until their documented cutover gates pass; Obsidian and generated
-  views are projections where the ownership docs say they are.
+  additive until their documented cutover gates pass. Obsidian is not Vellum's
+  knowledge base; it is only an optional connector for a user's own vault.
 - Keep the main Vellum agent capable and user-facing. Specialists use the shared
   catalog, typed delegation, and permissioned capabilities; they do not own raw
   integrations or silently become a second orchestration runtime.
@@ -145,7 +145,7 @@ Before declaring completion:
 - Repository topology and canonical runtime surfaces: `docs/ARCHITECTURE.md`.
 - Frontend/API capability and contract work:
   `docs/architecture/frontend-backend-contracts.md`.
-- Memory, conversation, Knowledge Wiki, or Knowledge Core ownership:
+- Memory, conversation, or Knowledge Core ownership:
   `docs/memory-knowledge-architecture.md` and
   `docs/PERSONAL_INTELLIGENCE_ARCHITECTURE.md`.
 - Agent profiles, delegation, and capability permissions:

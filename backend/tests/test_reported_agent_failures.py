@@ -19,7 +19,7 @@ from test_youtube_intelligence_capability import _snapshot
 def test_x_does_not_claim_published_when_cli_returns_no_post_receipt(tmp_path):
     provider = AgentReachXProvider(runner=lambda args, **kw: subprocess.CompletedProcess(args, 0, '{"success":true}', ''))
     provider.available = lambda: True
-    agent = XAgent(tmp_path, x_service=XCapabilityService(agent_reach_provider=provider, allow_posts=True))
+    agent = XAgent(x_service=XCapabilityService(agent_reach_provider=provider, allow_posts=True))
     result = agent.execute_action_request({"action":"x.publish_post", "payload":{"text":"A requested post."}})
     assert result.status == "error"
     assert "Posted to X" not in result.summary
@@ -28,10 +28,9 @@ def test_x_does_not_claim_published_when_cli_returns_no_post_receipt(tmp_path):
 
 def test_youtube_imported_data_question_reads_local_evidence_not_public_how_to(tmp_path):
     calls = []
-    service = YoutubeCapabilityService(vault_root=tmp_path,
-        search_backend=lambda query, limit: calls.append(query) or [{"title":"How to start YouTube"}],
+    service = YoutubeCapabilityService(search_backend=lambda query, limit: calls.append(query) or [{"title":"How to start YouTube"}],
         personal_context_backend=_snapshot)
-    result = YoutubeAgent(tmp_path, youtube_service=service).answer("what can u tell me about my youtube data from the imported snapshot")
+    result = YoutubeAgent(youtube_service=service).answer("what can u tell me about my youtube data from the imported snapshot")
     assert calls == []
     assert "Sidemen" in result.summary
     assert "local Knowledge Core" in result.analysis

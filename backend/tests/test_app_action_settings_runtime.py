@@ -229,7 +229,6 @@ def make_runtime():
             "skipped_turns": 1,
             "scanned_turns": 4,
         },
-        obsidian_memory_importer=lambda: {"imported_count": 0, "skipped_count": 0},
     )
     runtime = AppActionRuntime(
         clock=lambda: datetime(2026, 9, 18, tzinfo=timezone.utc),

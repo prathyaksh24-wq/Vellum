@@ -23,7 +23,7 @@ from agent.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_COLLECTIONS = ("obsidian_vault", "agent_queries")
+DEFAULT_COLLECTIONS = ("agent_queries",)
 
 _singleton: "VectorStore | None" = None
 _singleton_lock = threading.Lock()

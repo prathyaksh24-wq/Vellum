@@ -16,7 +16,6 @@ from test_app_action_settings_runtime import make_runtime
 def prompt_messages(monkeypatch):
     model = SimpleNamespace(id='test/model',label='Test model',tool_calling_compatibility='compatible')
     monkeypatch.setattr(graph, 'get_provider_registry', lambda:SimpleNamespace(current_model=lambda:model))
-    monkeypatch.setattr(graph, '_get_project_ctx', lambda:SimpleNamespace(build=lambda *a:'Private profile evidence'))
     monkeypatch.setattr(graph, '_get_skill_registry', lambda:None)
     monkeypatch.setattr(graph, 'build_skill_activation_block', lambda *a,**k:'')
     monkeypatch.setattr(graph, 'get_agent_catalog', lambda:SimpleNamespace(specialist_skill_ids=lambda:set()))
@@ -42,7 +41,6 @@ def test_fast_answers_skip_private_context_for_general_facts_but_not_personal_re
         messages = prompt_messages('Why is the sky blue?')
         content = '\n'.join(message.content for message in messages)
         assert 'Private memory evidence' not in content
-        assert 'Private profile evidence' not in content
         assert not any(message.additional_kwargs.get('vellum_context_layer') == 'personal_memory' for message in messages)
     with personalization_scope({'fastAnswers':True}, 'What do my notes say?'):
         messages = prompt_messages('What do my notes say?')
@@ -50,15 +48,12 @@ def test_fast_answers_skip_private_context_for_general_facts_but_not_personal_re
         assert len(evidence) == 1
         assert isinstance(evidence[0], HumanMessage)
         assert 'Private memory evidence' in evidence[0].content
-        assert 'Private profile evidence' in evidence[0].content
         assert 'Private memory evidence' not in messages[0].content
-        assert 'Private profile evidence' not in messages[0].content
         assert messages[-1].content == 'What do my notes say?'
     with personalization_scope({'fastAnswers':True}, 'Why is the sky blue?'):
         messages = prompt_messages('Why is the sky blue?\n\n[Recent Vellum conversation context]\nUser: I am a designer.')
         content = '\n'.join(message.content for message in messages)
         assert 'Private memory evidence' not in content
-        assert 'Private profile evidence' not in content
 
 
 def test_preferences_do_not_leak_between_requests(prompt):

@@ -53,4 +53,3 @@ class ConversationSearchResponse(BaseModel):
 class ConversationOrganizationResponse(BaseModel):
     conversation: dict[str, Any]
     memory_index: dict[str, Any] = Field(default_factory=dict)
-    obsidian_projection: dict[str, Any] = Field(default_factory=dict)

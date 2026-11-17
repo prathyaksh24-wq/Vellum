@@ -3,7 +3,6 @@ import asyncio
 from types import SimpleNamespace
 
 from agent.memory.fts5 import FTS5Memory
-from agent.obsidian.vault import ObsidianVault
 from agent.scheduler import digest
 
 
@@ -17,15 +16,13 @@ def test_build_digest_prompt_lists_facts():
 
 def test_run_digest_returns_none_without_facts(tmp_path):
     memory = FTS5Memory(tmp_path / "fts5.db")
-    vault = ObsidianVault(tmp_path / "Vault")
 
-    result = asyncio.run(digest.run_digest(memory=memory, vault=vault, now=datetime(2026, 5, 5)))
+    result = asyncio.run(digest.run_digest(memory=memory, now=datetime(2026, 5, 5)))
 
     assert result is None
-    assert not (tmp_path / "Vault" / "Agent").exists()
 
 
-def test_run_digest_writes_summary_note(monkeypatch, tmp_path):
+def test_run_digest_returns_summary_without_writing_notes(monkeypatch, tmp_path):
     memory = FTS5Memory(tmp_path / "fts5.db")
     memory.add_qa_pair(
         query="What about F1 standings?",
@@ -33,7 +30,6 @@ def test_run_digest_writes_summary_note(monkeypatch, tmp_path):
         thread_id="sports",
         source_paths=[],
     )
-    vault = ObsidianVault(tmp_path / "Vault")
     captured = {}
 
     async def fake_openrouter_chat(**kwargs):
@@ -42,12 +38,12 @@ def test_run_digest_writes_summary_note(monkeypatch, tmp_path):
 
     monkeypatch.setattr(digest, "openrouter_chat", fake_openrouter_chat)
 
-    note_path = asyncio.run(digest.run_digest(memory=memory, vault=vault, now=datetime(2026, 5, 5)))
+    monkeypatch.chdir(tmp_path)
 
-    assert note_path is not None
-    note = (tmp_path / "Vault" / "Agent" / "Digests" / "Digest 2026-05-05.md")
-    assert note.exists()
-    assert "F1 interest" in note.read_text(encoding="utf-8")
+    summary = asyncio.run(digest.run_digest(memory=memory, now=datetime(2026, 5, 5)))
+
+    assert summary == "## Insights\n- F1 interest"
+    assert not (tmp_path / "Vault").exists()
     assert captured["model_override"]
     assert captured["session_id"] == "digest-2026-05-05"
 
@@ -74,7 +70,7 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
     monkeypatch.setattr(
         digest,
         "get_settings",
-        lambda: SimpleNamespace(enable_nightly_digest=True, enable_vault_retention=True),
+        lambda: SimpleNamespace(enable_nightly_digest=True),
     )
 
     async def dreaming_job():
@@ -93,7 +89,6 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
         "youtube_creator_tracking",
         "memory_dreaming",
         "nightly_digest",
-        "vault_retention",
         "youtube_intelligence_projection",
         "discord_intelligence_sync",
         "skill_curator_tick",
@@ -108,7 +103,6 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
     assert records["nightly_digest"]["schedule"]["expression"] == "15 2 * * *"
     assert records["youtube_intelligence_projection"]["schedule"]["expression"] == "30 2 * * *"
     assert records["discord_intelligence_sync"]["schedule"]["seconds"] == 60
-    assert records["vault_retention"]["schedule"]["expression"] == "0 3 * * *"
     assert records["memory_dreaming"]["schedule"]["expression"] == "0 2 * * *"
     assert records["skill_curator_tick"]["schedule"]["seconds"] == 3600
     for record in records.values():
@@ -141,14 +135,35 @@ def test_start_scheduler_pauses_disabled_builtins(monkeypatch, tmp_path):
     monkeypatch.setattr(
         digest,
         "get_settings",
-        lambda: SimpleNamespace(enable_nightly_digest=False, enable_vault_retention=True),
+        lambda: SimpleNamespace(enable_nightly_digest=False),
     )
 
     digest.start_scheduler(scheduler=scheduler)
 
     records = {r["builtin_key"]: r for r in store.list()}
     assert records["nightly_digest"]["state"] == "paused"
-    assert records["vault_retention"]["state"] == "active"
+    assert records["memory_dreaming"]["state"] == "active"
     job_ids = {job[2]["id"] for job in scheduler.jobs}
-    assert f"automation-{records['vault_retention']['id']}" in job_ids
+    assert f"automation-{records['memory_dreaming']['id']}" in job_ids
     assert f"automation-{records['nightly_digest']['id']}" not in job_ids
+
+
+def test_seed_builtins_removes_retired_vault_retention(tmp_path):
+    from agent.automations.builtins import seed_builtins
+    from agent.automations.schedules import parse_schedule
+    from agent.automations.store import AutomationStore
+
+    store = AutomationStore(tmp_path / "automations")
+    store.create(
+        name="Vault retention",
+        instructions="Run vault retention.",
+        schedule=parse_schedule("0 3 * * *").to_dict(),
+        destination={"kind": "new_chat"},
+        permission={"full_access": True},
+        builtin=True,
+        builtin_key="vault_retention",
+    )
+
+    seed_builtins(store)
+
+    assert "vault_retention" not in {record.get("builtin_key") for record in store.list()}

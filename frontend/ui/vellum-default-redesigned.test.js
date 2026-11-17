@@ -70,8 +70,8 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("routes Knowledge, Books, YouTube, and feed mutations through App Actions", () => {
-    expect(html).toContain("onAction('knowledge.health.check', {})");
-    expect(html).toContain("onAction('knowledge.index.rebuild', {})");
+    expect(html).not.toContain("knowledge.health.check");
+    expect(html).not.toContain("knowledge.index.rebuild");
     expect(html).toContain("dispatchKnowledgeAction('composer.attachment.import', {source:'picker'})");
     expect(html).toContain("onAction('youtube.connection.start'");
     expect(html).toContain("onAction('youtube.sync'");
@@ -289,11 +289,11 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("API.runtimes.subagents()");
   });
 
-  test("uses one live memory state and supports Vault or wiki chat context", () => {
+  test("uses one live memory state without the retired Vault or wiki views", () => {
     expect(html).toContain("<MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData}");
     expect(html).toContain("Array.isArray(summary.sections)");
-    expect(html).toContain("API.knowledge.search(value, scope, 20)");
-    expect(html).toContain("New chat with context");
-    expect(html).toContain("API.conversations.attachContext");
+    expect(html).not.toContain("KnowledgeGraphView");
+    expect(html).not.toContain("API.knowledge.search(");
+    expect(html).not.toContain("API.conversations.attachContext");
   });
 });

@@ -51,8 +51,7 @@ def compound_dispatcher(tmp_path, *, fail_action='', tracks=None):
     registry.invoke = invoke
     state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
     state.set_active_agent('compound', 'YoutubeAgent', selected=True)
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path,
-        agent_catalog=AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent': agent}),
+    dispatcher = LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent': agent}),
         state_store=state)
     return dispatcher, calls, saved, state
 
@@ -156,7 +155,7 @@ def test_artist_followup_survives_hours_of_active_controls_and_context_reload(tm
         clock[0]+=1200
         result=dispatcher.maybe_handle('what is playing and how many playlist i have saved?','compound')
         assert result.status=='answered' and '1 saved playlist' in result.answer
-    reloaded=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=dispatcher.agent_catalog,
+    reloaded=LiveAgentDispatcher(agent_catalog=dispatcher.agent_catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
     result=reloaded.maybe_handle('no from psot malone','compound')
     assert result.status=='answered' and 'Post Malone' in result.answer

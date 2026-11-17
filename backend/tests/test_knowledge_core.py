@@ -43,8 +43,7 @@ def build_core(tmp_path: Path) -> KnowledgeCore:
     return KnowledgeCore(
         KnowledgeStore(tmp_path / "data" / "knowledge" / "core.db", tmp_path / "data" / "knowledge" / "blobs"),
         conversations_path=conversations,
-        vault_root=vault,
-    )
+        )
 
 
 def test_source_versions_are_content_addressed_and_idempotent(tmp_path: Path) -> None:
@@ -144,19 +143,6 @@ def test_bootstrap_preview_is_read_only_and_apply_is_repeatable(tmp_path: Path) 
         ),
         encoding="utf-8",
     )
-    source = core.vault_root / "Library" / "X" / "naval"
-    source.mkdir(parents=True)
-    (source / "post.md").write_text(
-        "---\nstatus_id: 123\nsource_trust: imported_archive\n---\n# Attention\nAttention is scarce.\n",
-        encoding="utf-8",
-    )
-    projection = core.vault_root / "Agent" / "Conversations"
-    projection.mkdir(parents=True)
-    (projection / "chat.md").write_text(
-        "---\nconversation_id: chat-1\ngenerated_by: vellum\n---\n# Architecture\n",
-        encoding="utf-8",
-    )
-
     preview = core.bootstrap(BootstrapRequest(apply=False))
     assert preview["mode"] == "preview"
     assert preview["conversations"]["scanned"] == 1
@@ -165,14 +151,11 @@ def test_bootstrap_preview_is_read_only_and_apply_is_repeatable(tmp_path: Path) 
     first = core.bootstrap(BootstrapRequest(apply=True))
     second = core.bootstrap(BootstrapRequest(apply=True))
     assert first["conversations"]["versions"] == 1
-    assert first["vault"]["projections"] == 1
-    assert first["vault"]["versions"] == 1
     assert second["conversations"]["versions"] == 0
-    assert second["vault"]["versions"] == 0
+    assert "vault" not in first
     counts = core.store.status()["counts"]
-    assert counts["sources"] == 2
-    assert counts["source_versions"] == 2
-    assert counts["projections"] == 1
+    assert counts["sources"] == 1
+    assert counts["source_versions"] == 1
 
 
 def test_existing_data_adapters_import_memory_archives_and_indexes_idempotently(tmp_path: Path) -> None:
@@ -213,12 +196,6 @@ def test_existing_data_adapters_import_memory_archives_and_indexes_idempotently(
         thread_id="thread-1",
         source_paths=["ui-conversation:thread-1:turn-1"],
     )
-    archive = core.vault_root / "Archive" / "Agent" / "Conversations"
-    archive.mkdir(parents=True)
-    (archive / "chat-1.md").write_text(
-        "---\nconversation_id: chat-1\ngenerated_by: vellum\n---\n# Archived chat\n",
-        encoding="utf-8",
-    )
     core.vector_reader = lambda _limit: [
         {
             "collection": "obsidian_vault",
@@ -234,8 +211,6 @@ def test_existing_data_adapters_import_memory_archives_and_indexes_idempotently(
     assert preview["memories"]["scanned"] == 1
     assert preview["memories"]["archived"] == 1
     assert preview["memories"]["projections"] == 2
-    assert preview["vault"]["projections"] == 1
-    assert preview["vault"]["archived"] == 1
     assert preview["retrieval_indexes"]["scanned"] == 2
     assert core.store.status()["counts"]["sources"] == 0
     assert core.store.status()["counts"]["projections"] == 0
@@ -253,7 +228,7 @@ def test_existing_data_adapters_import_memory_archives_and_indexes_idempotently(
     counts = core.store.status()["counts"]
     assert counts["sources"] == 1
     assert counts["source_versions"] == 1
-    assert counts["projections"] == 5
+    assert counts["projections"] == 4
     memory_source = core.store.list_sources(kind="memory_item")[0]
     assert memory_source["external_policy"] == "deny_raw"
     assert memory_source["sensitivity"] == "private_local_only"

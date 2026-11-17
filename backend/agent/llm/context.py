@@ -17,7 +17,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 # Unknown/dynamic tools and mutations are deliberately excluded. Only complete
 # read rounds may leave a single long task's working prompt.
-_READ_TOOLS = frozenset({"search_my_notes", "conversation_history", "web_search", "tool_search", "tool_describe",
+_READ_TOOLS = frozenset({"conversation_history", "web_search", "tool_search", "tool_describe",
                          "read_file", "list_files", "library_docs", "specialist_read",
                          "specialist_schema", "specialist_skill", "specialist_memory"})
 

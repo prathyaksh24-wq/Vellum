@@ -49,7 +49,7 @@ not inherit microphone approval. Removing this file while the app is closed
 resets the saved microphone choice. Operating-system microphone restrictions
 remain in effect independently.
 
-Application data stays in the existing backend, vault, and configured model
+Application data stays in the existing backend, Knowledge Core and configured model
 locations. No browser profile is copied or deleted. Electron maintains a
 separate workspace session, so device settings in a regular Brave/WebView2
 profile are not automatically imported. The regular web UI remains supported.
@@ -130,7 +130,7 @@ The backend builder uses the prepared repository `.venv`, or
 the Windows Python runtime and installed site-packages, preserving distribution
 metadata/licenses while excluding caches, test fixtures and editable checkout
 hooks. This initial package includes installed ML libraries and can be large;
-workspace model/cache directories are not copied. `.env`, vaults, databases, sign-ins,
+workspace model/cache directories are not copied. `.env`, databases, sign-ins,
 browser profiles and user skill state are not copied into the release. Generated
 resources and package outputs are ignored by Git. Check the build environment
 without copying or installing anything:
@@ -146,7 +146,7 @@ First packaged launch asks for the existing Vellum workspace folder containing
 profile; it does not move, import or duplicate user data. `VELLUM_WORKSPACE_ROOT`
 can explicitly select a folder. Backend code and bundled plugin implementations
 come from the release; mutable state and `.env` stay in the selected workspace.
-Existing absolute vault/model locations remain in effect.
+Existing absolute data and model locations remain in effect.
 
 The desktop host checks `/api/desktop/runtime` for protocol version, exact
 backend build identity and workspace before reusing a server. Otherwise it starts

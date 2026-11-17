@@ -101,10 +101,6 @@ class Settings(BaseSettings):
         alias="LLM_ROUTING_MAX_TRANSIENT_RETRIES",
     )
 
-    # Obsidian
-    obsidian_vault_path: Path = Field(alias="OBSIDIAN_VAULT_PATH")
-    agent_notes_folder: str = Field(default="Agent", alias="AGENT_NOTES_FOLDER")
-
     # Personal Intelligence / canonical Knowledge Core
     knowledge_core_enabled: bool = Field(default=True, alias="KNOWLEDGE_CORE_ENABLED")
     knowledge_shadow_write: bool = Field(default=True, alias="KNOWLEDGE_SHADOW_WRITE")
@@ -293,11 +289,6 @@ class Settings(BaseSettings):
         alias="LOG_LEVEL",
     )
     enable_nightly_digest: bool = Field(default=True, alias="ENABLE_NIGHTLY_DIGEST")
-    enable_vault_retention: bool = Field(default=True, alias="ENABLE_VAULT_RETENTION")
-    retention_archive_days: int = Field(default=30, alias="RETENTION_ARCHIVE_DAYS")
-    retention_delete_days: int = Field(default=90, alias="RETENTION_DELETE_DAYS")
-    enable_vault_watcher: bool = Field(default=True, alias="ENABLE_VAULT_WATCHER")
-    vault_watcher_debounce_seconds: float = Field(default=2.0, alias="VAULT_WATCHER_DEBOUNCE_SECONDS")
     voice_enabled: bool = Field(default=True, alias="VOICE_ENABLED")
     voice_stt_engine: str = Field(default="moonshine", alias="VOICE_STT_ENGINE")
     voice_stt_model: str = Field(default="tiny", alias="VOICE_STT_MODEL")
@@ -327,7 +318,6 @@ class Settings(BaseSettings):
     computer_use_guard_watchdog_seconds: float = Field(default=20.0, alias="COMPUTER_USE_GUARD_WATCHDOG_SECONDS")
 
     @field_validator(
-        "obsidian_vault_path",
         "chroma_path",
         "knowledge_core_db_path",
         "knowledge_blob_path",
@@ -353,7 +343,6 @@ class Settings(BaseSettings):
         # uses the path as its storage location, so a CWD-dependent path would
         # produce split-brain databases (one when started from Vellum/, another
         # from Vellum/backend/).
-        self.obsidian_vault_path = _resolve_against_repo(self.obsidian_vault_path)
         if self.chroma_path is not None:
             self.chroma_path = _resolve_against_repo(self.chroma_path)
         self.knowledge_core_db_path = _resolve_against_repo(self.knowledge_core_db_path)
@@ -365,10 +354,6 @@ class Settings(BaseSettings):
         self.privacy_receipt_path = _resolve_against_repo(self.privacy_receipt_path)
         self.web_extract_cache_dir = _resolve_against_repo(self.web_extract_cache_dir)
 
-        if not self.obsidian_vault_path.exists():
-            raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
-        if not self.obsidian_vault_path.is_dir():
-            raise ValueError(f"Obsidian vault path is not a directory: {self.obsidian_vault_path}")
         if not self.enable_pii_scrubbing:
             raise ValueError("ENABLE_PII_SCRUBBING must remain true for cloud-capable modes.")
         if not self.reviewed_openrouter_providers:
@@ -397,12 +382,6 @@ class Settings(BaseSettings):
             raise ValueError("OLLAMA_REQUEST_TIMEOUT_SECONDS must be greater than 0.")
         if not self.ollama_base_url.startswith(("https://", "http://")):
             raise ValueError("OLLAMA_BASE_URL must be an HTTP(S) URL.")
-        if self.vault_watcher_debounce_seconds < 0:
-            raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
-        if self.retention_archive_days < 1:
-            raise ValueError("RETENTION_ARCHIVE_DAYS must be at least 1.")
-        if self.retention_delete_days <= self.retention_archive_days:
-            raise ValueError("RETENTION_DELETE_DAYS must be greater than RETENTION_ARCHIVE_DAYS.")
         if self.voice_stt_engine not in {"moonshine"}:
             raise ValueError("VOICE_STT_ENGINE must be moonshine.")
         if self.voice_tts_engine not in {"kokoro"}:

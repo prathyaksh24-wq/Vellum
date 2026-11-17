@@ -83,18 +83,16 @@ class YoutubeAgent:
 
     def __init__(
         self,
-        vault_root: Path,
         youtube_service: YoutubeCapabilityService | None = None,
         tool_registry: ToolRegistry | None = None,
         synthesizer=None,
         planner=None,
     ) -> None:
-        self.vault_root = Path(vault_root)
         self.tool_registry = tool_registry
         self.synthesizer = synthesizer
         self.planner = planner
         self.youtube_service = youtube_service or (
-            None if tool_registry is not None else YoutubeCapabilityService(vault_root=self.vault_root)
+            None if tool_registry is not None else YoutubeCapabilityService()
         )
 
     def can_handle(self, query: str) -> bool:

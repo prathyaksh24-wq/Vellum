@@ -25,7 +25,6 @@ def test_seed_builtins_creates_records(tmp_path):
         "memory_dreaming",
         "youtube_browser_history",
         "nightly_digest",
-        "vault_retention",
         "youtube_intelligence_projection",
         "discord_intelligence_sync",
         "skill_curator_tick",
@@ -66,7 +65,7 @@ def test_seed_builtins_marks_disabled_builtins_paused(tmp_path):
 
     records = {r["builtin_key"]: r for r in store.list()}
     assert records["nightly_digest"]["state"] == "paused"
-    assert records["vault_retention"]["state"] == "active"
+    assert records["memory_dreaming"]["state"] == "active"
 
 
 def test_reset_builtin_restores_defaults(tmp_path):
@@ -149,7 +148,7 @@ def test_run_builtin_unknown_key_is_noop(monkeypatch):
 def test_fire_routes_builtin_to_run_builtin_not_reasoning(monkeypatch, tmp_path):
     store = _store(tmp_path)
     builtins.seed_builtins(store)
-    automation_id = next(r["id"] for r in store.list() if r["builtin_key"] == "vault_retention")
+    automation_id = next(r["id"] for r in store.list() if r["builtin_key"] == "nightly_digest")
 
     class FakeScheduler:
         def __init__(self):

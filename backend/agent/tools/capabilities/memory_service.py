@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -10,8 +9,7 @@ from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistr
 
 
 class MemoryCapabilityService:
-    def __init__(self, vault_root: Path, sessions_db: Path) -> None:
-        self.vault_root = Path(vault_root)
+    def __init__(self, sessions_db: Path) -> None:
         self.sessions_db = Path(sessions_db)
 
     def build_registry(self) -> ToolRegistry:
@@ -69,31 +67,31 @@ class MemoryCapabilityService:
         )
         return registry
 
-    def build_context_pack(self, payload: dict[str, Any]) -> dict[str, Any]:
-        query = str(payload.get("query", ""))
+    @staticmethod
+    def _canonical_cards() -> tuple[list[dict[str, str]], bool]:
+        """Saved memories the runtime already read from the canonical owner.
+
+        Returns the cards and whether memory is disabled for this run.
+        """
         from agent.profiles.execution import get_profile_execution
         execution = get_profile_execution()
-        has_canonical_packet = execution is not None and ('saved_memories' in execution.memory or 'settings' in execution.memory)
-        canonical = []
-        if has_canonical_packet:
-            # The runtime already read the canonical SQLite owner under the
-            # profile policy. Do not make MemoryAgent depend on a stale export.
-            packet = execution.memory
-            if not packet.get('settings', {}).get('memory_enabled', True):
-                return {'action': 'memory.build_context_pack', 'query': query, 'cards': [], 'disabled': True}
-            for item in packet.get('saved_memories') or []:
-                if isinstance(item, dict) and item.get('text'):
-                    canonical.append({'text': str(item['text']), 'path': 'memory:' + str(item.get('id') or ''),
-                        'scope': str(item.get('scope') or ''), 'source_thread_id': str(item.get('source_thread_id') or '')})
-        search_payload = {
-            "query": query,
-            "limit": 8,
-            "agent_name": payload.get("agent_name"),
-            "scopes": payload.get("scopes"),
-        }
-        cards = canonical if has_canonical_packet else self.search_cards(search_payload)["cards"]
-        if not cards and not has_canonical_packet:
-            cards = self.search_cards({**search_payload, "query": ""})["cards"]
+        if execution is None or not ('saved_memories' in execution.memory or 'settings' in execution.memory):
+            return [], False
+        packet = execution.memory
+        if not packet.get('settings', {}).get('memory_enabled', True):
+            return [], True
+        cards = []
+        for item in packet.get('saved_memories') or []:
+            if isinstance(item, dict) and item.get('text'):
+                cards.append({'text': str(item['text']), 'path': 'memory:' + str(item.get('id') or ''),
+                    'scope': str(item.get('scope') or ''), 'source_thread_id': str(item.get('source_thread_id') or '')})
+        return cards, False
+
+    def build_context_pack(self, payload: dict[str, Any]) -> dict[str, Any]:
+        query = str(payload.get("query", ""))
+        cards, disabled = self._canonical_cards()
+        if disabled:
+            return {'action': 'memory.build_context_pack', 'query': query, 'cards': [], 'disabled': True}
         return {
             "action": "memory.build_context_pack",
             "query": query,
@@ -114,35 +112,22 @@ class MemoryCapabilityService:
                 "global",
                 "user_profile",
                 "shared",
-                f"agent:{agent_name}",
+                _canonical_scope(f"agent:{agent_name}"),
             }
         )
         cards: list[dict[str, str]] = []
-        memory_root = self.vault_root / "Agent" / "Memories"
         if limit == 0:
             return {"action": "memory.search_cards", "cards": cards}
-
-        for path in sorted(memory_root.rglob("*.md")) if memory_root.exists() else []:
-            text = path.read_text(encoding="utf-8")
-            metadata = _card_frontmatter(text)
-            card_scope = _canonical_scope(metadata.get("scope") or "shared")
-            visible_to = _visible_to(metadata.get("visible_to"))
-            if card_scope not in allowed_scopes and agent_name not in visible_to:
+        canonical, disabled = self._canonical_cards()
+        for card in [] if disabled else canonical:
+            card_scope = _canonical_scope(card.get("scope") or "shared")
+            if card_scope not in allowed_scopes:
                 continue
-            if visible_to and agent_name not in visible_to:
+            if query_terms and not query_terms.intersection(_terms(card["text"])):
                 continue
-            if query_terms and not query_terms.intersection(_terms(text)):
-                continue
-            cards.append(
-                {
-                    "path": path.relative_to(self.vault_root).as_posix(),
-                    "text": text[:1000],
-                    "scope": card_scope,
-                }
-            )
+            cards.append({**card, "text": card["text"][:1000], "scope": card_scope})
             if limit is not None and len(cards) >= limit:
                 break
-
         return {"action": "memory.search_cards", "cards": cards}
 
     def review_proposals(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -253,26 +238,3 @@ def _canonical_scope(value: Any) -> str:
         return f"{prefix}:{identity}" if identity else "shared"
     return _slug(raw)
 
-
-def _card_frontmatter(text: str) -> dict[str, Any]:
-    if not text.startswith("---"):
-        return {}
-    metadata: dict[str, Any] = {}
-    for line in text.splitlines()[1:]:
-        if line.strip() == "---":
-            break
-        if ":" not in line or line[:1].isspace():
-            continue
-        key, value = line.split(":", 1)
-        clean = value.strip()
-        try:
-            metadata[key.strip()] = json.loads(clean)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            metadata[key.strip()] = clean.strip("\"'")
-    return metadata
-
-
-def _visible_to(value: Any) -> set[str]:
-    if isinstance(value, list):
-        return {str(item) for item in value if str(item).strip()}
-    return set()

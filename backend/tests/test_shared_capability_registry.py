@@ -10,11 +10,10 @@ from agent.tools.registry import ToolPermissionError
 
 def test_shared_registry_combines_specialist_and_mcp_capabilities(tmp_path):
     registry = build_shared_tool_registry(
-        vault_root=tmp_path / "Vault",
         sessions_db=tmp_path / "sessions.db",
         x_service=XCapabilityService(search_posts_backend=lambda query, max_results: [], allow_posts=True),
-        youtube_service=YoutubeCapabilityService(vault_root=tmp_path / "Vault", search_backend=lambda query, max_results: []),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        youtube_service=YoutubeCapabilityService(search_backend=lambda query, max_results: []),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         mcp_service=McpCapabilityService(runner=lambda server, params: "ok"),
     )
 
@@ -37,7 +36,6 @@ def test_shared_registry_combines_specialist_and_mcp_capabilities(tmp_path):
 
 def test_default_shared_registry_does_not_give_x_agent_generic_web_fallback(tmp_path):
     registry = build_shared_tool_registry(
-        vault_root=tmp_path / "Vault",
         sessions_db=tmp_path / "sessions.db",
     )
 
@@ -46,15 +44,14 @@ def test_default_shared_registry_does_not_give_x_agent_generic_web_fallback(tmp_
 
 def test_shared_registry_enforces_agent_permissions_and_confirmation(tmp_path):
     registry = build_shared_tool_registry(
-        vault_root=tmp_path / "Vault",
         sessions_db=tmp_path / "sessions.db",
         x_service=XCapabilityService(
             search_posts_backend=lambda query, max_results: [],
             post_backend=lambda text: {"id": "post-1", "text": text},
             allow_posts=True,
         ),
-        youtube_service=YoutubeCapabilityService(vault_root=tmp_path / "Vault", search_backend=lambda query, max_results: []),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        youtube_service=YoutubeCapabilityService(search_backend=lambda query, max_results: []),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         mcp_service=McpCapabilityService(runner=lambda server, params: "ok"),
     )
 

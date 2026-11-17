@@ -18,7 +18,6 @@ from agent.tools.registry import ToolInvocationObserver, ToolRegistry
 
 def build_shared_tool_registry(
     *,
-    vault_root: Path,
     sessions_db: Path | None = None,
     x_service: XCapabilityService | None = None,
     youtube_service: YoutubeCapabilityService | None = None,
@@ -29,12 +28,13 @@ def build_shared_tool_registry(
     mcp_service: McpCapabilityService | None = None,
     tool_observer: ToolInvocationObserver | None = None,
 ) -> ToolRegistry:
-    root = Path(vault_root)
-    memory_sessions_db = sessions_db or root / "Agent" / "Memory" / "shared-tool-registry-sessions.db"
+    from agent.config import REPO_ROOT
+
+    memory_sessions_db = sessions_db or REPO_ROOT / "data" / "memory" / "shared-tool-registry-sessions.db"
     services = (
         x_service or XCapabilityService(),
-        youtube_service or YoutubeCapabilityService(vault_root=root),
-        memory_service or MemoryCapabilityService(vault_root=root, sessions_db=memory_sessions_db),
+        youtube_service or YoutubeCapabilityService(),
+        memory_service or MemoryCapabilityService(sessions_db=memory_sessions_db),
         mcp_service or McpCapabilityService(),
         books_service or BooksCapabilityService(),
         calendar_service or CalendarCapabilityService(),

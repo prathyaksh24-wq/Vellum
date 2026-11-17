@@ -85,10 +85,10 @@ def test_youtube_agent_uses_browser_history_and_retains_displayed_link_order(tmp
         return {'available':True, 'provider':'browser', 'local_only':True, 'total':3,
             'refreshed_at':'2026-10-07T10:00:00Z', 'coverage':'recent_page', 'source_id':'src-history',
             'items':[{'video_id':f'abcdefghij{i}', 'title':f'Current account video {i}', 'day_label':'Today'} for i in range(3)]}
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=history,
+    service = YoutubeCapabilityService(browser_history_backend=history,
         takeout_history_backend=lambda *_args:pytest.fail('Fresh history must not read Takeout'),
         search_backend=lambda *_args:pytest.fail('Personal history must not search public videos'))
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=service)
+    agent = YoutubeAgent(youtube_service=service)
     first = agent.answer_with_context('what are the last 3 videos I watched?', {})
     assert first.status == 'answered' and first.summary.count('https://www.youtube.com/watch?v=') == 3
     assert 'browser just now' in first.summary and 'full watch history' in first.summary
@@ -100,10 +100,10 @@ def test_history_failure_is_honest_and_never_uses_takeout_or_public_search(tmp_p
     from agent.agents.youtube import YoutubeAgent
     from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
     def fail(): raise HistoryReadError('Sign into YouTube in Browser.')
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=fail,
+    service = YoutubeCapabilityService(browser_history_backend=fail,
         takeout_history_backend=lambda *_args:pytest.fail('No archive fallback'),
         search_backend=lambda *_args:pytest.fail('No public fallback'))
-    result = YoutubeAgent(vault_root=tmp_path, youtube_service=service).answer('what did I recently watch?')
+    result = YoutubeAgent(youtube_service=service).answer('what did I recently watch?')
     assert result.status == 'needs_fetch' and 'Sign into YouTube' in result.summary
 
 
@@ -119,7 +119,7 @@ def test_refresh_action_uses_same_history_service_and_returns_content_free_recei
 def test_history_capability_is_not_a_raw_browser_tool_for_the_main_agent(tmp_path):
     from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
     from agent.tools.registry import ToolPermissionError
-    registry = YoutubeCapabilityService(vault_root=tmp_path).build_registry()
+    registry = YoutubeCapabilityService().build_registry()
     with pytest.raises(ToolPermissionError):
         registry.invoke('youtube.watch_history', {}, agent_name='VellumAgent')
 
@@ -128,8 +128,7 @@ def test_history_capability_is_not_a_raw_browser_tool_for_the_main_agent(tmp_pat
 def test_invalid_history_arguments_are_rejected_before_browser_read(tmp_path, payload):
     from pydantic import ValidationError
     from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
-    service = YoutubeCapabilityService(vault_root=tmp_path,
-        browser_history_backend=lambda:pytest.fail('Invalid arguments must not read the browser'))
+    service = YoutubeCapabilityService(browser_history_backend=lambda:pytest.fail('Invalid arguments must not read the browser'))
     with pytest.raises(ValidationError):
         service.watch_history(payload)
 
@@ -139,9 +138,8 @@ def test_yesterday_filter_and_channel_projection_apply_before_display_limit(tmp_
     from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
     items = [{'video_id':f'abcdefghij{i}', 'title':f'Video {i}', 'channel_title':f'Creator {i%2}',
         'day_label':'Yesterday' if i>0 else 'Today'} for i in range(4)]
-    service = YoutubeCapabilityService(vault_root=tmp_path,
-        browser_history_backend=lambda:{'available':True,'provider':'browser','total':4,'items':items})
-    result = YoutubeAgent(vault_root=tmp_path, youtube_service=service).answer('name 2 channels from videos I watched yesterday')
+    service = YoutubeCapabilityService(browser_history_backend=lambda:{'available':True,'provider':'browser','total':4,'items':items})
+    result = YoutubeAgent(youtube_service=service).answer('name 2 channels from videos I watched yesterday')
     assert result.summary.count('Creator') == 2 and 'Video 0' not in result.summary
     assert 'Video 1' not in result.summary and 'recorded channels for' in result.summary
 
@@ -192,7 +190,7 @@ def test_background_read_preserves_visible_tab_and_closes_temporary_tab(monkeypa
 
 def test_verified_ordinal_link_does_not_depend_on_model_availability(tmp_path):
     from agent.agents.youtube import YoutubeAgent
-    agent = YoutubeAgent(vault_root=tmp_path, planner=lambda *_args:pytest.fail('Exact saved link needs no model'))
+    agent = YoutubeAgent(planner=lambda *_args:pytest.fail('Exact saved link needs no model'))
     result = agent.answer('give me the link to the second video', context={
         'account_request':{'source':'history','view':'videos'},
         'account_items':[{'video_id':'abcdefghij0','title':'First'},{'video_id':'abcdefghij1','title':'Second'}]})
@@ -202,10 +200,10 @@ def test_verified_ordinal_link_does_not_depend_on_model_availability(tmp_path):
 def test_history_creator_filter_uses_creator_not_video_title(tmp_path):
     from agent.agents.youtube import YoutubeAgent
     from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=lambda:{
+    service = YoutubeCapabilityService(browser_history_backend=lambda:{
         'available':True,'provider':'browser','items':[{'video_id':'abcdefghijk', 'title':'A different title',
             'channel_title':'Actual Creator'}]})
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=service,
+    agent = YoutubeAgent(youtube_service=service,
         planner=lambda *_args:{'source':'history','creator':'Actual Creator','limit':3})
     result = agent.answer('show videos by Actual Creator from my watch history')
     assert result.status == 'answered' and 'A different title' in result.summary

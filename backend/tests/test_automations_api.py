@@ -18,7 +18,6 @@ from agent.automations.store import AutomationStore
 @pytest.fixture(autouse=True)
 def isolated_store(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "start_scheduler", lambda: None)
-    monkeypatch.setattr(api, "start_vault_watcher", lambda: None)
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
     automations_api.set_store(AutomationStore(tmp_path / "data"))
     yield

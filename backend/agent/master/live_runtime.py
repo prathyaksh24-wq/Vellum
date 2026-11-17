@@ -22,7 +22,7 @@ def get_delegation_runtime() -> DelegationRuntime:
         return _RUNTIME
     with _RUNTIME_LOCK:
         if _RUNTIME is None:
-            catalog = AgentCatalog.default(get_settings().obsidian_vault_path)
+            catalog = AgentCatalog.default()
             _RUNTIME = DelegationRuntime(
                 agent_catalog=catalog,
                 memory_orchestrator=get_memory_orchestrator(),

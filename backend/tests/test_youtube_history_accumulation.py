@@ -200,8 +200,7 @@ def test_browser_identity_matches_legacy_account_hash():
 def test_cloud_profile_cannot_read_private_history(tmp_path):
     from agent.profiles.execution import ProfileExecution, profile_execution
     from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
-    service = YoutubeCapabilityService(vault_root=tmp_path,
-        browser_history_backend=lambda: pytest.fail("Private history must not reach an external profile model"))
+    service = YoutubeCapabilityService(browser_history_backend=lambda: pytest.fail("Private history must not reach an external profile model"))
     execution = ProfileExecution("YoutubeAgent", "openai/gpt-4o", "light", "", "", {}, "", "test")
     with profile_execution(execution), pytest.raises(ValueError, match="local only"):
         service.watch_history({})

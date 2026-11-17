@@ -75,7 +75,7 @@ def test_memory_packet_includes_external_provider_prefetch_context(tmp_path):
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
         provider_extensions=MemoryProviderExtensionManager([FakeProvider()]),
@@ -111,7 +111,7 @@ def test_record_turn_syncs_to_active_external_provider(tmp_path):
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
         provider_extensions=MemoryProviderExtensionManager([FakeProvider()]),

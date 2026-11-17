@@ -108,7 +108,7 @@ def test_own_latest_x_post_never_uses_public_search(tmp_path, message):
             return {'items':[{'handle':'owner','text':'A &amp; B','url':'https://x.com/owner/status/1'}]}
         def search_posts(self, payload):
             raise AssertionError('private account query reached public search')
-    response=XAgent(vault_root=tmp_path,x_service=Service()).answer(message)
+    response=XAgent(x_service=Service()).answer(message)
     assert calls == ['account']
     assert 'A & B' in response.summary
     assert len(response.sources) == 1
@@ -116,13 +116,13 @@ def test_own_latest_x_post_never_uses_public_search(tmp_path, message):
 @pytest.mark.parametrize('message', ['What did I watch recently on YouTube?', 'What did I recently watch?', 'Show my watch history'])
 def test_private_youtube_history_is_not_public_search(tmp_path, message):
     from agent.agents.youtube import YoutubeAgent
-    agent=YoutubeAgent(vault_root=tmp_path)
+    agent=YoutubeAgent()
     assert agent.can_handle(message)
     assert agent._is_takeout_query(message.lower())
 
 def test_youtube_data_access_is_account_intent(tmp_path):
     from agent.agents.youtube import YoutubeAgent
-    agent=YoutubeAgent(vault_root=tmp_path)
+    agent=YoutubeAgent()
     assert agent._is_account_query('do you have access to my youtube data?')
 
 def test_natural_calendar_availability_uses_requested_afternoon():
@@ -305,7 +305,7 @@ def test_read_x_link_fetches_target_without_preparing_write(tmp_path):
         def read_tweet(self, payload):
             calls.append(payload)
             return {"tweet": {"id": "123456789", "handle": "owner", "text": "Actual post", "url": "https://x.com/owner/status/123456789"}, "provider": "agent-reach"}
-    agent = XAgent(vault_root=tmp_path, x_service=Service())
+    agent = XAgent(x_service=Service())
     result = agent.answer("Read this tweet https://x.com/owner/status/123456789")
     assert calls == [{"tweet_id": "https://x.com/owner/status/123456789"}]
     assert result.summary == "@owner: Actual post"
@@ -318,7 +318,7 @@ def test_x_daily_limit_is_actionable_and_not_reported_as_success(tmp_path):
     class Service:
         def repost(self, payload):
             raise RuntimeError("Authorization: You have reached your daily limit for sending Tweets")
-    agent = XAgent(vault_root=tmp_path, x_service=Service())
+    agent = XAgent(x_service=Service())
     result = agent.execute_action_request({"action": "x.repost", "payload": {"tweet_id": "123456789"}})
     assert result.status == "error"
     assert "daily posting limit" in result.summary
@@ -337,6 +337,6 @@ def test_discovery_response_uses_bounded_local_interest_evidence(tmp_path):
     class Service:
         def personal_context(self, payload):
             return {"local_only": True, "channels": [{"label":"Learning", "evidence_count":5}], "search_themes": []}
-    result = YoutubeAgent(vault_root=tmp_path, youtube_service=Service()).answer("Discover something based on my interests in the imported YouTube snapshot")
+    result = YoutubeAgent(youtube_service=Service()).answer("Discover something based on my interests in the imported YouTube snapshot")
     assert "Learning" in result.summary and "snapshot" in result.summary
     assert result.status == "answered"

@@ -5,7 +5,7 @@ def test_agent_prompt_mentions_cloud_escalation():
     from agent.graph.agent import VELLUM_SYSTEM_PROMPT
 
     assert "escalate_to_cloud" in VELLUM_SYSTEM_PROMPT
-    assert "private vault" in VELLUM_SYSTEM_PROMPT.casefold()
+    assert "private personal context" in VELLUM_SYSTEM_PROMPT.casefold()
 
 
 def test_public_code_task_auto_allowed():

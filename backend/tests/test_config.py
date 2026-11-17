@@ -4,7 +4,7 @@ from agent.config import get_settings
 def test_settings_loads_paths_and_privacy_defaults():
     settings = get_settings()
 
-    assert settings.obsidian_vault_path.exists()
+    assert not hasattr(settings, "obsidian_vault_path")
     assert settings.zdr_only is True
     assert settings.enable_pii_scrubbing is True
     assert settings.privacy_mode == "protect_for_me"

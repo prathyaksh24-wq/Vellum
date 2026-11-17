@@ -1,0 +1,13 @@
+id: obsidian
+name: Obsidian
+type: connector
+category: Productivity
+version: 1.0.0
+default_enabled: false
+description: Optionally connect your own Obsidian vault through the Obsidian Local REST API plugin to read, search and, when you allow it, write notes. Vellum does not use Obsidian as its knowledge base. Requires OBSIDIAN_API_KEY.
+capabilities:
+  - obsidian.notes.read
+  - obsidian.notes.search
+  - obsidian.notes.write
+provides_tools:
+  - obsidian_api

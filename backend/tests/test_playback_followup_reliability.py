@@ -72,7 +72,7 @@ def test_curated_preview_handles_forbidden_public_playlist():
 @pytest.mark.parametrize('query', ['post simething on x','noo i meant post somethign rsndom on x'])
 def test_typo_correction_drafts_x_post_without_searching(tmp_path,query):
     from agent.agents.x_agent import XAgent
-    agent=XAgent(tmp_path,post_drafter=lambda request:'A short draft.')
+    agent=XAgent(post_drafter=lambda request:'A short draft.')
     response=agent.answer(query)
     assert response.action_request['payload']['text']=='A short draft.'
 
@@ -195,7 +195,7 @@ def test_playlist_membership_reads_later_pages():
 
 def test_x_explicit_target_requests_route_without_main_model(tmp_path):
     from agent.agents.x_agent import XAgent
-    agent=XAgent(vault_root=tmp_path,x_service=object())
+    agent=XAgent(x_service=object())
     assert agent.can_handle('Post "A reliability test." to X')
     assert agent.can_handle('delete https://x.com/i/status/12345')
 

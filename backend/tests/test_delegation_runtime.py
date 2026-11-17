@@ -43,7 +43,7 @@ def build_runtime(tmp_path: Path, *, clock: list[datetime] | None = None):
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=SQLiteMemoryStore(tmp_path / "memory.db"),
         memory_dir=tmp_path / "memory-files",
         specialist_cache=cache,

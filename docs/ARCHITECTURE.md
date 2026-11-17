@@ -9,7 +9,7 @@ Vellum is a local-first agent workspace with four main layers:
 - Frontend and desktop surfaces for chat, tools, settings, skills, memory, plugins, terminal, and workspace interaction.
 - FastAPI backend exposing stable HTTP, streaming, and WebSocket contracts.
 - Agent runtime for model routing, LangGraph execution, tools, specialists, memory, skills, and guarded computer-use flows.
-- Local storage in the repository, Obsidian vault, SQLite databases, ChromaDB, Honcho/PostgreSQL, package directories, and audit logs.
+- Local storage in the repository, SQLite databases, Knowledge Core blobs, ChromaDB, Honcho/PostgreSQL, package directories, and audit logs.
 
 ## Frontend
 
@@ -35,7 +35,7 @@ Important backend modules:
 - `backend/agent/graph/` for the main LangGraph agent.
 - `backend/agent/llm/` for provider and routing behavior.
 - `backend/agent/memory/` for memory orchestration and session state.
-- `backend/agent/obsidian/` for vault access, retention, and Knowledge Wiki.
+- `backend/agent/knowledge/` for the Knowledge Core, books, sources and provenance.
 - `backend/agent/skills/` for procedural memory and Skills Hub services.
 - `backend/agent/tools/` for model-callable tools and capability registry.
 
@@ -84,7 +84,6 @@ Vellum separates memory into several layers:
 - Memory Orchestrator data and settings in local stores.
 - FTS5 search for keyword recall.
 - Honcho for local user modeling, backed by PostgreSQL in Docker.
-- Obsidian conversation projections for user-readable history.
 - Saved and archived memory surfaces.
 
 Current conversation context wins when it conflicts with older memory.
@@ -98,13 +97,12 @@ It stores source identity, immutable versions, observations, provenance,
 relationships, temporal preferences, projections, and context-package lineage.
 It currently runs additively in shadow mode.
 
-The Knowledge Wiki remains a maintained Obsidian synthesis layer under
-`Vault/Knowledge` during migration. It is separate from raw `Vault/Library`
-material and will become the optional Karpathy-style projection after cutover.
+Vellum no longer keeps an Obsidian vault or a Markdown Knowledge Wiki. Raw
+sources live in the Knowledge Core as source records and content-addressed
+blobs; memory stays with the Memory Orchestrator and Honcho. Obsidian is only
+an optional connector (Plugins) for working with a user's own vault.
 
-Normal wiki operations read and write maintained Knowledge pages. Raw Library content is read only when explicitly approved for a specific ingestion request. Pages carry trust and provenance metadata, and revisions are versioned under the wiki history directory.
-
-See `docs/knowledge-wiki.md` and `docs/PERSONAL_INTELLIGENCE_ARCHITECTURE.md`.
+See `docs/PERSONAL_INTELLIGENCE_ARCHITECTURE.md`.
 
 ## Tools And MCP Integrations
 
@@ -112,11 +110,11 @@ Tool implementations live under `backend/agent/tools/` and MCP wrappers live und
 
 Supported integration areas include:
 
-- filesystem access scoped to the configured vault path
+- read-only access to saved browser pages in the browser cache
 - Apify-backed scraping workflows
 - Playwright browser inspection/control
 - GitHub and local git helpers
-- Obsidian API access
+- optional Obsidian Local REST API access for the user's own vault (off by default)
 - Context7 and GitMCP documentation lookup
 - Context Mode execution and retrieval
 - Tavily, Firecrawl, SerpAPI, DuckDuckGo, and web extraction helpers
@@ -185,7 +183,7 @@ Important local storage locations:
 - `data/llm-routing/routing.db` for routing state.
 - `data/skills/catalog.db` for the skills catalog projection.
 - `.skills/` for canonical skill packages and snapshots.
-- `Vault/` for Obsidian content, Knowledge Wiki pages, and agent projections.
+- `data/knowledge/` for the Knowledge Core database and content-addressed blobs.
 - `data/embeddings/chroma` for embedded ChromaDB vector storage when enabled.
 - Docker `honcho_data` and `honcho_cache` volumes for Honcho's PostgreSQL and Redis data.
 
@@ -197,13 +195,13 @@ Vellum's privacy gate classifies user input before model use:
 - YELLOW input is scrubbed locally.
 - GREEN input can proceed with query tagging.
 
-Folder policy controls vault context injection. Private or raw source folders may contribute to local retrieval decisions without sending raw content to a model unless a specific policy permits it.
+Book source content follows profile consent and per-book `Local only` overrides; private personal context needs explicit approval before it reaches a cloud model.
 
 Audit logs store metadata, not prompt or response content. Skills, memory, and knowledge workflows avoid storing raw private task text in catalog metadata or usage logs.
 
 ## Local Versus Cloud Processing
 
-Local processing includes privacy classification, scrubbing, Obsidian IO, SQLite/FTS5 storage, ChromaDB storage, Honcho storage and reasoning through Ollama, package/catalog operations, conversation exports, and audit logs.
+Local processing includes privacy classification, scrubbing, Knowledge Core storage, SQLite/FTS5 storage, ChromaDB storage, Honcho storage and reasoning through Ollama, package/catalog operations, conversation exports, and audit logs.
 
 Cloud or external calls occur only when configured features require them:
 
@@ -220,8 +218,8 @@ User input
   -> FastAPI request or stream route
   -> privacy classification and scrubbing
   -> conversation/session lookup
-  -> memory and Knowledge Wiki retrieval
-  -> folder policy and context shaping
+  -> memory and Knowledge Core retrieval
+  -> privacy policy and context shaping
   -> model/provider route selection
   -> LangGraph agent invocation
   -> tool or specialist dispatch as needed

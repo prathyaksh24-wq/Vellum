@@ -28,8 +28,7 @@ def build_core(tmp_path: Path) -> KnowledgeCore:
             tmp_path / "data" / "knowledge" / "blobs",
         ),
         conversations_path=conversations,
-        vault_root=vault,
-    )
+        )
 
 
 def learning_request() -> BookUserLearningRequest:

@@ -2,7 +2,7 @@
 Nightly self-learning digest.
 
 Reads recent indexed Q&A pairs, summarizes them with the fast OpenRouter model,
-and writes the digest back into the local Obsidian vault.
+and records the summary as a skill-learning signal.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from agent.config import get_settings
 from agent.llm.openrouter import openrouter_chat
 from agent.memory.fts5 import FTS5Memory
-from agent.obsidian.vault import ObsidianVault
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +38,10 @@ Summary:"""
 async def run_digest(
     *,
     memory: FTS5Memory | None = None,
-    vault: ObsidianVault | None = None,
     now: datetime | None = None,
 ) -> str | None:
     settings = get_settings()
     memory = memory or FTS5Memory()
-    vault = vault or ObsidianVault(settings.obsidian_vault_path)
     now = now or datetime.now()
 
     logger.info("[DIGEST] Starting nightly self-learning digest.")
@@ -62,24 +59,7 @@ async def run_digest(
         session_id=f"digest-{now.strftime('%Y-%m-%d')}",
     )
 
-    date_str = now.strftime("%Y-%m-%d")
-    content = f"# Knowledge Digest - {date_str}\n\n{summary}"
-    note_path = vault.create_note(
-        folder=f"{settings.agent_notes_folder}/Digests",
-        title=f"Digest {date_str}",
-        content=content,
-    )
-
-    logger.info("[DIGEST] Digest written to Obsidian: %s", note_path)
-
-    # Sports curiosity self-calibration piggybacks on the nightly digest.
-    # No separate schedule — it only runs when the digest runs.
-    try:
-        from agent.scheduler.sports_calibration import run_safely as run_sports_calibration
-
-        run_sports_calibration(now=now if isinstance(now, datetime) else datetime.now())
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[DIGEST] sports calibration step failed: %s", exc)
+    logger.info("[DIGEST] Summarized %d recent facts.", len(facts))
 
     try:
         from agent.skills.learning import SkillLearningWorkflow
@@ -90,7 +70,7 @@ async def run_digest(
     except Exception as exc:  # noqa: BLE001
         logger.warning("[DIGEST] skill learning review failed: %s", exc)
 
-    return str(note_path)
+    return summary
 
 
 def start_scheduler(
@@ -100,7 +80,6 @@ def start_scheduler(
     automation_store=None,
 ) -> AsyncIOScheduler | None:
     settings = get_settings()
-    retention_enabled = bool(getattr(settings, "enable_vault_retention", True))
 
     scheduler = scheduler or AsyncIOScheduler()
     # Legacy direct registration kept for callers that pass an explicit job;
@@ -115,11 +94,10 @@ def start_scheduler(
         store=automation_store,
         builtins_enabled={
             "nightly_digest": bool(getattr(settings, "enable_nightly_digest", True)),
-            "vault_retention": retention_enabled,
             "discord_intelligence_sync": bool(getattr(settings, "discord_intelligence_sync_enabled", True)),
         },
     )
     scheduler.start()
-    logger.info("[SCHEDULER] Dreaming/digest/retention scheduler started.")
+    logger.info("[SCHEDULER] Dreaming/digest scheduler started.")
     return scheduler
 

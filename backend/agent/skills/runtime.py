@@ -14,7 +14,6 @@ from agent.config import REPO_ROOT
 
 SKILLS_PATH = REPO_ROOT / ".skills"
 CORE_TOOL_NAMES = {
-    "append_to_note",
     "browser_action",
     "browser_back",
     "browser_cdp",
@@ -38,7 +37,6 @@ CORE_TOOL_NAMES = {
     "computer_use",
     "computer_use_route",
     "context_mode",
-    "create_note",
     "escalate_to_cloud",
     "git_action",
     "github_read",
@@ -49,7 +47,6 @@ CORE_TOOL_NAMES = {
     "read_file",
     "repo_docs",
     "search_amazon",
-    "search_my_notes",
     "skills_list",
     "skill_view",
     "web_extract",

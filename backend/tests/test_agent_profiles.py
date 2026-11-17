@@ -304,7 +304,7 @@ def test_profile_v2_declares_instructions_skills_and_delegation_policy() -> None
 
 
 def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: Path) -> None:
-    catalog = AgentCatalog.default(vault_root=tmp_path)
+    catalog = AgentCatalog.default()
 
     x_binding = catalog.resolve("XAgent")
     youtube_binding = catalog.resolve("YoutubeAgent")

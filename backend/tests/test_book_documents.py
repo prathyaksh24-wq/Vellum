@@ -152,7 +152,6 @@ def build_core(
     return KnowledgeCore(
         KnowledgeStore(tmp_path / "knowledge.db", tmp_path / "blobs"),
         conversations_path=conversations,
-        vault_root=vault,
         book_malware_scanner=CleanScanner(),
         book_embedding_provider=book_embedding_provider or FixedBookEmbedder(),
         book_retrieval_index=book_retrieval_index or RecordingBookIndex(),
@@ -725,7 +724,6 @@ def test_book_retrieval_excludes_superseded_materializations(tmp_path: Path) -> 
     revised = KnowledgeCore(
         core.store,
         conversations_path=core.conversations_path,
-        vault_root=core.vault_root,
         book_embedding_provider=FixedBookEmbedder(),
         book_materialization_compiler_version="book-materializer-v2",
         book_retrieval_index=index,
@@ -986,7 +984,6 @@ def test_embedding_model_revision_changes_materialization_identity(tmp_path: Pat
     revised = KnowledgeCore(
         core.store,
         conversations_path=core.conversations_path,
-        vault_root=core.vault_root,
         book_embedding_provider=FixedBookEmbedder(),
         book_embedding_model_revision="weights-r2",
         book_retrieval_index=index,
@@ -1064,7 +1061,6 @@ def test_failed_candidate_cannot_replace_the_active_materialization(tmp_path: Pa
     failing_core = KnowledgeCore(
         core.store,
         conversations_path=core.conversations_path,
-        vault_root=core.vault_root,
         book_embedding_provider=InvalidBookEmbedder(),
         book_materialization_compiler_version="book-materializer-v2",
         book_retrieval_index=core.book_materializations.retrieval_index,
@@ -1164,7 +1160,6 @@ def test_compatible_rebuild_promotes_atomically_and_retains_the_previous_bundle(
     upgraded = KnowledgeCore(
         core.store,
         conversations_path=core.conversations_path,
-        vault_root=core.vault_root,
         book_embedding_provider=FixedBookEmbedder(),
         book_materialization_compiler_version="book-materializer-v2",
         book_retrieval_index=core.book_materializations.retrieval_index,

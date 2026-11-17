@@ -32,7 +32,6 @@ MEMORY_ENTRY_ARCHIVE_ACTION_ID = "memory.entry.archive"
 MEMORY_ENTRY_DELETE_ACTION_ID = "memory.entry.delete"
 MEMORY_DREAMING_RUN_ACTION_ID = "memory.dreaming.run"
 MEMORY_CONVERSATIONS_IMPORT_ACTION_ID = "memory.conversations.import"
-MEMORY_OBSIDIAN_IMPORT_ACTION_ID = "memory.obsidian.import"
 PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID = "provider.credential.configure"
 ROUTING_POLICY_SET_ACTION_ID = "llm.routing.policy.set"
 ROUTING_MODEL_POLICY_SET_ACTION_ID = "llm.routing.model_policy.set"
@@ -62,7 +61,6 @@ SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
-    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     ROUTING_POLICY_SET_ACTION_ID,
     ROUTING_MODEL_POLICY_SET_ACTION_ID,
@@ -82,7 +80,6 @@ CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
-    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
     ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
     ROUTING_CREDENTIAL_ADD_ACTION_ID,
     ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
@@ -146,7 +143,6 @@ class SettingsRuntimeActionService:
         credential_writer: Callable[[str, str], None],
         memory_dreaming_runner: Callable[[], dict[str, Any]],
         conversation_memory_importer: Callable[[int | None], dict[str, int]],
-        obsidian_memory_importer: Callable[[], dict[str, Any]],
         provider_selection_resumer: Callable[[str, AppActionContext], dict[str, Any]] | None = None,
         dictation_store_provider: Callable[[], Any] | None = None,
         config_writer: Callable[[str, str], None] | None = None,
@@ -158,7 +154,6 @@ class SettingsRuntimeActionService:
         self._credential_writer = credential_writer
         self._memory_dreaming_runner = memory_dreaming_runner
         self._conversation_memory_importer = conversation_memory_importer
-        self._obsidian_memory_importer = obsidian_memory_importer
         self._provider_selection_resumer = provider_selection_resumer
         self._dictation_store_provider = dictation_store_provider
         self._config_writer = config_writer
@@ -239,9 +234,6 @@ class SettingsRuntimeActionService:
         if action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
             self._require_confirmation(confirmed)
             return self._import_conversation_memories(arguments)
-        if action_id == MEMORY_OBSIDIAN_IMPORT_ACTION_ID:
-            self._require_confirmation(confirmed)
-            return self._import_obsidian_memories()
         if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID:
             return self._configure_provider_credential(arguments, confirmed=confirmed, context=_context)
         if action_id == ROUTING_POLICY_SET_ACTION_ID:
@@ -695,21 +687,6 @@ class SettingsRuntimeActionService:
             "_message": "Conversation memories imported.",
         }
 
-    def _import_obsidian_memories(self) -> dict[str, Any]:
-        try:
-            result = dict(self._obsidian_memory_importer() or {})
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise SettingsRuntimeActionError("MEMORY_IMPORT_FAILED", "Obsidian memory import failed.") from exc
-        imported = int(result.get("imported_count") or 0)
-        skipped = int(result.get("skipped_count") or 0)
-        return {
-            "changed": imported > 0,
-            "counts": {"imported_count": imported, "skipped_count": skipped},
-            "_target_kind": "memory_runtime",
-            "_target_id": "obsidian-import",
-            "_message": "Obsidian memories imported.",
-        }
-
     @staticmethod
     def _memory_id(arguments: dict[str, Any]) -> int:
         raw = arguments.get("memory_id", arguments.get("id"))
@@ -1126,15 +1103,6 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "user",
             "operation_bound",
             {"limit": {"type": "integer", "minimum": 1, "maximum": 100000}},
-            "memory-import",
-        ),
-        (
-            MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
-            "Import Obsidian memories",
-            "Import reviewed local memory notes without returning their content.",
-            "user",
-            "operation_bound",
-            {},
             "memory-import",
         ),
         (

@@ -39,7 +39,6 @@ class AgentCatalog:
     @classmethod
     def default(
         cls,
-        vault_root: Path,
         profile_dir: Path | str = Path("data/agent_profiles"),
     ) -> "AgentCatalog":
         from agent.agents.books import BooksAgent
@@ -56,21 +55,20 @@ class AgentCatalog:
         from agent.tools.capabilities.registry import build_shared_tool_registry
         from agent.plugins.discord_runtime import discord_service
 
-        root = Path(vault_root)
         discord_runtime_service = discord_service()
-        tools = build_shared_tool_registry(vault_root=root, discord_service=discord_runtime_service)
+        tools = build_shared_tool_registry(discord_service=discord_runtime_service)
         catalog = cls(profile_dir=profile_dir)
         catalog.tool_registry = tools
         books_profile = catalog.get("BooksAgent")
         agents = [
             BrowserAgent(tool_registry=tools),
             MusicAgent(tool_registry=tools),
-            XAgent(vault_root=root, tool_registry=tools),
-            YoutubeAgent(vault_root=root, tool_registry=tools, synthesizer=LocalYoutubeSynthesizer(), planner=LocalYoutubeAccountPlanner()),
-            MemoryAgent(vault_root=root, tool_registry=tools),
+            XAgent(tool_registry=tools),
+            YoutubeAgent(tool_registry=tools, synthesizer=LocalYoutubeSynthesizer(), planner=LocalYoutubeAccountPlanner()),
+            MemoryAgent(tool_registry=tools),
             DiscordAgent(tool_registry=tools, discord_service=discord_runtime_service, summarizer=LocalDiscordSummarizer()),
             CalendarAgent(tool_registry=tools),
-            SportsAgent(vault_root=root, tool_registry=tools),
+            SportsAgent(tool_registry=tools),
             BooksAgent(
                 tool_registry=tools,
                 synthesizer=RoutedBooksSynthesizer(

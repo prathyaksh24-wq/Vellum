@@ -60,7 +60,6 @@ from agent.app_actions.settings_runtime import (
     MEMORY_ENTRY_UPDATE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
-    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     ROUTING_CREDENTIAL_ADD_ACTION_ID,
     ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
@@ -87,11 +86,8 @@ from agent.app_actions.knowledge_sources import (
     BOOK_COMPILE_ACTION_ID,
     BOOK_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
-    KNOWLEDGE_HEALTH_CHECK_ACTION_ID,
-    KNOWLEDGE_INDEX_REBUILD_ACTION_ID,
     KNOWLEDGE_SOURCE_ACTION_IDS,
     KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS,
-    KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
     KnowledgeSourceActionError,
     knowledge_source_action_definitions,
 )
@@ -1104,13 +1100,6 @@ class AppActionRuntime:
                 arguments={"mode": mode} if mode else {},
             )
 
-        if re.fullmatch(polite + r"(?:rebuild|refresh)\s+(?:the\s+)?knowledge\s+index", normalized):
-            return AppActionRequest(action_id=KNOWLEDGE_INDEX_REBUILD_ACTION_ID)
-        if re.fullmatch(
-            polite + r"(?:check|lint)\s+(?:the\s+)?knowledge(?:\s+wiki)?(?:\s+health)?",
-            normalized,
-        ):
-            return AppActionRequest(action_id=KNOWLEDGE_HEALTH_CHECK_ACTION_ID)
         if re.fullmatch(polite + r"(?:import|add)\s+(?:a\s+|an\s+)?(?:epub|book)(?:\s+file)?", normalized):
             return AppActionRequest(action_id=BOOK_IMPORT_ACTION_ID)
         book_process = re.fullmatch(
@@ -1816,9 +1805,6 @@ class AppActionRuntime:
                 elif request.action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
                     target_kind, target_reference = "memory_runtime", "conversation-import"
                     confirmation_message = "Confirm importing existing chats into memory."
-                elif request.action_id == MEMORY_OBSIDIAN_IMPORT_ACTION_ID:
-                    target_kind, target_reference = "memory_runtime", "obsidian-import"
-                    confirmation_message = "Confirm importing reviewed local memory notes."
                 elif request.action_id == ROUTING_MODEL_POLICY_REMOVE_ACTION_ID:
                     target_kind = "llm_routing"
                     target_reference = f"model-policy:{str(request.arguments.get('model_id') or '').strip()}"
@@ -1859,19 +1845,13 @@ class AppActionRuntime:
                     request,
                     context,
                     definition,
-                    target_kind="knowledge_source" if request.action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID else "book_document",
+                    target_kind="book_document",
                     target_reference=str(
-                        "knowledge-source"
-                        if request.action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID
-                        else request.arguments.get("import_id")
+                        request.arguments.get("import_id")
                         or request.arguments.get("reference")
                         or request.action_id
                     ),
-                    message=(
-                        "Confirm importing this approved source into Knowledge."
-                        if request.action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID
-                        else "Confirm changing this Book knowledge."
-                    ),
+                    message="Confirm changing this Book knowledge.",
                 )
             return self._dispatch_knowledge_source(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
@@ -3815,8 +3795,6 @@ class AppActionRuntime:
             "target_revision": int(deleted.get("revision", 0)),
             "conversation_id": conversation_id,
             "deleted_fts_rows": mutation.get("deleted_fts_rows", 0),
-            "deleted_context_refs": mutation.get("deleted_context_refs", 0),
-            "obsidian_projection": mutation.get("obsidian_projection", {}),
             "message": "Chat deleted.",
         }
         if conversation_id == context.invocation_conversation_id:
@@ -3862,7 +3840,6 @@ class AppActionRuntime:
             "target_revision": int(conversation.get("revision", 0)),
             "conversation": conversation,
             "fork_boundary": mutation.get("fork_boundary"),
-            "copied_context_refs": mutation.get("copied_context_refs", 0),
             "navigation": {"view": "chat", "conversation_id": conversation["id"]},
             "message": f"Forked {conversation.get('title') or 'chat'}.",
         }

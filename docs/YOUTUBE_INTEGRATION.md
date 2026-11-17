@@ -13,9 +13,8 @@ systems.
 | Transcript ingestion | Video content evidence | YouTube video ID |
 | Live search tools | Current query evidence | YouTube video or channel ID |
 
-Knowledge Core owns imported source records and versions. Obsidian may receive
-readable projections later, but projections are marked `do_not_reingest` and
-never become a second source.
+Knowledge Core owns imported source records and versions. Any readable
+projection is marked `do_not_reingest` and never becomes a second source.
 
 ## OAuth Configuration
 

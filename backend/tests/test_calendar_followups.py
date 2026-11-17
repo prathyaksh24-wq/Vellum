@@ -19,7 +19,7 @@ def harness(tmp_path):
     agent=CalendarAgent(tool_registry=svc.build_registry(),now=lambda tz:datetime(2026,10,1,12,tzinfo=tz))
     catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'CalendarAgent':agent})
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path/'vault',agent_catalog=catalog,state_store=state)
+    dispatcher=LiveAgentDispatcher(agent_catalog=catalog,state_store=state)
     return agent,dispatcher,state,calls
 
 

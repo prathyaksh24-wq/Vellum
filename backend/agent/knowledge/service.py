@@ -22,8 +22,7 @@ from agent.knowledge.book_materialization import (
     BookMaterializationPipeline,
     BookRetrievalIndex,
 )
-from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
-from agent.knowledge.materialization import MaterializationCanary
+from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, RetrievalIndexAdapter
 from agent.knowledge.models import (
     BookDiscoveryPolicy,
     BookDiscoveryRequest,
@@ -40,7 +39,6 @@ from agent.knowledge.models import (
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
-    MaterializationCanaryRequest,
     ObservationActor,
     ObservationInput,
     PromotionStatus,
@@ -56,7 +54,6 @@ class KnowledgeCore:
         store: KnowledgeStore,
         *,
         conversations_path: Path,
-        vault_root: Path,
         memory_db_path: Path | None = None,
         fts5_db_path: Path | None = None,
         memory_snapshot_dir: Path | None = None,
@@ -76,7 +73,6 @@ class KnowledgeCore:
     ) -> None:
         self.store = store
         self.conversations_path = Path(conversations_path)
-        self.vault_root = Path(vault_root)
         data_root = self.conversations_path.parent.parent
         self.memory_db_path = Path(memory_db_path) if memory_db_path is not None else data_root / "memory" / "sessions.db"
         self.fts5_db_path = Path(fts5_db_path) if fts5_db_path is not None else data_root / "memory" / "fts5.db"
@@ -151,20 +147,10 @@ class KnowledgeCore:
                 "future": "Knowledge Core candidates separate from Library",
                 "migration": "shadow_only",
             },
-            "knowledge_wiki": {
-                "current": "Vault/Knowledge",
-                "future": "Obsidian projection of Knowledge Core insights",
-                "migration": "shadow_import_then_project",
-            },
             "raw_sources": {
-                "current": "Vault/Library and legacy source folders",
+                "current": "Knowledge Core blobs and source records",
                 "future": "Knowledge Core blobs and source records",
-                "migration": "content_hash_import",
-            },
-            "obsidian": {
-                "current": "mixed canonical and projections",
-                "future": "optional readable projection and explicit user-authored source",
-                "migration": "classify_before_cutover",
+                "migration": "canonical",
             },
             "retrieval_indexes": {
                 "current": "FTS5 and Chroma",
@@ -363,7 +349,6 @@ class KnowledgeCore:
             "errors": [],
         }
         memory_stats = dict(conversation_stats)
-        vault_stats = dict(conversation_stats)
         index_stats = dict(conversation_stats)
         if request.conversations:
             adapter = ConversationAdapter(self.store)
@@ -379,15 +364,6 @@ class KnowledgeCore:
                 snapshot_dir=self.memory_snapshot_dir,
             )
             memory_stats = adapter.import_records(apply=request.apply, limit=request.limit).as_dict()
-        if request.vault_library or request.knowledge_wiki or request.agent_projections or request.archives:
-            adapter = ObsidianAdapter(self.store, self.vault_root)
-            paths = adapter.candidate_paths(
-                library=request.vault_library,
-                knowledge_wiki=request.knowledge_wiki,
-                agent_projections=request.agent_projections,
-                archives=request.archives,
-            )
-            vault_stats = adapter.import_paths(paths, apply=request.apply, limit=request.limit).as_dict()
         if request.retrieval_indexes:
             adapter = RetrievalIndexAdapter(
                 self.store,
@@ -400,17 +376,9 @@ class KnowledgeCore:
             "mode": "apply" if request.apply else "preview",
             "conversations": conversation_stats,
             "memories": memory_stats,
-            "vault": vault_stats,
             "retrieval_indexes": index_stats,
             "status": self.store.status() if request.apply else None,
         }
-
-    def materialize_canary(self, request: MaterializationCanaryRequest) -> dict[str, Any]:
-        return MaterializationCanary(
-            self.store,
-            conversations_path=self.conversations_path,
-            vault_root=self.vault_root,
-        ).run(request)
 
     def create_context_pack(self, request: ContextPackRequest) -> dict[str, Any]:
         return self.store.create_context_pack(request)

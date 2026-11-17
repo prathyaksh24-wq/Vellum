@@ -85,7 +85,7 @@ def test_suggestion_acceptance_is_bound_to_one_pending_action(tmp_path, confirma
     agent, _, calls = fixture_agent(planner=lambda *_:{'operation':'suggest_music', 'query':'mellow'})
     state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
     catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
     assert dispatcher.maybe_handle('suggest music for my mood', 'music').status == 'needs_fetch'
     assert not any(name == 'spotify_playback' for name,_ in calls)
     result = dispatcher.maybe_handle(confirmation, 'music')
@@ -149,7 +149,7 @@ def test_exact_dated_recall_delegates_even_with_memory_agent_selected(tmp_path):
     state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
     state.set_active_agent('music', 'MemoryAgent', selected=True)
     catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
     result = dispatcher.maybe_handle('what song did u play from drake yesterday?', 'music')
     assert result.agent_name == 'MusicAgent' and result.status == 'answered'
     assert calls[0][1]['action'] == 'recently_played'
@@ -693,7 +693,7 @@ def test_music_intent_delegates_even_when_a_different_specialist_was_selected(tm
     state.set_active_agent("qa", "XAgent", selected=True)
     catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={"XAgent":SelectedX(), "MusicAgent":music})
     runtime = DelegationRuntime(agent_catalog=catalog, memory_orchestrator=None, audit_path=tmp_path / "audit.jsonl")
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state, delegation_runtime=runtime)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state, delegation_runtime=runtime)
     response = dispatcher.maybe_handle("play blinding lights", "qa")
     assert response.agent_name == "MusicAgent"
     assert "Playing Blinding Lights" in response.answer
@@ -792,7 +792,7 @@ def test_artist_correction_uses_thread_context_through_the_shared_dispatcher(tmp
     music, _, calls = fixture_agent(tracks=tracks)
     catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={"MusicAgent":music})
     state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
     assert dispatcher.maybe_handle("play the ride", "music").status == "needs_fetch"
     result = dispatcher.maybe_handle(correction, "music")
     assert result.agent_name == "MusicAgent"
@@ -846,7 +846,7 @@ def test_playlist_creation_uses_the_same_pending_action_authority(tmp_path, conf
     music, _, calls = fixture_agent()
     catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={"MusicAgent":music})
     state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
     preview = dispatcher.maybe_handle('create a playlist called Night Drive with Blinding Lights by The Weeknd', "music")
     assert "Confirm" in preview.answer
     result = dispatcher.maybe_handle(confirmation, "music")

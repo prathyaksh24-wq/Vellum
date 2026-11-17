@@ -1,13 +1,13 @@
 """Built-in background jobs as ordinary store automations.
 
-The five hardcoded scheduler jobs (memory dreaming, nightly digest, vault
-retention, YouTube intelligence projection, skill curator tick) migrate into
+The hardcoded scheduler jobs (memory dreaming, nightly digest, YouTube
+intelligence projection, skill curator tick and others) migrate into
 the automation store as ``builtin: true`` records, seeded idempotently on
 startup. They stay visible, editable, and pausable like user automations;
 deleting one restores its default schedule instead of removing it.
 
 When a built-in's job fires, the automation scheduler dispatches to the
-original backend function (``run_digest``, ``run_retention``, ...) rather than
+original backend function (``run_digest``, ``run_projection``, ...) rather than
 a reasoning turn — these are maintenance jobs, not user automations.
 """
 
@@ -50,14 +50,8 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
         "key": "nightly_digest",
         "name": "Nightly digest",
-        "instructions": "Read recent learned facts and write a knowledge digest into the vault.",
+        "instructions": "Summarize recent learned facts into a digest that feeds skill learning and memory.",
         "schedule": "15 2 * * *",
-    },
-    {
-        "key": "vault_retention",
-        "name": "Vault retention",
-        "instructions": "Run vault retention: archive or condense aging notes per policy.",
-        "schedule": "0 3 * * *",
     },
     {
         "key": "youtube_intelligence_projection",
@@ -79,6 +73,10 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
+# Built-ins that no longer exist. Startup removes their stored records so they
+# do not linger in the Scheduled view without a handler.
+RETIRED_BUILTIN_KEYS = frozenset({"vault_retention"})
+
 
 def _definitions_by_key() -> dict[str, dict[str, Any]]:
     return {definition["key"]: definition for definition in BUILTIN_DEFINITIONS}
@@ -90,6 +88,9 @@ def seed_builtins(
     enabled: dict[str, bool] | None = None,
 ) -> list[str]:
     """Create missing built-in records (idempotent; never overwrites user edits)."""
+    for record in store.list():
+        if record.get("builtin") and record.get("builtin_key") in RETIRED_BUILTIN_KEYS:
+            store.remove(record["id"])
     seeded: list[str] = []
     for definition in BUILTIN_DEFINITIONS:
         key = definition["key"]
@@ -161,12 +162,6 @@ async def _nightly_digest_handler() -> None:
     await run_digest()
 
 
-async def _vault_retention_handler() -> None:
-    from agent.scheduler.retention import run_retention
-
-    await run_retention()
-
-
 async def _youtube_projection_handler() -> None:
     from agent.scheduler.youtube_intelligence import run_projection
 
@@ -203,7 +198,6 @@ _HANDLERS: dict[str, Any] = {
     "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
     "nightly_digest": _nightly_digest_handler,
-    "vault_retention": _vault_retention_handler,
     "youtube_intelligence_projection": _youtube_projection_handler,
     "discord_intelligence_sync": _discord_sync_handler,
     "skill_curator_tick": _curator_tick_handler,

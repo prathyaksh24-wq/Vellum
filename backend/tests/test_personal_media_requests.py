@@ -15,12 +15,11 @@ from test_music_agent import fixture_agent
 
 def test_watched_creator_request_never_uses_public_search(tmp_path):
     calls = []
-    service = YoutubeCapabilityService(vault_root=tmp_path,
-        search_backend=lambda *a: calls.append('public') or [],
+    service = YoutubeCapabilityService(search_backend=lambda *a: calls.append('public') or [],
         takeout_history_backend=lambda *a: pytest.fail('Current history must not use an archive'),
         browser_history_backend=lambda: {'available':True,'provider':'browser','total':1,'items':[
             {'title':'A watched video','channel_title':'Jynxzi Live','video_id':'abcdefghijk'}]})
-    response = YoutubeAgent(tmp_path, youtube_service=service).answer('what videos have i watched from jynxzi')
+    response = YoutubeAgent(youtube_service=service).answer('what videos have i watched from jynxzi')
     assert calls == []
     assert 'A watched video' in response.summary
 
@@ -94,7 +93,7 @@ def test_seek_is_relative_and_clamped_before_episode_end():
 def test_natural_x_self_post_drafts_instead_of_searching(tmp_path, text):
     from agent.agents.x_agent import XAgent
     calls=[]
-    agent=XAgent(tmp_path, post_drafter=lambda request:calls.append(request) or 'I am Vellum, your personal assistant.')
+    agent=XAgent(post_drafter=lambda request:calls.append(request) or 'I am Vellum, your personal assistant.')
     assert agent.can_handle(text)
     result=agent.answer_with_context(text,{})
     assert calls and result.action_request['action']=='x.publish_post'
@@ -118,7 +117,7 @@ def build_parallel_dispatcher(tmp_path, barrier=None, release=None):
         'YoutubeAgent':Executor('YoutubeAgent','watched'), 'CalendarAgent':Executor('CalendarAgent','calendar')})
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     runtime=DelegationRuntime(agent_catalog=catalog,memory_orchestrator=None,pending_action_store=state,audit_path=tmp_path/'audit.jsonl')
-    return LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=catalog,state_store=state,delegation_runtime=runtime)
+    return LiveAgentDispatcher(agent_catalog=catalog,state_store=state,delegation_runtime=runtime)
 
 
 def test_independent_specialists_run_concurrently_and_emit_fast_result(tmp_path):
@@ -201,7 +200,6 @@ async def test_stream_shows_finished_specialist_before_slow_specialist_finishes(
     monkeypatch.setattr(api,'_continuity_request',lambda message,thread:message)
     monkeypatch.setattr(api,'_is_memory_recall_request',lambda *a:False)
     monkeypatch.setattr(api,'_is_explanation_followup',lambda *a:False)
-    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *a,**k:{'context':'','attachments':[]}))
     async def noop(*a,**k): pass
     monkeypatch.setattr(api,'_checkpoint_specialist_exchange',noop)
     chunks=[]

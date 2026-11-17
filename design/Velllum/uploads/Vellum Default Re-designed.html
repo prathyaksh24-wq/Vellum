@@ -347,48 +347,6 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .model-vendor-icon{width:22px;height:22px;object-fit:contain;flex-shrink:0;background:#fff;border-radius:5px;padding:2px}
 .model-vendor-icon.model-monochrome-mark{width:20px;height:20px;padding:0;border:0;border-radius:0;background:var(--txt2);mask-repeat:no-repeat;mask-position:center;mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center;-webkit-mask-size:contain}
 .v-select-value{flex:1;text-align:left}.v-select-option-copy{flex:1}.model-drop .drop-item{display:flex;align-items:center;gap:9px}
-/* knowledge graph */
-.kg-ic{color:var(--ember)!important}
-.kg-legend{display:flex;gap:6px;flex-shrink:0}
-.kg-stat{font-size:11px;color:var(--dim);border:1px solid var(--line2);border-radius:20px;padding:3px 10px}
-.kg-sub-note{text-transform:none;letter-spacing:0;color:var(--dim2);font-size:10.5px}
-.kg-empty{font-size:12.5px;color:var(--dim2);padding:6px 0}
-/* knowledge wiki */
-.wiki-search{display:flex;align-items:center;gap:10px;margin:18px 0 12px;padding:8px 10px 8px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--input);color:var(--dim)}
-.wiki-search input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--txt2);font:inherit;font-size:13px}
-.wiki-search input::placeholder{color:var(--dim2)}
-.wiki-actions{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
-.wiki-status-copy{flex:1;min-width:0;color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wiki-action-buttons{display:flex;gap:7px;flex-shrink:0}
-.wiki-report{display:flex;gap:8px;align-items:center;margin:-4px 0 14px;font-size:12px;color:var(--dim)}
-.wiki-report span{color:var(--ember);font-weight:600;text-transform:none;letter-spacing:0;font-size:12px}
-.wiki-layout{display:grid;grid-template-columns:minmax(250px,.84fr) minmax(0,1.3fr);gap:24px;min-height:390px}
-.wiki-results{min-width:0;border-right:1px solid var(--line);padding-right:20px}
-.wiki-section-label{font-size:12px;color:var(--dim);text-transform:none;letter-spacing:0;margin:2px 0 10px}
-.wiki-result{display:flex;flex-direction:column;align-items:flex-start;width:100%;padding:12px 11px;margin-bottom:5px;border:1px solid transparent;border-radius:10px;background:none;text-align:left;color:inherit;cursor:pointer;font:inherit}
-.wiki-result:hover{background:var(--hover)}
-.wiki-result.on{border-color:color-mix(in srgb,var(--ember) 40%,var(--line2));background:color-mix(in srgb,var(--ember) 7%,transparent)}
-.wiki-result-title{font-size:13px;color:var(--txt2);font-weight:500}
-.wiki-result-meta{margin-top:4px;font-size:12px;color:var(--ember)}
-.wiki-result-description{margin-top:5px;font-size:12px;color:var(--dim);line-height:1.45}
-.wiki-page-view{min-width:0;padding-bottom:20px}
-.wiki-page-title{font-family:var(--font-d);font-size:21px;line-height:1.25;color:var(--txt2);font-weight:600}
-.wiki-page-meta{margin-top:6px;color:var(--dim);font-size:12px}
-.wiki-page-description{color:var(--dim);font-size:13px;line-height:1.55;margin:16px 0 0}
-.wiki-page-content{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--txt);font-size:13.5px;line-height:1.7;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
-.wiki-page-sources{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:20px;color:var(--dim);font-size:12px}
-.wiki-page-sources span{font-size:12px;text-transform:none;letter-spacing:0;color:var(--dim2);margin-right:3px}
-.wiki-page-sources code{font:12px var(--font-m);color:var(--txt);background:var(--input);border:1px solid var(--line2);border-radius:6px;padding:3px 6px}
-.wiki-state{padding:32px 8px;color:var(--dim2);font-size:13px;line-height:1.5}
-.wiki-state.error{padding:10px 12px;color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,transparent);border:1px solid color-mix(in srgb,var(--danger) 24%,var(--line));border-radius:9px}
-.wiki-status-list{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
-.wiki-status-list div{padding:12px 10px;border-top:1px solid var(--line2);background:var(--glass)}
-.wiki-status-list b,.wiki-status-list span{display:block}
-.wiki-status-list b{font-size:19px;color:var(--txt2);font-family:var(--font-d)}
-.wiki-status-list span{margin-top:3px;font-size:12px;color:var(--dim)}
-.wiki-counts{display:flex;flex-wrap:wrap;gap:6px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
-.wiki-counts span{border:1px solid var(--line2);border-radius:14px;padding:3px 8px}
-@media (max-width:720px){.wiki-actions{align-items:flex-start;flex-direction:column}.wiki-action-buttons{width:100%}.wiki-layout{grid-template-columns:1fr;gap:18px}.wiki-results{border-right:0;border-bottom:1px solid var(--line);padding:0 0 14px}.wiki-page-view{padding-top:2px}}
 /* memory architecture */
 .km-sech{font-size:12px;color:var(--dim);text-transform:none;letter-spacing:0;font-weight:600;margin:22px 0 11px;display:flex;align-items:center;gap:8px}
 .km-layers{display:flex;flex-direction:column;gap:8px}
@@ -3272,7 +3230,6 @@ const IcBrain = (p)=> <window.VellumUI.AppIcon name="MemoryOnRemember" {...p}/>;
 const IcMcp = (p)=> <window.VellumUI.AppIcon name="Connect" {...p}/>;
 const IcFlame = (p)=> <I {...p} d="M12 2c1 3.5-1.5 5-1.5 7.5A3.5 3.5 0 0 0 14 13c0-2 2-3 2-3 .5 4 2 5 2 7a6 6 0 1 1-12 0c0-3 2.5-4 2.5-7 0-1.5-.5-2.5-.5-2.5S10 6 12 2z"/>;
 const IcEye = (p)=> <window.VellumUI.AppIcon name="Eye" {...p}/>;
-const IcGraph = (p)=> <window.VellumUI.AppIcon name="Nodes" {...p}/>;
 const DockTooltip = ({content, side='top', children}) => (
   <span className="dock-tooltip-wrap" data-tip={content} data-tooltip-side={side}>{children}</span>
 );
@@ -3702,7 +3659,6 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <NotificationTrigger compact unread={notificationState.unread} expanded={notificationState.open} onClick={openNotifications}/>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><window.VellumUI.AppIcon name="Music"/></button>
-      <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
@@ -6878,99 +6834,6 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-function KnowledgeGraphView({ onBack, onAttachContext, onAction }){
-  const [status, setStatus] = useState(null);
-  const [query, setQuery] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [page, setPage] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [pageLoading, setPageLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [lintReport, setLintReport] = useState(null);
-  const [scope, setScope] = useState('all');
-
-  const loadStatus = async () => {
-    setLoading(true);
-    setError('');
-    try { setStatus(await API.knowledge.status()); }
-    catch (err) { setError((err && err.message) || 'Knowledge wiki is unavailable.'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { loadStatus(); }, []);
-
-  const search = async event => {
-    if (event) event.preventDefault();
-    const value = query.trim();
-    if (!value) { setResults([]); setSubmittedQuery(''); return; }
-    setSearching(true); setError(''); setPage(null); setSubmittedQuery(value);
-    try {
-      const body = await API.knowledge.search(value, scope, 20);
-      setResults(Array.isArray(body && body.results) ? body.results : []);
-    } catch (err) { setResults([]); setError((err && err.message) || 'Wiki search failed.'); }
-    finally { setSearching(false); }
-  };
-  const openPage = async item => {
-    if (!item || !item.ref) return;
-    setPageLoading(true); setError('');
-    try {
-      const opened = item.kind === 'vault_note' ? await API.knowledge.vaultNote(item.ref) : await API.knowledge.page(item.ref);
-      setPage({...opened, kind:item.kind || 'wiki_page', ref:item.ref});
-    }
-    catch (err) { setError((err && err.message) || 'Could not open that wiki page.'); }
-    finally { setPageLoading(false); }
-  };
-  const runWikiAction = async action => {
-    setBusy(true); setError('');
-    try {
-      const result = await action();
-      const payload = result && result.action_id ? result.result : result;
-      const lint = payload && payload.lint ? payload.lint : payload;
-      if (lint && (lint.issues || lint.health)) setLintReport(lint);
-      await loadStatus();
-    } catch (err) { setError((err && err.message) || 'Knowledge wiki action failed.'); }
-    finally { setBusy(false); }
-  };
-  const counts = status && status.counts ? Object.entries(status.counts) : [];
-  const lintIssueCount = lintReport ? ['missing_fields','missing_sources','missing_provenance','invalid_source_trust','broken_links','duplicate_titles','duplicate_identities','orphan_pages','stale_pages'].reduce((total, key) => total + (Array.isArray(lintReport[key]) ? lintReport[key].length : 0), 0) + (lintReport.overview_drift ? 1 : 0) : 0;
-  return (
-    <div className="page">
-      <div className="page-inner wiki-page" style={{maxWidth: 980}}>
-        <div className="page-head">
-          <span className="page-head-ic kg-ic"><IcGraph size={18}/></span>
-          <div style={{flex:1}}><div className="page-title">Knowledge wiki</div><div className="page-sub">Search the maintained pages behind Vellum's answers. Open a result to read the source.</div></div>
-          {onBack && <button className="btn" onClick={onBack}>Back</button>}
-        </div>
-        {error && <div className="wiki-state error" role="alert">{error}</div>}
-        <div className="tab-row" style={{padding:'0 0 12px'}}>{[['all','All'],['vault','Vault'],['wiki','Wiki']].map(([key,label]) => <button key={key} className={'tab' + (scope === key ? ' on' : '')} onClick={() => setScope(key)}>{label}</button>)}</div>
-        <form className="wiki-search" onSubmit={search}>
-          <IcSearch size={16}/><input aria-label="Search knowledge wiki" placeholder="Search your knowledge wiki" value={query} onChange={e => setQuery(e.target.value)}/><button className="btn primary" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Search'}</button>
-        </form>
-        <div className="wiki-actions">
-          <div className="wiki-status-copy">{loading ? 'Checking wiki…' : status ? (status.page_count || 0) + ' pages · ' + (status.root || 'ready') : 'Wiki status unavailable'}</div>
-          <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => onAction('knowledge.health.check', {}))}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => onAction('knowledge.index.rebuild', {}))}>Rebuild index</button></div>
-        </div>
-        {lintReport && <div className="wiki-report"><span>Lint · {lintReport.health || 'complete'}</span>{lintIssueCount + ' issue' + (lintIssueCount === 1 ? '' : 's')}{lintReport.stale_days != null ? ' · stale after ' + lintReport.stale_days + ' days' : ''}</div>}
-        <div className="wiki-layout">
-          <section className="wiki-results" aria-label="Wiki search results">
-            <div className="wiki-section-label">{submittedQuery ? 'Results for “' + submittedQuery + '”' : 'Wiki status'}</div>
-            {!submittedQuery && (loading ? <div className="wiki-state">Loading wiki status…</div> : status ? <div className="wiki-status-list"><div><b>{status.page_count || 0}</b><span>pages</span></div><div><b>{status.inbox_count || 0}</b><span>inbox</span></div><div><b>{status.lint_report_count || 0}</b><span>lint reports</span></div></div> : <div className="wiki-state">No status to show.</div>)}
-            {!searching && submittedQuery && results.length === 0 && <div className="wiki-state">No wiki pages matched that search.</div>}
-            {results.map(item => <button key={item.kind + ':' + item.ref} className={'wiki-result' + (page && page.ref === item.ref ? ' on' : '')} onClick={() => openPage(item)}><span className="wiki-result-title">{item.title || item.ref}</span><span className="wiki-result-meta">{item.scope || item.type || 'page'} · {item.status || 'ready'}{item.updated ? ' · ' + memoryEntryDate({date:item.updated}) : ''}</span>{item.description && <span className="wiki-result-description">{item.description}</span>}</button>)}
-            {counts.length > 0 && <div className="wiki-counts">{counts.map(([type, count]) => <span key={type}>{type} {count}</span>)}</div>}
-          </section>
-          <section className="wiki-page-view" aria-label="Wiki page">
-            {pageLoading && <div className="wiki-state">Loading page…</div>}
-            {!pageLoading && !page && <div className="wiki-state">Choose a search result to read its page.</div>}
-            {!pageLoading && page && <React.Fragment><div className="wiki-page-title">{page.title}</div><div className="wiki-page-meta">{page.type || 'page'} · {page.status || 'draft'}{page.updated ? ' · updated ' + memoryEntryDate({date:page.updated}) : ''}</div><div className="wiki-action-buttons" style={{margin:'10px 0 14px'}}><button className="btn primary" onClick={() => onAttachContext && onAttachContext(page, false)}>Add to chat</button><button className="btn" onClick={() => onAttachContext && onAttachContext(page, true)}>New chat with context</button></div>{page.description && <p className="wiki-page-description">{page.description}</p>}<div className="wiki-page-content">{page.content || 'This page has no content.'}</div>{Array.isArray(page.sources) && page.sources.length > 0 && <div className="wiki-page-sources"><span>Sources</span>{page.sources.map(source => <code key={source}>{source}</code>)}</div>}</React.Fragment>}
-          </section>
-        </div>
-      </div>
-    </div>
-  );
-}
 function MemoryConsole({ onClose, onBack, page, memoryData, onRefresh, onDreamComplete, onMemoryAction }){
   const [tab, setTab] = useState('summary');
   const [q, setQ] = useState('');
@@ -8834,7 +8697,7 @@ const PetdexTab = ({manifest, loading, error, installed = [], active, size, hidd
     </React.Fragment>
   );
 };
-const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','music','memory','kg','archive','agent']);
+const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','music','memory','archive','agent']);
 const isNotFoundLocation = () => {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -10120,33 +9983,6 @@ const [slashSkills, setSlashSkills] = useState([]);
     return save;
   };
 
-  const attachKnowledgeContext = async (page, forceNew) => {
-    if (!page || !page.ref) return;
-    let chatId = forceNew ? null : activeChatId;
-    const contextMessage = {id:uid(), role:'assistant', text:'Using “' + (page.title || 'Knowledge') + '” as live ' + (page.kind === 'vault_note' ? 'Vault' : 'wiki') + ' context.', streaming:false, phase:'done', sources:[], tools:[]};
-    if (!chatId) {
-      chatId = uid();
-      const record = {id: chatId, thread_id: chatId, model: selModel, title: 'Context: ' + (page.title || 'Knowledge'), pinned:false, archived:false, projectId:null, created:'Today', appIds:[], messages:[contextMessage]};
-      threadRef.current[chatId] = chatId;
-      setChats(items => [record, ...items]);
-      saveConversation(record);
-    }
-    try {
-      await API.conversations.attachContext(threadRef.current[chatId] || chatId, {
-        kind: page.kind === 'vault_note' ? 'vault_note' : 'wiki_page',
-        ref: page.ref,
-        mode: 'live',
-      });
-      if (!forceNew && activeChatId) updateChat(chatId, chat => ({...chat, messages:[...(chat.messages || []), contextMessage]}), true);
-      setActiveChatId(chatId);
-      setView('chat');
-      try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
-      pushToast((page.title || 'Knowledge') + ' added to chat');
-    } catch (err) {
-      pushToast((err && err.message) || 'Could not add knowledge context');
-    }
-  };
-
   const updateChat = (chatId, mapper, persist = false) => {
     setChats(cs => cs.map(c => {
       if (c.id !== chatId) return c;
@@ -11325,7 +11161,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const activeChatProject = projects.find(project=>project.id===(activeChat?.projectId || (!activeChat?draftProjectId:null))) || null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
-  const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
+  const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
   const workspaceProperties=workspaceLayout.surfaces['right-panel'].properties;
   const workspaceItems=Array.isArray(workspaceProperties.items)?workspaceProperties.items:[];
@@ -11713,7 +11549,6 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={pluginSidebarVisible} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
-            {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>
 

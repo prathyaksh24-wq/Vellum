@@ -7,7 +7,6 @@ import re
 import unicodedata
 from typing import Iterable
 
-from agent.obsidian.folder_policy import can_send_to_llm
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 
@@ -55,8 +54,6 @@ class SkillPrivacyGate:
         classification, _reason = classify(value)
         if classification is DataClass.RED:
             raise SkillPrivacyError("RED content cannot be used as a skill signal")
-        if source_path is not None and not can_send_to_llm(str(source_path)):
-            raise SkillPrivacyError("folder policy blocks this source from skill authoring")
         if _INJECTION.search(value):
             raise SkillPrivacyError("skill-authoring prompt injection detected")
         public_urls: list[str] = []

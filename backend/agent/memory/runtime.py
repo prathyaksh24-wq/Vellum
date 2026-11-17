@@ -17,7 +17,6 @@ from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
 from agent.memory.provider_extensions import build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.knowledge.runtime import get_knowledge_core
-from agent.obsidian.wiki_runtime import get_knowledge_wiki
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 
 
@@ -32,10 +31,7 @@ def build_memory_orchestrator() -> MemoryOrchestrator:
     return MemoryOrchestrator(
         fts5=FTS5Memory(memory_root / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(memory_root / "resolved.db"),
-        memory_service=MemoryCapabilityService(
-            vault_root=settings.obsidian_vault_path,
-            sessions_db=sessions_db,
-        ),
+        memory_service=MemoryCapabilityService(sessions_db=sessions_db),
         store=SQLiteMemoryStore(sessions_db),
         provider_extensions=build_default_memory_provider_extensions(settings=settings),
         honcho=HonchoMemory(
@@ -44,7 +40,6 @@ def build_memory_orchestrator() -> MemoryOrchestrator:
             user_id=settings.honcho_user_id,
         ),
         memory_dir=memory_root,
-        knowledge_wiki=get_knowledge_wiki(),
         knowledge_core=get_knowledge_core() if settings.knowledge_core_enabled else None,
     )
 

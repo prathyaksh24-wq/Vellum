@@ -16,10 +16,10 @@ def activity_agent(tmp_path, *, planner=None, count=6):
             'items':[{'video_id':f'video{i:06d}', 'title':f'Chess game review {i}',
                 'channel_title':'Chess Creator' if i < 4 else 'Other Creator',
                 'day_label':'Today' if i < 3 else 'Monday'} for i in range(count)]}
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=history,
+    service = YoutubeCapabilityService(browser_history_backend=history,
         search_backend=lambda *_:pytest.fail('Personal activity reached public search'),
         personal_context_backend=lambda *_:pytest.fail('Browser account activity reached an unrelated imported account'))
-    return YoutubeAgent(vault_root=tmp_path, youtube_service=service, planner=planner), reads
+    return YoutubeAgent(youtube_service=service, planner=planner), reads
 
 
 def test_repeated_link_keeps_the_selected_item_without_planning_or_refresh(tmp_path):
@@ -129,7 +129,7 @@ def test_analysis_accumulates_only_the_freshly_verified_account(tmp_path, monkey
     reader.refresh()
     reader.refresh()
     monkeypatch.setattr(history, 'YouTubeBrowserHistoryService', lambda:reader)
-    service = YoutubeCapabilityService(vault_root=tmp_path)
+    service = YoutubeCapabilityService()
     result = service.watch_history({'limit':100, 'include_accumulated':True})
     assert {item['video_id'] for item in result['items']} == {'video000000','video000002'}
     assert result['total'] == 2 and result['coverage'] == 'fresh_and_accumulated'
@@ -146,7 +146,7 @@ def test_activity_followups_route_through_the_existing_dispatcher(tmp_path):
     agent, reads = activity_agent(tmp_path)
     catalog = AgentCatalog(profile_dir=tmp_path/'profiles', executors={'YoutubeAgent':agent})
     state = MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
     first = dispatcher.maybe_handle('what is the trend u are seeing from my yt watch history', 'activity')
     assert first.agent_name == 'YoutubeAgent' and first.status == 'answered'
     followup = dispatcher.maybe_handle('what is ur analysis based on that', 'activity')

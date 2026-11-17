@@ -5,23 +5,6 @@ from langchain_core.messages import HumanMessage
 
 from agent.graph.agent import vellum_prompt
 from agent.graph import agent as agent_graph
-from agent.memory import project_context as pc
-
-
-def test_vellum_prompt_includes_identity(tmp_path: Path, monkeypatch):
-    meta = tmp_path / "Meta"
-    meta.mkdir()
-    (meta / "profile.md").write_text("My name is Test")
-
-    monkeypatch.setattr(
-        "agent.graph.agent._prompt_project_ctx",
-        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
-        raising=False,
-    )
-    state = {"messages": [HumanMessage(content="hi")]}
-    config = {"configurable": {"thread_id": "t1"}}
-    messages = vellum_prompt(state, config)
-    assert any("<PROTECTED>" in m.content for m in messages)
 
 
 def test_memory_query_excludes_injected_conversation_context():
@@ -33,11 +16,6 @@ def test_memory_query_excludes_injected_conversation_context():
 
 
 def test_prompt_keeps_learning_context_below_kernel_and_preserves_correction(monkeypatch):
-    class FakeProjectContext:
-        def build(self, thread_id):
-            return "<PROTECTED>Older profile: prefer long answers.</PROTECTED>"
-
-    monkeypatch.setattr(agent_graph, "_prompt_project_ctx", FakeProjectContext())
     monkeypatch.setattr(agent_graph, "_get_skill_registry", lambda: object())
     monkeypatch.setattr(agent_graph, "build_skill_activation_block", lambda *args, **kwargs: "")
     monkeypatch.setattr(agent_graph, "_specialist_directory_block", lambda: "")
@@ -60,33 +38,15 @@ def test_prompt_keeps_learning_context_below_kernel_and_preserves_correction(mon
     evidence = messages[1]
     assert evidence.additional_kwargs['vellum_context_layer'] == 'personal_memory'
     boundary = evidence.content.index("## Personal context boundary")
-    assert boundary < evidence.content.index("Older profile:")
     assert boundary < evidence.content.index("Older inferred preference:")
-    assert 'Older profile:' not in system
+    assert 'Older inferred preference:' not in system
     assert "Current explicit statements and corrections take precedence" in system
     assert "default ambiguous stance to unknown" in system
     assert "report the proposal as pending" in system
     assert messages[-1] is correction
 
 
-def test_vellum_prompt_no_meta_falls_back(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(
-        "agent.graph.agent._prompt_project_ctx",
-        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
-        raising=False,
-    )
-    state = {"messages": [HumanMessage(content="hi")]}
-    config = {"configurable": {"thread_id": "t1"}}
-    messages = vellum_prompt(state, config)
-    assert all("<PROTECTED>" not in m.content for m in messages)
-
-
 def test_vellum_prompt_includes_runtime_date_grounding(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(
-        "agent.graph.agent._prompt_project_ctx",
-        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
-        raising=False,
-    )
 
     messages = vellum_prompt({"messages": [HumanMessage(content="which year are you in?")]}, {})
 
@@ -95,10 +55,6 @@ def test_vellum_prompt_includes_runtime_date_grounding(tmp_path: Path, monkeypat
 
 
 def test_vellum_prompt_reports_request_scoped_runtime_model(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(
-        "agent.graph.agent._prompt_project_ctx",
-        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
-    )
 
     messages = vellum_prompt(
         {"messages": [HumanMessage(content="which model?")]},
@@ -264,12 +220,6 @@ def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog
     monkeypatch.setattr(agent_graph, "_prompt_skill_registry", FakeRegistry(), raising=False)
     monkeypatch.setattr(agent_graph, "get_agent_catalog", lambda: FakeCatalog())
     monkeypatch.setattr(agent_graph, "build_skill_activation_block", activate)
-    monkeypatch.setattr(
-        agent_graph,
-        "_prompt_project_ctx",
-        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
-        raising=False,
-    )
 
     messages = agent_graph.vellum_prompt({"messages": [HumanMessage(content="Review this diff")]}, {})
 
@@ -308,12 +258,6 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
     monkeypatch.setattr(agent_graph, "_prompt_skill_registry", registry, raising=False)
     monkeypatch.setattr(agent_graph, "get_agent_catalog", lambda: FakeCatalog())
     monkeypatch.setattr(agent_graph, "build_skill_activation_block", activate, raising=False)
-    monkeypatch.setattr(
-        agent_graph,
-        "_prompt_project_ctx",
-        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
-        raising=False,
-    )
 
     messages = agent_graph.vellum_prompt(
         {"messages": [HumanMessage(content="Review this pull request")]},

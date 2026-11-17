@@ -12,7 +12,7 @@ def test_memory_orchestrator_tool_reports_status_and_runs_dreaming(monkeypatch, 
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -39,7 +39,7 @@ def test_memory_orchestrator_tool_updates_settings(monkeypatch, tmp_path):
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )

@@ -15,8 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from agent.knowledge.backup import KnowledgeBackupService  # noqa: E402
-from agent.knowledge.materialization import CANARY_CONFIRMATION  # noqa: E402
-from agent.knowledge.models import BootstrapRequest, MaterializationCanaryRequest  # noqa: E402
+from agent.knowledge.models import BootstrapRequest  # noqa: E402
 from agent.knowledge.service import KnowledgeCore  # noqa: E402
 from agent.knowledge.store import KnowledgeStore  # noqa: E402
 
@@ -31,11 +30,6 @@ except ImportError:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--vault",
-        type=Path,
-        default=Path(os.getenv("OBSIDIAN_VAULT_PATH") or REPO_ROOT / "Vault"),
-    )
     parser.add_argument(
         "--database",
         type=Path,
@@ -60,15 +54,7 @@ def parse_args() -> argparse.Namespace:
     bootstrap.add_argument("--limit", type=int)
     bootstrap.add_argument("--no-conversations", action="store_true")
     bootstrap.add_argument("--no-memories", action="store_true")
-    bootstrap.add_argument("--no-library", action="store_true")
-    bootstrap.add_argument("--no-wiki", action="store_true")
-    bootstrap.add_argument("--no-agent-projections", action="store_true")
-    bootstrap.add_argument("--no-archives", action="store_true")
     bootstrap.add_argument("--no-retrieval-indexes", action="store_true")
-
-    canary = subparsers.add_parser("materialize-canary")
-    canary.add_argument("--apply", action="store_true")
-    canary.add_argument("--confirm", default="")
 
     backup = subparsers.add_parser("backup")
     backup.add_argument("--output", type=Path, required=True)
@@ -88,7 +74,6 @@ def main() -> int:
     core = KnowledgeCore(
         KnowledgeStore(args.database, args.blobs),
         conversations_path=args.conversations,
-        vault_root=args.vault,
     )
     if args.command == "status":
         result = {"knowledge": core.status(), "integrity": core.store.integrity_check()}
@@ -99,23 +84,10 @@ def main() -> int:
             BootstrapRequest(
                 conversations=not args.no_conversations,
                 memories=not args.no_memories,
-                vault_library=not args.no_library,
-                knowledge_wiki=not args.no_wiki,
-                agent_projections=not args.no_agent_projections,
-                archives=not args.no_archives,
                 retrieval_indexes=not args.no_retrieval_indexes,
                 apply=args.apply,
                 confirm=args.apply,
                 limit=args.limit,
-            )
-        )
-    elif args.command == "materialize-canary":
-        if args.apply and args.confirm != CANARY_CONFIRMATION:
-            raise SystemExit(f"Apply requires --confirm {CANARY_CONFIRMATION}")
-        result = core.materialize_canary(
-            MaterializationCanaryRequest(
-                apply=args.apply,
-                confirmation=args.confirm,
             )
         )
     elif args.command == "backup":
@@ -130,8 +102,6 @@ def main() -> int:
             rollback_destination=args.rollback_output,
         )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
-    if args.command == "materialize-canary" and args.apply and result.get("passed") is not True:
-        return 1
     return 0
 
 

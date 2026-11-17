@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Retire the Obsidian vault as Vellum's knowledge base. Remove vault tools (`search_my_notes`, `create_note`/`append_to_note`, vault file writes), the vault watcher and indexer, Markdown conversation copies, attached vault/wiki chat context, the Knowledge Wiki (view, API, tool and App Actions), vault retention, `/project` commands, the Obsidian memory import and the vault-based X, YouTube and sports ingestion scripts. `OBSIDIAN_VAULT_PATH` is no longer required. Memory cards come from canonical saved memories, the nightly digest no longer writes notes, the agent's file tools only read saved browser pages, and the stored Vault retention job is removed at startup. Existing `Vault/` files are left untouched. Obsidian returns as an optional, off-by-default Plugins connector for a user's own vault through the Local REST API.
+
 - Load the main agent's instructions from `docs/main.md` (runtime contract), `docs/SOUL.md` (new identity) and `docs/PERSONALITY.md` (communication style). The hard-coded prompt now carries only Vellum-specific routing, personal-evidence, privacy and tool rules. Edits to these files restart the development backend and change the desktop backend identity.
 
 - Fix desktop development startup: copy static UI scripts and assets (including pets) into the actual build output, restore the missing sidebar visibility state that left the window blank, accept the saved number-shortcut preference, and drop retired saved settings so App Actions are no longer rejected.

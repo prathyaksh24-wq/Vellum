@@ -174,7 +174,7 @@ def mixed_dispatcher(tmp_path, release=None):
     state.set_pending_action('chat', {'agent': 'MusicAgent', 'action': 'music.change_collection', 'payload': {'target': 'exact'}})
     catalog = AgentCatalog(profile_dir=tmp_path/'profiles', executors={'MusicAgent': Music(), 'SportsAgent': Sports()})
     runtime = DelegationRuntime(agent_catalog=catalog, memory_orchestrator=None, audit_path=tmp_path/'audit.jsonl', pending_action_store=state)
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state, delegation_runtime=runtime)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state, delegation_runtime=runtime)
     return dispatcher, calls, state
 
 

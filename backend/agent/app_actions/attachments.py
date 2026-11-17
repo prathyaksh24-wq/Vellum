@@ -482,22 +482,7 @@ _service: AttachmentImportService | None = None
 def get_attachment_import_service() -> AttachmentImportService:
     global _service
     if _service is None:
-        from agent.config import get_settings
-
-        settings = get_settings()
-        _service = AttachmentImportService(
-            granted_folders=(settings.obsidian_vault_path,),
-            path_egress_allowed=_default_path_egress_allowed,
-        )
+        # No local folders are granted for path imports; files arrive through
+        # the picker or drag and drop instead.
+        _service = AttachmentImportService()
     return _service
-
-
-def _default_path_egress_allowed(path: Path) -> bool:
-    from agent.config import get_settings
-    from agent.obsidian.folder_policy import access_decision
-
-    try:
-        relative = path.relative_to(get_settings().obsidian_vault_path.resolve())
-    except ValueError:
-        return True
-    return access_decision(relative).can_send_to_llm

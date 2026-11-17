@@ -47,7 +47,7 @@ describe('quiet workspace transitions', () => {
   });
 
   test('a real conversation-save failure is visible and preserves the submitted messages', async () => {
-    const code = source.split('  const saveConversation = ')[1].split('  const attachKnowledgeContext = ')[0].trim().replace(/;$/, '');
+    const code = source.split('  const saveConversation = ')[1].split('  const updateChat = ')[0].trim().replace(/;$/, '');
     const conversation = {id:'save-test',messages:[{role:'user',text:'hide sidebar'}]};
     const save = vi.fn(async () => {throw new Error('file locked');});
     const notify = vi.fn(), refresh = vi.fn(), warn = vi.fn();

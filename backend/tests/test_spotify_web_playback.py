@@ -41,7 +41,6 @@ def service(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "_spotify_client", lambda: client)
     monkeypatch.setattr(spotify_controls, "spotify_client", lambda: client)
     monkeypatch.setattr(api, "start_scheduler", lambda: None)
-    monkeypatch.setattr(api, "start_vault_watcher", lambda: None)
     return client, requests
 
 

@@ -43,7 +43,6 @@ def _core(tmp_path: Path, handler) -> KnowledgeCore:
     return KnowledgeCore(
         KnowledgeStore(tmp_path / "core.db", tmp_path / "blobs"),
         conversations_path=tmp_path / "ui" / "conversations.json",
-        vault_root=tmp_path / "vault",
         book_catalog=OpenLibraryCatalog(transport=httpx.MockTransport(handler)),
     )
 

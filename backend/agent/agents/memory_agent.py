@@ -24,12 +24,10 @@ class MemoryAgent:
 
     def __init__(
         self,
-        vault_root: Path,
         memory_service: MemoryCapabilityService | None = None,
         sessions_db: Path | None = None,
         tool_registry: ToolRegistry | None = None,
     ) -> None:
-        self.vault_root = Path(vault_root)
         self.tool_registry = tool_registry
         self.memory_service = memory_service or (
             None
@@ -128,9 +126,10 @@ class MemoryAgent:
     def _default_memory_service(self, sessions_db: Path | None):
         from agent.tools.capabilities.memory_service import MemoryCapabilityService
 
+        from agent.config import REPO_ROOT
+
         return MemoryCapabilityService(
-            vault_root=self.vault_root,
-            sessions_db=sessions_db or self.vault_root / "Agent" / "Memory" / "memory-agent-sessions.db",
+            sessions_db=sessions_db or REPO_ROOT / "data" / "memory" / "memory-agent-sessions.db",
         )
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:

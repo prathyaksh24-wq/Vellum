@@ -3,15 +3,12 @@ from types import ModuleType, SimpleNamespace
 
 from agent.rag.embedder import Embedder, VECTOR_SIZE
 from agent.rag.store import VectorStore
-from agent.tools import vault_search
 
 
 class FakeSettings:
     min_retrieval_score = 0.65
     max_context_chunks = 5
     max_context_tokens = 3000
-    agent_notes_folder = "Agent"
-    obsidian_vault_path = None
     enable_vector_search = False
     enable_cross_encoder_rerank = False
     enable_query_vector_storage = False
@@ -91,12 +88,12 @@ def test_vector_store_creates_collections_and_searches_in_memory():
     vector[0] = 1.0
 
     point_id = store.upsert(
-        collection="obsidian_vault",
+        collection="agent_queries",
         text="NBA context",
         embedding=vector,
         metadata={"folder": "Sports/NBA", "path": "Sports/NBA/latest.md"},
     )
-    results = store.search("obsidian_vault", vector, top_k=1, score_threshold=0.0)
+    results = store.search("agent_queries", vector, top_k=1, score_threshold=0.0)
 
     assert point_id
     assert results[0]["text"] == "NBA context"
@@ -134,131 +131,6 @@ def test_vector_store_uses_local_chroma_path(monkeypatch, tmp_path):
 
     assert FakeSettings.chroma_path.exists()
     assert created_paths == [str(FakeSettings.chroma_path)]
-    assert {"obsidian_vault", "agent_queries"} <= {
+    assert {"agent_queries"} <= {
         collection.name for collection in store.client.list_collections()
     }
-
-
-def test_vault_search_uses_vector_backend_and_filters_private_chunks(monkeypatch):
-    class FakeEmbedder:
-        def embed(self, text):
-            return [1.0]
-
-    class FakeStore:
-        def search(self, collection, embedding, top_k=10, score_threshold=0.0):
-            return [
-                {
-                    "text": "NBA vector context",
-                    "score": 0.91,
-                    "metadata": {"folder": "Sports/NBA", "path": "Sports/NBA/latest.md"},
-                },
-                {
-                    "text": "NBA private book note",
-                    "score": 0.95,
-                    "metadata": {"folder": "Books", "path": "Books/private.md"},
-                },
-            ]
-
-    monkeypatch.setattr(vault_search, "get_embedder", lambda: FakeEmbedder())
-    monkeypatch.setattr(vault_search, "get_vector_store", lambda: FakeStore())
-    monkeypatch.setattr(vault_search, "_settings", lambda: type("Settings", (FakeSettings,), {"enable_vector_search": True})())
-    monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
-    monkeypatch.setattr(
-        vault_search,
-        "_rerank",
-        lambda query, results: sorted(
-            [(item["score"], item) for item in results],
-            key=lambda item: item[0],
-            reverse=True,
-        ),
-    )
-
-    result = vault_search.search_my_notes.func("nba")
-
-    assert "NBA vector context" in result
-    assert "private book note" not in result
-
-
-def test_vault_search_falls_back_to_vault_when_vector_backend_unavailable(monkeypatch):
-    class BrokenEmbedder:
-        def embed(self, text):
-            raise RuntimeError("model unavailable")
-
-    class FakeVault:
-        def __init__(self, vault_path):
-            self.vault_path = vault_path
-
-        def search_notes(self, query, limit=12):
-            return [
-                {
-                    "text": "NBA fallback context",
-                    "score": 1.0,
-                    "metadata": {"folder": "Sports/NBA", "path": "Sports/NBA/latest.md"},
-                }
-            ]
-
-    monkeypatch.setattr(vault_search, "get_embedder", lambda: BrokenEmbedder())
-    monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
-    monkeypatch.setattr(vault_search, "_settings", lambda: type("Settings", (FakeSettings,), {"enable_vector_search": True})())
-    monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
-    monkeypatch.setattr(vault_search, "_rerank", lambda query, results: [(item["score"], item) for item in results])
-
-    result = vault_search.search_my_notes.func("NBA latest standings")
-
-    assert "NBA fallback context" in result
-
-
-def test_vault_search_uses_exact_sensitive_query_locally_and_scrubs_outbound_chunks(monkeypatch):
-    seen_queries = []
-
-    class FakeVault:
-        def __init__(self, vault_path):
-            self.vault_path = vault_path
-
-        def search_notes(self, query, limit=12):
-            seen_queries.append(query)
-            return [
-                {
-                    "text": "Contact Jane Doe with password=super-secret",
-                    "score": 1.0,
-                    "metadata": {"folder": "Projects", "path": "Projects/private.md"},
-                }
-            ]
-
-    monkeypatch.setattr(vault_search, "_settings", lambda: FakeSettings())
-    monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
-    monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
-
-    result = vault_search.search_my_notes.func("password=super-secret")
-
-    assert seen_queries == ["password=super-secret"]
-    assert "super-secret" not in result
-    assert "Jane Doe" not in result
-
-
-def test_vault_search_default_path_does_not_require_vector_backend(monkeypatch):
-    class ExplodingEmbedder:
-        def embed(self, text):
-            raise AssertionError("vector embedding should not run by default")
-
-    class FakeVault:
-        def __init__(self, vault_path):
-            self.vault_path = vault_path
-
-        def search_notes(self, query, limit=12):
-            return [
-                {
-                    "text": "Naval note about attention",
-                    "score": 1.0,
-                    "metadata": {"folder": "X/naval", "path": "X/naval/latest-50.md"},
-                }
-            ]
-
-    monkeypatch.setattr(vault_search, "_settings", lambda: FakeSettings())
-    monkeypatch.setattr(vault_search, "get_embedder", lambda: ExplodingEmbedder())
-    monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
-    monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
-
-    result = vault_search.search_my_notes.func("naval attention")
-
-    assert "Naval note about attention" in result

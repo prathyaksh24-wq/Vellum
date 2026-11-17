@@ -36,9 +36,8 @@
       ResearchAgent: "Research Agent",
       serpapi: "SerpAPI",
       web_search: "web",
-      search_my_notes: "your notes",
-      read_file: "a note",
-      list_files: "your vault",
+      read_file: "a saved page",
+      list_files: "saved pages",
       obsidian_api: "Obsidian",
       obsidian_search: "Obsidian",
       context_mode: "Context Mode",
@@ -58,7 +57,6 @@
     if (type === "thinking_started") return "";
     if (String(name || "").indexOf("agent_reach_x_") === 0) return "";
     if (type === "memory_retrieved") {
-      if (name === "search_my_notes") return "Searching your notes";
       if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";
       return "Searching your memory";
     }
@@ -71,7 +69,6 @@
       if (name === "serpapi") return "Searched with SerpAPI";
       if (name === "web_search") return "Searched the web";
       if (String(name || "").endsWith("_agent")) return "Called " + humanToolName(name);
-      if (name === "search_my_notes") return "Searched your notes";
       if (name === "obsidian_api" || name === "obsidian_search") return "Read Obsidian";
       return "Used " + humanToolName(name || "tool");
     }
@@ -79,10 +76,9 @@
       if (name === "serpapi") return "Searching with SerpAPI";
       if (name === "web_search") return "Searching the web";
       if (String(name || "").endsWith("_agent")) return "Calling " + humanToolName(name);
-      if (name === "search_my_notes") return "Searching your notes";
-      if (name === "read_file") return "Reading a note";
+      if (name === "read_file") return "Reading a saved page";
       if (name === "web_extract_pages") return "Reading web pages";
-      if (name === "list_files") return "Browsing your vault";
+      if (name === "list_files") return "Browsing saved pages";
       if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";
       if (name === "youtube_search") return "Searching YouTube";
       return "Using " + humanToolName(name || "tool");

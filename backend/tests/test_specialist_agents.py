@@ -148,7 +148,7 @@ def test_memory_proposal_structure_and_confidence_validation():
 
 
 def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
-    agent = SportsAgent(vault_root=tmp_path / "Vault")
+    agent = SportsAgent()
 
     assert agent.can_handle("What is happening with the NBA Finals?")
     assert agent.can_handle("Give me Arsenal and Champions League news")
@@ -164,7 +164,7 @@ def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
 
 
 def test_sports_agent_recognizes_natural_chiefs_schedule_queries(tmp_path):
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda _query: "No web results found.")
+    agent = SportsAgent(web_searcher=lambda _query: "No web results found.")
 
     for query in ("When is the next Chiefs game?", "When is the next cheifs match?"):
         assert agent.can_handle(query)
@@ -179,7 +179,7 @@ def test_sports_agent_answers_combat_sports_without_persisting_legacy_note(tmp_p
         "Makhachev retained his title and the co-main ended by decision.\n"
         "https://www.espn.com/mma/story/ufc-302-results"
     )
-    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_output)
+    agent = SportsAgent(web_searcher=lambda query: search_output)
 
     response = agent.answer("Any UFC fight card updates tonight?")
 
@@ -200,7 +200,7 @@ def test_sports_agent_routes_public_athlete_performance_questions(tmp_path):
         "Ronaldo scored and created two chances in yesterday's match.\n"
         "https://www.espn.com/soccer/ronaldo-match-report"
     )
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)
+    agent = SportsAgent(web_searcher=lambda query: search_output)
 
     assert agent.can_handle("Cristiano Ronaldo performance yesterday")
     response = agent.answer("Cristiano Ronaldo performance yesterday")
@@ -227,7 +227,7 @@ def test_sports_agent_prioritizes_current_sources_for_yesterday_queries(tmp_path
             },
         ],
     }
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+    agent = SportsAgent(web_searcher=lambda query: search_result)
 
     response = agent.answer("Cristiano Ronaldo performance yesterday")
 
@@ -271,7 +271,7 @@ def test_sports_agent_prioritizes_official_schedule_for_next_f1_race(tmp_path):
         seen["query"] = query
         return search_result
 
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=searcher)
+    agent = SportsAgent(web_searcher=searcher)
 
     response = agent.answer("what is the next f1 race")
 
@@ -302,7 +302,7 @@ def test_sports_agent_answer_uses_serpapi_answer_without_inline_source_list(tmp_
             }
         ],
     }
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+    agent = SportsAgent(web_searcher=lambda query: search_result)
 
     response = agent.answer("what is the next f1 race")
 
@@ -329,7 +329,7 @@ def test_sports_agent_prefers_serpapi_compact_facts_over_raw_text(tmp_path):
             }
         ],
     }
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+    agent = SportsAgent(web_searcher=lambda query: search_result)
 
     response = agent.answer("who leads the fifa world cup career goals all time")
 
@@ -364,7 +364,7 @@ def test_sports_agent_preserves_serpapi_full_markdown_answer(tmp_path):
             }
         ],
     }
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+    agent = SportsAgent(web_searcher=lambda query: search_result)
 
     response = agent.answer("tell me about ronaldo performance against congo yesterday")
 
@@ -398,7 +398,7 @@ def test_sports_agent_preserves_serpapi_f1_calendar_markdown(tmp_path):
             }
         ],
     }
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+    agent = SportsAgent(web_searcher=lambda query: search_result)
 
     response = agent.answer("what is the next f1 race and show the calendar details")
 
@@ -409,7 +409,7 @@ def test_sports_agent_preserves_serpapi_f1_calendar_markdown(tmp_path):
 
 
 def test_sports_agent_ranking_demotes_ticket_and_low_relevance_sources():
-    agent = SportsAgent(vault_root=Path("unused"))
+    agent = SportsAgent()
     sources = [
         {
             "title": "Portugal vs Argentina Tickets",
@@ -438,7 +438,7 @@ def test_sports_agent_ranking_demotes_ticket_and_low_relevance_sources():
 
 
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
-    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "No web results found.")
+    agent = SportsAgent(web_searcher=lambda query: "No web results found.")
 
     response = agent.answer("Give me a summary of NBA Finals")
 
@@ -448,13 +448,13 @@ def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
 
 
 def test_sports_agent_enabled_keywords_do_not_match_word_fragments():
-    agent = SportsAgent(vault_root=Path("unused"))
+    agent = SportsAgent()
 
     assert not agent.can_handle("How do I type an underscore in Python?")
 
 
 def test_sports_agent_generic_terms_need_sports_context():
-    agent = SportsAgent(vault_root=Path("unused"))
+    agent = SportsAgent()
 
     assert not agent.can_handle("How do I write a pytest fixture?")
     assert not agent.can_handle("What is my injury insurance policy?")
@@ -462,7 +462,7 @@ def test_sports_agent_generic_terms_need_sports_context():
 
 
 def test_sports_agent_resolves_fifa_world_cup_context():
-    agent = SportsAgent(vault_root=Path("unused"))
+    agent = SportsAgent()
 
     assert agent.resolve_league("who won the opening match in the fifa world cup 2026") == "FIFA-World-Cup"
     assert agent.resolve_league("when is Portugal's next match?") == "FIFA-World-Cup"
@@ -478,7 +478,7 @@ def test_sports_agent_ignores_seeded_placeholder_latest_and_uses_web(tmp_path):
         "Game 1 tips off next week with injury reports expected before shootaround.\n"
         "https://www.nba.com/news/finals-schedule"
     )
-    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_output)
+    agent = SportsAgent(web_searcher=lambda query: search_output)
 
     response = agent.answer("NBA Finals update")
 
@@ -504,7 +504,7 @@ def test_sports_agent_prefers_web_over_stale_latest_sports_note(tmp_path):
         "The latest report lists two starters questionable for Game 1.\n"
         "https://www.nba.com/news/finals-injury-report"
     )
-    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_output)
+    agent = SportsAgent(web_searcher=lambda query: search_output)
 
     response = agent.answer("NBA Finals update")
 
@@ -543,7 +543,7 @@ def test_sports_agent_uses_fresh_serpapi_search_when_selected(monkeypatch, tmp_p
         )(),
     )
 
-    agent = SportsAgent(vault_root=tmp_path / "Vault")
+    agent = SportsAgent()
     response = agent.answer("when is the next NBA game?")
 
     assert response.status == "answered"
@@ -560,8 +560,7 @@ def test_live_dispatcher_routes_implicit_specialist_request_naturally(tmp_path):
         "https://www.formula1.com/en/latest/article/race-report"
     )
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
-        agent_catalog=catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)}),
+        agent_catalog=catalog_for({"SportsAgent": SportsAgent(web_searcher=lambda query: search_output)}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -579,8 +578,7 @@ def test_live_dispatcher_returns_to_vellum_for_non_agent_turn_without_handoff_pr
         "https://www.nba.com/news/update"
     )
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
-        agent_catalog=catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)}),
+        agent_catalog=catalog_for({"SportsAgent": SportsAgent(web_searcher=lambda query: search_output)}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
     routed = dispatcher.maybe_handle("NBA update", thread_id="t1")
@@ -600,8 +598,7 @@ def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
-        agent_catalog=catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)}),
+        agent_catalog=catalog_for({"SportsAgent": SportsAgent(web_searcher=lambda query: search_output)}),
         state_store=state_store,
     )
     routed = dispatcher.maybe_handle("NBA update", thread_id="t1")
@@ -618,9 +615,8 @@ def test_live_dispatcher_honors_an_explicit_persistent_agent_selection(tmp_path)
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("t1", "SportsAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog_for({
-            "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "")
+            "SportsAgent": SportsAgent(web_searcher=lambda query: "")
         }),
         state_store=state_store,
     )
@@ -647,7 +643,6 @@ def test_live_dispatcher_honors_selected_x_youtube_and_memory_agents(tmp_path):
         agent_reach_provider=AgentReachUnavailable(),
     )
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "title": "Arsenal highlights",
@@ -659,10 +654,10 @@ def test_live_dispatcher_honors_selected_x_youtube_and_memory_agents(tmp_path):
     )
     registry = catalog_for(
         {
-            "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
-            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
-            "MemoryAgent": MemoryAgent(vault_root=tmp_path / "Vault"),
-            "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault"),
+            "XAgent": XAgent(x_service=x_service),
+            "YoutubeAgent": YoutubeAgent(youtube_service=youtube_service),
+            "MemoryAgent": MemoryAgent(),
+            "SportsAgent": SportsAgent(),
         }
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
@@ -670,7 +665,6 @@ def test_live_dispatcher_honors_selected_x_youtube_and_memory_agents(tmp_path):
     state_store.set_active_agent("yt-thread", "YoutubeAgent", selected=True)
     state_store.set_active_agent("mem-thread", "MemoryAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=registry,
         state_store=state_store,
     )
@@ -698,7 +692,6 @@ def test_live_dispatcher_honors_selected_x_youtube_and_memory_agents(tmp_path):
 
 def test_live_dispatcher_exposes_serpapi_tool_for_selected_youtube_provider(tmp_path):
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "title": "Mat Armstrong latest upload",
@@ -711,13 +704,12 @@ def test_live_dispatcher_exposes_serpapi_tool_for_selected_youtube_provider(tmp_
     )
     registry = catalog_for(
         {
-            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+            "YoutubeAgent": YoutubeAgent(youtube_service=youtube_service),
         }
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("yt-serp", "YoutubeAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=registry,
         state_store=state_store,
     )
@@ -754,7 +746,6 @@ def test_live_dispatcher_exposes_serpapi_tool_from_selected_specialist_analysis(
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("serp-thread", "ResearchAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog_for({"ResearchAgent": SerpAgent()}),
         state_store=state_store,
     )
@@ -775,14 +766,13 @@ def test_live_dispatcher_switches_explicit_agents_and_keeps_main_fallback(tmp_pa
     x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
     registry = catalog_for(
         {
-            "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
-            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault"),
-            "MemoryAgent": MemoryAgent(vault_root=tmp_path / "Vault"),
-            "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+            "XAgent": XAgent(x_service=x_service),
+            "YoutubeAgent": YoutubeAgent(),
+            "MemoryAgent": MemoryAgent(),
+            "SportsAgent": SportsAgent(web_searcher=lambda query: search_output),
         }
     )
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=registry,
         state_store=state_store,
     )
@@ -802,22 +792,23 @@ def test_live_dispatcher_switches_explicit_agents_and_keeps_main_fallback(tmp_pa
 
 
 def test_live_dispatcher_forwards_selected_memory_sources_for_workspace_ui(tmp_path):
-    vault = tmp_path / "Vault"
-    memory_dir = vault / "Agent" / "Memories" / "Shared"
-    memory_dir.mkdir(parents=True)
-    (memory_dir / "answer-style.md").write_text(
-        "User prefers concise answers with direct next steps.",
-        encoding="utf-8",
-    )
+    card = {'text': 'User prefers concise answers with direct next steps.', 'path': 'memory:11', 'scope': 'shared'}
+
+    class CanonicalMemory:
+        def build_context_pack(self, payload):
+            return {'action': 'memory.build_context_pack', 'query': payload.get('query'), 'cards': [card]}
+
+        def search_cards(self, payload):
+            return {'action': 'memory.search_cards', 'cards': [card]}
+
     registry = catalog_for(
         {
-            "MemoryAgent": MemoryAgent(vault_root=vault),
+            "MemoryAgent": MemoryAgent(memory_service=CanonicalMemory()),
         }
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("mem-thread", "MemoryAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=vault,
         agent_catalog=registry,
         state_store=state_store,
     )
@@ -827,7 +818,7 @@ def test_live_dispatcher_forwards_selected_memory_sources_for_workspace_ui(tmp_p
     assert result is not None
     assert result.agent_name == "MemoryAgent"
     assert result.sources
-    assert result.sources[0]["url"] == "Agent/Memories/Shared/answer-style.md"
+    assert result.sources[0]["url"] == "memory:11"
 
 
 def test_agent_catalog_skips_executor_when_can_handle_fails(tmp_path):
@@ -872,7 +863,6 @@ def test_live_dispatcher_contains_selected_agent_answer_failures(tmp_path):
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("thread-1", "FailingAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog_for({"FailingAgent": FailingAgent()}),
         state_store=state_store,
     )
@@ -900,7 +890,7 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
         ],
         agent_reach_provider=AgentReachUnavailable(),
     )
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
     assert agent.can_handle("Search X for Vellum") is True
 
     response = agent.answer("What did Naval post on X?")
@@ -929,7 +919,7 @@ def test_x_agent_honors_requested_search_result_limit(tmp_path):
                 ],
             }
 
-    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+    agent = XAgent(x_service=FakeXService())
 
     response = agent.answer("Search X for Vellum and show 2 results")
 
@@ -957,7 +947,7 @@ def test_x_agent_search_with_agent_reach_emits_visible_activity(tmp_path):
         search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
         agent_reach_provider=FakeAgentReach(),
     )
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
 
     response = agent.answer("What did OpenAI post on X?")
 
@@ -984,8 +974,7 @@ def test_live_dispatcher_does_not_label_agent_reach_x_sources_as_web_search(tmp_
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("x-agent-reach", "XAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
-        agent_catalog=catalog_for({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)}),
+        agent_catalog=catalog_for({"XAgent": XAgent(x_service=service)}),
         state_store=state_store,
     )
 
@@ -1008,7 +997,7 @@ def test_agent_reach_activity_marks_generic_tool_events_suppressible(tmp_path):
         search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
         agent_reach_provider=FakeAgentReach(),
     )
-    agent = XAgent(vault_root=tmp_path / "Vault", x_service=service)
+    agent = XAgent(x_service=service)
 
     response = agent.answer("What did OpenAI post on X?")
 
@@ -1030,7 +1019,7 @@ def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
             },
         )
     )
-    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+    agent = XAgent(tool_registry=registry)
 
     response = agent.answer("What did NBA post on X?")
 
@@ -1040,7 +1029,7 @@ def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
 
 def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
 
     response = agent.answer("What did AlexHormozi post on X?")
 
@@ -1056,7 +1045,7 @@ def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
 def test_x_agent_post_request_returns_confirmation_preview_without_publishing(tmp_path):
     calls = []
     service = XCapabilityService(post_backend=lambda text: calls.append(text) or {"id": "1"}, allow_posts=True)
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
 
     response = agent.answer('Post this to X: "Shipping the Agent-Reach connector today."')
 
@@ -1082,7 +1071,7 @@ def test_x_agent_natural_publish_requests_prepare_confirmation_instead_of_search
         def search_posts(self, _payload):
             raise AssertionError("publish intent must not call X search")
 
-    response = XAgent(vault_root=tmp_path, x_service=FakeXService()).answer(query)
+    response = XAgent(x_service=FakeXService()).answer(query)
 
     assert response.status == "blocked"
     assert response.action_request["action"] == "x.publish_post"
@@ -1096,7 +1085,6 @@ def test_x_agent_creative_publish_request_drafts_copy_and_prepares_confirmation(
 
     drafts = []
     response = XAgent(
-        vault_root=tmp_path,
         x_service=FakeXService(),
         post_drafter=lambda request: drafts.append(request) or "My Wi-Fi and I are taking some space.",
     ).answer("tweet something funny")
@@ -1109,7 +1097,7 @@ def test_x_agent_creative_publish_request_drafts_copy_and_prepares_confirmation(
 
 
 def test_x_agent_uses_previous_message_envelope_as_exact_post_text(tmp_path):
-    response = XAgent(vault_root=tmp_path, x_service=object()).answer(
+    response = XAgent(x_service=object()).answer(
         "Post this to X exactly:\n[X post text]\nA joke with 'quotes' inside.\n[/X post text]"
     )
 
@@ -1129,7 +1117,7 @@ def test_x_agent_returns_only_the_requested_bookmark_ordinal(tmp_path):
                 ],
             }
 
-    response = XAgent(vault_root=tmp_path, x_service=FakeXService()).answer(
+    response = XAgent(x_service=FakeXService()).answer(
         "what is the second post saved on my bookmarks"
     )
 
@@ -1161,7 +1149,7 @@ def test_x_agent_summarizes_bookmarks_instead_of_dumping_raw_posts(tmp_path):
                 ],
             }
 
-    response = XAgent(vault_root=tmp_path, x_service=FakeXService()).answer("summarize my bookmarks")
+    response = XAgent(x_service=FakeXService()).answer("summarize my bookmarks")
 
     assert response.status == "answered"
     assert response.summary.startswith("You have 2 recent bookmarks")
@@ -1193,7 +1181,7 @@ def test_x_agent_reads_latest_post_from_authenticated_account_without_search(tmp
         def search_posts(self, _payload):
             raise AssertionError("account post intent must not call X search")
 
-    response = XAgent(vault_root=tmp_path, x_service=FakeXService()).answer(
+    response = XAgent(x_service=FakeXService()).answer(
         "what is the latest tweet from my account"
     )
 
@@ -1222,7 +1210,7 @@ def test_x_agent_returns_only_latest_post_for_named_account(tmp_path):
         def search_posts(self, _payload):
             raise AssertionError("latest account post must not call broad X search")
 
-    response = XAgent(vault_root=tmp_path, x_service=FakeXService()).answer(
+    response = XAgent(x_service=FakeXService()).answer(
         "get the latest tweet from alex hormozi"
     )
 
@@ -1249,7 +1237,7 @@ def test_x_agent_returns_only_latest_liked_post(tmp_path):
                 ],
             }
 
-    response = XAgent(vault_root=tmp_path, x_service=FakeXService()).answer(
+    response = XAgent(x_service=FakeXService()).answer(
         "what is the latest post i liked"
     )
 
@@ -1279,7 +1267,7 @@ def test_x_agent_synthesizes_topic_summary_from_live_x_posts(tmp_path):
         synthesized.append((query, items))
         return "RSI discussion is active, with mixed interpretations."
 
-    agent = XAgent(vault_root=tmp_path, x_service=FakeXService(), post_summarizer=summarize)
+    agent = XAgent(x_service=FakeXService(), post_summarizer=summarize)
     response = agent.answer("what is the latest news regarding RSI on X?")
 
     assert calls == [{"query": "RSI", "max_results": 20}]
@@ -1309,7 +1297,7 @@ def test_x_agent_reads_bookmarks_and_timeline_with_agent_reach_activity(tmp_path
                 "items": [{"text": "Liked X post", "handle": "c", "url": "https://x.com/c/status/3"}],
             }
 
-    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+    agent = XAgent(x_service=FakeXService())
 
     bookmarks = agent.answer("show my X bookmarks")
     timeline = agent.answer("show my X timeline")
@@ -1346,9 +1334,7 @@ def test_x_agent_synthesizes_natural_trend_question_from_authenticated_timeline(
                 ],
             }
 
-    agent = XAgent(
-        tmp_path,
-        x_service=FakeXService(),
+    agent = XAgent(x_service=FakeXService(),
         post_summarizer=lambda query, items: "One concise synthesis of the current X conversation.",
     )
     response = agent.answer("what is happening on X?")
@@ -1370,9 +1356,7 @@ def test_x_agent_understands_typo_in_what_is_going_on_x(tmp_path):
                 "items": [{"text": "A current post", "handle": "person", "url": "https://x.com/person/status/1"}],
             }
 
-    response = XAgent(
-        tmp_path,
-        x_service=FakeXService(),
+    response = XAgent(x_service=FakeXService(),
         post_summarizer=lambda query, items: "A concise summary.",
     ).answer("what is goign on x?")
 
@@ -1384,7 +1368,7 @@ def test_x_agent_delete_request_returns_confirmation_preview_without_deleting(tm
     calls = []
     service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
     service.delete = lambda payload: calls.append(payload) or {"provider": "agent-reach"}
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
 
     response = agent.answer("delete this X post https://x.com/me/status/123")
 
@@ -1401,7 +1385,7 @@ def test_x_agent_confirmed_repost_uses_normalized_numeric_tweet_id(tmp_path):
     calls = []
     service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
     service.repost = lambda payload: calls.append(payload) or {"provider": "agent-reach"}
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
 
     response = agent.execute_action_request(
         {"action": "x.repost", "payload": {"tweet_id": "https://x.com/openai/status/1234567890123456789"}}
@@ -1413,7 +1397,7 @@ def test_x_agent_confirmed_repost_uses_normalized_numeric_tweet_id(tmp_path):
 
 def test_x_agent_prepares_extended_actions_for_confirmation(tmp_path):
     service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
-    agent = XAgent(vault_root=tmp_path, x_service=service)
+    agent = XAgent(x_service=service)
 
     cases = (
         ("bookmark this X post https://x.com/a/status/12345678", "x.bookmark"),
@@ -1431,7 +1415,7 @@ def test_x_agent_prepares_extended_actions_for_confirmation(tmp_path):
 
 
 def test_x_agent_reports_edit_as_unsupported_instead_of_delete_and_repost(tmp_path):
-    agent = XAgent(vault_root=tmp_path, x_service=XCapabilityService())
+    agent = XAgent(x_service=XCapabilityService())
 
     response = agent.answer('edit X post https://x.com/me/status/12345678 to "new text"')
 
@@ -1452,7 +1436,7 @@ def test_x_agent_status_reports_connector_capabilities(tmp_path):
                 }
             }
 
-    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+    agent = XAgent(x_service=FakeXService())
 
     response = agent.answer("check X agent status")
 
@@ -1466,7 +1450,7 @@ def test_x_agent_empty_likes_preserves_agent_reach_activity(tmp_path):
         def likes(self, payload):
             return {"provider": "agent-reach", "items": []}
 
-    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+    agent = XAgent(x_service=FakeXService())
 
     response = agent.answer("what is my latest like on X?")
 
@@ -1488,13 +1472,13 @@ def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_pat
         agent_reach_provider=NoAgentReach(),
         allow_posts=True,
     )
-    registry = catalog_for({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)})
+    registry = catalog_for({"XAgent": XAgent(x_service=service)})
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_pending_action(
         "thread-x",
         {"agent": "XAgent", "action": "x.publish_post", "payload": {"text": "Hello from Vellum."}},
     )
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path / "Vault", agent_catalog=registry, state_store=state_store)
+    dispatcher = LiveAgentDispatcher(agent_catalog=registry, state_store=state_store)
 
     assert calls == []
     confirmed = dispatcher.maybe_handle("yes, post it", thread_id="thread-x")
@@ -1514,7 +1498,7 @@ def test_x_agent_returns_structured_response_when_service_fails(tmp_path):
         def search_posts(self, payload):
             raise RuntimeError("network unavailable")
 
-    agent = XAgent(vault_root=tmp_path, x_service=FailingXService())
+    agent = XAgent(x_service=FailingXService())
 
     response = agent.answer("What did Naval post on X?")
 
@@ -1527,7 +1511,6 @@ def test_x_agent_returns_structured_response_when_service_fails(tmp_path):
 
 def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "title": "Arsenal parade highlights",
@@ -1538,7 +1521,7 @@ def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
             }
         ],
     )
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+    agent = YoutubeAgent(youtube_service=youtube_service)
 
     response = agent.answer("Summarize Arsenal highlights on YouTube")
 
@@ -1555,7 +1538,6 @@ def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
 def test_youtube_agent_uses_official_account_capabilities_without_public_search(tmp_path):
     search_calls = []
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: search_calls.append(query) or [],
         account_backend=lambda: {
             "configured": True,
@@ -1568,7 +1550,7 @@ def test_youtube_agent_uses_official_account_capabilities_without_public_search(
             {"channel_id": "UC-two", "title": "Channel Two", "channel_url": "https://youtube.com/channel/UC-two"},
         ],
     )
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+    agent = YoutubeAgent(youtube_service=youtube_service)
 
     account = agent.answer("Are you connected to YouTube?")
     subscriptions = agent.answer("Which channels am I subscribed to on YouTube?")
@@ -1587,7 +1569,6 @@ def test_youtube_agent_uses_official_account_capabilities_without_public_search(
 def test_youtube_agent_routes_private_library_and_takeout_queries_without_public_search(tmp_path):
     search_calls = []
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: search_calls.append(query) or [],
         account_backend=lambda: {"configured": True, "connected": True},
         liked_videos_backend=lambda max_results: [
@@ -1612,7 +1593,7 @@ def test_youtube_agent_routes_private_library_and_takeout_queries_without_public
             ],
         },
     )
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+    agent = YoutubeAgent(youtube_service=youtube_service)
 
     liked = agent.answer("What are my latest liked videos on YouTube?")
     history = agent.answer("What did I recently watch according to my YouTube Takeout?")
@@ -1631,7 +1612,6 @@ def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
     search_calls = []
     saved_calls = []
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: search_calls.append(query) or [],
     )
     youtube_service.subscription_feed = lambda payload: saved_calls.append(payload) or {
@@ -1639,7 +1619,7 @@ def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
         "uploads": [{"video_id": "abc123XYZ09", "title": "KSI uploaded a new challenge", "creator": "KSI"}],
         "coverage": "Saved uploads only; feed coverage may be incomplete.",
     }
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+    agent = YoutubeAgent(youtube_service=youtube_service)
 
     assert agent.can_handle("what did KSI upload")
     response = agent.answer("what did KSI upload")
@@ -1652,7 +1632,7 @@ def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
 
 
 def test_youtube_agent_does_not_route_meta_feedback_about_youtube(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault")
+    agent = YoutubeAgent()
 
     assert not agent.can_handle("in your previous response regarding youtube i don't need the evidence section")
     assert not agent.can_handle("stop adding the evidence section for YouTube searches")
@@ -1663,7 +1643,6 @@ def test_youtube_agent_does_not_route_meta_feedback_about_youtube(tmp_path):
 
 def test_live_dispatcher_keeps_youtube_feedback_with_vellum(tmp_path):
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "title": "Should not be called",
@@ -1673,11 +1652,10 @@ def test_live_dispatcher_keeps_youtube_feedback_with_vellum(tmp_path):
     )
     registry = catalog_for(
         {
-            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+            "YoutubeAgent": YoutubeAgent(youtube_service=youtube_service),
         }
     )
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=registry,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
@@ -1711,7 +1689,7 @@ def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):
             },
         )
     )
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+    agent = YoutubeAgent(tool_registry=registry)
 
     response = agent.answer("Summarize YouTube videos")
 
@@ -1721,10 +1699,9 @@ def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):
 
 def test_youtube_agent_returns_needs_fetch_when_service_has_no_results(tmp_path):
     youtube_service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [],
     )
-    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+    agent = YoutubeAgent(youtube_service=youtube_service)
 
     response = agent.answer("Summarize latest YouTube videos")
 
@@ -1733,17 +1710,14 @@ def test_youtube_agent_returns_needs_fetch_when_service_has_no_results(tmp_path)
 
 
 def test_memory_agent_answers_from_memory_capability_context(tmp_path):
-    vault = tmp_path / "Vault"
-    memory_dir = vault / "Agent" / "Memories" / "Shared"
-    memory_dir.mkdir(parents=True)
-    (memory_dir / "sports-style.md").write_text(
-        "---\nscope: shared\n---\n\nUser prefers concise sports analysis with injuries first.\n",
-        encoding="utf-8",
-    )
-    memory_service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
-    agent = MemoryAgent(vault_root=vault, memory_service=memory_service)
+    from agent.profiles.execution import ProfileExecution, profile_execution
+    memory_service = MemoryCapabilityService(sessions_db=tmp_path / "sessions.db")
+    agent = MemoryAgent(memory_service=memory_service)
+    execution = ProfileExecution('MemoryAgent', None, None, '', '', {'saved_memories': [
+        {'id': 5, 'text': 'User prefers concise sports analysis with injuries first.', 'scope': 'shared'}]}, '', 'current')
 
-    response = agent.answer("What do you remember about my sports analysis preference?")
+    with profile_execution(execution):
+        response = agent.answer("What do you remember about my sports analysis preference?")
 
     assert agent.name == "MemoryAgent"
     assert agent.can_handle("remember my preference")
@@ -1751,7 +1725,7 @@ def test_memory_agent_answers_from_memory_capability_context(tmp_path):
     assert "concise sports analysis" in response.summary
     assert response.sources
     assert response.sources[0].kind == "memory"
-    assert response.sources[0].path_or_url == "Agent/Memories/Shared/sports-style.md"
+    assert response.sources[0].path_or_url == "memory:5"
     assert "memory.build_context_pack" in response.analysis
 
 
@@ -1770,7 +1744,7 @@ def test_memory_agent_invokes_shared_tool_registry_when_provided(tmp_path):
             },
         )
     )
-    agent = MemoryAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+    agent = MemoryAgent(tool_registry=registry)
 
     response = agent.answer("What do you remember about style?")
 
@@ -1780,8 +1754,8 @@ def test_memory_agent_invokes_shared_tool_registry_when_provided(tmp_path):
 
 def test_memory_agent_proposes_query_specific_memory_without_mutating(tmp_path):
     vault = tmp_path / "Vault"
-    memory_service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
-    agent = MemoryAgent(vault_root=vault, memory_service=memory_service)
+    memory_service = MemoryCapabilityService(sessions_db=tmp_path / "sessions.db")
+    agent = MemoryAgent(memory_service=memory_service)
 
     response = agent.answer("Remember that I prefer short answers")
 
@@ -1795,7 +1769,7 @@ def test_memory_agent_proposes_query_specific_memory_without_mutating(tmp_path):
 
 
 def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
-    agent = MemoryAgent(vault_root=tmp_path)
+    agent = MemoryAgent()
     low_confidence = MemoryProposal(
         scope="memory",
         claim="Weak preference signal.",
@@ -1837,7 +1811,6 @@ def test_live_dispatcher_routes_from_allowed_skill_match(tmp_path):
     )
     runtime = RecordingRuntime(catalog)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver("ResearchAgent"),
@@ -1875,7 +1848,6 @@ def test_live_dispatcher_falls_back_to_matcher_when_skill_is_not_allowed(tmp_pat
     )
     runtime = RecordingRuntime(catalog)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver("ResearchAgent", skill_id="unapproved-route"),
@@ -1891,13 +1863,12 @@ def test_live_dispatcher_falls_back_to_matcher_when_skill_is_not_allowed(tmp_pat
 
 
 def test_live_dispatcher_rejects_catalog_runtime_ownership_split(tmp_path):
-    first_catalog = catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "first")})
-    second_catalog = catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "second")})
+    first_catalog = catalog_for({"SportsAgent": SportsAgent()})
+    second_catalog = catalog_for({"SportsAgent": SportsAgent()})
     runtime = RecordingRuntime(second_catalog)
 
     with pytest.raises(ValueError, match="same AgentCatalog"):
         LiveAgentDispatcher(
-            vault_root=tmp_path / "Vault",
             agent_catalog=first_catalog,
             delegation_runtime=runtime,
             state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
@@ -1917,7 +1888,6 @@ def test_live_dispatcher_ignores_unknown_skill_route_and_uses_matcher(tmp_path):
     catalog = catalog_for({"SportsAgent": SportsExecutor()})
     runtime = RecordingRuntime(catalog)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver("MissingAgent"),
@@ -1948,7 +1918,6 @@ def test_live_dispatcher_propagates_delegation_cache_metadata(tmp_path):
     state_store.set_active_agent("thread-1", "SportsAgent", selected=True)
     state_store.set_active_agent("thread-2", "SportsAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog,
         state_store=state_store,
         skill_route_resolver=FixedSkillResolver(None),
@@ -2011,7 +1980,6 @@ skills:
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state_store.set_active_agent("thread-1", "ResearchAgent", selected=True)
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         state_store=state_store,
         skill_route_resolver=FixedSkillResolver("ResearchAgent"),
         delegation_runtime=ProfileRuntime(),
@@ -2029,7 +1997,6 @@ def test_sports_search_is_blocked_by_profile_tool_policy(tmp_path):
     calls = []
     tool_registry = ToolRegistry()
     agent = SportsAgent(
-        vault_root=tmp_path / "Vault",
         web_searcher=lambda query: calls.append(query) or "unused",
         tool_registry=tool_registry,
     )
@@ -2065,7 +2032,7 @@ def test_x_agent_image_post_waits_for_confirmation_before_publishing(tmp_path):
             calls.append(payload)
             return {"tweet": {"id": "image-post-1"}}
 
-    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+    agent = XAgent(x_service=FakeXService())
 
     preview = agent.answer('Generate an image of a moon and post it to X with "hello"')
 
@@ -2090,7 +2057,7 @@ def test_x_agent_image_post_waits_for_confirmation_before_publishing(tmp_path):
 
 
 def test_x_followup_repost_binds_real_post_from_previous_read(tmp_path):
-    agent = XAgent(vault_root=tmp_path)
+    agent = XAgent()
     context = {"posts": [{"tweet_id": "123456789", "url": "https://x.com/owner/status/123456789", "text": "Earlier post"}]}
     result = agent.answer_with_context("Repost that", context)
     assert result.action_request["action"] == "x.repost"
@@ -2098,7 +2065,7 @@ def test_x_followup_repost_binds_real_post_from_previous_read(tmp_path):
 
 
 def test_x_followup_reply_drafts_without_requiring_exact_copy(tmp_path):
-    agent = XAgent(vault_root=tmp_path, post_drafter=lambda query: "Thanks for sharing!")
+    agent = XAgent(post_drafter=lambda query: "Thanks for sharing!")
     result = agent.answer_with_context("Reply to that with a friendly thank you", {"posts":[{"tweet_id":"123456789", "url":"https://x.com/owner/status/123456789"}]})
     assert result.action_request["action"] == "x.reply"
     assert result.action_request["payload"]["text"] == "Thanks for sharing!"
@@ -2106,7 +2073,7 @@ def test_x_followup_reply_drafts_without_requiring_exact_copy(tmp_path):
 
 
 def test_x_followup_never_guesses_between_multiple_posts(tmp_path):
-    agent = XAgent(vault_root=tmp_path)
+    agent = XAgent()
     result = agent.answer_with_context("Repost that", {"posts":[{"tweet_id":"111111111"},{"tweet_id":"222222222"}]})
     assert not result.action_request
     assert result.status == "blocked"

@@ -9,9 +9,9 @@ This roadmap reflects the current repository state. Items marked as planned are 
 - Stabilize the Skills System after the Hermes-compatible package migration.
 - Resolve the current `.skills/packages/...` deletion state before release work.
 - Create the first formal alpha release process, including `CHANGELOG.md`, Git tags, and GitHub Releases.
-- Reconcile older architecture documentation with the current ChromaDB, Honcho, Knowledge Wiki, and capability-contract implementation.
+- Reconcile older architecture documentation with the current ChromaDB, Honcho, Knowledge Core, and capability-contract implementation.
 - Keep `README.md` focused on current capabilities rather than long-term vision.
-- Strengthen regression checks around `/api/capabilities`, memory, skills, routing, Knowledge Wiki, and plugin-owned surfaces.
+- Strengthen regression checks around `/api/capabilities`, memory, skills, routing, Knowledge Core, and plugin-owned surfaces.
 - Continue hardening OpenRouter/provider fallback behavior and credential health.
 - Tighten documentation around setup, environment variables, and supported Windows development flow.
 
@@ -20,7 +20,7 @@ This roadmap reflects the current repository state. Items marked as planned are 
 - Prepare the first tagged alpha release, likely `v0.4.0-alpha` or `v0.5.0-alpha` depending on how much of the Skills System and memory/knowledge work is included.
 - Polish the production Skills Hub UI and its review/approval workflows.
 - Improve Memory Orchestrator UX for reviewing saved, archived, and pending memory.
-- Expand Knowledge Wiki ingestion workflows while preserving the raw Library trust boundary.
+- Complete the Knowledge Core read cutover once its documented gates pass.
 - Improve desktop shell packaging and startup reliability.
 - Continue computer-use safety work, including clearer consent boundaries, guarded actions, and observable session state.
 - Improve coding-assistant mode around project tree handling, session recovery, event streaming, and adapter diagnostics.

@@ -113,7 +113,6 @@ def library_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     core = KnowledgeCore(
         KnowledgeStore(tmp_path / "knowledge.db", tmp_path / "blobs"),
         conversations_path=conversations,
-        vault_root=tmp_path / "Vault",
         book_malware_scanner=CleanScanner(),
         book_embedding_provider=FixedBookEmbedder(),
         book_retrieval_index=RecordingBookIndex(),
@@ -203,7 +202,6 @@ def test_duplicate_import_recompiles_an_outdated_active_book_skill(library_clien
     upgraded = KnowledgeCore(
         core.store,
         conversations_path=core.conversations_path,
-        vault_root=core.vault_root,
         book_malware_scanner=CleanScanner(),
         book_embedding_provider=FixedBookEmbedder(),
         book_materialization_compiler_version="book-to-skill-v1.3.0-vellum.test-upgrade",
@@ -361,7 +359,7 @@ def test_parser_upgrade_preserves_old_document_and_library_identity(library_clie
     class LocalOCR:
         def __call__(self, data): raise AssertionError("Native text must not invoke OCR")
     upgraded = KnowledgeCore(core.store, conversations_path=core.conversations_path,
-        vault_root=core.vault_root, book_ocr_provider=LocalOCR(), book_malware_scanner=CleanScanner(),
+        book_ocr_provider=LocalOCR(), book_malware_scanner=CleanScanner(),
         book_embedding_provider=FixedBookEmbedder(), book_retrieval_index=core.book_materializations.retrieval_index)
     set_knowledge_core(upgraded)
     second = _import(client, content)

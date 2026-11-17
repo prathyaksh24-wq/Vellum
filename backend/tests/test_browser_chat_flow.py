@@ -98,7 +98,7 @@ def test_browser_search_followup_precedes_topic_match_but_facts_can_change_agent
 
     state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
     catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'BrowserAgent': Browser(), 'SportsAgent': Sports()})
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
     state.set_active_agent('browser-followup', 'BrowserAgent')
     result = dispatcher.maybe_handle('now search for NBA', 'browser-followup')
     assert result.agent_name == 'BrowserAgent' and result.route_source == 'contextual'

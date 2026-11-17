@@ -4,9 +4,6 @@ from agent.app_actions.knowledge_sources import (
     BOOK_COMPILE_ACTION_ID,
     BOOK_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
-    KNOWLEDGE_HEALTH_CHECK_ACTION_ID,
-    KNOWLEDGE_INDEX_REBUILD_ACTION_ID,
-    KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
     KnowledgeSourceActionService,
 )
 from agent.app_actions.models import AppActionContext, AppActionRequest
@@ -19,30 +16,6 @@ from agent.plugins.youtube_contract import (
     YOUTUBE_SYNC_ACTION_ID,
 )
 from agent.plugins.youtube_controls import youtube_plugin_contribution
-
-
-class _Wiki:
-    def __init__(self) -> None:
-        self.imports = []
-        self.lints = []
-
-    def rebuild_index(self):
-        return {"path": "Knowledge/index.md", "page_count": 4}
-
-    def ingest_source(self, **payload):
-        self.imports.append(payload)
-        return {
-            "source_trust": "approved_path",
-            "source_page": {
-                "created": True,
-                "ref": "source:opaque-1",
-                "page": {"title": "Private source", "status": "draft", "sensitivity": "private"},
-            },
-        }
-
-    def lint(self, **payload):
-        self.lints.append(payload)
-        return {"health": "healthy", "stale_days": payload["stale_days"], "issues": []}
 
 
 class _Books:
@@ -93,14 +66,10 @@ def _context(source="nlp"):
 
 
 def _knowledge_runtime():
-    wiki = _Wiki()
     books = _Books()
-    service = KnowledgeSourceActionService(
-        book_library_provider=lambda: books,
-        knowledge_wiki_provider=lambda: wiki,
-    )
+    service = KnowledgeSourceActionService(book_library_provider=lambda: books)
     runtime = AppActionRuntime(knowledge_source_handler=service.execute)
-    return runtime, wiki, books
+    return runtime, books
 
 
 def _youtube_runtime(tmp_path: Path, *, connected: bool = True):
@@ -138,10 +107,9 @@ def _youtube_runtime(tmp_path: Path, *, connected: bool = True):
     return runtime, registry, controls
 
 
-def test_knowledge_index_and_epub_import_use_canonical_owners_without_user_claims():
-    runtime, wiki, books = _knowledge_runtime()
+def test_epub_import_uses_the_canonical_book_owner_without_user_claims():
+    runtime, books = _knowledge_runtime()
 
-    rebuilt = runtime.dispatch(AppActionRequest(action_id=KNOWLEDGE_INDEX_REBUILD_ACTION_ID), _context())
     imported = runtime.dispatch(
         AppActionRequest(
             action_id=BOOK_IMPORT_ACTION_ID,
@@ -156,9 +124,6 @@ def test_knowledge_index_and_epub_import_use_canonical_owners_without_user_claim
         _context("ui"),
     )
 
-    assert rebuilt.status == "applied"
-    assert rebuilt.result["index"] == {"path": "Knowledge/index.md", "page_count": 4}
-    assert wiki.imports == []
     assert imported.status == "applied"
     assert imported.result["library"]["book"]["local_only"] is True
     assert books.imports[0]["content"] == b"epub-fixture"
@@ -167,71 +132,8 @@ def test_knowledge_index_and_epub_import_use_canonical_owners_without_user_claim
     assert "belief" not in imported.model_dump_json()
 
 
-def test_knowledge_health_check_uses_the_canonical_wiki_linter():
-    runtime, wiki, _books = _knowledge_runtime()
-
-    receipt = runtime.dispatch(
-        AppActionRequest(action_id=KNOWLEDGE_HEALTH_CHECK_ACTION_ID, arguments={"stale_days": 45}),
-        _context("ui"),
-    )
-
-    assert receipt.status == "applied"
-    assert receipt.result["lint"] == {"health": "healthy", "stale_days": 45, "issues": []}
-    assert wiki.lints == [{"stale_days": 45, "write_report": True}]
-
-
-def test_source_path_is_withheld_from_confirmation_and_only_used_after_confirmation():
-    runtime, wiki, _books = _knowledge_runtime()
-    source_path = r"D:\Private\identity-notes.md"
-    request = AppActionRequest(
-        action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
-        arguments={
-            "source_path": source_path,
-            "title": "Private source",
-            "content": "Maintained synthesis only.",
-            "provenance": [{"kind": "approved_path", "ref": "private-source"}],
-        },
-    )
-
-    review = runtime.dispatch(request, _context())
-
-    assert review.status == "confirmation_required"
-    assert source_path not in review.model_dump_json()
-    assert "Maintained synthesis only" not in review.model_dump_json()
-    assert wiki.imports == []
-    applied = runtime.confirm(review.confirmation.token, request, _context())
-    assert applied.status == "applied"
-    assert applied.target.id == "source:opaque-1"
-    assert source_path not in applied.model_dump_json()
-    assert wiki.imports[0]["source_path"] == source_path
-    assert wiki.imports[0]["synthesis"] == "Maintained synthesis only."
-    assert wiki.imports[0]["provenance"] == [{"kind": "approved_path", "ref": "private-source"}]
-
-
-def test_source_import_rejects_a_raw_path_without_maintained_synthesis():
-    runtime, wiki, _books = _knowledge_runtime()
-
-    review = runtime.dispatch(
-        AppActionRequest(
-            action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
-            arguments={"source_path": "Library/Research/raw.md"},
-        ),
-        _context(),
-    )
-    request = AppActionRequest(
-        action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
-        arguments={"source_path": "Library/Research/raw.md"},
-    )
-    receipt = runtime.confirm(review.confirmation.token, request, _context())
-
-    assert review.status == "confirmation_required"
-    assert receipt.status == "failed"
-    assert receipt.error_code == "INVALID_ACTION_ARGUMENTS"
-    assert wiki.imports == []
-
-
 def test_book_process_and_compile_require_bound_confirmation():
-    runtime, _wiki, books = _knowledge_runtime()
+    runtime, books = _knowledge_runtime()
 
     for action_id, operation in (
         (BOOK_PROCESS_ACTION_ID, "process"),
@@ -277,10 +179,10 @@ def test_youtube_intelligence_rebuild_remains_available_without_oauth(tmp_path):
 
 
 def test_nlp_matches_explicit_knowledge_and_youtube_controls_without_catching_questions():
-    runtime, _wiki, _books = _knowledge_runtime()
+    runtime, _books = _knowledge_runtime()
 
-    assert runtime.match_submission("rebuild the knowledge index").action_id == KNOWLEDGE_INDEX_REBUILD_ACTION_ID
-    assert runtime.match_submission("check knowledge health").action_id == KNOWLEDGE_HEALTH_CHECK_ACTION_ID
+    assert runtime.match_submission("rebuild the knowledge index") is None
+    assert runtime.match_submission("check knowledge health") is None
     assert runtime.match_submission("import a book").action_id == BOOK_IMPORT_ACTION_ID
     assert runtime.match_submission("process book book-1").action_id == BOOK_PROCESS_ACTION_ID
     assert runtime.match_submission("build book skill book-1").action_id == BOOK_COMPILE_ACTION_ID

@@ -288,7 +288,6 @@ def test_live_dispatcher_routes_natural_calendar_intent_through_the_catalog(tmp_
     )
     catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={calendar.name: calendar})
     dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
         agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )

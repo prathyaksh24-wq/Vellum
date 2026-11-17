@@ -45,25 +45,17 @@ class ConversationLifecycle:
         path: Path,
         clock: Callable[[], datetime] | None = None,
         indexer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-        projector: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-        archiver: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         delete_fts: Callable[[str], int] | None = None,
-        clear_context: Callable[[str], int] | None = None,
         delete_session: Callable[[str], None] | None = None,
         rename_session: Callable[[str, str], None] | None = None,
-        copy_context: Callable[[str, str], int] | None = None,
         conversation_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self.path = Path(path)
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._indexer = indexer or (lambda _conversation: {})
-        self._projector = projector or (lambda _conversation: {})
-        self._archiver = archiver or (lambda _conversation: {"ok": True})
         self._delete_fts = delete_fts or (lambda _thread_id: 0)
-        self._clear_context = clear_context or (lambda _thread_id: 0)
         self._delete_session = delete_session or (lambda _thread_id: None)
         self._rename_session = rename_session or (lambda _thread_id, _title: None)
-        self._copy_context = copy_context or (lambda _source_thread_id, _destination_thread_id: 0)
         self._conversation_id_factory = conversation_id_factory or (lambda: f"chat_{uuid4().hex}")
         self._lock = _path_lock(self.path)
 
@@ -383,17 +375,13 @@ class ConversationLifecycle:
                     if str(item.get("id")) != conversation_id
                 ])
                 thread_id = str(conversation.get("thread_id") or conversation.get("id") or conversation_id)
-                projection = self._archiver(conversation)
                 deleted_fts = self._delete_fts(thread_id)
-                deleted_context = self._clear_context(thread_id)
                 self._delete_session(thread_id)
                 return {
                     "deleted": True,
                     "conversation": conversation,
                     "changed": True,
                     "deleted_fts_rows": deleted_fts,
-                    "deleted_context_refs": deleted_context,
-                    "obsidian_projection": projection,
                 }
         raise ConversationLifecycleError("CONVERSATION_NOT_FOUND", "Conversation not found.")
 
@@ -465,21 +453,12 @@ class ConversationLifecycle:
                 },
             })
             record.pop("updated_at", None)
-            try:
-                copied_context = self._copy_context(
-                    str(source.get("thread_id") or source.get("id") or conversation_id),
-                    destination_id,
-                )
-                mutation = self.save(destination_id, record)
-            except Exception:
-                self._clear_context(destination_id)
-                raise
+            mutation = self.save(destination_id, record)
             destination = mutation["conversation"]
             return {
                 **mutation,
                 "source_conversation": source,
                 "fork_boundary": boundary or None,
-                "copied_context_refs": copied_context,
             }
 
     def _write(self, conversations: list[dict[str, Any]], *, projects: list[dict[str, Any]] | None = None) -> None:
@@ -522,12 +501,11 @@ class ConversationLifecycle:
             self._rename_session(thread_id, str(conversation.get("title") or "New chat"))
         return {
             "memory_index": self._indexer(conversation),
-            "obsidian_projection": self._projector(conversation),
         }
 
     @staticmethod
     def _empty_update_effects() -> dict[str, Any]:
-        return {"memory_index": {}, "obsidian_projection": {}}
+        return {"memory_index": {}}
 
     def _normalize(
         self,

@@ -8,8 +8,7 @@ from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
 
 
 def liked_service(tmp_path, *, unique=15):
-    return YoutubeCapabilityService(vault_root=tmp_path,
-        account_backend=lambda: {"connected": True},
+    return YoutubeCapabilityService(account_backend=lambda: {"connected": True},
         search_backend=lambda *_args: pytest.fail("A personal request reached public search"),
         liked_videos_backend=lambda limit: [
             {"video_id": f"video{index:06d}", "title": f"Liked title {index}",
@@ -19,7 +18,7 @@ def liked_service(tmp_path, *, unique=15):
 
 
 def test_exact_ten_channels_request_returns_ten_distinct_names_without_video_titles(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path))
     response = agent.answer("name any 10 channels from my liked videos")
     assert response.status == "answered"
     assert "Liked title" not in response.summary
@@ -29,13 +28,13 @@ def test_exact_ten_channels_request_returns_ten_distinct_names_without_video_tit
 
 
 def test_requested_video_count_is_respected(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path))
     response = agent.answer("show just 3 of my liked videos")
     assert len(re.findall(r"(?m)^\d+\. ", response.summary)) == 3
 
 
 def test_channels_request_reports_insufficient_distinct_channels_without_padding(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path, unique=3))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path, unique=3))
     response = agent.answer("name any 10 channels from my liked videos")
     assert "Liked title" not in response.summary
     assert len(re.findall(r"(?m)^\d+\. ", response.summary)) == 3
@@ -44,7 +43,7 @@ def test_channels_request_reports_insufficient_distinct_channels_without_padding
 
 
 def test_second_video_link_uses_the_displayed_order(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path))
     first = agent.answer_with_context("show just 3 of my liked videos", {})
     context = agent.thread_context(first, {})
     response = agent.answer_with_context("give me the link to the second video", context)
@@ -54,7 +53,7 @@ def test_second_video_link_uses_the_displayed_order(tmp_path):
 
 
 def test_missing_previous_list_explains_the_failure_without_search(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path))
     assert agent.can_handle("give me the link to the second video")
     response = agent.answer_with_context("give me the link to the second video", {})
     assert response.status == "needs_fetch"
@@ -67,7 +66,7 @@ def test_model_plan_controls_projection_count_and_creator_filter(tmp_path):
     def planner(query, context):
         calls.append(query)
         return {"source":"liked", "view":"videos", "limit":2, "creator":"Creator 3", "names_only":True}
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path), planner=planner)
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path), planner=planner)
     result = agent.answer("Pick a pair of uploads I enjoyed by that creator; titles alone please")
     assert len(calls) == 1
     assert len(re.findall(r"(?m)^\d+\. ", result.summary)) == 2
@@ -85,13 +84,13 @@ def test_account_failures_explain_reason_without_public_search(tmp_path, error, 
         raise error
     service = liked_service(tmp_path)
     service.liked_videos_backend = failed
-    result = YoutubeAgent(vault_root=tmp_path, youtube_service=service).answer("name 10 channels from my liked videos")
+    result = YoutubeAgent(youtube_service=service).answer("name 10 channels from my liked videos")
     assert result.status == "error"
     assert explanation in result.summary.lower()
 
 
 def test_invalid_model_plan_fails_honestly_without_reading_or_searching(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path),
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path),
         planner=lambda *_args: {"source":"invented", "view":"channels", "limit":10})
     result = agent.answer("name any 10 channels from my liked videos")
     assert result.status == "error"
@@ -119,7 +118,7 @@ def test_account_request_interpreter_uses_local_route_and_validates_output():
 
 
 def test_out_of_range_reference_retains_order_and_explains_missing_item(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path))
     first = agent.answer_with_context("show just 3 of my liked videos", {})
     response = agent.answer_with_context("give me the link to the fifth video", agent.thread_context(first, {}))
     assert response.status == "needs_fetch"
@@ -127,14 +126,14 @@ def test_out_of_range_reference_retains_order_and_explains_missing_item(tmp_path
 
 
 def test_channel_list_is_not_silently_treated_as_a_video_list(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path))
     first = agent.answer_with_context("name any 10 channels from my liked videos", {})
     response = agent.answer_with_context("give me the link to the second video", agent.thread_context(first, {}))
     assert response.status == "needs_fetch" and "contains channels" in response.summary
 
 
 def test_distinct_channel_count_has_explicit_recent_coverage(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path, unique=3))
+    agent = YoutubeAgent(youtube_service=liked_service(tmp_path, unique=3))
     response = agent.answer("how many distinct channels are in my liked videos?")
     assert "3 distinct channels" in response.summary and "50 recent liked videos" in response.summary
 
@@ -152,5 +151,5 @@ def test_profile_selected_cloud_model_is_rejected_before_account_interpretation(
 
 @pytest.mark.parametrize("query", ["link to the 0th video", "link to the 51st video"])
 def test_invalid_ordinals_are_reported_without_search(tmp_path, query):
-    response = YoutubeAgent(vault_root=tmp_path, youtube_service=liked_service(tmp_path)).answer(query)
+    response = YoutubeAgent(youtube_service=liked_service(tmp_path)).answer(query)
     assert response.status == "needs_fetch"

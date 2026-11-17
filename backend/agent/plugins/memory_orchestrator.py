@@ -16,7 +16,6 @@ MEMORY_ORCHESTRATOR_CAPABILITIES = [
     "memory.list_archived",
     "memory.get_settings",
     "memory.update_settings",
-    "memory.import_obsidian",
     "memory.providers.status",
 ]
 
@@ -124,12 +123,5 @@ def _provider_statuses(*, honcho_ready: bool) -> list[dict[str, Any]]:
                 if honcho_ready
                 else "Start the local Honcho stack to enable user-model context."
             ),
-        },
-        {
-            "id": "obsidian",
-            "name": "Obsidian Memory Files",
-            "type": "human_readable",
-            "status": "ready",
-            "capabilities": ["memory_cards", "USER.md", "MEMORY.md", "vault_import"],
         },
     ]

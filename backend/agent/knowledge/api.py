@@ -14,7 +14,6 @@ from agent.config import get_settings
 from agent.knowledge.book_library import BookLibrary, RIGHTS_ATTESTATION_VERSION
 from agent.knowledge.book_documents import BookDocumentError
 from agent.knowledge.book_reader import BookReaderManifest, BookReaderSection, BookReaderText
-from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
@@ -24,7 +23,6 @@ from agent.knowledge.models import (
     BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
-    MaterializationCanaryRequest,
     ObservationActor,
     ObservationInput,
     ProjectionInput,
@@ -450,26 +448,3 @@ async def core_bootstrap(request: BootstrapRequest) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().bootstrap, request)
 
 
-@router.post("/materialization-canary")
-async def core_materialization_canary(request: MaterializationCanaryRequest) -> dict[str, Any]:
-    if request.apply:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "canary_apply_offline",
-                "message": "Stop Vellum and run materialize-canary from the local CLI.",
-            },
-        )
-    try:
-        result = await asyncio.to_thread(get_knowledge_core().materialize_canary, request)
-    except MaterializationCanaryError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "canary_not_ready", "message": str(exc)},
-        ) from exc
-    if result.get("status") == "rolled_back":
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "canary_rolled_back", "report": result},
-        )
-    return result

@@ -39,9 +39,7 @@ def _registry():
     from agent.plugins.discord_runtime import discord_service
     from agent.tools.capabilities.registry import build_shared_tool_registry
 
-    settings = get_settings()
     return build_shared_tool_registry(
-        vault_root=settings.obsidian_vault_path,
         discord_service=discord_service(),
         tool_observer=KnowledgeToolObserver(get_knowledge_core()),
     )

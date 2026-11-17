@@ -32,11 +32,6 @@ def test_privacy_gate_blocks_or_scrubs_protected_values(value: str) -> None:
     assert "username:password" not in result.text
 
 
-def test_private_folder_source_is_rejected() -> None:
-    with pytest.raises(SkillPrivacyError, match="folder policy"):
-        build_learn_prompt("A reusable procedure", source_path="Books/private-note.md")
-
-
 def test_learn_and_signal_workflow_share_privacy_gate_and_three_signal_threshold(tmp_path: Path) -> None:
     workflow = SkillLearningWorkflow(tmp_path / ".skills")
     composed = workflow.compose("Deploy only after the health check")

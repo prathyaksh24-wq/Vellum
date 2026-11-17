@@ -132,8 +132,8 @@ def test_agent_reads_browser_only_history_and_discloses_stale_refresh(monkeypatc
     reader.refresh()
     monkeypatch.setattr(runtime, "get_knowledge_core", lambda: SimpleNamespace(store=store))
     monkeypatch.setattr(youtube_runtime, "youtube_status", lambda: {})
-    capability = YoutubeCapabilityService(vault_root=tmp_path)
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=capability)
+    capability = YoutubeCapabilityService()
+    agent = YoutubeAgent(youtube_service=capability)
 
     answer = agent._answer_takeout_history("my watch history")
     assert answer.status == "answered"

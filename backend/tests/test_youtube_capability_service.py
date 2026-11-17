@@ -25,7 +25,6 @@ def test_youtube_service_prefers_serpapi_backend_over_web_fallback(tmp_path):
         ]
 
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         serpapi_search_backend=serpapi_search,
         web_search_backend=web_search,
     )
@@ -38,7 +37,6 @@ def test_youtube_service_prefers_serpapi_backend_over_web_fallback(tmp_path):
 
 def test_youtube_service_filters_non_youtube_provider_results(tmp_path):
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "title": "Irrelevant CRM result",
@@ -76,7 +74,6 @@ def test_youtube_service_falls_back_to_web_when_serpapi_empty(tmp_path):
         ]
 
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         serpapi_search_backend=serpapi_search,
         web_search_backend=web_search,
     )
@@ -89,7 +86,6 @@ def test_youtube_service_falls_back_to_web_when_serpapi_empty(tmp_path):
 
 def test_youtube_service_filters_simulation_videos_and_ranks_official_recent_results(tmp_path):
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "videoId": "fake123456",
@@ -131,7 +127,6 @@ def test_youtube_service_fetches_serpapi_transcript_before_local_cards(tmp_path)
         return {"video_id": video_id, "transcript": "SerpAPI transcript.", "path": ""}
 
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [],
         serpapi_transcript_backend=serpapi_transcript,
     )
@@ -144,7 +139,6 @@ def test_youtube_service_fetches_serpapi_transcript_before_local_cards(tmp_path)
 
 def test_youtube_service_normalizes_search_results(tmp_path):
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [
             {
                 "videoId": "abc123XYZ09",
@@ -172,30 +166,8 @@ def test_youtube_service_normalizes_search_results(tmp_path):
     }
 
 
-def test_youtube_service_fetches_local_transcript_card(tmp_path):
-    vault = tmp_path / "Vault"
-    note = vault / "Library" / "Youtube" / "channels" / "arsenal" / "videos" / "2026" / "video.md"
-    note.parent.mkdir(parents=True)
-    note.write_text(
-        "---\ntype: youtube_transcript\nvideo_id: \"abc123XYZ09\"\n---\n\n## Transcript\n\nArsenal transcript body.",
-        encoding="utf-8",
-    )
-    service = YoutubeCapabilityService(
-        vault_root=vault,
-        search_backend=lambda query, max_results: [],
-        serpapi_transcript_backend=lambda video_id: None,
-    )
-
-    result = service.fetch_transcript({"video_id": "abc123XYZ09"})
-
-    assert result["action"] == "youtube.fetch_transcript"
-    assert result["transcript"] == "Arsenal transcript body."
-    assert result["path"] == "Library/Youtube/channels/arsenal/videos/2026/video.md"
-
-
 def test_youtube_service_registry_is_read_only(tmp_path):
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, max_results: [],
         account_backend=lambda: {"configured": True, "connected": True, "channel_title": "Pratyakksh"},
         subscriptions_backend=lambda: [

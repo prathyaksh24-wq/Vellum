@@ -86,7 +86,6 @@ def build_core(tmp_path: Path, *, scanner=None) -> KnowledgeCore:
             tmp_path / "data" / "knowledge" / "blobs",
         ),
         conversations_path=conversations,
-        vault_root=vault,
         book_malware_scanner=scanner or CleanScanner(),
     )
 

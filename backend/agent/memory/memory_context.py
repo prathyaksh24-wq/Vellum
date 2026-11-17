@@ -12,8 +12,7 @@ Two pieces, mirroring how Hermes makes an agent "know the user" and grow:
 
 Over days this user model deepens (Honcho accumulates observations), so the
 injected block gets richer and the agent responds with growing understanding.
-Explicit "what did we discuss" recall stays the `search_my_notes` tool
-(vector RAG over the vault + past Q&A via ChromaDB).
+Explicit "what did we discuss" recall uses the `conversation_history` tool.
 """
 
 from __future__ import annotations
@@ -233,23 +232,6 @@ def _format_memory_packet(packet: dict[str, Any]) -> str:
     external_context = str(packet.get("external_context") or "").strip()
     if external_context:
         sections.append("## External memory provider context\n" + external_context)
-    knowledge_refs = packet.get("knowledge_refs") or []
-    if knowledge_refs:
-        lines = []
-        for item in knowledge_refs[:4]:
-            if not isinstance(item, dict):
-                continue
-            title = str(item.get("title") or "Untitled")
-            ref = str(item.get("ref") or "")
-            description = str(item.get("description") or "").strip()
-            suffix = f" - {description}" if description else ""
-            lines.append(f"- {title} ({ref}){suffix}")
-        if lines:
-            sections.append(
-                "## Relevant Knowledge wiki references\n"
-                "These are routing references, not copied memory. Use the knowledge_wiki tool to read a page only when needed.\n"
-                + "\n".join(lines)
-            )
     if not sections:
         return ""
     return (

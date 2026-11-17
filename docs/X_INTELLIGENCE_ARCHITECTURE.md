@@ -22,7 +22,6 @@ XAgent
 | Authenticated local X reads and writes | `backend/agent/tools/capabilities/agent_reach_x_provider.py` |
 | Normalized evidence and provenance | Knowledge Core |
 | Successful tool-call observation | `backend/agent/knowledge/tool_observer.py` |
-| Human-readable vault notes | Derived projection only |
 
 The portable Agent-Reach plugin exposes this adapter. It is not a second runtime or data store.
 
@@ -66,7 +65,7 @@ executes only a stored pending action after a later explicit confirmation.
 
 ## Canonical Data Rules
 
-Knowledge Core is the canonical home for normalized X evidence. Obsidian remains an optional projection and review surface.
+Knowledge Core is the canonical home for normalized X evidence.
 
 Every ingested record must include:
 
@@ -82,12 +81,9 @@ Likes, bookmarks, follows, views, and reposts are observations. They are not pre
 
 ## Legacy Writers
 
-`scripts/poll_x.py` and `scripts/x_ingest.py` write directly to `Vault/Library/X`. Treat them as legacy migration inputs:
-
-- do not extend them with new source types
-- do not run them as a second canonical ingestion pipeline
-- route future scheduled ingestion through the shared connector and Knowledge Core
-- generate vault notes from canonical records after normalization
+The former vault writers (`scripts/poll_x.py`, `scripts/x_ingest.py` and their
+helpers), which wrote to `Vault/Library/X`, have been removed. Route scheduled X
+ingestion through the shared connector and Knowledge Core.
 
 Bookmark categorization adapts the taxonomy, entity extraction, and specific-category preference from
 [Siftly](https://github.com/viperrcrypto/Siftly), Copyright (c) 2025 Siftly Contributors,

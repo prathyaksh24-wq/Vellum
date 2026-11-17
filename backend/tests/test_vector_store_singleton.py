@@ -40,20 +40,3 @@ def test_singleton_resets_for_tests() -> None:
     assert a is first
     assert b is second
     assert ctor.call_count == 2
-
-
-def test_ingester_default_uses_singleton() -> None:
-    """Verify VaultIngester picks up the shared store by default."""
-    from agent.obsidian import ingester as ingester_mod
-
-    sentinel = object()
-    with patch.object(store_mod, "VectorStore", return_value=sentinel):
-        # Bypass Embedder/scrubber heavy init by patching them.
-        with patch.object(ingester_mod, "Embedder") as embedder_mock, \
-             patch.object(ingester_mod, "PrivacyScrubber") as scrub_mock, \
-             patch.object(ingester_mod, "get_settings") as settings_mock:
-            settings_mock.return_value.obsidian_vault_path = "."
-            embedder_mock.return_value = object()
-            scrub_mock.return_value = object()
-            ing = ingester_mod.VaultIngester()
-            assert ing.store is sentinel

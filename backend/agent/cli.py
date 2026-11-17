@@ -18,7 +18,6 @@ from agent.cli import expand_skill_input, handle_command as handle_skill_command
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
-from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -47,7 +46,6 @@ def _record_chat_usage(result: dict, cfg: dict) -> None:
 HELP_TEXT = """
 [bold cyan]Commands:[/bold cyan]
   [green]/memory[/green]      - Show recently learned facts
-  [green]/reindex[/green]     - Re-index your Obsidian vault
   [green]/thread <id>[/green] - Switch conversation thread
   [green]/skills[/green]       - List installed skills
   [green]/curator[/green]      - Show curator status
@@ -130,12 +128,6 @@ async def handle_command(
         rows = memory.recent_documents(limit=15)
         body = "\n".join(f"- {row['content'][:240]}" for row in rows) if rows else "No indexed exchanges yet."
         active_console.print(Panel(body, title="[bold]Recent Exchanges[/bold]", border_style="yellow"))
-        return True, current_thread_config
-
-    if normalized == "/reindex":
-        with active_console.status("[yellow]Re-indexing vault...[/yellow]"):
-            count = VaultIngester().ingest(force=True)
-        active_console.print(f"[green]Vault re-indexed: {count} chunks.[/green]")
         return True, current_thread_config
 
     if normalized.startswith("/thread "):

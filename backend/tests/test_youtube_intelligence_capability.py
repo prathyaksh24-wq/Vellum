@@ -37,7 +37,6 @@ def _snapshot(_query: str, _limit: int) -> dict:
 
 def test_personal_context_capability_is_local_and_youtube_agent_only(tmp_path: Path) -> None:
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, limit: [],
         personal_context_backend=_snapshot,
     )
@@ -58,11 +57,10 @@ def test_personal_context_capability_is_local_and_youtube_agent_only(tmp_path: P
 
 def test_youtube_agent_answers_interest_change_from_local_intelligence(tmp_path: Path) -> None:
     service = YoutubeCapabilityService(
-        vault_root=tmp_path / "Vault",
         search_backend=lambda query, limit: [],
         personal_context_backend=_snapshot,
     )
-    agent = YoutubeAgent(tmp_path / "Vault", youtube_service=service)
+    agent = YoutubeAgent(youtube_service=service)
 
     response = agent.answer("How has my interest in Sidemen changed?")
 

@@ -50,7 +50,6 @@ def make_client(monkeypatch, tmp_path) -> TestClient:
         credential_writer=lambda _provider, _secret: None,
         memory_dreaming_runner=lambda: {},
         conversation_memory_importer=lambda _limit: {},
-        obsidian_memory_importer=lambda: {},
     )
     actions = AppActionRuntime(settings_runtime_handler=service.execute)
     routing_api.configure_action_dispatcher(

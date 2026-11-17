@@ -17,10 +17,10 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'backend'))
 QA = ROOT / ".scratch" / ("context-budget-live-" + uuid4().hex[:10])
-(QA / "vault").mkdir(parents=True)
-os.environ.update(OBSIDIAN_VAULT_PATH=str(QA / "vault"), PRIMARY_MODEL="ollama/gemma4:12b",
+QA.mkdir(parents=True)
+os.environ.update(PRIMARY_MODEL="ollama/gemma4:12b",
                   KNOWLEDGE_CORE_DB_PATH=str(QA / "knowledge.db"), KNOWLEDGE_BLOB_PATH=str(QA / "blobs"),
-                  LLM_ROUTING_DB_PATH=str(QA / "routing.db"), ENABLE_VAULT_WATCHER="false",
+                  LLM_ROUTING_DB_PATH=str(QA / "routing.db"),
                   LLM_STREAM_TIMEOUT_SECONDS="180", ENABLE_NIGHTLY_DIGEST="false")
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -35,15 +35,12 @@ from agent.llm.routing.runtime import get_routing_runtime
 from agent.llm.providers import get_provider_registry
 from agent.profiles.execution import get_profile_execution
 from agent.conversations import recall
-from agent.memory.project_context import ProjectContext
 
 graph.CHECKPOINT_DB = QA / "checkpoints.db"
 api._UI_CONVERSATIONS_PATH = QA / "conversations.json"
 recall.HISTORY_PATH = api._UI_CONVERSATIONS_PATH
-graph._prompt_project_ctx = ProjectContext(vault_root=QA / 'vault', sessions_db=QA / 'identity.db')
 api._api_ledger = api.UsageLedger(QA / "usage.db")
 api._observability = api.ObservabilityService(QA / "observability.db")
-api._conversation_context_store = api.ConversationContextStore(QA / "context.db")
 state = MasterThreadStateStore(sessions_db=QA / "sessions.db")
 api._live_dispatcher.state_store = state
 api._live_dispatcher.delegation_runtime.pending_action_store = state

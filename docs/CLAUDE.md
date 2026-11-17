@@ -4,6 +4,14 @@
 > This file defines *how* the agent operates technically, not what it is philosophically.
 > Paste this into Claude Code or Codex as the operational contract for every build session.
 
+> **Obsidian vault retired (2026-11-16).** Vellum no longer reads or writes an Obsidian
+> vault: its folder policy, vault tools (`search_my_notes`, `create_note`, file writes),
+> conversation exports, retention, Knowledge Wiki and `OBSIDIAN_VAULT_PATH` are gone.
+> Memory lives in the Memory Orchestrator and Honcho; sources live in the Knowledge Core.
+> Obsidian is only an optional Plugins connector for a user's own vault. Sections below
+> that describe vault behavior are historical; follow `AGENTS.md`, `docs/ARCHITECTURE.md`
+> and `docs/memory-knowledge-architecture.md` for current behavior.
+
 ---
 
 ## 1. Privacy & Scrubbing Protocol (CRITICAL — READ FIRST)

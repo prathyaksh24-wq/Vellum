@@ -656,16 +656,8 @@ class ContextPackRequest(BaseModel):
 class BootstrapRequest(BaseModel):
     conversations: bool = True
     memories: bool = True
-    vault_library: bool = True
-    knowledge_wiki: bool = True
-    agent_projections: bool = True
-    archives: bool = True
     retrieval_indexes: bool = True
     apply: bool = False
     confirm: bool = False
     limit: int | None = Field(default=None, ge=1, le=100000)
 
-
-class MaterializationCanaryRequest(BaseModel):
-    apply: bool = False
-    confirmation: str = Field(default="", max_length=80)

@@ -29,7 +29,6 @@ def test_explicit_memory_uses_store_and_search_projection(tmp_path: Path) -> Non
         fts5=fts,
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(
-            vault_root=tmp_path / "Vault",
             sessions_db=tmp_path / "sessions.db",
         ),
         store=store,
@@ -52,7 +51,7 @@ def test_memory_packet_uses_saved_honcho_project_and_recent_context(tmp_path: Pa
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     fts = FTS5Memory(tmp_path / "fts5.db")
     resolved = ResolvedQuestionsCache(tmp_path / "resolved.db")
-    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+    service = MemoryCapabilityService(sessions_db=tmp_path / "sessions.db")
     honcho = FakeHoncho()
     orchestrator = MemoryOrchestrator(
         fts5=fts,
@@ -108,7 +107,7 @@ def test_tool_backed_answer_can_be_reused_by_related_question_in_new_chat(tmp_pa
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -154,7 +153,7 @@ def test_memory_packet_respects_global_and_agent_scopes(tmp_path: Path) -> None:
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
         memory_dir=tmp_path / "memory-files",
@@ -207,7 +206,7 @@ def test_memory_settings_can_disable_recent_context_without_disabling_saved_memo
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
         memory_dir=tmp_path / "memory-files",
@@ -233,40 +232,12 @@ def test_memory_settings_can_disable_recent_context_without_disabling_saved_memo
     assert packet["recent_context"] == ""
 
 
-def test_import_obsidian_memories_adds_existing_memory_cards_once(tmp_path: Path) -> None:
-    vault = tmp_path / "Vault"
-    memories = vault / "Agent" / "Memories"
-    memories.mkdir(parents=True)
-    (memories / "retention-policy.md").write_text(
-        "---\ntype: memory\n---\n# Retention policy\n\nUser wants old memories archived before deletion.",
-        encoding="utf-8",
-    )
-    store = SQLiteMemoryStore(tmp_path / "memory.db")
-    orchestrator = MemoryOrchestrator(
-        fts5=FTS5Memory(tmp_path / "fts5.db"),
-        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db"),
-        store=store,
-        memory_dir=tmp_path / "memory-files",
-    )
-
-    first = orchestrator.import_obsidian_memories(vault)
-    second = orchestrator.import_obsidian_memories(vault)
-
-    assert first["imported_count"] == 1
-    assert second["imported_count"] == 0
-    saved = store.list_saved()
-    assert saved[0]["scope"] == "global"
-    assert saved[0]["source_thread_id"].endswith("Agent/Memories/retention-policy.md")
-    assert "archived before deletion" in saved[0]["text"]
-
-
 def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
         memory_dir=tmp_path / "memory-files",
@@ -305,7 +276,7 @@ def test_memory_intake_keeps_operational_queries_out_of_durable_memory(tmp_path:
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -347,7 +318,7 @@ def test_summary_view_is_structured_and_dreaming_archives_legacy_noise(tmp_path:
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=tmp_path / "memory-files",
     )
@@ -387,7 +358,7 @@ def test_dreaming_writes_hermes_style_user_and_memory_files(tmp_path: Path) -> N
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=memory_dir,
     )
@@ -420,7 +391,7 @@ def test_memory_context_files_are_bounded(tmp_path: Path) -> None:
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         memory_dir=memory_dir,
     )
@@ -439,7 +410,7 @@ def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Pa
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
-        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
         memory_dir=tmp_path / "memory-files",

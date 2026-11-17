@@ -41,11 +41,6 @@ from langchain_core.messages import ToolMessage, HumanMessage, AIMessage
 from langgraph.errors import GraphRecursionError
 from pydantic import BaseModel, Field
 
-from agent.cli.project_commands import (
-    CommandResult,
-    InvalidCommand,
-    handle_project_command,
-)
 from agent.app_actions.api import router as app_actions_router
 from agent.mcp.browser_api import router as browser_router
 from agent.mcp.playwright_tools import shutdown_async as browser_shutdown_async
@@ -65,7 +60,6 @@ from agent.app_actions.settings_runtime import (
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_ENTRY_PIN_ACTION_ID,
     MEMORY_ENTRY_UPDATE_ACTION_ID,
-    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
     MEMORY_SETTINGS_UPDATE_ACTION_ID,
     SettingsRuntimeActionService,
 )
@@ -97,7 +91,6 @@ from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.honcho_client import HonchoMemory
 from agent.memory.runtime import get_memory_orchestrator
-from agent.memory.project_context import ProjectContext
 from agent.memory.sessions import SessionsReader
 from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
@@ -107,11 +100,6 @@ from agent.contracts.profile import ProfileActivity
 from agent.llm.routing.api import configure_action_dispatcher, router as llm_routing_router
 from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
-from agent.obsidian.ingester import VaultIngester
-from agent.obsidian.conversation_export import archive_conversation_projection, export_conversations
-from agent.obsidian.conversation_context import ConversationContextStore
-from agent.obsidian.wiki_api import router as knowledge_router
-from agent.obsidian.watcher import start_vault_watcher
 from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.tools.capabilities.agent_reach_x_provider import AgentReachError, AgentReachXProvider
@@ -252,7 +240,6 @@ _memory_orchestrator = get_memory_orchestrator()
 _app_action_runtime = get_app_action_runtime()
 _attachment_import_service = get_attachment_import_service()
 _app_action_runtime.set_attachment_importer(_attachment_import_service.import_from_action)
-_conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
 _conversation_share_service = ConversationShareService(export_dir=REPO_ROOT / "data" / "exports" / "conversations")
 _fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
@@ -358,7 +345,6 @@ _agent_turns = _ThreadTurnCoordinator()
 _agent_catalog = get_agent_catalog()
 _delegation_runtime = get_delegation_runtime()
 _live_dispatcher = LiveAgentDispatcher(
-    vault_root=get_settings().obsidian_vault_path,
     agent_catalog=_agent_catalog,
     delegation_runtime=_delegation_runtime,
 )
@@ -370,21 +356,8 @@ _session_control_service = SessionControlService(
 _app_action_runtime.set_session_control_handler(_session_control_service.execute)
 _oauth_flows: dict[str, dict[str, Any]] = {}
 
-_project_context_singleton: ProjectContext | None = None
 _skill_surface_singleton: SkillSurfaceService | None = None
 _plugin_registry_singleton: PluginRegistry | None = None
-
-
-def _context_vault_root() -> Path:
-    return Path(getattr(get_settings(), "obsidian_vault_path", REPO_ROOT / "Vault"))
-
-
-def _project_context() -> ProjectContext:
-    global _project_context_singleton
-    if _project_context_singleton is None:
-        s = get_settings()
-        _project_context_singleton = ProjectContext(vault_root=s.obsidian_vault_path)
-    return _project_context_singleton
 
 
 def _plugin_registry() -> PluginRegistry:
@@ -592,10 +565,6 @@ class ComputerUseTaskRequest(BaseModel):
     task: str = Field(min_length=1)
 
 
-class ReindexResponse(BaseModel):
-    chunks: int
-
-
 class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # Model id or label (label resolved via registry.resolve)
 
@@ -655,12 +624,6 @@ class SpotifyStatusResponse(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     web_playback_ready: bool = False
     redirect_uri: str = SPOTIFY_REDIRECT_URI
-
-
-class ConversationContextRequest(BaseModel):
-    kind: Literal["vault_note", "wiki_page"]
-    ref: str = Field(min_length=1)
-    mode: Literal["live", "snapshot"] = "live"
 
 
 def _computer_use_overlay() -> DesktopActivityOverlay:
@@ -956,8 +919,6 @@ def _has_memory_recall_language(message: str) -> bool:
         "find it from memory",
         "search my memory",
         "search your memory",
-        "search my vault",
-        "from the vault",
         "know about me",
         "know about myself",
         "tell me about me",
@@ -1658,34 +1619,6 @@ def _index_ui_conversation(conversation: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _project_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
-    try:
-        manifest = export_conversations(
-            [conversation],
-            vault_root=get_settings().obsidian_vault_path,
-            dry_run=False,
-        )
-        entry = (manifest.get("entries") or [{}])[0]
-        return {"ok": True, "action": entry.get("action"), "path": entry.get("path")}
-    except Exception:
-        _LOGGER.exception("Conversation projection failed")
-        return {"ok": False, "error": "unavailable"}
-
-
-def _archive_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
-    try:
-        result = archive_conversation_projection(
-            str(conversation.get("id") or ""),
-            thread_id=str(conversation.get("thread_id") or conversation.get("id") or ""),
-            vault_root=get_settings().obsidian_vault_path,
-            dry_run=False,
-        )
-        return {"ok": True, **result}
-    except Exception:
-        _LOGGER.exception("Conversation archive failed")
-        return {"ok": False, "error": "unavailable"}
-
-
 def _conversation_sessions() -> SessionsReader:
     return SessionsReader(
         checkpoints_db=REPO_ROOT / "data" / "memory" / "checkpoints.db",
@@ -1697,13 +1630,9 @@ def _conversation_lifecycle() -> ConversationLifecycle:
     return ConversationLifecycle(
         path=_UI_CONVERSATIONS_PATH,
         indexer=_index_ui_conversation,
-        projector=_project_ui_conversation,
-        archiver=_archive_ui_conversation,
         delete_fts=_fts5_memory.delete_thread,
-        clear_context=_conversation_context_store.clear,
         delete_session=lambda thread_id: _conversation_sessions().delete(thread_id),
         rename_session=lambda thread_id, title: _conversation_sessions().rename(thread_id, title),
-        copy_context=_conversation_context_store.copy,
     )
 
 
@@ -1721,14 +1650,10 @@ async def lifespan(app: FastAPI):
     from agent.desktop_runtime import acquire_workspace_lease
     acquire_workspace_lease()
     scheduler = start_scheduler()
-    watcher = start_vault_watcher()
     app.state.scheduler = scheduler
-    app.state.vault_watcher = watcher
     try:
         yield
     finally:
-        if watcher is not None:
-            watcher.stop()
         if scheduler is not None:
             shutdown = getattr(scheduler, "shutdown", None)
             if shutdown is not None:
@@ -1848,9 +1773,6 @@ _settings_runtime_actions = SettingsRuntimeActionService(
     dictation_store_provider=lambda:get_dictation_store(),
     memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
     conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
-    obsidian_memory_importer=lambda: _memory_orchestrator.import_obsidian_memories(
-        get_settings().obsidian_vault_path
-    ),
 )
 _app_action_runtime.set_settings_runtime_handler(_settings_runtime_actions.execute)
 
@@ -2767,31 +2689,13 @@ async def _run_agent_scoped(
         answer, tools = skill_system_result
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools)
 
-    if clean_message.startswith("/project"):
-        parts = clean_message.split()
-        args = parts[1:]
-        ctx = _project_context()
-        try:
-            result = handle_project_command(ctx, active_thread_id, args)
-            answer = result.message
-        except InvalidCommand as exc:
-            answer = f"⚠ {exc}"
-        return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
-
-    attached_context = await asyncio.to_thread(
-        _conversation_context_store.resolve,
-        active_thread_id,
-        vault_root=_context_vault_root(),
-    )
-    memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id) or (
-        bool(attached_context["context"]) and not _requests_fresh_public_data(effective_message, active_thread_id)
-    )
+    memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id)
     explanatory_followup = _is_explanation_followup(clean_message)
     main_plugin_route = _main_plugin_request(effective_message, attachments)
     live_result = None if memory_recall_intent or explanatory_followup or main_plugin_route else await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
     delegated_tools: list[str] = []
     delegated_sources: list[Source] = []
-    agent_input_message = _with_attached_conversation_context(effective_message, attached_context)
+    agent_input_message = effective_message
     from agent.agents.music import MusicAgent
     if not main_plugin_route and MusicAgent.public_research_request(effective_message) and not (live_result and live_result.handled):
         agent_input_message = _with_forced_web_search_context(agent_input_message)
@@ -2829,10 +2733,7 @@ async def _run_agent_scoped(
                     )
                 )
             return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
-        agent_input_message = _with_attached_conversation_context(
-            _delegated_agent_message(effective_message, live_result, live_sources),
-            attached_context,
-        )
+        agent_input_message = _delegated_agent_message(effective_message, live_result, live_sources)
 
     from agent.skills.usage_intelligence import usage_scope
 
@@ -3026,18 +2927,6 @@ async def _background_learn(
             await asyncio.to_thread(refresh_user_model, thread_id, honcho)
         except Exception:
             pass
-        try:
-            from agent.memory.project_context import build_fast_summarizer
-            ctx = _project_context()
-            # Lazy-bind a real summarizer once per process (the default is a placeholder)
-            current = getattr(ctx.summarizer, "__name__", "")
-            if current == "_default_summarizer":
-                ctx.summarizer = build_fast_summarizer()
-            summary = (clean_query[:80] + "…") if len(clean_query) > 80 else clean_query
-            await asyncio.to_thread(ctx.tick, thread_id, summary)
-        except Exception:
-            # Never let project bookkeeping break the response
-            pass
     except Exception:
         return
 
@@ -3163,7 +3052,6 @@ async def health(deep: bool = Query(default=False)) -> dict[str, Any]:
     body: dict[str, Any] = {
         "ok": True,
         "service": "personal-agent-api",
-        "vault": {"path": str(settings.obsidian_vault_path), "exists": settings.obsidian_vault_path.exists()},
         "models": {
             "primary": settings.primary_model,
             "fallback": settings.fallback_model,
@@ -3321,7 +3209,6 @@ async def patch_conversation_organization(
     return ConversationOrganizationResponse(
         conversation=result["conversation"],
         memory_index=result["memory_index"],
-        obsidian_projection=result["obsidian_projection"],
     )
 
 
@@ -3334,7 +3221,6 @@ async def put_conversation(conversation_id: str, payload: dict[str, Any]) -> dic
     return {
         "conversation": result["conversation"],
         "memory_index": result["memory_index"],
-        "obsidian_projection": result["obsidian_projection"],
     }
 
 
@@ -3354,7 +3240,6 @@ async def patch_conversation(conversation_id: str, payload: dict[str, Any]) -> d
     return {
         "conversation": result["conversation"],
         "memory_index": result["memory_index"],
-        "obsidian_projection": result["obsidian_projection"],
     }
 
 
@@ -3365,43 +3250,12 @@ async def delete_conversation(conversation_id: str) -> dict[str, Any]:
     except ConversationLifecycleError as exc:
         if exc.code != "CONVERSATION_NOT_FOUND":
             raise _conversation_http_error(exc) from exc
-        return {"ok": True, "found": False, "obsidian_projection": {"ok": True, "found": False}}
+        return {"ok": True, "found": False}
     return {
         "ok": True,
         "found": True,
         "deleted_fts_rows": result["deleted_fts_rows"],
-        "deleted_context_refs": result["deleted_context_refs"],
-        "obsidian_projection": result["obsidian_projection"],
     }
-
-
-@router.get("/conversations/{conversation_id}/context")
-async def conversation_context(conversation_id: str) -> dict[str, Any]:
-    return {"attachments": await asyncio.to_thread(_conversation_context_store.list, conversation_id)}
-
-
-@router.post("/conversations/{conversation_id}/context")
-async def attach_conversation_context(conversation_id: str, request: ConversationContextRequest) -> dict[str, Any]:
-    try:
-        attachment = await asyncio.to_thread(
-            _conversation_context_store.attach,
-            conversation_id=conversation_id,
-            kind=request.kind,
-            ref=request.ref,
-            mode=request.mode,
-            vault_root=_context_vault_root(),
-        )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Vault or wiki reference was not found.") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail="Invalid context attachment.") from exc
-    return {"attachment": attachment}
-
-
-@router.delete("/conversations/{conversation_id}/context/{attachment_id}")
-async def remove_conversation_context(conversation_id: str, attachment_id: str) -> dict[str, Any]:
-    removed = await asyncio.to_thread(_conversation_context_store.remove, conversation_id, attachment_id)
-    return {"ok": True, "removed": removed}
 
 
 @router.get("/skills")
@@ -4320,20 +4174,12 @@ from agent.tools.web import extract_web_sources
 
 _ACTIVITY_LABELS = {
     "web_search": "Searched the web",
-    "search_my_notes": "Searched your library",
-    "read_file": "Read a note",
-    "list_files": "Browsed your vault",
-    "create_note": "Wrote a note",
-    "append_to_note": "Updated a note",
-    "write_file": "Wrote a file",
-    "edit_file": "Edited a file",
-    "delete_file": "Deleted a file",
-    "create_directory": "Created a folder",
+    "read_file": "Read a saved page",
+    "list_files": "Browsed saved pages",
     "context_mode": "Fetched a page",
     "x_agent": "Called X Agent",
     "search_amazon": "Checked Amazon",
     "computer_use": "Used the desktop",
-    "knowledge_wiki": "Maintained your knowledge wiki",
     "tool_search": "Searched the tool catalog",
     "tool_describe": "Inspected a tool",
 }
@@ -4421,20 +4267,6 @@ def _decorate_source_list(records: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def _activity_for(name: str, tool_input: Any) -> tuple[str, str]:
-    if name == "knowledge_wiki" and isinstance(tool_input, dict):
-        action = str(tool_input.get("action") or "").strip().casefold().replace("-", "_")
-        label = {
-            "status": "Checking your knowledge wiki",
-            "query": "Searching your knowledge wiki",
-            "read_page": "Reading your knowledge wiki",
-            "ingest_source": "Compiling a source into your wiki",
-            "upsert_page": "Updating your knowledge wiki",
-            "update_overview": "Updating your knowledge overview",
-            "rebuild_index": "Rebuilding your knowledge index",
-            "lint": "Checking wiki health",
-        }.get(action, _ACTIVITY_LABELS["knowledge_wiki"])
-        detail = str(tool_input.get("query") or tool_input.get("source_path") or tool_input.get("title") or "")
-        return label, detail[:200]
     label = _ACTIVITY_LABELS.get(name, f"Used {name}")
     detail = ""
     if isinstance(tool_input, dict):
@@ -4513,7 +4345,7 @@ def _memory_confidence(tool_names: list[Any] | tuple[Any, ...] | None, source_re
     has_sources = bool(_memory_source_urls(source_records))
     if has_sources and names:
         return 0.92
-    if has_sources or names.intersection({"web_search", "search_my_notes", "memory_orchestrator", "x_agent"}):
+    if has_sources or names.intersection({"web_search", "memory_orchestrator", "x_agent"}):
         return 0.88
     return 0.7
 
@@ -4543,18 +4375,6 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
         return ''
     return history_block(recall_history(_read_ui_conversations(), thread_id=thread_id,
         query=clean_message, scope='previous'))
-
-
-def _with_attached_conversation_context(clean_message: str, resolved: dict[str, Any]) -> str:
-    context = str(resolved.get("context") or "").strip()
-    if not context:
-        return clean_message
-    return (
-        f"{clean_message}\n\n[Conversation knowledge context]\n"
-        "The user explicitly attached these private Vault/wiki references to this conversation. "
-        "Use them as primary context. Do not use public web tools unless the user asks for fresh or current information.\n\n"
-        f"{context}"
-    )
 
 
 def _requests_fresh_public_data(message: str, thread_id: str | None = None) -> bool:
@@ -4989,14 +4809,7 @@ async def _stream_agent_turn_scoped(
             name="books_agent",
         )
     effective_message = _continuity_request(clean_message, active_thread_id)
-    attached_context = await asyncio.to_thread(
-        _conversation_context_store.resolve,
-        active_thread_id,
-        vault_root=_context_vault_root(),
-    )
-    memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id) or (
-        bool(attached_context["context"]) and not _requests_fresh_public_data(effective_message, active_thread_id)
-    )
+    memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id)
     explanatory_followup = _is_explanation_followup(clean_message)
     early_parts = []
     live_result = None
@@ -5040,7 +4853,7 @@ async def _stream_agent_turn_scoped(
     live_sources: list[dict[str, Any]] = []
     delegated_tools: list[str] = []
     subagent_item: dict[str, Any] | None = None
-    agent_input_message = _with_attached_conversation_context(effective_message, attached_context)
+    agent_input_message = effective_message
     from agent.agents.music import MusicAgent
     if not main_plugin_route and MusicAgent.public_research_request(effective_message) and not (live_result and live_result.handled):
         query = MusicAgent.public_research_query(clean_message)
@@ -5059,28 +4872,10 @@ async def _stream_agent_turn_scoped(
                 yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
                     activity_type='source_discovered', label=f"Found {source['domain']}",
                     source=source, status='completed')
-    for context_item in attached_context["attachments"]:
-        if context_item.get("status") != "ready":
-            continue
-        context_label = "Using Obsidian note..." if context_item.get("kind") == "vault_note" else "Reading knowledge wiki..."
-        yield _agent_activity_event(
-            response_id=response_id,
-            thread_id=active_thread_id,
-            activity_type="memory_retrieved",
-            label=context_label,
-            detail=str(context_item.get("title") or context_item.get("ref") or ""),
-            status="completed",
-            item_id=str(context_item.get("id") or _stream_id("context")),
-            name=str(context_item.get("kind") or "knowledge"),
-            metadata={"ref": context_item.get("ref"), "mode": context_item.get("mode")},
-        )
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
         delegated_tools = list(live_result.tools)
-        agent_input_message = _with_attached_conversation_context(
-            _delegated_agent_message(effective_message, live_result, live_sources),
-            attached_context,
-        )
+        agent_input_message = _delegated_agent_message(effective_message, live_result, live_sources)
         if live_result.agent_name not in (_live_agents or set()):
             yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
                 activity_type="sub_agent_completed", label=f"{live_result.agent_name} finished",
@@ -5479,7 +5274,7 @@ async def _stream_agent_turn_scoped(
                             "detail": detail,
                         }
                         active_tool_items[str(event.get("run_id") or raw_name)] = item
-                        lifecycle_type = "memory_retrieved" if str(name) in {"search_my_notes", "memory_search", "obsidian_search"} else "tool_call_started"
+                        lifecycle_type = "memory_retrieved" if str(name) in {"memory_search"} else "tool_call_started"
                         lifecycle_label = "Using memory..." if lifecycle_type == "memory_retrieved" else f"Using {name}..."
                         yield _agent_activity_event(
                             response_id=response_id,
@@ -6358,25 +6153,6 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 )
             )
 
-        if clean_message.startswith("/project"):
-            parts = clean_message.split()
-            args = parts[1:]
-            ctx = _project_context()
-            try:
-                result = handle_project_command(ctx, active_thread_id, args)
-                msg = result.message
-            except InvalidCommand as exc:
-                msg = f"⚠ {exc}"
-
-            final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
-
-            async def single_event():
-                yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
-                yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
-                yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
-
-            return stream_response(single_event())
-
     else:
         clean_message = f"{scheduled_prompt}\n\nLatest user request:\n{clean_message}"
 
@@ -6584,17 +6360,6 @@ async def voice_speak(request: VoiceSpeakRequest) -> Response:
     return Response(content=wav, media_type="audio/wav")
 
 
-@router.post("/vault/reindex", response_model=ReindexResponse)
-async def reindex() -> ReindexResponse:
-    if not get_settings().enable_vector_search:
-        raise HTTPException(status_code=409, detail="vector search is disabled")
-    try:
-        chunks = await asyncio.to_thread(VaultIngester().ingest, True)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return ReindexResponse(chunks=chunks)
-
-
 @router.get("/memory/recent")
 async def recent_memory(limit: int = 15) -> dict[str, list[str]]:
     rows = await asyncio.to_thread(_fts5_memory.recent_documents, limit=limit)
@@ -6713,12 +6478,6 @@ async def import_conversation_memories(limit: int | None = None) -> dict[str, in
         MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
         arguments,
     )
-    return dict(receipt.result.get("counts") or {})
-
-
-@router.post("/memory/import-obsidian")
-async def import_obsidian_memories() -> dict[str, Any]:
-    receipt = await asyncio.to_thread(_dispatch_compat_action, MEMORY_OBSIDIAN_IMPORT_ACTION_ID, {})
     return dict(receipt.result.get("counts") or {})
 
 
@@ -7122,15 +6881,12 @@ async def public_settings() -> dict[str, Any]:
         "thread_id": settings.thread_id,
         "web_search": search_settings().model_dump(),
         "honcho_base_url": settings.honcho_base_url,
-        "vault_path": str(settings.obsidian_vault_path),
-        "agent_notes_folder": settings.agent_notes_folder,
         "primary_model": settings.primary_model,
         "fallback_model": settings.fallback_model,
         "fast_model": settings.fast_model,
         "apify_mcp_url": settings.apify_mcp_url,
         "chroma_path": str(settings.chroma_path) if settings.chroma_path is not None else None,
         "enable_nightly_digest": settings.enable_nightly_digest,
-        "enable_vault_watcher": settings.enable_vault_watcher,
         "provider_keys": configured_provider_keys(),
         "provider_connections": [connection.model_dump() for connection in provider_connections()],
     }
@@ -7324,7 +7080,6 @@ router.include_router(app_actions_router)
 router.include_router(account_router)
 router.include_router(browser_router)
 router.include_router(llm_routing_router)
-router.include_router(knowledge_router)
 router.include_router(automations_router)
 router.include_router(youtube_router)
 router.include_router(local_music_router)

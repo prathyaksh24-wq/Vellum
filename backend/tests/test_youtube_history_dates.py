@@ -32,11 +32,11 @@ def test_date_text_preserves_day_without_confusing_year_with_list_quantity(text,
 
 def test_day_followup_keeps_history_context_and_filters(tmp_path):
     from agent.agents.youtube import YoutubeAgent
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=lambda:{
+    service = YoutubeCapabilityService(browser_history_backend=lambda:{
         'available':True, 'provider':'browser', 'refreshed_at':'2026-10-08T10:00:00Z',
         'items':[{'video_id':'abcdefghijk', 'title':'Monday video', 'day_label':'Monday', 'channel_title':'Creator'},
                  {'video_id':'abcdefghij0', 'title':'Today video', 'day_label':'Today', 'channel_title':'Creator'}]})
-    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=service)
+    agent = YoutubeAgent(youtube_service=service)
     response = agent.answer_with_context('what about Monday?', {'at':time.time(),
         'account_request':{'source':'history', 'creator':'Creator', 'limit':2}})
     assert 'Monday video' in response.summary and 'Today video' not in response.summary
@@ -55,7 +55,7 @@ def test_date_query_combines_only_verified_account_saved_matches(tmp_path, monke
         clock=lambda:datetime(2026,10,8,tzinfo=UTC))
     reader.refresh()
     monkeypatch.setattr(youtube_browser_history, 'YouTubeBrowserHistoryService', lambda:reader)
-    service = YoutubeCapabilityService(vault_root=tmp_path)
+    service = YoutubeCapabilityService()
     result = service.watch_history({'day_label':'Monday'})
     assert [row['title'] for row in result['items']] == ['Saved Monday']
     assert result['saved_matches'] == 1
@@ -64,16 +64,16 @@ def test_date_query_combines_only_verified_account_saved_matches(tmp_path, monke
 
 def test_uncaptured_day_is_honest_instead_of_claiming_an_empty_day(tmp_path):
     from agent.agents.youtube import YoutubeAgent
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=lambda:{
+    service = YoutubeCapabilityService(browser_history_backend=lambda:{
         'available':True, 'provider':'browser', 'refreshed_at':'2026-10-08T10:00:00Z',
         'items':[{'video_id':'abcdefghijk','title':'Today video','day_label':'Today'}]})
-    result = YoutubeAgent(vault_root=tmp_path, youtube_service=service).answer('what did I watch Monday?')
+    result = YoutubeAgent(youtube_service=service).answer('what did I watch Monday?')
     assert result.status == 'needs_fetch' and "haven't captured" in result.summary
     assert '2026-10-05' in result.summary and 'Today video' not in result.summary
 
 
 def test_history_date_matches_resolved_days_and_empty_day_is_bounded(tmp_path):
-    service = YoutubeCapabilityService(vault_root=tmp_path, browser_history_backend=lambda:{
+    service = YoutubeCapabilityService(browser_history_backend=lambda:{
         'available':True, 'provider':'browser', 'timezone':'Asia/Kolkata', 'refreshed_at':'2026-10-08T10:00:00Z',
         'truncated':False, 'items':[
             {'video_id':'abcdefghijk', 'title':'Monday video', 'day_label':'Oct 5, 2026', 'history_day':'2026-10-05'},

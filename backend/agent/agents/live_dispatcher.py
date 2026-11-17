@@ -42,20 +42,18 @@ class LiveAgentDispatcher:
 
     def __init__(
         self,
-        vault_root: Path,
         agent_catalog: AgentCatalog | None = None,
         state_store: MasterThreadStateStore | None = None,
         skill_route_resolver: SkillRouteResolver | None = None,
         delegation_runtime: DelegationRuntime | None = None,
     ) -> None:
-        self.vault_root = Path(vault_root)
         runtime_catalog = getattr(delegation_runtime, "agent_catalog", None)
         if agent_catalog is not None and runtime_catalog is not None and agent_catalog is not runtime_catalog:
             raise ValueError("agent_catalog and delegation_runtime must use the same AgentCatalog")
         if delegation_runtime is None and agent_catalog is None:
             delegation_runtime = get_delegation_runtime()
             runtime_catalog = delegation_runtime.agent_catalog
-        self.agent_catalog = agent_catalog or runtime_catalog or AgentCatalog.default(vault_root=self.vault_root)
+        self.agent_catalog = agent_catalog or runtime_catalog or AgentCatalog.default()
         self.state_store = state_store or MasterThreadStateStore()
         if hasattr(delegation_runtime, "pending_action_store"):
             runtime_state_store = delegation_runtime.pending_action_store

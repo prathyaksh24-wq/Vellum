@@ -10,12 +10,12 @@ const { useState: useMCP_useState, useEffect: useMCP_useEffect, useMemo: useMCP_
    "Built-in" group mirrors the servers that already ship with the
    backend (agent/mcp/client.py · SERVER_RUNNERS). They are on by
    default and scoped per CLAUDE.md §3:
-     – Filesystem MCP is restricted to OBSIDIAN_VAULT_PATH
+     – Filesystem access is read-only and limited to saved browser pages
      – Apify MCP is used only for the Amazon/YouTube scrapers
    The remaining groups are optional additions that get appended
    to the user's ~/.vellum/mcp.yaml on completion. */
 const MCP_DEFAULT = [
-  { id: "b.filesystem", category: "Built-in",     label: "Filesystem",       sub: "— scoped to OBSIDIAN_VAULT_PATH · read-only fetch", url: "builtin://filesystem",      enabled: true,  builtin: true },
+  { id: "b.filesystem", category: "Built-in",     label: "Filesystem",       sub: "— saved browser pages only · read-only", url: "builtin://filesystem",      enabled: true,  builtin: true },
   { id: "b.apify",      category: "Built-in",     label: "Apify",            sub: "— Amazon + YouTube scrapers · output scrubbed before LLM", url: "https://mcp.apify.com/sse", enabled: true,  builtin: true },
 
   { id: "p.notion",     category: "Productivity", label: "Notion",           sub: "— pages, databases (read+write)", url: "mcp://notion",                    enabled: false },
@@ -25,6 +25,7 @@ const MCP_DEFAULT = [
   { id: "d.fs.work",    category: "Dev tools",    label: "Filesystem (~/work)", sub: "— second filesystem mount, scoped to ~/work/", url: "mcp://fs?root=~/work",  enabled: false },
   { id: "d.shell",      category: "Dev tools",    label: "Shell",            sub: "— run vetted commands · confirmation required", url: "mcp://shell",        enabled: false },
 
+  { id: "x.obsidian",   category: "Personal",     label: "Obsidian",         sub: "— connect your own vault (optional)", url: "mcp://obsidian",                 enabled: false },
   { id: "x.notes",      category: "Personal",     label: "Apple Notes",      sub: "— search + add notes",            url: "mcp://apple-notes",               enabled: false },
   { id: "x.pocket",     category: "Personal",     label: "Pocket",           sub: "— saved articles",                url: "mcp://pocket",                    enabled: false },
   { id: "x.spotify",    category: "Personal",     label: "Spotify",          sub: "— now-playing + queue (read)",    url: "mcp://spotify",                   enabled: false },

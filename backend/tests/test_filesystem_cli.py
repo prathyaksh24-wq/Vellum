@@ -1,4 +1,4 @@
-"""Tests for the PowerShell-CLI filesystem tools (no MCP involved)."""
+"""Tests for the read-only browser-cache file tools (PowerShell CLI, no MCP)."""
 
 from __future__ import annotations
 
@@ -16,120 +16,63 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-def fs_settings(tmp_path, monkeypatch):
-    vault = tmp_path / "vault"
-    vault.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        fs,
-        "get_settings",
-        lambda: SimpleNamespace(
-            obsidian_vault_path=vault,
-            browser_cache_dir=tmp_path / "cache",
-        ),
-    )
-    return vault
+def cache(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(fs, "get_settings", lambda: SimpleNamespace(browser_cache_dir=root))
+    return root
 
 
-def test_read_file_reads_vault_file(fs_settings):
-    note = fs_settings / "Agent" / "test.md"
-    note.parent.mkdir(parents=True)
-    note.write_text("hello vault", encoding="utf-8")
-
-    assert fs.read_file.invoke({"path": "Agent/test.md"}) == "hello vault"
-
-
-def test_read_file_uses_cache_for_relative_path(fs_settings):
-    cache = fs_settings.parent / "cache"
-    cache.mkdir(parents=True, exist_ok=True)
+def test_read_file_reads_relative_cache_path(cache):
     (cache / "page.txt").write_text("cached body", encoding="utf-8")
 
     assert fs.read_file.invoke({"path": "page.txt"}) == "cached body"
 
 
-def test_read_file_rejects_paths_outside_vault_and_cache(fs_settings):
-    outside = fs_settings.parent / "outside.txt"
+def test_read_file_reads_absolute_cache_path(cache):
+    snapshot = cache / "snapshots" / "full.md"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text("full snapshot", encoding="utf-8")
+
+    assert fs.read_file.invoke({"path": str(snapshot)}) == "full snapshot"
+
+
+def test_read_file_rejects_paths_outside_cache(cache):
+    outside = cache.parent / "outside.txt"
     outside.write_text("secret", encoding="utf-8")
 
     result = fs.read_file.invoke({"path": str(outside)})
 
-    assert "inside the Obsidian vault" in result
+    assert "inside the browser cache" in result
 
 
-def test_read_file_missing(fs_settings):
+def test_read_file_rejects_parent_traversal(cache):
+    (cache.parent / "outside.txt").write_text("secret", encoding="utf-8")
+
+    result = fs.read_file.invoke({"path": "../outside.txt"})
+
+    assert "inside the browser cache" in result
+
+
+def test_read_file_missing(cache):
     assert fs.read_file.invoke({"path": "nope.md"}) == "File not found: nope.md"
 
 
-def test_write_file_creates_with_parents(fs_settings):
-    result = fs.write_file.invoke({"path": "Agent/deep/nested.md", "content": "body"})
-
-    assert result == "Wrote Agent/deep/nested.md"
-    assert (fs_settings / "Agent" / "deep" / "nested.md").read_text(encoding="utf-8") == "body"
-
-
-def test_write_file_overwrites(fs_settings):
-    target = fs_settings / "a.md"
-    target.write_text("old", encoding="utf-8")
-
-    fs.write_file.invoke({"path": "a.md", "content": "new"})
-
-    assert target.read_text(encoding="utf-8") == "new"
-
-
-def test_edit_file_replaces_first_occurrence(fs_settings):
-    target = fs_settings / "a.md"
-    target.write_text("one two one", encoding="utf-8")
-
-    result = fs.edit_file.invoke({"path": "a.md", "old_text": "one", "new_text": "ONE"})
-
-    assert result == "Edited a.md"
-    assert target.read_text(encoding="utf-8") == "ONE two one"
-
-
-def test_edit_file_pattern_not_found(fs_settings):
-    target = fs_settings / "a.md"
-    target.write_text("abc", encoding="utf-8")
-
-    result = fs.edit_file.invoke({"path": "a.md", "old_text": "zzz", "new_text": "x"})
-
-    assert "Pattern not found" in result
-    assert target.read_text(encoding="utf-8") == "abc"
-
-
-def test_delete_file_requires_confirmation(fs_settings):
-    target = fs_settings / "a.md"
-    target.write_text("body", encoding="utf-8")
-
-    result = fs.delete_file.invoke({"path": "a.md", "confirm": False})
-
-    assert "confirm=true" in result
-    assert target.exists()
-
-
-def test_delete_file_with_confirmation(fs_settings):
-    target = fs_settings / "a.md"
-    target.write_text("body", encoding="utf-8")
-
-    result = fs.delete_file.invoke({"path": "a.md", "confirm": True})
-
-    assert result == "Deleted a.md"
-    assert not target.exists()
-
-
-def test_create_directory_creates_nested(fs_settings):
-    result = fs.create_directory.invoke({"path": "Folder/Sub"})
-
-    assert result == "Created Folder/Sub"
-    assert (fs_settings / "Folder" / "Sub").is_dir()
-
-
-def test_list_files_returns_vault_relative_paths(fs_settings):
-    (fs_settings / "a.md").write_text("a", encoding="utf-8")
-    (fs_settings / "b.md").write_text("b", encoding="utf-8")
+def test_list_files_returns_cache_relative_paths(cache):
+    (cache / "a.md").write_text("a", encoding="utf-8")
+    (cache / "b.md").write_text("b", encoding="utf-8")
 
     result = fs.list_files.invoke({"directory": ""})
 
     assert "- a.md" in result
     assert "- b.md" in result
+
+
+def test_file_tools_are_read_only():
+    assert not hasattr(fs, "write_file")
+    assert not hasattr(fs, "delete_file")
+    assert not hasattr(fs, "edit_file")
+    assert not hasattr(fs, "create_directory")
 
 
 def test_ps_quote_escapes_single_quotes():

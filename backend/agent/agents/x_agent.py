@@ -52,13 +52,11 @@ class XAgent:
 
     def __init__(
         self,
-        vault_root: Path,
         x_service: XCapabilityService | None = None,
         tool_registry: ToolRegistry | None = None,
         post_summarizer: Callable[[str, list[dict[str, Any]]], str] | None = None,
         post_drafter: Callable[[str], str] | None = None,
     ) -> None:
-        self.vault_root = Path(vault_root)
         self.tool_registry = tool_registry
         self.x_service = x_service or (None if tool_registry is not None else XCapabilityService())
         self.post_summarizer = post_summarizer

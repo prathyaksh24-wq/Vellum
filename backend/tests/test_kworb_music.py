@@ -146,7 +146,7 @@ def test_shared_dispatcher_delegates_artist_statistics_and_charts_without_model(
     from agent.profiles import AgentCatalog
     reader,_=service()
     agent=MusicAgent(tool_registry=reader.build_registry(),integrations={},planner=lambda *_:pytest.fail('No model lookup'))
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
+    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
     result=dispatcher.maybe_handle('how many monthly listeners does David Guetta have?','music-statistics')
     assert result.agent_name=='MusicAgent' and '83,220,280' in result.answer
@@ -164,7 +164,7 @@ def test_unavailable_monthly_listener_source_keeps_main_public_web_fallback(tmp_
     from agent.profiles import AgentCatalog
     reader,_=service()
     agent=MusicAgent(tool_registry=reader.build_registry(),integrations={})
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
+    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
     assert dispatcher.maybe_handle('how many monthly listeners does Unlisted Artist have?','music-statistics') is None
 
@@ -194,7 +194,7 @@ def test_list_chart_then_play_it_uses_the_displayed_tracks_without_refetch(tmp_p
     reader,fetches=service();registry.register(reader.build_registry().get('music_kworb'))
     state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     state.set_active_agent('chart-followup','YoutubeAgent',selected=True)
-    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),state_store=state)
+    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),state_store=state)
     listed=dispatcher.maybe_handle('top 10 songs from france','chart-followup')
     before=len(fetches)
     played=dispatcher.maybe_handle('play it','chart-followup')

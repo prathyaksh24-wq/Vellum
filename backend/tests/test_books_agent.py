@@ -1266,7 +1266,7 @@ def test_live_runtime_wires_both_private_books_sinks(monkeypatch, tmp_path) -> N
         "get_settings",
         lambda: SimpleNamespace(obsidian_vault_path=tmp_path),
     )
-    monkeypatch.setattr(live_runtime.AgentCatalog, "default", lambda _path: object())
+    monkeypatch.setattr(live_runtime.AgentCatalog, "default", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(live_runtime, "get_memory_orchestrator", lambda: object())
     monkeypatch.setattr(live_runtime, "MasterThreadStateStore", lambda: object())
     monkeypatch.setattr(live_runtime, "get_knowledge_core", lambda: core)
