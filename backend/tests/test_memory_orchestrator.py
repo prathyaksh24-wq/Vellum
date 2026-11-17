@@ -476,3 +476,121 @@ def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Pa
     assert pinned_id not in [item["id"] for item in dream["archived_memories"]]
     assert store.get_memory(pinned_id)["status"] == "saved"
     assert store.get_memory(stale_id)["status"] == "archived"
+
+
+class FakeHindsight:
+    id = "hindsight"
+    name = "Hindsight"
+    provider_type = "knowledge_graph"
+    optional = True
+    capabilities: list[str] = []
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.docs: dict[str, str] = {}
+        self.fail = fail
+
+    def is_enabled(self) -> bool:
+        return True
+
+    def is_configured(self) -> bool:
+        return True
+
+    def health(self) -> bool:
+        return True
+
+    def setup_notes(self) -> str:
+        return ""
+
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
+        return ""
+
+    def sync_turn(self, *args, **kwargs):
+        return "vellum-turn-test"
+
+    def retain_memory(self, memory):
+        if self.fail:
+            raise RuntimeError("server busy")
+        doc_id = f"vellum-memory-{memory['id']}"
+        self.docs[doc_id] = memory["text"]
+        return doc_id
+
+    def forget_document(self, doc_id: str) -> None:
+        self.docs.pop(doc_id, None)
+
+    def shutdown(self) -> None:
+        return None
+
+
+def _orchestrator_with(tmp_path: Path, provider) -> tuple[MemoryOrchestrator, SQLiteMemoryStore]:
+    from agent.memory.provider_extensions import MemoryProviderExtensionManager
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+        provider_extensions=MemoryProviderExtensionManager([provider]),
+    )
+    return orchestrator, store
+
+
+def test_memory_items_gain_title_topic_origin_and_typed_settings(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    memory_id = store.save_memory(kind="preference", text="I prefer concise answers with examples.",
+                                  source_thread_id="t1", confidence=0.9, scope="user_profile")
+    item = store.get_memory(memory_id)
+    assert item["origin"] == "stated"
+    assert item["title"] == "Prefer concise answers with examples"
+    assert item["topic"] == "How to talk to me"
+    assert item["use_count"] == 0 and item["suppressed"] == 0
+
+    settings = store.update_settings({"archive_after_days": "45", "include_sensitive": 1, "bogus": True})
+    assert settings["archive_after_days"] == 45 and settings["delete_after_days"] == 90
+    assert settings["include_sensitive"] is True and "bogus" not in settings
+
+    store.mark_used([memory_id])
+    assert store.get_memory(memory_id)["use_count"] == 1
+
+
+def test_deleting_a_memory_scrubs_its_text_from_the_audit_log(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    memory_id = store.save_memory(kind="fact", text="Secret project codename Bluebird.",
+                                  source_thread_id="t1", confidence=0.9)
+    store.update(memory_id, text="Secret project codename Bluebird II.")
+    store.delete(memory_id)
+    details = " ".join(row["detail"] for row in store.audit_log(limit=50))
+    assert "Bluebird" not in details
+    assert any(row["event"] == "deleted" and row["memory_id"] == memory_id for row in store.audit_log())
+
+
+def test_saved_memories_mirror_to_hindsight_and_forgets_follow(tmp_path: Path) -> None:
+    provider = FakeHindsight()
+    orchestrator, store = _orchestrator_with(tmp_path, provider)
+    memory = orchestrator.save_explicit_memory(kind="preference", text="Prefers dark roast coffee.",
+                                               source_thread_id="t1", confidence=0.95)
+    assert orchestrator.flush_provider_sync()["retained"] == 1
+    assert provider.docs == {f"vellum-memory-{memory['id']}": "Prefers dark roast coffee."}
+    assert store.sync_status("hindsight") == {"synced": 1}
+
+    store.delete(memory["id"])
+    assert orchestrator.flush_provider_sync()["forgotten"] == 1
+    assert provider.docs == {}
+    assert store.sync_status("hindsight") == {}
+
+
+def test_failed_hindsight_sends_stay_queued_and_unsent_deletes_need_nothing(tmp_path: Path) -> None:
+    provider = FakeHindsight(fail=True)
+    orchestrator, store = _orchestrator_with(tmp_path, provider)
+    memory = orchestrator.save_explicit_memory(kind="fact", text="Lives near the coast.",
+                                               source_thread_id="t1", confidence=0.95)
+    assert orchestrator.flush_provider_sync()["failed"] == 1
+    assert store.sync_status("hindsight") == {"failed": 1}
+    provider.fail = False
+    assert orchestrator.flush_provider_sync()["retained"] == 1
+
+    other = orchestrator.save_explicit_memory(kind="fact", text="Never synced memory.",
+                                              source_thread_id="t1", confidence=0.95)
+    store.delete(other["id"])
+    assert store.sync_status("hindsight") == {"synced": 1}

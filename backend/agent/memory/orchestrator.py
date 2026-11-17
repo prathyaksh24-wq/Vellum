@@ -43,13 +43,36 @@ _LIVE_HINTS = {
     "yesterday",
 }
 
-DEFAULT_MEMORY_SETTINGS = {
+DEFAULT_MEMORY_SETTINGS: dict[str, bool | int] = {
     "memory_enabled": True,
     "dreaming_enabled": True,
     "reference_history_enabled": True,
     "save_new_memories": True,
     "auto_archive_enabled": True,
-    "use_archived_memories": False,
+    # Archived memories stay recallable until they are distilled and deleted.
+    "use_archived_memories": True,
+    "include_sensitive": False,
+    # Retention: inferred memories and history archive after this many days,
+    # then are distilled into a digest and permanently deleted.
+    "archive_after_days": 30,
+    "delete_after_days": 90,
+}
+
+# The provider that mirrors durable memories (via the memory_sync ledger).
+SYNC_PROVIDER = "hindsight"
+
+# Where a memory came from. Stated memories are things the user said directly;
+# they are never removed by retention.
+MEMORY_ORIGINS = ("stated", "inferred", "imported", "digest")
+
+_MEMORY_ITEM_COLUMNS = {
+    "title": "TEXT NOT NULL DEFAULT ''",
+    "description": "TEXT NOT NULL DEFAULT ''",
+    "topic": "TEXT NOT NULL DEFAULT ''",
+    "origin": "TEXT NOT NULL DEFAULT 'inferred'",
+    "last_used_at": "TEXT",
+    "use_count": "INTEGER NOT NULL DEFAULT 0",
+    "suppressed": "INTEGER NOT NULL DEFAULT 0",
 }
 
 
@@ -88,6 +111,44 @@ class SQLiteMemoryStore:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(memory_items)").fetchall()}
             if "scope" not in columns:
                 conn.execute("ALTER TABLE memory_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'")
+            for column, ddl in _MEMORY_ITEM_COLUMNS.items():
+                if column not in columns:
+                    conn.execute(f"ALTER TABLE memory_items ADD COLUMN {column} {ddl}")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_sync (
+                    memory_id INTEGER NOT NULL,
+                    provider TEXT NOT NULL,
+                    doc_id TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (memory_id, provider)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_provider_docs (
+                    doc_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (doc_id, provider)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_growth (
+                    day TEXT PRIMARY KEY,
+                    counts_json TEXT NOT NULL,
+                    milestones_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS memory_summaries (
@@ -130,6 +191,7 @@ class SQLiteMemoryStore:
         source_thread_id: str,
         confidence: float,
         scope: str = "global",
+        **meta: Any,
     ) -> int:
         return self._insert_memory(
             scope=scope,
@@ -138,6 +200,7 @@ class SQLiteMemoryStore:
             status="pending",
             source_thread_id=source_thread_id,
             confidence=confidence,
+            **meta,
         )
 
     def save_memory(
@@ -148,7 +211,9 @@ class SQLiteMemoryStore:
         source_thread_id: str,
         confidence: float,
         scope: str = "global",
+        **meta: Any,
     ) -> int:
+        meta.setdefault("origin", "stated")
         memory_id = self._insert_memory(
             scope=scope,
             kind=kind,
@@ -156,8 +221,10 @@ class SQLiteMemoryStore:
             status="saved",
             source_thread_id=source_thread_id,
             confidence=confidence,
+            **meta,
         )
         self.audit("saved", memory_id, text)
+        self.sync_mark(memory_id, SYNC_PROVIDER, state="pending")
         return memory_id
 
     def _insert_memory(
@@ -169,18 +236,28 @@ class SQLiteMemoryStore:
         status: str,
         source_thread_id: str,
         confidence: float,
+        title: str = "",
+        description: str = "",
+        topic: str = "",
+        origin: str = "inferred",
     ) -> int:
         now = self._now()
         clean_scope = _normalize_scope(scope)
+        if origin not in MEMORY_ORIGINS:
+            origin = "inferred"
+        title = title or _memory_title(text)
+        topic = topic or _memory_topic(kind, text)
         with self._connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO memory_items (
-                    scope, kind, text, status, source_thread_id, confidence, created_at, updated_at
+                    scope, kind, text, status, source_thread_id, confidence, created_at, updated_at,
+                    title, description, topic, origin
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (clean_scope, kind, text, status, source_thread_id, float(confidence), now, now),
+                (clean_scope, kind, text, status, source_thread_id, float(confidence), now, now,
+                 title, description or text[:200], topic, origin),
             )
             return int(cursor.lastrowid)
 
@@ -246,6 +323,8 @@ class SQLiteMemoryStore:
             )
         item = self.get_memory(memory_id)
         self.audit("promoted", memory_id, item["text"])
+        if item["status"] == "saved":
+            self.sync_mark(memory_id, SYNC_PROVIDER, state="pending")
         return item
 
     def archive(self, memory_id: int) -> dict[str, Any]:
@@ -270,9 +349,168 @@ class SQLiteMemoryStore:
         item = self.get_memory(memory_id)
         if item["pinned"]:
             raise ValueError("Pinned memories cannot be deleted")
+        self.purge(memory_id, reason="deleted", kind=item["kind"])
+
+    def purge(self, memory_id: int, *, reason: str = "deleted", kind: str = "") -> None:
+        """Permanently remove a memory and every trace of its text in this store.
+
+        Earlier audit rows quoted the memory's text; they are scrubbed so a
+        deleted memory is actually forgotten. The new audit row records only
+        the id and kind.
+        """
         with self._connect() as conn:
             conn.execute("DELETE FROM memory_items WHERE id = ?", (int(memory_id),))
-        self.audit("deleted", memory_id, item["text"])
+            conn.execute(
+                "UPDATE memory_audit_log SET detail = '[removed]' WHERE memory_id = ?",
+                (int(memory_id),),
+            )
+            # A provider copy that was never sent needs nothing; one that was
+            # sent must be deleted there too.
+            conn.execute(
+                "DELETE FROM memory_sync WHERE memory_id = ? AND state IN ('pending', 'failed') AND attempts = 0",
+                (int(memory_id),),
+            )
+            conn.execute(
+                "UPDATE memory_sync SET state = 'forget', attempts = 0, last_error = '' WHERE memory_id = ?",
+                (int(memory_id),),
+            )
+        self.audit(reason, memory_id, f"kind={kind}" if kind else "")
+
+    def mark_used(self, memory_ids: list[int]) -> None:
+        ids = [int(item) for item in memory_ids]
+        if not ids:
+            return
+        now = self._now()
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE memory_items SET use_count = use_count + 1, last_used_at = ? WHERE id IN ({placeholders})",
+                (now, *ids),
+            )
+
+    def set_suppressed(self, memory_id: int, suppressed: bool = True) -> dict[str, Any]:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE memory_items SET suppressed = ?, updated_at = ? WHERE id = ?",
+                (1 if suppressed else 0, self._now(), int(memory_id)),
+            )
+        self.audit("suppressed" if suppressed else "unsuppressed", memory_id, "")
+        return self.get_memory(memory_id)
+
+    def set_meta(self, memory_id: int, **fields: Any) -> dict[str, Any]:
+        allowed = {key: value for key, value in fields.items() if key in {"title", "description", "topic", "origin"}}
+        if allowed:
+            assignments = ", ".join(f"{key} = ?" for key in allowed)
+            with self._connect() as conn:
+                conn.execute(
+                    f"UPDATE memory_items SET {assignments}, updated_at = ? WHERE id = ?",
+                    (*allowed.values(), self._now(), int(memory_id)),
+                )
+        return self.get_memory(memory_id)
+
+    # -- provider sync ledger -------------------------------------------------
+
+    def sync_mark(self, memory_id: int, provider: str, *, state: str, doc_id: str = "", error: str = "") -> None:
+        now = self._now()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_sync (memory_id, provider, doc_id, state, attempts, last_error, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(memory_id, provider) DO UPDATE SET
+                    doc_id = CASE WHEN excluded.doc_id != '' THEN excluded.doc_id ELSE memory_sync.doc_id END,
+                    state = excluded.state,
+                    attempts = CASE
+                        WHEN excluded.last_error != '' THEN memory_sync.attempts + 1
+                        WHEN excluded.state = 'synced' THEN 0
+                        ELSE memory_sync.attempts END,
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at
+                """,
+                (int(memory_id), provider, doc_id or f"vellum-memory-{int(memory_id)}", state,
+                 1 if error else 0, _squash(error, limit=300), now),
+            )
+
+    def sync_pending(self, provider: str, *, max_attempts: int = 5, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM memory_sync
+                WHERE provider = ? AND state IN ('pending', 'failed', 'forget') AND attempts < ?
+                ORDER BY updated_at ASC LIMIT ?
+                """,
+                (provider, int(max_attempts), int(limit)),
+            ).fetchall()
+        return [_row_dict(row) for row in rows]
+
+    def record_provider_doc(self, doc_id: str, provider: str, kind: str) -> None:
+        if not doc_id:
+            return
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO memory_provider_docs (doc_id, provider, kind, created_at) VALUES (?, ?, ?, ?)",
+                (doc_id, provider, kind, self._now()),
+            )
+
+    def provider_docs_before(self, provider: str, cutoff_iso: str, *, kind: str = "turn") -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT doc_id FROM memory_provider_docs WHERE provider = ? AND kind = ? AND created_at < ?",
+                (provider, kind, cutoff_iso),
+            ).fetchall()
+        return [str(row["doc_id"]) for row in rows]
+
+    def drop_provider_doc(self, doc_id: str, provider: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM memory_provider_docs WHERE doc_id = ? AND provider = ?", (doc_id, provider))
+
+    def sync_drop(self, memory_id: int, provider: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM memory_sync WHERE memory_id = ? AND provider = ?", (int(memory_id), provider))
+
+    def sync_status(self, provider: str) -> dict[str, int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT state, COUNT(*) AS n FROM memory_sync WHERE provider = ? GROUP BY state", (provider,)
+            ).fetchall()
+        return {str(row["state"]): int(row["n"]) for row in rows}
+
+    # -- growth snapshots -----------------------------------------------------
+
+    def record_growth(self, day: str, counts: dict[str, Any], milestones: list[dict[str, Any]]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_growth (day, counts_json, milestones_json, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(day) DO UPDATE SET counts_json = excluded.counts_json,
+                    milestones_json = excluded.milestones_json
+                """,
+                (day, json.dumps(counts, sort_keys=True), json.dumps(milestones), self._now()),
+            )
+
+    def growth(self, *, limit: int = 90) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM memory_growth ORDER BY day DESC LIMIT ?", (int(limit),)
+            ).fetchall()
+        out = []
+        for row in reversed(rows):
+            out.append({
+                "day": row["day"],
+                "counts": json.loads(row["counts_json"]),
+                "milestones": json.loads(row["milestones_json"]),
+            })
+        return out
+
+    def list_all(self, *, statuses: tuple[str, ...] = ("saved", "archived", "pending")) -> list[dict[str, Any]]:
+        placeholders = ",".join("?" for _ in statuses)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM memory_items WHERE status IN ({placeholders}) ORDER BY created_at ASC, id ASC",
+                statuses,
+            ).fetchall()
+        return [_row_dict(row) for row in rows]
 
     def pin(self, memory_id: int, pinned: bool = True) -> dict[str, Any]:
         now = self._now()
@@ -294,11 +532,13 @@ class SQLiteMemoryStore:
         now = self._now()
         with self._connect() as conn:
             conn.execute(
-                "UPDATE memory_items SET text = ?, kind = ?, updated_at = ? WHERE id = ?",
-                (next_text, next_kind, now, int(memory_id)),
+                "UPDATE memory_items SET text = ?, kind = ?, title = ?, description = ?, updated_at = ? WHERE id = ?",
+                (next_text, next_kind, _memory_title(next_text), next_text[:200], now, int(memory_id)),
             )
         updated = self.get_memory(memory_id)
         self.audit("updated", memory_id, updated["text"])
+        if updated["status"] == "saved":
+            self.sync_mark(memory_id, SYNC_PROVIDER, state="pending")
         return updated
 
     def global_summary(self) -> str:
@@ -356,35 +596,35 @@ class SQLiteMemoryStore:
             ).fetchall()
         return [_row_dict(row) for row in rows]
 
-    def get_settings(self) -> dict[str, bool]:
-        settings = dict(DEFAULT_MEMORY_SETTINGS)
+    def get_settings(self) -> dict[str, Any]:
+        settings: dict[str, Any] = dict(DEFAULT_MEMORY_SETTINGS)
         with self._connect() as conn:
             rows = conn.execute("SELECT key, value FROM memory_settings").fetchall()
         for row in rows:
             if row["key"] not in settings:
                 continue
-            try:
-                settings[row["key"]] = bool(json.loads(row["value"]))
-            except json.JSONDecodeError:
-                settings[row["key"]] = row["value"].lower() == "true"
+            settings[row["key"]] = _coerce_setting(row["key"], row["value"])
         return settings
 
-    def update_settings(self, patch: dict[str, Any]) -> dict[str, bool]:
+    def update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
         allowed = set(DEFAULT_MEMORY_SETTINGS)
         now = self._now()
+        applied: dict[str, Any] = {}
         with self._connect() as conn:
             for key, value in patch.items():
                 if key not in allowed:
                     continue
+                clean = _coerce_setting(key, value)
+                applied[key] = clean
                 conn.execute(
                     """
                     INSERT INTO memory_settings (key, value, updated_at)
                     VALUES (?, ?, ?)
                     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
                     """,
-                    (key, json.dumps(bool(value)), now),
+                    (key, json.dumps(clean), now),
                 )
-        self.audit("settings_updated", None, json.dumps({k: bool(v) for k, v in patch.items() if k in allowed}, sort_keys=True))
+        self.audit("settings_updated", None, json.dumps(applied, sort_keys=True))
         return self.get_settings()
 
 
@@ -417,6 +657,7 @@ class MemoryOrchestrator:
         source_thread_id: str,
         confidence: float,
         scope: str = "global",
+        **meta: Any,
     ) -> dict[str, Any]:
         """Persist a user-authored memory and update its canonical search projection."""
 
@@ -428,6 +669,7 @@ class MemoryOrchestrator:
             source_thread_id=source_thread_id,
             confidence=confidence,
             scope=scope,
+            **meta,
         )
         self.fts5.add_document(
             content=f"Saved memory: {text}",
@@ -435,6 +677,46 @@ class MemoryOrchestrator:
             source_paths=[f"memory:{memory_id}"],
         )
         return self.store.get_memory(memory_id)
+
+    def flush_provider_sync(self, *, limit: int = 50) -> dict[str, Any]:
+        """Send queued memory changes to Hindsight; failures stay queued for retry.
+
+        Every durable memory is mirrored as its own document, so a forget in
+        Vellum deletes exactly that document in Hindsight.
+        """
+        result: dict[str, Any] = {"retained": 0, "forgotten": 0, "failed": 0, "skipped": ""}
+        if self.store is None or self.provider_extensions is None:
+            result["skipped"] = "no_store"
+            return result
+        provider = self.provider_extensions.get(SYNC_PROVIDER)
+        health = getattr(provider, "health", None)
+        if provider is None or not hasattr(provider, "retain_memory") or (callable(health) and not health()):
+            result["skipped"] = "provider_unavailable"
+            return result
+        for row in self.store.sync_pending(SYNC_PROVIDER, limit=limit):
+            memory_id = int(row["memory_id"])
+            try:
+                if row["state"] == "forget":
+                    provider.forget_document(str(row["doc_id"]))
+                    self.store.sync_drop(memory_id, SYNC_PROVIDER)
+                    result["forgotten"] += 1
+                    continue
+                try:
+                    memory = self.store.get_memory(memory_id)
+                except KeyError:
+                    self.store.sync_drop(memory_id, SYNC_PROVIDER)
+                    continue
+                if memory["status"] != "saved" or memory.get("suppressed"):
+                    self.store.sync_drop(memory_id, SYNC_PROVIDER)
+                    continue
+                doc_id = provider.retain_memory(memory)
+                self.store.sync_mark(memory_id, SYNC_PROVIDER, state="synced", doc_id=doc_id)
+                result["retained"] += 1
+            except Exception as exc:  # noqa: BLE001 - the ledger keeps the error for retry
+                self.store.sync_mark(memory_id, SYNC_PROVIDER, state="failed" if row["state"] != "forget" else "forget",
+                                     error=str(exc))
+                result["failed"] += 1
+        return result
 
     def lookup_specialist_response(self, *, profile: AgentProfile, query: str) -> CacheDecision:
         if self.store is not None:
@@ -528,6 +810,11 @@ class MemoryOrchestrator:
                     "confidence": confidence,
                 },
             )
+            if self.store is not None:
+                # Turn documents are history: the retention job deletes them
+                # from the provider once they pass delete_after_days.
+                for synced in external_sync:
+                    self.store.record_provider_doc(str(synced.get("doc_id") or ""), str(synced.get("provider")), "turn")
 
         knowledge_core_result: dict[str, Any] = {"stored": False, "reason": "knowledge_core_unavailable"}
         if self.knowledge_core is not None:
@@ -762,12 +1049,14 @@ class MemoryOrchestrator:
             # Preferences and corrections describe the user, not one project, so
             # they go to user_profile, which every specialist already reads.
             user_level = main_agent and candidate["kind"] in {"preference", "correction"}
+            stated = candidate["confidence"] >= 0.8
             memory_id = self.store.add_pending(
                 kind=candidate["kind"],
                 text=candidate["text"],
                 source_thread_id=thread_id,
                 confidence=candidate["confidence"],
                 scope="user_profile" if user_level else _scope_for_candidate(agent_name),
+                origin="stated" if stated else "inferred",
             )
             self.store.audit("pending_created", memory_id, f"{agent_name}: {candidate['text']}")
             # Things the user stated directly must shape the very next answer,
@@ -1098,6 +1387,66 @@ def _dedupe_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _explicit_remember(text: str) -> bool:
     return bool(re.search(r"(?:^|[.!?]\s+)(?:please\s+)?(?:remember|memorize|note|keep in mind)\b", text, re.I))
+
+
+def _coerce_setting(key: str, value: Any) -> Any:
+    default = DEFAULT_MEMORY_SETTINGS.get(key)
+    raw = value
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            raw = raw.strip().lower() == "true" if isinstance(default, bool) else raw
+    if isinstance(default, bool):
+        return bool(raw)
+    if isinstance(default, int):
+        try:
+            return max(1, int(raw))
+        except (TypeError, ValueError):
+            return default
+    return raw
+
+
+def _memory_title(text: str) -> str:
+    """A short label for the memory, used as its recall key and card title."""
+    clean = re.sub(r"\s+", " ", str(text or "")).strip().rstrip(".!")
+    clean = re.sub(r"^(?:please\s+)?(?:remember|note|keep in mind)(?:\s+that)?\s+", "", clean, flags=re.I)
+    clean = re.sub(r"^i\s+", "", clean, flags=re.I)
+    words = clean.split()
+    title = " ".join(words[:9])
+    if len(words) > 9:
+        title += "…"
+    return title[:1].upper() + title[1:] if title else ""
+
+
+_TOPIC_RULES: tuple[tuple[str, str], ...] = (
+    (r"\b(?:code|coding|python|typescript|javascript|rust|repo|git|test|api|backend|frontend|bug)\b", "Coding and tools"),
+    (r"\b(?:music|song|album|artist|spotify|playlist)\b", "Music"),
+    (r"\b(?:book|books|read|reading|author|novel)\b", "Books and reading"),
+    (r"\b(?:sport|football|cricket|nba|match|team|league)\b", "Sports"),
+    (r"\b(?:youtube|video|creator|channel)\b", "Videos and creators"),
+    (r"\b(?:calendar|meeting|schedule|morning|routine|weekday)\b", "Schedule and routines"),
+    (r"\b(?:tone|concise|format|bullet|answer|answers|reply|replies|explain|style)\b", "How to talk to me"),
+)
+
+
+def _memory_topic(kind: str, text: str) -> str:
+    if kind == "correction":
+        return "Lessons and corrections"
+    if kind == "digest":
+        return "Earlier memories"
+    lowered = str(text or "").casefold()
+    if kind == "project" or "vellum" in lowered:
+        if "vellum" in lowered:
+            return "Vellum"
+    for pattern, topic in _TOPIC_RULES:
+        if re.search(pattern, lowered):
+            return topic
+    if kind == "project":
+        return "Projects"
+    if kind == "preference":
+        return "Preferences"
+    return "About you"
 
 
 def _sentence(text: str) -> str:

@@ -144,6 +144,30 @@ services:
       retries: 12
     restart: unless-stopped
 
+  # Hindsight: Vellum's long-term memory engine (retain / recall / reflect).
+  # Runs fully local: its LLM is Ollama on the host, embeddings and reranking
+  # run inside the container, and the API binds to loopback only.
+  # Start with: docker compose up -d hindsight
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:${HINDSIGHT_IMAGE_TAG:-latest}
+    ports:
+      - "127.0.0.1:8888:8888"
+    environment:
+      HINDSIGHT_API_LLM_PROVIDER: ollama
+      HINDSIGHT_API_LLM_BASE_URL: http://host.docker.internal:11434/v1
+      HINDSIGHT_API_LLM_MODEL: ${HINDSIGHT_LLM_MODEL:-gemma4:12b}
+      # Local models cannot produce Hindsight's default 65k-token extraction.
+      HINDSIGHT_API_RETAIN_MAX_COMPLETION_TOKENS: "16000"
+      HINDSIGHT_API_WORKER_ID: vellum-local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    shm_size: 1g
+    stop_grace_period: 75s
+    volumes:
+      - hindsight_data:/home/hindsight/.pg0
+    restart: unless-stopped
+
 volumes:
   honcho_data:
   honcho_cache:
+  hindsight_data:

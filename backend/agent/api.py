@@ -6432,6 +6432,9 @@ class MemorySettingsRequest(BaseModel):
     save_new_memories: bool | None = None
     auto_archive_enabled: bool | None = None
     use_archived_memories: bool | None = None
+    include_sensitive: bool | None = None
+    archive_after_days: int | None = None
+    delete_after_days: int | None = None
 
 
 @router.get("/memory/summary")

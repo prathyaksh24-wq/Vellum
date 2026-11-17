@@ -10,12 +10,47 @@ import json
 import os
 import re
 import sqlite3
+import time
+import urllib.parse
+import urllib.request
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from agent.config import Settings
+
+
+_HEALTH_TTL_SECONDS = 30.0
+
+
+def _is_local_url(url: str) -> bool:
+    host = (urllib.parse.urlparse(url).hostname or "").casefold()
+    return host in {"localhost", "127.0.0.1", "::1", "host.docker.internal"}
+
+
+def _hindsight_items(result: Any) -> list[dict[str, Any]]:
+    if isinstance(result, dict):
+        raw_items = result.get("results") or result.get("memories") or result.get("observations") or []
+    else:
+        raw_items = getattr(result, "results", None) or getattr(result, "memories", None) or []
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            get = item.get
+        else:
+            def get(key: str, _item: Any = item) -> Any:
+                return getattr(_item, key, None)
+        text = get("text") or get("content") or get("memory") or get("observation")
+        if not text:
+            continue
+        items.append({
+            "text": str(text).strip(),
+            "type": str(get("type") or get("fact_type") or ""),
+            "document_id": str(get("document_id") or ""),
+        })
+    return items
 
 
 class MemoryProviderExtension(Protocol):
@@ -97,7 +132,10 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
             notes="Set HINDSIGHT_API_KEY and add hindsight to MEMORY_EXTENSION_PROVIDERS.",
         )
         self.client = client
+        self._injected_client = client is not None
         self.settings = settings
+        self._healthy = False
+        self._health_checked_at = -_HEALTH_TTL_SECONDS
         self.bank_id = settings.hindsight_bank_id if settings else os.environ.get("HINDSIGHT_BANK_ID", "vellum")
         self.budget = settings.hindsight_budget if settings else os.environ.get("HINDSIGHT_BUDGET", "mid")
 
@@ -109,16 +147,52 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         }
 
     def is_configured(self) -> bool:
+        if _is_local_url(self.base_url):
+            return True
         if self.settings is None:
             return super().is_configured()
         return bool(self.settings.hindsight_api_key.get_secret_value().strip())
 
+    @property
+    def base_url(self) -> str:
+        return (self.settings.hindsight_api_url if self.settings else
+                os.environ.get("HINDSIGHT_API_URL", "https://api.hindsight.vectorize.io")).rstrip("/")
+
+    def health(self) -> bool:
+        """True only when the server answered recently, not merely when configured."""
+        if self._injected_client:
+            return True
+        now = time.monotonic()
+        if now - self._health_checked_at < _HEALTH_TTL_SECONDS:
+            return self._healthy
+        self._health_checked_at = now
+        try:
+            with urllib.request.urlopen(f"{self.base_url}/health", timeout=1.5) as response:  # noqa: S310
+                self._healthy = 200 <= int(response.status) < 300
+        except Exception:
+            self._healthy = False
+        return self._healthy
+
     def prefetch(self, query: str, *, session_id: str = "") -> str:
-        client = self._client()
-        if client is None or not query.strip():
+        items = self.recall_items(query)
+        if not items:
             return ""
+        return "## Hindsight Memory\n" + "\n".join(f"- {item['text']}" for item in items[:8])
+
+    def recall_items(self, query: str, *, limit: int = 8) -> list[dict[str, Any]]:
+        client = self._client()
+        if client is None or not query.strip() or not self.health():
+            return []
         result = client.recall(self.bank_id, query, budget=self.budget)
-        return _format_hindsight_recall(result)
+        return _hindsight_items(result)[:limit]
+
+    def reflect(self, query: str, *, context: str | None = None) -> str:
+        client = self._client()
+        if client is None or not query.strip() or not self.health() or not hasattr(client, "reflect"):
+            return ""
+        result = client.reflect(self.bank_id, query, budget="low", context=context)
+        text = result.get("text") if isinstance(result, dict) else getattr(result, "text", "")
+        return str(text or "").strip()
 
     def sync_turn(
         self,
@@ -127,21 +201,54 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         *,
         session_id: str = "",
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> str | None:
+        """Retain a conversation turn. Returns the provider document id."""
         client = self._client()
-        if client is None:
-            return
+        if client is None or not self.health():
+            return None
         content = f"User: {user_content.strip()}\nAssistant: {assistant_content.strip()}".strip()
         if not content:
-            return
+            return None
         next_metadata = {
             key: value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
             for key, value in {"session_id": session_id, **(metadata or {})}.items()
         }
+        doc_id = f"vellum-turn-{uuid.uuid4().hex}"
         if hasattr(client, "retain"):
-            client.retain(self.bank_id, content, metadata=next_metadata)
+            client.retain(self.bank_id, content, metadata=next_metadata, document_id=doc_id,
+                          tags=["vellum:turn"], retain_async=True)
         elif hasattr(client, "add"):
             client.add(self.bank_id, content, metadata=next_metadata)
+        return doc_id
+
+    def retain_memory(self, memory: dict[str, Any]) -> str:
+        """Upsert one durable Vellum memory as its own Hindsight document."""
+        client = self._client()
+        if client is None or not self.health():
+            raise RuntimeError("Hindsight is unreachable")
+        doc_id = f"vellum-memory-{int(memory['id'])}"
+        client.retain(
+            self.bank_id,
+            str(memory.get("text") or ""),
+            context=f"{memory.get('origin') or 'inferred'} {memory.get('kind') or 'fact'} about the user",
+            document_id=doc_id,
+            metadata={"memory_id": str(memory["id"]), "kind": str(memory.get("kind") or ""),
+                      "origin": str(memory.get("origin") or "")},
+            tags=["vellum:memory", f"kind:{memory.get('kind') or 'fact'}"],
+        )
+        return doc_id
+
+    def forget_document(self, doc_id: str) -> None:
+        client = self._client()
+        if client is None or not self.health():
+            raise RuntimeError("Hindsight is unreachable")
+        if hasattr(client, "forget_document"):  # test doubles
+            client.forget_document(self.bank_id, doc_id)
+            return
+        from hindsight_client import _run_async  # type: ignore[attr-defined]
+        from hindsight_client_api import DocumentsApi
+
+        _run_async(DocumentsApi(client._api_client).delete_document(bank_id=self.bank_id, document_id=doc_id))
 
     def shutdown(self) -> None:
         client, self.client = self.client, None
@@ -157,7 +264,7 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         except Exception:
             return None
         base_url = self.settings.hindsight_api_url if self.settings else os.environ.get("HINDSIGHT_API_URL", "https://api.hindsight.vectorize.io")
-        kwargs: dict[str, Any] = {"base_url": base_url}
+        kwargs: dict[str, Any] = {"base_url": base_url, "timeout": 30.0}
         api_key = (self.settings.hindsight_api_key.get_secret_value() if self.settings else os.environ.get("HINDSIGHT_API_KEY", "")).strip()
         if api_key:
             kwargs["api_key"] = api_key
@@ -321,6 +428,12 @@ class MemoryProviderExtensionManager:
     def __init__(self, providers: list[MemoryProviderExtension] | None = None) -> None:
         self.providers = providers or []
 
+    def get(self, provider_id: str) -> MemoryProviderExtension | None:
+        for provider in self.providers:
+            if provider.id == provider_id and provider.is_enabled() and provider.is_configured():
+                return provider
+        return None
+
     def statuses(self) -> list[dict[str, Any]]:
         return [_status_for(provider) for provider in self.providers]
 
@@ -354,8 +467,8 @@ class MemoryProviderExtensionManager:
             if not provider.is_enabled() or not provider.is_configured():
                 continue
             try:
-                provider.sync_turn(user_content, assistant_content, session_id=session_id, metadata=metadata)
-                results.append({"provider": provider.id, "status": "synced"})
+                doc_id = provider.sync_turn(user_content, assistant_content, session_id=session_id, metadata=metadata)
+                results.append({"provider": provider.id, "status": "synced", "doc_id": str(doc_id or "")})
             except Exception as exc:
                 results.append({"provider": provider.id, "status": "error", "error": str(exc)[:240]})
         return results
@@ -382,6 +495,9 @@ def _status_for(provider: MemoryProviderExtension) -> dict[str, Any]:
     enabled = provider.is_enabled()
     configured = provider.is_configured()
     status = "ready" if enabled and configured else "not_configured" if enabled else "disabled"
+    health = getattr(provider, "health", None)
+    if status == "ready" and callable(health) and not health():
+        status = "unreachable"
     return {
         "id": provider.id,
         "name": provider.name,
@@ -391,7 +507,10 @@ def _status_for(provider: MemoryProviderExtension) -> dict[str, Any]:
         "configured": configured,
         "status": status,
         "capabilities": list(provider.capabilities),
-        "notes": "" if status == "ready" else provider.setup_notes(),
+        "notes": "" if status == "ready" else (
+            "Configured but not answering. Start it with: docker compose up -d hindsight"
+            if status == "unreachable" else provider.setup_notes()
+        ),
     }
 
 

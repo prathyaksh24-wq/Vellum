@@ -48,6 +48,12 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
         "schedule": "0 2 * * *",
     },
     {
+        "key": "memory_provider_sync",
+        "name": "Memory engine sync",
+        "instructions": "Send new, edited and forgotten memories to the local Hindsight memory engine; failed sends retry.",
+        "schedule": "every 5m",
+    },
+    {
         "key": "nightly_digest",
         "name": "Nightly digest",
         "instructions": "Summarize recent learned facts into a digest that feeds skill learning and memory.",
@@ -156,6 +162,12 @@ async def _memory_dreaming_handler() -> None:
     await api._maybe_run_dreaming(reason="scheduled", force=True)
 
 
+async def _memory_provider_sync_handler() -> dict[str, Any]:
+    from agent import api  # lazy: the main api module mounts this package's router
+
+    return await asyncio.to_thread(api._memory_orchestrator.flush_provider_sync)
+
+
 async def _nightly_digest_handler() -> None:
     from agent.scheduler.digest import run_digest
 
@@ -197,6 +209,7 @@ _HANDLERS: dict[str, Any] = {
     "youtube_creator_tracking": _youtube_creator_handler,
     "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
+    "memory_provider_sync": _memory_provider_sync_handler,
     "nightly_digest": _nightly_digest_handler,
     "youtube_intelligence_projection": _youtube_projection_handler,
     "discord_intelligence_sync": _discord_sync_handler,

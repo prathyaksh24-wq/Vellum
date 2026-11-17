@@ -92,7 +92,11 @@ _MEMORY_SETTING_KEYS = frozenset({
     "save_new_memories",
     "auto_archive_enabled",
     "use_archived_memories",
+    "include_sensitive",
+    "archive_after_days",
+    "delete_after_days",
 })
+_MEMORY_NUMERIC_SETTING_KEYS = frozenset({"archive_after_days", "delete_after_days"})
 _CREDENTIAL_PROVIDERS = frozenset(PROVIDER_KEY_ENV)
 _ROUTING_PROVIDERS = frozenset({"openrouter", "openai"})
 _DEVICE_SETTING_KEYS = frozenset({
@@ -509,11 +513,16 @@ class SettingsRuntimeActionService:
                 "INVALID_ACTION_ARGUMENTS",
                 "Unknown memory setting: " + ", ".join(sorted(unknown)),
             )
-        invalid = [key for key, value in patch.items() if not isinstance(value, bool)]
+        invalid = [
+            key for key, value in patch.items()
+            if (key in _MEMORY_NUMERIC_SETTING_KEYS and (isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 3650))
+            or (key not in _MEMORY_NUMERIC_SETTING_KEYS and not isinstance(value, bool))
+        ]
         if invalid:
             raise SettingsRuntimeActionError(
                 "INVALID_ACTION_ARGUMENTS",
-                "Memory settings must be true or false: " + ", ".join(sorted(invalid)),
+                "Memory toggles must be true or false and retention days a whole number from 1 to 3650: "
+                + ", ".join(sorted(invalid)),
             )
         store = self._memory_store_provider()
         if store is None:
@@ -1038,7 +1047,8 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "operation_bound",
             {
                 "patch": {"type": "object"},
-                **{key: {"type": "boolean"} for key in sorted(_MEMORY_SETTING_KEYS)},
+                **{key: ({"type": "integer", "minimum": 1, "maximum": 3650} if key in _MEMORY_NUMERIC_SETTING_KEYS else {"type": "boolean"})
+                   for key in sorted(_MEMORY_SETTING_KEYS)},
             },
             "settings-memory",
         ),
