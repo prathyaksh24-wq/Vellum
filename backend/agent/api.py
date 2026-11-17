@@ -6781,6 +6781,13 @@ async def memory_topics() -> dict[str, Any]:
     return {"topics": topics}
 
 
+@router.get("/memory/growth")
+async def memory_growth() -> dict[str, Any]:
+    from agent.memory.retention import growth_view
+
+    return await asyncio.to_thread(growth_view, _memory_orchestrator.store)
+
+
 @router.get("/memory/import/prompt")
 async def memory_import_prompt() -> dict[str, str]:
     from agent.memory.import_export import EXPORT_PROMPT

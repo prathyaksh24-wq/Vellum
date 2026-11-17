@@ -54,6 +54,15 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
         "schedule": "every 5m",
     },
     {
+        "key": "memory_retention",
+        "name": "Memory retention and growth",
+        "instructions": (
+            "Archive inferred memories after 30 days (still recallable), distil and permanently delete them "
+            "after 90 days, keep stated memories, corrections and pins, and record today's growth snapshot."
+        ),
+        "schedule": "0 3 * * *",
+    },
+    {
         "key": "nightly_digest",
         "name": "Nightly digest",
         "instructions": "Summarize recent learned facts into a digest that feeds skill learning and memory.",
@@ -159,7 +168,21 @@ async def run_builtin(record: dict[str, Any], *, raise_errors: bool = False) -> 
 async def _memory_dreaming_handler() -> None:
     from agent import api  # lazy: the main api module mounts this package's router
 
+    store = getattr(api._memory_orchestrator, "store", None)
+    if store is not None and not store.get_settings().get("dreaming_enabled", True):
+        return  # the Dreaming switch is off; force only skips the batch threshold
     await api._maybe_run_dreaming(reason="scheduled", force=True)
+
+
+async def _memory_retention_handler() -> dict[str, Any]:
+    from agent import api  # lazy: the main api module mounts this package's router
+    from agent.memory.retention import run_retention, snapshot_growth
+
+    orchestrator = api._memory_orchestrator
+    result = await asyncio.to_thread(run_retention, orchestrator)
+    result["growth"] = (await asyncio.to_thread(snapshot_growth, orchestrator.store))["counts"]["known"]
+    result["sync"] = await asyncio.to_thread(orchestrator.flush_provider_sync)
+    return result
 
 
 async def _memory_provider_sync_handler() -> dict[str, Any]:
@@ -210,6 +233,7 @@ _HANDLERS: dict[str, Any] = {
     "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
     "memory_provider_sync": _memory_provider_sync_handler,
+    "memory_retention": _memory_retention_handler,
     "nightly_digest": _nightly_digest_handler,
     "youtube_intelligence_projection": _youtube_projection_handler,
     "discord_intelligence_sync": _discord_sync_handler,

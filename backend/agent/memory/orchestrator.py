@@ -378,6 +378,19 @@ class SQLiteMemoryStore:
             )
         self.audit(reason, memory_id, f"kind={kind}" if kind else "")
 
+    def scrub_deleted_audit_text(self) -> int:
+        """One-time cleanup: older builds quoted deleted memories in the audit log."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE memory_audit_log SET detail = '[removed]'
+                WHERE memory_id IN (
+                    SELECT DISTINCT memory_id FROM memory_audit_log WHERE event IN ('deleted', 'retention_deleted')
+                ) AND detail NOT IN ('[removed]', '') AND detail NOT LIKE 'kind=%'
+                """
+            )
+            return max(int(cursor.rowcount), 0)
+
     def mark_used(self, memory_ids: list[int]) -> None:
         ids = [int(item) for item in memory_ids]
         if not ids:
@@ -1167,12 +1180,10 @@ class MemoryOrchestrator:
                 if _simple_contradiction(left["text"], right["text"]):
                     contradictions.append({"left": left, "right": right})
 
-        cutoff = datetime.now(UTC) - timedelta(days=max(0, int(stale_days)))
-        for item in saved:
-            if item["pinned"]:
-                continue
-            if datetime.fromisoformat(item["updated_at"]) <= cutoff:
-                archived_memories.append(self.store.archive(item["id"]))
+        # Age-based archiving lives in the retention job (agent.memory.retention),
+        # which keeps stated memories, corrections and pins. stale_days is kept
+        # for callers but no longer archives anything here.
+        del stale_days
 
         global_summary = _safe_global_summary(self.store, use_stored_fallback=False)
         self.store.update_global_summary(global_summary)

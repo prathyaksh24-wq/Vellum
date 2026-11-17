@@ -456,11 +456,11 @@ def test_memory_context_files_are_bounded(tmp_path: Path) -> None:
     assert len(Path(files["memory_path"]).read_text(encoding="utf-8")) <= 2200
 
 
-def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Path) -> None:
+def test_dreaming_no_longer_archives_by_age(tmp_path: Path) -> None:
+    """Age-based archiving moved to the retention job, which keeps stated memories."""
     store = SQLiteMemoryStore(tmp_path / "memory.db")
-    stale_id = store.save_memory(kind="project", text="Old unpinned memory", source_thread_id="t1", confidence=0.8)
-    pinned_id = store.save_memory(kind="preference", text="Pinned memory", source_thread_id="t1", confidence=0.9)
-    store.pin(pinned_id, True)
+    stated_id = store.save_memory(kind="project", text="Old stated project note", source_thread_id="t1",
+                                  confidence=0.8)
     orchestrator = MemoryOrchestrator(
         fts5=FTS5Memory(tmp_path / "fts5.db"),
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
@@ -472,10 +472,8 @@ def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Pa
 
     dream = orchestrator.run_dreaming(stale_days=0)
 
-    assert stale_id in [item["id"] for item in dream["archived_memories"]]
-    assert pinned_id not in [item["id"] for item in dream["archived_memories"]]
-    assert store.get_memory(pinned_id)["status"] == "saved"
-    assert store.get_memory(stale_id)["status"] == "archived"
+    assert stated_id not in [item["id"] for item in dream["archived_memories"]]
+    assert store.get_memory(stated_id)["status"] == "saved"
 
 
 class FakeHindsight:
