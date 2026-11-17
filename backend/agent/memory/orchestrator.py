@@ -1015,6 +1015,28 @@ class MemoryOrchestrator:
             thread_id=thread_id, user_id=user_id, captured_at=now, expires_at=now+timedelta(minutes=5),
             items=items).model_dump(mode="json")
 
+    def topics_view(self) -> list[dict[str, Any]]:
+        """Saved and archived memories grouped into topic cards, newest learning first."""
+        if self.store is None:
+            return []
+        groups: dict[str, dict[str, Any]] = {}
+        for item in self.store.list_saved() + self.store.list_archived():
+            if not _is_durable_memory_text(str(item.get("text") or "")):
+                continue
+            topic = item.get("topic") or _memory_topic(str(item.get("kind") or ""), str(item.get("text") or ""))
+            card = groups.setdefault(topic, {"topic": topic, "count": 0, "last_learned": "",
+                                             "origins": {}, "items": []})
+            card["count"] += 1
+            card["last_learned"] = max(card["last_learned"], str(item.get("created_at") or ""))
+            origin = str(item.get("origin") or "inferred")
+            card["origins"][origin] = card["origins"].get(origin, 0) + 1
+            card["items"].append({key: item.get(key) for key in (
+                "id", "title", "text", "kind", "origin", "status", "pinned", "suppressed",
+                "use_count", "last_used_at", "created_at", "updated_at")})
+        for card in groups.values():
+            card["items"].sort(key=lambda entry: str(entry.get("created_at") or ""), reverse=True)
+        return sorted(groups.values(), key=lambda card: card["last_learned"], reverse=True)
+
     def summary_view(self) -> dict[str, Any]:
         """Return one stable, UI-ready memory contract for every frontend surface."""
         if self.store is None:
