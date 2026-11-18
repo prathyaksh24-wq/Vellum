@@ -287,6 +287,11 @@ class Settings(BaseSettings):
     # Local model for memory work: picking relevant memories, writing the
     # About-you summary, planning memory edits and parsing imports.
     memory_llm_model: str = Field(default="gemma4:12b", alias="MEMORY_LLM_MODEL")
+    # Embedded memory engines (no Docker). Provider/model default to the user's
+    # own model source; see agent.memory.engines.llm_routing.
+    memory_engines_enabled: bool = Field(default=True, alias="MEMORY_ENGINES_ENABLED")
+    memory_engine_provider: str = Field(default="", alias="MEMORY_ENGINE_PROVIDER")
+    memory_engine_model: str = Field(default="", alias="MEMORY_ENGINE_MODEL")
     memory_recall_timeout_seconds: float = Field(default=3.0, ge=0.5, le=60, alias="MEMORY_RECALL_TIMEOUT_SECONDS")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",

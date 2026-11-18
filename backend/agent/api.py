@@ -1672,6 +1672,10 @@ async def lifespan(app: FastAPI):
     scheduler = start_scheduler()
     app.state.scheduler = scheduler
     startup_mark("scheduler started")
+    if serving():
+        # Embedded memory engines (Hindsight, Honcho): background start, never blocks chat.
+        from agent.memory.engines.runtime import start_engines
+        start_engines()
     try:
         yield
     finally:
@@ -1690,6 +1694,8 @@ async def lifespan(app: FastAPI):
         await browser_shutdown_async()
         if _memory_orchestrator.provider_extensions is not None:
             await asyncio.to_thread(_memory_orchestrator.provider_extensions.shutdown)
+        from agent.memory.engines.runtime import stop_engines
+        await asyncio.to_thread(stop_engines)
 
 
 app = FastAPI(title="Personal Agent API", version="0.1.0", lifespan=lifespan)
@@ -6793,6 +6799,14 @@ async def memory_growth() -> dict[str, Any]:
     return await asyncio.to_thread(growth_view, _memory_orchestrator.store)
 
 
+@router.get("/memory/engines")
+async def memory_engines() -> dict[str, Any]:
+    """Embedded memory engine status: starting / ready / needs_model / error, with a reason."""
+    from agent.memory.engines.runtime import engines_status
+
+    return await asyncio.to_thread(engines_status)
+
+
 @router.get("/memory/import/prompt")
 async def memory_import_prompt() -> dict[str, str]:
     from agent.memory.import_export import EXPORT_PROMPT
@@ -7537,6 +7551,11 @@ async def tool_search_config_patch(patch: ToolSearchConfigPatch) -> dict[str, An
     return apply_tool_search_config(overlay)
 
 app.include_router(router)
+
+from agent.memory.engines.embeddings_route import router as _engine_embeddings_router  # noqa: E402
+
+# Shared embeddings for the embedded memory engines: base URL <api>/api/v1.
+app.include_router(_engine_embeddings_router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)
