@@ -33,9 +33,12 @@
 <script defer src="components/desktop-chrome.js"></script>
 <script type="text/babel" data-presets="react" src="components/profile.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
+<link rel="stylesheet" href="components/onboarding.css"/>
+<script type="text/babel" data-presets="react" src="components/onboarding.jsx"></script>
 <script src="api/chat.js?v=20261030-orbs"></script>
 <script src="api/voice.js"></script>
 <script src="api/app-actions.js"></script>
+<script src="api/setup.js"></script>
 <link rel="stylesheet" href="components/dictation-settings.css"/>
 <script type="text/babel" data-presets="react" src="components/dictation-settings.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/plugin-add.jsx"></script>
@@ -8848,7 +8851,7 @@ const mergeConversationRecords = (current, serverConversations) => {
   return [...localOnly, ...merged];
 };
 
-const App = () => {
+const App = ({setupHandoff = null} = {}) => {
   const dictationShortcuts = window.VellumUI.Dictation.useShortcuts();
   const [musicPageTarget, setMusicPageTarget] = useState(null);
   const navigationEpochRef = useRef(0);
@@ -9647,6 +9650,13 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (messageId) setTimeout(()=>{if(navigationEpochRef.current===epoch+1)scrollToConversationMessage(messageId);},80);
   };
   const openSearch = (preset = null) => { setSearchPreset(preset); setSearchOpen(true); };
+  // Right after first-run setup, open the first connector the user picked so they can sign in to it.
+  useEffect(() => {
+    const first = setupHandoff?.connectors?.[0];
+    if (!first) return;
+    setPluginNavigation({v:'detail', p:first, nonce:Date.now()});
+    nav('apps');
+  }, [setupHandoff]);
   const nav = v => {
     setScheduledChatId(null);
     // Keep older shortcuts, links, and action receipts on their new Settings home.
@@ -11786,7 +11796,25 @@ try {
   document.documentElement.dataset.background = bootBackground.id;
   applyBackgroundTheme(bootBackground, bootTheme);
 } catch {}
-ReactDOM.createRoot(document.getElementById('root')).render(<window.VellumUI.Accounts.Root>{() => <App/>}</window.VellumUI.Accounts.Root>);
+// First-run setup for new users, between sign-in and the app. Existing installs
+// (with conversations or memories) are never shown it; if the check fails, Vellum opens.
+function SetupGate({context}) {
+  const [gate, setGate] = React.useState({loading: true, needs: false});
+  const [handoff, setHandoff] = React.useState(null);
+  React.useEffect(() => {
+    window.VellumApi.setup.onboarding()
+      .then(result => setGate({loading: false, needs: !!result.needs_onboarding}))
+      .catch(() => setGate({loading: false, needs: false}));
+  }, []);
+  if (gate.loading) return <main className="account-welcome"><p role="status">Opening Vellum…</p></main>;
+  if (gate.needs) {
+    const account = context.state.accounts.find(a => a.id === context.state.active_account_id) || null;
+    return <window.VellumUI.Onboarding api={window.VellumApi.setup} account={account}
+      onDone={result => {setHandoff(result || {}); setGate({loading: false, needs: false});}}/>;
+  }
+  return <App setupHandoff={handoff}/>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<window.VellumUI.Accounts.Root>{context => <SetupGate context={context}/>}</window.VellumUI.Accounts.Root>);
 </script>
 </body>
 </html>

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vellum setup (preview)</title>
+<link rel="icon" type="image/png" href="assets/brand/vellum-icon-blue.png"/>
+<link rel="stylesheet" href="components/typography.css"/>
+<link rel="stylesheet" href="components/accounts.css"/>
+<link rel="stylesheet" href="components/onboarding.css"/>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<style>
+/* The app's own theme tokens (Vellum Default Re-designed.html). */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0908;--panel:rgba(255,255,255,.028);--line:rgba(255,255,255,.075);--line2:rgba(255,255,255,.13);
+  --txt:#d1d0d0;--txt2:#f2f0f0;--dim:#928a88;--ember:#988686;--accent2:#5c4e4e;
+  --hover:rgba(255,255,255,.05);--active:rgba(255,255,255,.09);--modal:#1a1717;--input:rgba(255,255,255,.045);
+  --glass-side:rgba(255,255,255,.022);--glass-bar:rgba(0,0,0,.45);
+  --stage:radial-gradient(1100px 740px at 13% -8%,rgba(152,134,134,.16),transparent 56%),radial-gradient(1050px 720px at 93% 5%,rgba(92,78,78,.20),transparent 56%),radial-gradient(900px 720px at 60% 122%,rgba(152,134,134,.08),transparent 55%),linear-gradient(155deg,#0c0b0a 0%,#070605 60%,#050404 100%);
+  --font-ui:"SN Pro","Segoe UI","Nirmala UI",system-ui,sans-serif;--font-d:var(--font-ui);--font-m:"Cascadia Mono",Consolas,monospace;
+  --ui-control-radius:8px;--ui-panel-radius:12px;
+}
+[data-theme="light"]{
+  --bg:#f2f0f0;--panel:rgba(255,255,255,.55);--line:rgba(20,14,14,.10);--line2:rgba(20,14,14,.16);
+  --txt:#2b2727;--txt2:#0d0b0b;--dim:#6c6464;--ember:#7a6a6a;
+  --hover:rgba(20,14,14,.05);--active:rgba(20,14,14,.09);--modal:rgba(253,252,252,.98);--input:rgba(255,255,255,.62);
+  --glass-side:rgba(255,255,255,.34);--glass-bar:rgba(255,255,255,.52);
+  --stage:radial-gradient(1100px 740px at 13% -8%,rgba(122,106,106,.18),transparent 56%),radial-gradient(1050px 720px at 93% 5%,rgba(92,78,78,.15),transparent 56%),linear-gradient(155deg,#efedec 0%,#e9e6e6 60%,#e4e0e0 100%);
+}
+html,body,#root{height:100%}
+body{background:var(--bg);-webkit-font-smoothing:antialiased}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// Preview only: a stand-in for the account service, so the real sign-up screen
+// (components/accounts.jsx) runs without the backend. Nothing is sent anywhere.
+(function () {
+  try {localStorage.removeItem('vellum-local-welcome-v1');} catch {}
+  const people = {google: {provider: 'google', display_name: 'Sam Rivera', email: 'sam.rivera@gmail.com'},
+                  github: {provider: 'github', display_name: 'Sam Rivera', username: 'samrivera', email: ''}};
+  let state = {accounts: [], active_account_id: null, email_auth_available: true, logged_out: false,
+               providers: [{id: 'google', available: true, method: 'redirect'}, {id: 'github', available: true, method: 'redirect'}]};
+  const later = (value, ms = 400) => new Promise(resolve => setTimeout(() => resolve(JSON.parse(JSON.stringify(value))), ms));
+  const signInAs = account => {
+    const id = account.provider + ':' + (account.email || account.username);
+    state = {...state, accounts: [{id, ...account}], active_account_id: id};
+  };
+  let pendingProvider = null;
+  window.VellumApi = {client: {snapshot: () => null}, accounts: {
+    status: () => later(state, 200),
+    start: provider => {pendingProvider = provider; return later({flow_id: 'preview', status: 'pending', provider, interval: 1});},
+    navigateToProvider: () => {},
+    poll: () => {signInAs(people[pendingProvider]); return later({flow_id: 'preview', status: 'complete', provider: pendingProvider}, 1200);},
+    cancel: () => later({ok: true}),
+    signUp: email => {signInAs({provider: 'email', display_name: email.split('@')[0], email}); return later({status: 'complete'});},
+    signIn: email => {signInAs({provider: 'email', display_name: email.split('@')[0], email}); return later({status: 'complete'});},
+    continueLocal: () => later(state),
+    focusVellum: () => later(null),
+    select: () => later(state), signOut: () => later(state), logOut: () => later(state),
+  }};
+})();
+</script>
+<script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/onboarding.jsx"></script>
+<script type="text/babel" data-presets="react">
+// Sample data only, shaped like the real endpoints: /api/setup/hardware, /api/setup/models,
+// provider_connections(), /api/plugins and /api/memory/engines.
+document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+const wait = (value, ms = 500) => new Promise(resolve => setTimeout(() => resolve(value), ms));
+const HW = {
+  hardware: {ram_gb: 15.7, free_disk_gb: 212.4, cpu_cores: 16, cpu_name: 'AMD Ryzen 7 7840HS', gpu_name: 'NVIDIA GeForce RTX 4060 Laptop GPU', vram_gb: 8, ollama_installed: false},
+  recommendation: {mode: 'local', model: 'qwen3.5:9b', label: 'Qwen 3.5 9B', size_gb: 5.5,
+    reasons: ['Runs on your NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)', 'Qwen 3.5 9B is about 5.5 GB to download', 'Ollama will need to be installed to run it']},
+};
+const M = (repo, quant, size_gb, fit, extra = {}) => ({repo, quant, size_gb, fit, ollama_model: `hf.co/${repo}:${quant}`, trusted: true, fine_tuned: false, uncensored: false, ...extra});
+const MODELS = {
+  general: [M('unsloth/Qwen3.5-9B-GGUF', 'Q4_K_M', 5.6, 'gpu'), M('bartowski/Meta-Llama-3.1-8B-Instruct-GGUF', 'Q5_K_M', 5.7, 'gpu'),
+            M('bartowski/Ministral-8B-Instruct-2410-GGUF', 'Q5_K_M', 5.7, 'gpu'), M('unsloth/gemma-4-12b-it-GGUF', 'Q4_K_M', 7.3, 'cpu')],
+  coding: [M('Qwen/Qwen2.5-Coder-7B-Instruct-GGUF', 'Q5_K_M', 5.4, 'gpu'), M('bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF', 'Q4_K_M', 10.4, 'cpu')],
+  small: [M('unsloth/gemma-4-4b-it-GGUF', 'Q8_0', 4.1, 'gpu'), M('unsloth/Phi-4-mini-instruct-GGUF', 'Q8_0', 4.1, 'gpu'), M('unsloth/Qwen3.5-4B-GGUF', 'Q8_0', 4.3, 'gpu')],
+};
+const EXTRA = [M('NousResearch/Hermes-3-Llama-3.1-8B-GGUF', 'Q5_K_M', 5.7, 'gpu', {fine_tuned: true, trusted: false}),
+               M('mlabonne/Qwen3.5-9B-abliterated-GGUF', 'Q4_K_M', 5.6, 'gpu', {uncensored: true, fine_tuned: true, trusted: false})];
+const PROVIDERS = [
+  ['groq', 'Groq', 'Fast inference for open models.', 'groq-color', 'https://console.groq.com/keys'],
+  ['openrouter', 'OpenRouter', 'One connection, many model providers.', 'openrouter-color', 'https://openrouter.ai/settings/keys'],
+  ['anthropic', 'Claude', 'Claude models from Anthropic.', 'claude-color', 'https://platform.claude.com/settings/keys'],
+  ['openai', 'OpenAI', 'GPT models from OpenAI.', 'openai', 'https://platform.openai.com/api-keys'],
+  ['google', 'Google Gemini', 'Gemini models from Google.', 'gemini-color', 'https://aistudio.google.com/api-keys'],
+  ['xai', 'Grok', 'Grok models from xAI.', 'grok', 'https://console.x.ai/'],
+  ['kimi', 'Kimi', 'Kimi models from Moonshot AI.', 'kimi-color', 'https://platform.moonshot.ai/console/api-keys'],
+].map(([id, name, description, icon, key_url]) => ({id, name, description, icon: `provider-icons/${icon}.svg`, key_url, requires_key: true, configured: false}));
+const C = (id, name, description, icon, account = null) => ({id, name, description, icon: `assets/plugins/${icon}`, account});
+const CONNECTORS = [
+  C('gmail', 'Gmail', 'Read and draft email', 'gmail.svg', 'google'), C('google-calendar', 'Google Calendar', 'Your schedule and events', 'googlecalendar.svg', 'google'),
+  C('google-drive', 'Google Drive', 'Docs, Sheets and files', 'googledrive.png', 'google'), C('google-contacts', 'Google Contacts', 'People you know', 'googlecontacts.png', 'google'),
+  C('github', 'GitHub', 'Repositories, issues and pull requests', 'github.png', 'github'),
+  C('notion', 'Notion', 'Pages and databases', 'notion.png'), C('linear', 'Linear', 'Issues and projects', 'linear.png'),
+  C('slack', 'Slack', 'Channels and messages', 'slack.png'), C('spotify', 'Spotify', 'Music and playback', 'spotify.svg'),
+  C('todoist', 'Todoist', 'Tasks and reminders', 'todoist.svg'), C('figma', 'Figma', 'Design files', 'figma.svg'),
+  C('dropbox', 'Dropbox', 'Files and folders', 'dropbox.svg'), C('obsidian', 'Obsidian', 'Your vault of notes', 'obsidian.svg'),
+];
+let engineCalls = 0;
+const api = {
+  hardware: () => wait(HW, 1600),
+  models: ({category, q, uncensored}) => {
+    let list = q ? [...Object.values(MODELS).flat(), ...EXTRA].filter(m => m.repo.toLowerCase().includes(q.toLowerCase().replace(/\s+/g, ''))
+      || m.repo.toLowerCase().replace(/[-_]/g, ' ').includes(q.toLowerCase())) : MODELS[category];
+    if (!uncensored) list = list.filter(m => !m.uncensored);
+    return wait({models: list}, 700);
+  },
+  providers: () => wait(PROVIDERS, 300),
+  connectors: () => wait(CONNECTORS, 300),
+  engines: () => wait({engines: {hindsight: {state: ++engineCalls > 2 ? 'ready' : 'starting'}, honcho: {state: engineCalls > 2 ? 'ready' : 'starting'}}}, 100),
+  openImport: source => alert(`Opens the ${source} memory import (preview).`),
+  planSignIn: provider => wait({ok: true}, 1500),
+  finish: state => wait(console.log('setup finished', state), 600),
+};
+// New users only: after creating an account (or choosing no account), setup runs once.
+function AfterSignIn({context}) {
+  const [done, setDone] = React.useState(false);
+  const account = context.state.accounts.find(a => a.id === context.state.active_account_id) || null;
+  if (done) return <div style={{height: '100%', display: 'grid', placeItems: 'center', color: 'var(--txt2)', font: '15px var(--font-ui)'}}>Vellum opens here.</div>;
+  return <window.VellumUI.Onboarding api={api} account={account} onDone={() => setDone(true)}/>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<window.VellumUI.Accounts.Root>{context => <AfterSignIn context={context}/>}</window.VellumUI.Accounts.Root>);
+</script>
+</body>
+</html>

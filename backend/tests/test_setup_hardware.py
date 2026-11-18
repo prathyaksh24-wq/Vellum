@@ -34,7 +34,7 @@ def test_setup_complete_applies_the_model_and_never_saves_keys(monkeypatch, tmp_
         dispatched.append((action_id, arguments))
         return type("Receipt", (), {"result": {"model": {"id": arguments["model"]}}})()
 
-    monkeypatch.setattr(api, "_dispatch_compat_action", dispatch)
+    monkeypatch.setattr(api, "_dispatch_user_confirmed", dispatch)
     from agent.memory.engines import runtime
 
     monkeypatch.setattr(runtime, "restart_engines", lambda: restarted.append(True))
