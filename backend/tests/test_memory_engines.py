@@ -170,8 +170,8 @@ def test_postgres_uses_its_own_port_and_workspace_data_dir(tmp_path: Path):
 
     honcho_uri = pg.ensure_database("honcho")
     assert honcho_uri.endswith("/honcho")
-    assert ("-d", "postgres", "-c", 'CREATE DATABASE "honcho"') in started.sql
-    assert ("-d", "honcho", "-c", "CREATE EXTENSION IF NOT EXISTS vector") in started.sql
+    assert ("-d", pg.uri("postgres"), "-c", 'CREATE DATABASE "honcho"') in started.sql
+    assert ("-d", pg.uri("honcho"), "-c", "CREATE EXTENSION IF NOT EXISTS vector") in started.sql
     with pytest.raises(ValueError):
         pg.ensure_database("bad; drop")
 
@@ -246,3 +246,77 @@ def test_engine_that_exits_during_startup_is_an_error_not_a_hang():
     supervisor.add_engine("hindsight", lambda: _spec("hindsight"))
     assert supervisor._launch("hindsight", lambda: _spec("hindsight")) is False
     assert supervisor.status()["hindsight"]["reason"] == "Exited during startup (code 3)"
+
+
+# -- embedded Hindsight ---------------------------------------------------------------
+
+def test_hindsight_spec_wires_database_embeddings_reranker_and_llm(tmp_path: Path, monkeypatch):
+    from agent.memory.engines import hindsight_engine
+    from agent.memory.engines.runtime import EngineContext
+    from agent.rag import embedder
+
+    python = tmp_path / "python.exe"
+    python.write_text("")
+    monkeypatch.setattr(hindsight_engine, "engine_python", lambda name: python)
+    monkeypatch.setattr(hindsight_engine, "memory_engine_llm",
+                        lambda: memory_engine_llm(_settings(groq="gsk-1", memory_engine_provider="groq"), _registry("x")))
+    monkeypatch.setattr(embedder, "get_embedder", lambda: FakeEmbedder())
+    FakePg.instances.clear()
+    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54400)
+    pg.start()
+    spec = hindsight_engine.build_spec(EngineContext(tmp_path / "engines", pg, "http://127.0.0.1:8000"))
+
+    env = spec.env
+    assert spec.argv == [str(python), "-c", "from hindsight_api.main import main; main()"]
+    assert env["HINDSIGHT_API_DATABASE_URL"].endswith("@127.0.0.1:54400/hindsight")
+    assert env["HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL"] == "http://127.0.0.1:8000/api/v1"
+    assert env["HINDSIGHT_API_EMBEDDINGS_OPENAI_DIMENSIONS"] == "3"
+    assert env["HINDSIGHT_API_RERANKER_PROVIDER"] == "flashrank"
+    assert env["HINDSIGHT_API_LLM_GROQ_SERVICE_TIER"] == "on_demand"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert spec.health_url == f"{spec.url}/health" and spec.url.startswith("http://127.0.0.1:")
+    assert "OPENROUTER_API_KEY" not in env  # Vellum's own secrets are not inherited
+
+
+def test_hindsight_engine_reports_why_it_cannot_start(tmp_path: Path, monkeypatch):
+    from agent.memory.engines import hindsight_engine
+    from agent.memory.engines.runtime import EngineContext
+
+    context = EngineContext(tmp_path, EnginePostgres(tmp_path, pg_factory=FakePg), "http://127.0.0.1:8000")
+    monkeypatch.setattr(hindsight_engine, "engine_python", lambda name: None)
+    with pytest.raises(EngineNotReady) as missing:
+        hindsight_engine.build_spec(context)
+    assert missing.value.state == "off"
+
+    monkeypatch.setattr(hindsight_engine, "engine_python", lambda name: tmp_path / "python.exe")
+    monkeypatch.setattr(hindsight_engine, "memory_engine_llm",
+                        lambda: memory_engine_llm(_settings(memory_engine_provider="anthropic"), _registry("x")))
+    with pytest.raises(EngineNotReady) as no_key:
+        hindsight_engine.build_spec(context)
+    assert no_key.value.state == "needs_model" and "anthropic API key" in no_key.value.reason
+
+
+def test_vellum_client_follows_the_embedded_engine(monkeypatch):
+    from agent.memory import provider_extensions
+
+    monkeypatch.setattr(provider_extensions, "_embedded_engine_url", lambda: "http://127.0.0.1:54171")
+    monkeypatch.delenv("MEMORY_EXTENSION_PROVIDERS", raising=False)
+    provider = provider_extensions.HindsightProviderExtension()
+    assert provider.is_enabled() and provider.is_configured()
+    assert provider.base_url == "http://127.0.0.1:54171"
+
+
+def test_supervisor_shows_starting_before_its_thread_runs():
+    supervisor = EngineSupervisor(health_check=lambda url: False, popen=FakeProcess, sleep=lambda s: None)
+    supervisor.add_engine("hindsight", lambda: (_ for _ in ()).throw(EngineNotReady("off", "not installed")))
+    supervisor._thread = SimpleNamespace(is_alive=lambda: False)
+    supervisor._run = lambda: None  # don't actually run in this test
+    import threading as _threading
+
+    original = _threading.Thread
+    try:
+        _threading.Thread = lambda **kwargs: SimpleNamespace(start=lambda: None, is_alive=lambda: True)
+        supervisor.start()
+    finally:
+        _threading.Thread = original
+    assert supervisor.status()["hindsight"]["state"] == "starting"

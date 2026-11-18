@@ -118,6 +118,8 @@ class EngineSupervisor:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
+        for status in self._status.values():  # visible immediately, before the thread runs
+            status.state, status.reason = "starting", ""
         self._thread = threading.Thread(target=self._run, name="memory-engines", daemon=True)
         self._thread.start()
 
@@ -242,5 +244,7 @@ def child_env(extra: dict[str, str]) -> dict[str, str]:
             "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "WINDIR", "COMSPEC", "PATHEXT", "NUMBER_OF_PROCESSORS",
             "PROCESSOR_ARCHITECTURE", "HOME", "LANG"}
     env = {key: value for key, value in os.environ.items() if key.upper() in keep}
-    env.update({"PYTHONUNBUFFERED": "1", "PYTHONNOUSERSITE": "1", **extra})
+    # PYTHONIOENCODING: with output redirected to a log file, Windows uses the
+    # legacy code page and engines that print Unicode (Hindsight's banner) crash.
+    env.update({"PYTHONUNBUFFERED": "1", "PYTHONNOUSERSITE": "1", "PYTHONIOENCODING": "utf-8", **extra})
     return env

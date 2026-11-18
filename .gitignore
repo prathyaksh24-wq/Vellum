@@ -88,3 +88,7 @@ data/music/
 # Generated standalone backend payloads
 desktop/resources/backend-runtime/
 desktop/resources/backend-staging-*/
+
+# Embedded memory engines: per-engine runtimes and their data (database, generated password)
+.engines/
+data/engines/

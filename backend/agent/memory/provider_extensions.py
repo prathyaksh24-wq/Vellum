@@ -30,6 +30,17 @@ def _is_local_url(url: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1", "host.docker.internal"}
 
 
+def _embedded_engine_url() -> str:
+    """URL of Vellum's own Hindsight engine when it is running; never starts it."""
+    try:
+        from agent.memory.engines.runtime import get_engine_supervisor
+    except Exception:  # noqa: BLE001
+        return ""
+    if not get_engine_supervisor.cache_info().currsize:
+        return ""
+    return get_engine_supervisor().url("hindsight")
+
+
 def _delete_hindsight_document(client: Any, bank_id: str, doc_id: str) -> None:
     """Delete one document; works with hindsight-client 0.10 and 1.x.
 
@@ -150,6 +161,7 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         )
         self.client = client
         self._injected_client = client is not None
+        self._client_url = ""
         self.settings = settings
         self._healthy = False
         self._health_checked_at = -_HEALTH_TTL_SECONDS
@@ -157,6 +169,8 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         self.budget = settings.hindsight_budget if settings else os.environ.get("HINDSIGHT_BUDGET", "mid")
 
     def is_enabled(self) -> bool:
+        if _embedded_engine_url():
+            return True
         if self.settings is None:
             return super().is_enabled()
         return self.settings.hindsight_memory_enabled or "hindsight" in {
@@ -172,6 +186,10 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
 
     @property
     def base_url(self) -> str:
+        """The embedded engine when Vellum runs one; otherwise the configured URL."""
+        embedded = _embedded_engine_url()
+        if embedded:
+            return embedded
         return (self.settings.hindsight_api_url if self.settings else
                 os.environ.get("HINDSIGHT_API_URL", "https://api.hindsight.vectorize.io")).rstrip("/")
 
@@ -179,6 +197,8 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         """True only when the server answered recently, not merely when configured."""
         if self._injected_client:
             return True
+        if self._client_url and self._client_url != self.base_url:
+            self._health_checked_at = -_HEALTH_TTL_SECONDS  # engine moved: re-check now
         now = time.monotonic()
         if now - self._health_checked_at < _HEALTH_TTL_SECONDS:
             return self._healthy
@@ -271,19 +291,23 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
             close()
 
     def _client(self) -> Any | None:
-        if self.client is not None:
+        if self.client is not None and (self._injected_client or self._client_url == self.base_url):
             return self.client
+        if self.client is not None:  # the embedded engine restarted on a new port
+            _close_client(self.client)
+            self.client = None
         try:
             from hindsight_client import Hindsight
         except Exception:
             return None
-        base_url = self.settings.hindsight_api_url if self.settings else os.environ.get("HINDSIGHT_API_URL", "https://api.hindsight.vectorize.io")
+        base_url = self.base_url
         kwargs: dict[str, Any] = {"base_url": base_url, "timeout": 30.0}
         api_key = (self.settings.hindsight_api_key.get_secret_value() if self.settings else os.environ.get("HINDSIGHT_API_KEY", "")).strip()
         if api_key:
             kwargs["api_key"] = api_key
         try:
             self.client = Hindsight(**kwargs)
+            self._client_url = base_url
         except Exception:
             self.client = None
         return self.client

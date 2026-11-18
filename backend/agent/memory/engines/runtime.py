@@ -57,8 +57,19 @@ def get_engine_context() -> EngineContext:
     return EngineContext(root, EnginePostgres(root), api_base)
 
 
+ENGINE_MODULES = ("agent.memory.engines.hindsight_engine",)
+
+
+def _load_engines() -> None:
+    import importlib
+
+    for module in ENGINE_MODULES:
+        importlib.import_module(module)  # each module calls register_engine()
+
+
 @lru_cache(maxsize=1)
 def get_engine_supervisor() -> EngineSupervisor:
+    _load_engines()
     supervisor = EngineSupervisor()
     context = get_engine_context()
     with _REGISTRY_LOCK:

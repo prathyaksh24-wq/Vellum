@@ -109,11 +109,13 @@ class EnginePostgres:
             raise ValueError(f"invalid database name: {name!r}")
         if self._pg is None:
             raise RuntimeError("start() first")
-        exists = self._pg.psql("-tA", "-d", "postgres", "-c",
+        # `pg0 psql` connects to port 5432 whatever the instance's port is, so
+        # always pass a full connection URI.
+        exists = self._pg.psql("-tA", "-d", self.uri("postgres"), "-c",
                                f"SELECT 1 FROM pg_database WHERE datname = '{name}'").stdout.strip()
         if exists != "1":
-            self._pg.psql("-d", "postgres", "-c", f'CREATE DATABASE "{name}"')
-        self._pg.psql("-d", name, "-c", "CREATE EXTENSION IF NOT EXISTS vector")
+            self._pg.psql("-d", self.uri("postgres"), "-c", f'CREATE DATABASE "{name}"')
+        self._pg.psql("-d", self.uri(name), "-c", "CREATE EXTENSION IF NOT EXISTS vector")
         return self.uri(name)
 
     def stop(self) -> None:
