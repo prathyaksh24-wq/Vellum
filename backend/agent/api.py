@@ -7328,6 +7328,28 @@ async def setup_hardware() -> dict[str, Any]:
     return await asyncio.to_thread(scan_and_recommend)
 
 
+@router.get("/setup/models")
+async def setup_models(q: str = "", category: str = "general", uncensored: bool = False) -> dict[str, Any]:
+    """Hugging Face GGUF models sized to this computer (best quantization that fits).
+
+    With ``q`` it searches; without, it returns a short trusted list for ``category``
+    (general, coding, small). Uncensored models appear only when ``uncensored`` is true.
+    """
+    from agent.setup_hardware import scan
+    from agent import setup_models as catalog
+    from dataclasses import asdict
+
+    hw = asdict(await asyncio.to_thread(scan))
+    try:
+        if q.strip():
+            models = await asyncio.to_thread(catalog.search, q.strip(), hw, include_uncensored=uncensored)
+        else:
+            models = await asyncio.to_thread(catalog.recommended, hw, category=category)
+    except Exception as exc:  # noqa: BLE001 - offline or Hugging Face unavailable
+        raise HTTPException(status_code=503, detail=f"Couldn't reach Hugging Face: {exc}") from exc
+    return {"hardware": {"vram_gb": hw["vram_gb"], "ram_gb": hw["ram_gb"]}, "models": models}
+
+
 @router.post("/setup/complete")
 async def setup_complete(body: SetupStateBody) -> dict[str, Any]:
     """Finalize the wizard: save the snapshot, apply the chosen model, restart memory engines.
