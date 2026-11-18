@@ -46,6 +46,8 @@ class EngineSpec:
     ready_timeout: float = 600.0  # first start downloads models
     log_path: Path | None = None
     before_start: list[list[str]] = field(default_factory=list)  # e.g. migrations
+    on_ready: Callable[[], None] | None = None  # e.g. record a one-time setup step
+    settle_seconds: float = 5.0  # no health_url: ready once alive this long (a worker)
 
 
 @dataclass
@@ -152,8 +154,11 @@ class EngineSupervisor:
         status.state, status.reason, status.url = "starting", "", spec.url
         try:
             for step in spec.before_start:
-                subprocess.run(step, env=spec.env, cwd=spec.cwd, check=True,  # noqa: S603
-                               capture_output=True, timeout=600)
+                done = subprocess.run(step, env=spec.env, cwd=spec.cwd, capture_output=True,  # noqa: S603
+                                      timeout=600, check=False)
+                if done.returncode != 0:
+                    tail = (done.stderr or done.stdout or b"").decode("utf-8", "replace").strip().splitlines()[-3:]
+                    raise RuntimeError(f"setup step failed ({' '.join(step[-2:])}): {' | '.join(tail)}")
             log = open(spec.log_path, "ab") if spec.log_path else subprocess.DEVNULL  # noqa: SIM115
             extra = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
             process = self._popen(spec.argv, env=spec.env, cwd=spec.cwd, stdout=log, stderr=log,
@@ -170,9 +175,15 @@ class EngineSupervisor:
             if process.poll() is not None:
                 status.state, status.reason = "error", f"Exited during startup (code {process.returncode})"
                 return False
-            if self._health(spec.health_url):
+            alive_for = time.time() - (status.started_at or time.time())
+            if (self._health(spec.health_url) if spec.health_url else alive_for >= spec.settle_seconds):
                 status.state = "ready"
-                logger.info("[ENGINES] %s ready at %s", name, spec.url)
+                logger.info("[ENGINES] %s ready at %s", name, spec.url or "(worker)")
+                if spec.on_ready is not None:
+                    try:
+                        spec.on_ready()
+                    except Exception:  # noqa: BLE001
+                        logger.exception("[ENGINES] %s on_ready failed", name)
                 return True
             self._sleep(self._poll)
         if not self._stop.is_set():

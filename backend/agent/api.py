@@ -7073,9 +7073,12 @@ def _mcp_health_sync(probe: bool) -> dict[str, Any]:
     # Adjacent services belong to health inspection, not plugin browsing.
     vector = _vector_health()
 
+    from agent.memory.honcho_client import embedded_honcho_url
+
+    honcho_url = embedded_honcho_url() or settings.honcho_base_url
     honcho_reachable = False
     try:
-        health_url = f"{settings.honcho_base_url.rstrip('/')}/health"
+        health_url = f"{honcho_url.rstrip('/')}/health"
         with urllib.request.urlopen(health_url, timeout=1) as response:
             honcho_reachable = response.status == 200
     except Exception:
@@ -7085,9 +7088,9 @@ def _mcp_health_sync(probe: bool) -> dict[str, Any]:
         "mcp_servers": servers,
         "vector": vector,
         "honcho": {
-            "base_url": settings.honcho_base_url,
+            "base_url": honcho_url,
             "reachable": honcho_reachable,
-            "notes": "Self-hosted via Docker; if down, identity-memory layer is dead but chat still works.",
+            "notes": "Runs inside Vellum (or a configured server); if down, the user model pauses but chat still works.",
         },
     }
 

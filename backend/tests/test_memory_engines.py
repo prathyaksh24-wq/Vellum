@@ -320,3 +320,77 @@ def test_supervisor_shows_starting_before_its_thread_runs():
     finally:
         _threading.Thread = original
     assert supervisor.status()["hindsight"]["state"] == "starting"
+
+
+# -- embedded Honcho ---------------------------------------------------------------------
+
+def _honcho_context(tmp_path: Path, monkeypatch):
+    from agent.memory.engines import honcho_engine
+    from agent.memory.engines.runtime import EngineContext
+    from agent.rag import embedder
+
+    python = tmp_path / "py" / "python.exe"
+    python.parent.mkdir()
+    python.write_text("")
+    source = tmp_path / "src"
+    source.mkdir()
+    monkeypatch.setattr(honcho_engine, "engine_python", lambda name: python)
+    monkeypatch.setattr(honcho_engine, "honcho_source", lambda: source)
+    monkeypatch.setattr(honcho_engine, "memory_engine_llm",
+                        lambda: memory_engine_llm(_settings(openrouter="sk-or-1"), _registry("x", "openrouter")))
+    monkeypatch.setattr(embedder, "get_embedder", lambda: FakeEmbedder())
+    FakePg.instances.clear()
+    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54500)
+    pg.start()
+    return honcho_engine, EngineContext(tmp_path / "engines", pg, "http://127.0.0.1:8000"), python, source
+
+
+def test_honcho_api_spec_runs_migrations_then_sizes_embeddings_once(tmp_path: Path, monkeypatch):
+    honcho_engine, context, python, source = _honcho_context(tmp_path, monkeypatch)
+    spec = honcho_engine.build_api_spec(context)
+    env = spec.env
+    assert env["DB_CONNECTION_URI"].startswith("postgresql+psycopg://vellum:")
+    assert env["DB_CONNECTION_URI"].endswith("@127.0.0.1:54500/honcho")
+    assert env["EMBEDDING_VECTOR_DIMENSIONS"] == "3"
+    assert env["EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL"] == "http://127.0.0.1:8000/api/v1"
+    assert (env["AUTH_USE_AUTH"], env["CACHE_ENABLED"], env["METRICS_ENABLED"]) == ("false", "false", "false")
+    assert env["PEER_CARD_MODEL_CONFIG__OVERRIDES__BASE_URL"] == "https://openrouter.ai/api/v1"
+    assert spec.cwd == str(source) and spec.argv[1].endswith("honcho_launcher.py") and spec.argv[2] == "api"
+    assert spec.before_start[0] == [str(python), "-m", "alembic", "upgrade", "head"]
+    assert spec.before_start[1][-2:] == ["scripts/configure_embeddings.py", "--yes"]
+
+    spec.on_ready()  # first start succeeded: embeddings are sized
+    again = honcho_engine.build_api_spec(context)
+    assert len(again.before_start) == 1  # only migrations on later starts
+
+
+def test_honcho_deriver_is_a_worker_without_a_port(tmp_path: Path, monkeypatch):
+    honcho_engine, context, _python, _source = _honcho_context(tmp_path, monkeypatch)
+    spec = honcho_engine.build_deriver_spec(context)
+    assert spec.health_url == "" and spec.argv[2] == "deriver"
+    assert spec.env["DB_CONNECTION_URI"].endswith("/honcho")
+
+
+def test_worker_counts_as_ready_once_it_stays_up(monkeypatch):
+    import agent.memory.engines.supervisor as supervisor_module
+
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(supervisor_module.time, "time", lambda: clock["now"])
+
+    def sleep(seconds):
+        clock["now"] += 2
+
+    supervisor = EngineSupervisor(health_check=lambda url: False, popen=FakeProcess, sleep=sleep)
+    spec = EngineSpec(name="worker", argv=["w"], env={}, health_url="", settle_seconds=5)
+    supervisor.add_engine("worker", lambda: spec)
+    assert supervisor._launch("worker", lambda: spec) is True
+    assert supervisor.status()["worker"]["state"] == "ready"
+
+
+def test_honcho_client_follows_the_embedded_engine(monkeypatch):
+    from agent.memory import honcho_client
+
+    honcho = honcho_client.HonchoMemory(base_url="http://localhost:8001", app_id="vellum", user_id="default")
+    assert honcho.base_url == "http://localhost:8001"
+    monkeypatch.setattr(honcho_client, "embedded_honcho_url", lambda: "http://127.0.0.1:61000")
+    assert honcho.base_url == "http://127.0.0.1:61000"

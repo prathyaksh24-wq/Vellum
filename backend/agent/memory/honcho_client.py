@@ -20,9 +20,20 @@ except Exception:  # pragma: no cover - depends on optional SDK
 logger = logging.getLogger(__name__)
 
 
+def embedded_honcho_url() -> str:
+    """URL of Vellum's own Honcho engine when it is running; never starts it."""
+    try:
+        from agent.memory.engines.runtime import get_engine_supervisor
+    except Exception:  # noqa: BLE001
+        return ""
+    if not get_engine_supervisor.cache_info().currsize:
+        return ""
+    return get_engine_supervisor().url("honcho")
+
+
 class HonchoMemory:
     def __init__(self, *, base_url: str, app_id: str, user_id: str, conversations_path: Path | None = None):
-        self.base_url = base_url
+        self.configured_url = base_url
         self.app_id = app_id
         self.user_id = user_id
         if conversations_path is None:
@@ -30,8 +41,18 @@ class HonchoMemory:
             conversations_path = REPO_ROOT / "data" / "ui" / "conversations.json"
         self.conversations_path = Path(conversations_path)
         self._client = None
+        self._client_url = ""
         self._app = None
         self._user = None
+
+    @property
+    def base_url(self) -> str:
+        """Vellum's embedded engine when running, else the configured server (e.g. Docker)."""
+        return embedded_honcho_url() or self.configured_url
+
+    @base_url.setter
+    def base_url(self, value: str) -> None:
+        self.configured_url = value
 
     @property
     def available(self) -> bool:
@@ -46,9 +67,11 @@ class HonchoMemory:
     def _ensure(self) -> Any | None:
         if Honcho is None:
             return None
-        if self._client is not None:
+        if self._client is not None and self._client_url == self.base_url:
             return self._client
+        self._client = None  # the engine restarted on a new port: reconnect
         try:
+            self._client_url = self.base_url
             self._client = Honcho(
                 base_url=self.base_url,
                 workspace_id=self.app_id,

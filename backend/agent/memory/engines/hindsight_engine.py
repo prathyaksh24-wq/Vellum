@@ -14,32 +14,13 @@ end to end on Windows: ready in about 12 s, retain about 6 s, recall about
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from agent.memory.engines.llm_routing import hindsight_llm_env, memory_engine_llm
 from agent.memory.engines.postgres import free_loopback_port
-from agent.memory.engines.runtime import EngineContext, register_engine
+from agent.memory.engines.runtime import EngineContext, engine_python, register_engine
 from agent.memory.engines.supervisor import EngineNotReady, EngineSpec, child_env
 
 ENGINE = "hindsight"
 PACKAGES = ("hindsight-api-slim[embedded-db]==1.2.1", "flashrank")
-
-
-def engine_python(name: str) -> Path | None:
-    """Locate an engine's own Python, packaged or development."""
-    import os
-
-    from agent.config import REPO_ROOT
-
-    explicit = os.environ.get(f"VELLUM_{name.upper()}_PYTHON")
-    candidates = [Path(explicit)] if explicit else []
-    # Packaged: <resources>/backend-runtime/python/python.exe -> <resources>/engine-runtimes/<name>
-    resources = Path(sys.executable).resolve().parents[2]
-    candidates.append(resources / "engine-runtimes" / name / "python" / "python.exe")
-    candidates.append(Path(REPO_ROOT) / ".engines" / name / ".venv" / "Scripts" / "python.exe")
-    candidates.append(Path(REPO_ROOT) / ".engines" / name / ".venv" / "bin" / "python")
-    return next((path for path in candidates if path.is_file()), None)
 
 
 def build_spec(context: EngineContext) -> EngineSpec:

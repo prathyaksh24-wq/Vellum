@@ -39,6 +39,30 @@ class EngineContext:
         return path
 
 
+def engine_dirs(name: str) -> list[Path]:
+    """Where an engine's own runtime can live, packaged app first."""
+    import sys
+
+    from agent.config import REPO_ROOT
+
+    # Packaged: <resources>/backend-runtime/python/python.exe -> <resources>/engine-runtimes/<name>
+    resources = Path(sys.executable).resolve().parents[2]
+    return [resources / "engine-runtimes" / name, Path(REPO_ROOT) / ".engines" / name]
+
+
+def engine_python(name: str) -> Path | None:
+    """The engine's own Python: packaged copy, or a development venv."""
+    import os
+
+    explicit = os.environ.get(f"VELLUM_{name.upper()}_PYTHON")
+    candidates = [Path(explicit)] if explicit else []
+    for home in engine_dirs(name):
+        candidates += [home / "python" / "python.exe",
+                       home / ".venv" / "Scripts" / "python.exe", home / ".venv" / "bin" / "python",
+                       home / "src" / ".venv" / "Scripts" / "python.exe", home / "src" / ".venv" / "bin" / "python"]
+    return next((path for path in candidates if path.is_file()), None)
+
+
 def register_engine(name: str, factory: Callable[[EngineContext], EngineSpec]) -> None:
     with _REGISTRY_LOCK:
         if all(existing != name for existing, _ in _REGISTRY):
@@ -57,7 +81,7 @@ def get_engine_context() -> EngineContext:
     return EngineContext(root, EnginePostgres(root), api_base)
 
 
-ENGINE_MODULES = ("agent.memory.engines.hindsight_engine",)
+ENGINE_MODULES = ("agent.memory.engines.hindsight_engine", "agent.memory.engines.honcho_engine")
 
 
 def _load_engines() -> None:

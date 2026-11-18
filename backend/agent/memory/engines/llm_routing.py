@@ -136,6 +136,10 @@ def hindsight_llm_env(llm: EngineLLM) -> dict[str, str]:
 _HONCHO_PREFIXES = (
     "DERIVER_MODEL_CONFIG__",
     "SUMMARY_MODEL_CONFIG__",
+    # Unconfigured modules fall back to OpenAI with no key, so set them all.
+    "PEER_CARD_MODEL_CONFIG__",
+    "DREAM_DEDUCTION_MODEL_CONFIG__",
+    "DREAM_INDUCTION_MODEL_CONFIG__",
     *(f"DIALECTIC_LEVELS__{level}__MODEL_CONFIG__" for level in ("minimal", "low", "medium", "high", "max")),
 )
 
