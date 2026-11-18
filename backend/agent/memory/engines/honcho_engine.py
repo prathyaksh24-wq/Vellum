@@ -37,7 +37,10 @@ LAUNCHER = Path(__file__).with_name("honcho_launcher.py")
 
 
 def honcho_source() -> Path | None:
-    return next((home / "src" for home in engine_dirs(API) if (home / "src" / "src" / "main.py").is_file()), None)
+    explicit = os.environ.get("VELLUM_HONCHO_SOURCE")
+    candidates = [Path(explicit)] if explicit else []
+    candidates += [home / "src" for home in engine_dirs(API)]
+    return next((path for path in candidates if (path / "src" / "main.py").is_file()), None)
 
 
 def _environment(context: EngineContext) -> tuple[Path, Path, dict[str, str], dict[str, str]]:

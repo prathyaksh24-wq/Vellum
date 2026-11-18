@@ -8,14 +8,18 @@ module.exports = {
     executableName: 'Vellum',
     appBundleId: 'local.vellum.desktop',
     icon: 'assets/icon',
-    extraResource: ['resources/backend-runtime'],
-    ignore: [/^\/test(?:\/|$)/, /^\/scripts(?:\/|$)/, /^\/out(?:\/|$)/, /^\/resources\/backend-runtime(?:\/|$)/, /^\/resources\/backend-staging-/],
+    // Memory engines (Hindsight, Honcho) ship with their own Python runtimes: no Docker for users.
+    extraResource: ['resources/backend-runtime', 'resources/engine-runtimes'],
+    ignore: [/^\/test(?:\/|$)/, /^\/scripts(?:\/|$)/, /^\/out(?:\/|$)/, /^\/resources\/backend-runtime(?:\/|$)/, /^\/resources\/backend-staging-/,
+             /^\/resources\/engine-runtimes(?:\/|$)/, /^\/resources\/engines-staging-/],
   },
   hooks: {
     prePackage: async (_config,platform,arch) => {
       if(platform!=='win32'||arch!=='x64')throw new Error('The bundled backend release currently supports Windows x64 only.');
       const manifest=require('node:path').join(__dirname,'resources/backend-runtime/app/desktop-backend.json');
       if(!require('node:fs').existsSync(manifest))throw new Error('Build the backend before packaging: npm run build:backend.');
+      const engines=require('node:path').join(__dirname,'resources/engine-runtimes/hindsight/python/python.exe');
+      if(!require('node:fs').existsSync(engines))throw new Error('Build the memory engines before packaging: npm run build:engines.');
     },
     // Forge derives its runtime version from package metadata after merging
     // packagerConfig. Scope the ECS selection to release packaging; keep the
