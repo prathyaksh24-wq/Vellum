@@ -1,7 +1,8 @@
 """Shared local embedding owner for vault, memory projections and Books.
 
-Google EmbeddingGemma 2 uses the existing loopback Ollama service. Explicit
-SentenceTransformer instances remain available for legacy rollback. No cloud
+Google EmbeddingGemma 2 uses the existing loopback Ollama service. Installs
+without Ollama use a model bundled with Vellum (agent/rag/embedding_profile.py)
+through sentence-transformers. No cloud
 fallback or automatic model download occurs on the request path.
 """
 
@@ -61,8 +62,14 @@ class Embedder:
         self._lock = threading.RLock()
 
     @property
+    def bundled(self) -> bool:
+        from agent.rag.embedding_profile import BUNDLED, PROFILES
+
+        return self.backend == 'sentence_transformers' and self.model_name == PROFILES[BUNDLED]['embedding_model']
+
+    @property
     def revision(self) -> str:
-        return self.model_revision + (':retrieval-prefix-v1' if self.backend == 'ollama' else '')
+        return self.model_revision + (':retrieval-prefix-v1' if self.backend == 'ollama' or self.bundled else '')
 
     @property
     def fingerprint(self) -> str:
@@ -80,7 +87,27 @@ class Embedder:
                 "sentence-transformers is required for local embeddings. "
                 "Install requirements.txt before using the RAG layer."
             ) from exc
+        if self.bundled:
+            # Bundled with Vellum for users without Ollama: load from disk, never download.
+            import torch
+
+            from agent.config import REPO_ROOT
+            from agent.rag.embedding_profile import bundled_model_path
+
+            folder = bundled_model_path(REPO_ROOT)
+            if folder is None:
+                raise RuntimeError('The bundled embedding model is missing from this build.')
+            # Stored as fp16 to halve the download; computed in fp32 (identical vectors).
+            return SentenceTransformer(str(folder), device='cpu', model_kwargs={'torch_dtype': torch.float32})
         return SentenceTransformer(self.model_name)
+
+    def _prefixed(self, texts: list[str], *, query: bool) -> list[str]:
+        if not self.bundled:
+            return texts
+        from agent.rag.embedding_profile import BUNDLED_DOCUMENT_PREFIX, BUNDLED_QUERY_PREFIX
+
+        prefix = BUNDLED_QUERY_PREFIX if query else BUNDLED_DOCUMENT_PREFIX
+        return [prefix + (text or '') for text in texts]
 
     @cached_property
     def client(self):
@@ -112,7 +139,8 @@ class Embedder:
             return []
         with self._lock:
             if self.backend == 'sentence_transformers':
-                return _to_list(self.model.encode(texts, normalize_embeddings=True, batch_size=self.batch_size))
+                return _to_list(self.model.encode(self._prefixed(texts, query=query),
+                                                  normalize_embeddings=True, batch_size=self.batch_size))
             self._check_model()
             prefix = QUERY_PREFIX if query else DOCUMENT_PREFIX
             vectors = []
@@ -140,7 +168,8 @@ class Embedder:
         """Legacy document API; query callers use embed_query instead."""
         if self.backend == 'sentence_transformers':
             with self._lock:
-                return _to_list(self.model.encode(text or '', normalize_embeddings=True))
+                return _to_list(self.model.encode(self._prefixed([text or ''], query=False)[0],
+                                                  normalize_embeddings=True))
         return self._encode([text], query=False)[0]
 
     def embed_query(self, text: str) -> list[float]:

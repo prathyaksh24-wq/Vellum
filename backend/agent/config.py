@@ -455,7 +455,11 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    from agent.rag.embedding_profile import apply_pinned
+
+    apply_pinned(settings, REPO_ROOT)  # this install's pinned embedding model, unless set explicitly
+    return settings
 
 
 settings = get_settings()

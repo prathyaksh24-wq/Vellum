@@ -198,6 +198,10 @@ def main(*, standalone: bool = False) -> None:
     for key, value in {"OMP_NUM_THREADS": "4", "MKL_NUM_THREADS": "4", "HF_HUB_DISABLE_XET": "1"}.items():
         os.environ.setdefault(key, value)
     import uvicorn
+    # Pin this install's embedding model before any settings are read: Ollama's
+    # EmbeddingGemma when present, otherwise the model bundled with Vellum.
+    from agent.rag.embedding_profile import ensure_profile
+    ensure_profile(workspace_root(), os.environ.get("OLLAMA_BASE_URL") or "http://127.0.0.1:11434")
     startup_mark("runtime ready")
     from agent.api import app
     startup_mark("API imported")

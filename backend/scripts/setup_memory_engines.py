@@ -6,6 +6,11 @@ its dependencies conflict with Vellum's (e.g. Hindsight needs mcp 2.x).
 
     uv run python backend/scripts/setup_memory_engines.py            # all engines
     uv run python backend/scripts/setup_memory_engines.py hindsight  # one engine
+    uv run python backend/scripts/setup_memory_engines.py embedding-model
+
+``embedding-model`` prepares the embedding model bundled for users without
+Ollama (see agent/rag/embedding_profile.py). Run it with Vellum's own Python;
+it needs sentence-transformers.
 
 Requires ``uv`` on PATH.
 """
@@ -43,7 +48,36 @@ def setup_source(name: str, uv: str) -> None:
     print(f"{name}: ready at {src / '.venv'}")
 
 
+def setup_embedding_model() -> None:
+    """Download the pinned bundled embedding model and store it as fp16 (vectors are unchanged)."""
+    import tempfile
+
+    sys.path.insert(0, str(REPO / "backend"))
+    from huggingface_hub import snapshot_download
+    from sentence_transformers import SentenceTransformer
+
+    from agent.rag.embedding_profile import BUNDLED, BUNDLED_DIR, PROFILES
+
+    profile = PROFILES[BUNDLED]
+    target = REPO / ".engines" / "embedding-models" / BUNDLED_DIR
+    with tempfile.TemporaryDirectory(prefix="vellum-embed-") as cache:
+        folder = snapshot_download(profile["embedding_model"], revision=profile["embedding_model_revision"],
+                                   cache_dir=cache, allow_patterns=["*.json", "model.safetensors",
+                                                                     "sentencepiece.bpe.model", "1_Pooling/*",
+                                                                     "README.md"])
+        model = SentenceTransformer(folder, device="cpu")
+        if model.get_embedding_dimension() != profile["embedding_dimensions"]:
+            sys.exit("The bundled embedding model has unexpected dimensions.")
+        if target.exists():
+            shutil.rmtree(target)
+        model.half().save(str(target))
+    print(f"embedding model: ready at {target}")
+
+
 def setup(name: str) -> None:
+    if name == "embedding-model":
+        setup_embedding_model()
+        return
     spec = ENGINES[name]
     if "source" in spec:
         uv = shutil.which("uv")
@@ -63,5 +97,5 @@ def setup(name: str) -> None:
 
 
 if __name__ == "__main__":
-    for engine in sys.argv[1:] or list(ENGINES):
+    for engine in sys.argv[1:] or [*ENGINES, "embedding-model"]:
         setup(engine)
