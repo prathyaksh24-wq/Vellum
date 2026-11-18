@@ -212,3 +212,21 @@ def test_holographic_provider_stores_and_prefetches_local_facts(monkeypatch, tmp
     context = provider.prefetch("What graph memory does Vellum use?", session_id="t2")
 
     assert "Hindsight" in context
+
+
+def test_forget_document_uses_the_clients_own_loop_runner(monkeypatch):
+    """hindsight-client keeps _run_async in hindsight_client.hindsight_client, not the package root."""
+    import hindsight_client.hindsight_client as client_module
+
+    from agent.memory import provider_extensions as module
+
+    calls = []
+
+    class Documents:
+        def delete_document(self, *, bank_id, document_id):
+            calls.append((bank_id, document_id))
+            return "coroutine"
+
+    monkeypatch.setattr(client_module, "_run_async", lambda coro: calls.append(("ran", coro)))
+    module._delete_hindsight_document(type("Client", (), {"documents": Documents()})(), "vellum", "vellum-memory-7")
+    assert calls == [("vellum", "vellum-memory-7"), ("ran", "coroutine")]
