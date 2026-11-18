@@ -229,6 +229,9 @@ class EngineSupervisor:
 
     def stop(self) -> None:
         self._stop.set()
+        thread = self._thread
+        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=5)
         for name, _factory in reversed(self._factories):
             self._terminate(name)
             self._status[name].state = "stopped"

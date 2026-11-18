@@ -7320,18 +7320,41 @@ async def setup_state_post(body: SetupStateBody) -> dict[str, Any]:
     return {"ok": True}
 
 
+@router.get("/setup/hardware")
+async def setup_hardware() -> dict[str, Any]:
+    """Scan this computer (memory, disk, GPU, Ollama) and recommend local or cloud."""
+    from agent.setup_hardware import scan_and_recommend
+
+    return await asyncio.to_thread(scan_and_recommend)
+
+
 @router.post("/setup/complete")
 async def setup_complete(body: SetupStateBody) -> dict[str, Any]:
-    """Finalize the wizard. Writes the snapshot to setup_state.json with a
-       completed_at marker. Provider keys are NOT written from here — the
-       wizard's key-input phase writes to ~/.vellum/.env directly via the
-       shell adapter when the real backend is mounted."""
+    """Finalize the wizard: save the snapshot, apply the chosen model, restart memory engines.
+
+    ``state.apply_model`` is a Vellum model id (e.g. ``ollama/qwen3.5:9b`` or an
+    OpenRouter id). API keys are never sent here: they go through the
+    ``provider.credential.configure`` action, so they are not saved in the
+    wizard's state file.
+    """
     from datetime import datetime, timezone
 
-    payload = dict(body.state)
+    payload = {key: value for key, value in dict(body.state).items()
+               if not re.search(r"key|secret|token|password", str(key), re.I)}
     payload["completed_at"] = datetime.now(timezone.utc).isoformat()
+    applied: dict[str, Any] = {}
+    model = str(payload.get("apply_model") or "").strip()
+    if model:
+        try:
+            receipt = await asyncio.to_thread(_dispatch_compat_action, DEFAULT_MODEL_SET_ACTION_ID, {"model": model})
+            applied["model"] = receipt.result["model"]["id"]
+        except HTTPException as exc:
+            applied["model_error"] = exc.detail if isinstance(exc.detail, str) else exc.detail.get("message", "")
     _write_setup_state(payload)
-    return {"ok": True, "completed_at": payload["completed_at"]}
+    from agent.memory.engines.runtime import restart_engines
+
+    await asyncio.to_thread(restart_engines)
+    return {"ok": True, "completed_at": payload["completed_at"], "applied": applied}
 
 
 @router.get("/terminal/profiles")

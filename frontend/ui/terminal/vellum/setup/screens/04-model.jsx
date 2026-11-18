@@ -14,6 +14,7 @@ const { useState: useModel_useState, useEffect: useModel_useEffect, useMemo: use
 
 const MODELS = [
   { id: "gemma-3:12b",    family: "Gemma 3",       params: "12B", sizeGB: 7.4,  contextK: 8,   tps: 48, quality: 74, quant: "Q4_K_M", desc: "Fast default — matches backend FAST_MODEL." },
+  { id: "qwen-3.5:9b",    family: "Qwen 3.5",      params: "9B",  sizeGB: 5.5,  contextK: 32,  tps: 40, quality: 76, quant: "Q4_K_M", desc: "Runs well on an 8 GB laptop — the default for modest hardware." },
   { id: "gemma-4:4b",     family: "Gemma 4",       params: "4B",  sizeGB: 2.7,  contextK: 8,   tps: 78, quality: 62, quant: "Q4_K_M", desc: "Tiniest — chat & lightweight reasoning." },
   { id: "gemma-4:12b",    family: "Gemma 4",       params: "12B", sizeGB: 7.4,  contextK: 8,   tps: 42, quality: 78, quant: "Q4_K_M", desc: "Mid-range. Stronger reasoning, still snappy." },
   { id: "gemma-4:31b",    family: "Gemma 4",       params: "31B", sizeGB: 18.0, contextK: 128, tps: 22, quality: 88, quant: "Q4_K_M", desc: "Primary — backend PRIMARY_MODEL for deep synthesis." },
@@ -23,17 +24,28 @@ const MODELS = [
   { id: "phi-3:3.8b",     family: "Phi 3",         params: "3.8B",sizeGB: 2.2,  contextK: 4,   tps: 92, quality: 58, quant: "Q4_K_M", desc: "Fastest on the list — tight loops." },
 ];
 
-// fit grading uses hw from screen 3
+// Fit grading uses the real scan from screen 3. Without a GPU that can hold
+// the model it runs on the processor from system RAM: workable, but slower.
 function gradeFit(m, hw) {
   if (!hw) return "good";
-  if (m.sizeGB > hw.vramGB + 4) return "bad";
-  if (m.sizeGB > hw.vramGB)     return "swap";
-  return "good";
+  const vram = hw.vramGB || 0;
+  if (m.sizeGB <= vram) return "good";
+  const ramRoom = (hw.ramGB || 0) - 3;  // leave room for Windows and Vellum
+  if (m.sizeGB <= ramRoom) return "swap";
+  return "bad";
+}
+
+// "gemma-4:12b" (wizard id) -> "gemma4:12b" (Ollama tag)
+function ollamaTag(id) {
+  return id.replace(/-(\d)/, "$1");
 }
 
 function ModelScreen({ s, set, onAdvance }) {
   const fit = useModel_useMemo(() => MODELS.map(m => ({ ...m, fit: gradeFit(m, s.hw) })), [s.hw]);
-  const defaultIdx = fit.findIndex(m => m.id === (s.localModel.id || "gemma-3:12b"));
+  const recommended = s.hw && s.hw.recommendation && s.hw.recommendation.mode === "local"
+    ? fit.findIndex(m => ollamaTag(m.id) === s.hw.recommendation.model) : -1;
+  const chosen = fit.findIndex(m => m.id === s.localModel.id);
+  const defaultIdx = chosen >= 0 ? chosen : recommended >= 0 ? recommended : fit.findIndex(m => m.id === "gemma-3:12b");
   const [idx, setIdx] = useModel_useState(defaultIdx < 0 ? 0 : defaultIdx);
 
   useModel_useEffect(() => {
@@ -49,6 +61,7 @@ function ModelScreen({ s, set, onAdvance }) {
         const m = fit[idx];
         if (m.fit === "bad") return;
         beginDownload(m, set);
+        set("apply_model", "ollama/" + ollamaTag(m.id));  // applied by /api/setup/complete
         // Brief delay so the user sees the download begin in sidebar before we move on
         setTimeout(onAdvance, 650);
       }
@@ -67,7 +80,7 @@ function ModelScreen({ s, set, onAdvance }) {
       </div>
       <div className="oc-desc">
         Which model runs locally, by default. You can change this anytime with <code style={{color:"var(--text)"}}>vellum model</code>.
-        {s.hw && <> Fit is graded against the <b style={{color:"var(--text)"}}>{s.hw.vramGB} GB</b> of VRAM detected.</>}
+        {s.hw && <> Fit is graded against the <b style={{color:"var(--text)"}}>{s.hw.vramGB} GB</b> of GPU memory and <b style={{color:"var(--text)"}}>{s.hw.ramGB} GB</b> of RAM detected.</>}
       </div>
 
       <div className="oc-question">Select default local model:</div>
@@ -102,7 +115,7 @@ function ModelScreen({ s, set, onAdvance }) {
             <div className="name">
               <b>{m.id}</b>
               <div className="meta">
-                {m.params} · {m.contextK}K ctx · ~{m.tps} t/s · {m.desc}
+                {m.params} · {m.contextK}K ctx · ~{m.tps} t/s · {m.desc}{i === recommended ? " · Recommended for this computer" : ""}
               </div>
             </div>
             <div className="size">{m.sizeGB} GB</div>

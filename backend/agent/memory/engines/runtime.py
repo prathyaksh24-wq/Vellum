@@ -115,6 +115,26 @@ def start_engines() -> None:
     get_engine_supervisor().start()
 
 
+def restart_engines() -> None:
+    """Re-read the user's model choice and restart every engine with it (in the background)."""
+    from agent.config import get_settings
+
+    get_settings.cache_clear()
+    from agent.llm.providers import get_provider_registry
+
+    get_provider_registry.cache_clear()
+    if not get_engine_supervisor.cache_info().currsize or get_engine_supervisor()._thread is None:
+        return  # engines never started in this process; the next launch reads the new choice
+    supervisor = get_engine_supervisor()
+
+    def run() -> None:
+        supervisor.stop()
+        if get_settings().memory_engines_enabled:
+            supervisor.start()
+
+    threading.Thread(target=run, name="memory-engines-restart", daemon=True).start()
+
+
 def stop_engines() -> None:
     if get_engine_supervisor.cache_info().currsize:
         get_engine_supervisor().stop()
