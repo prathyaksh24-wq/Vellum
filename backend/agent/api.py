@@ -3099,6 +3099,14 @@ def _embedding_health() -> dict[str, Any]:
     backend = str(getattr(get_settings(), "embedding_backend", "") or "sentence_transformers").replace("-", "_")
     if backend == "ollama":
         return {"ok": True, "provider": "ollama"}
+    if backend == "llama_server":
+        from agent.config import REPO_ROOT
+        from agent.rag.embedding_profile import bundled_model_path
+        from agent.rag.embedding_server import bundled_server_path
+
+        if bundled_model_path(REPO_ROOT) and bundled_server_path(REPO_ROOT):
+            return {"ok": True, "provider": "bundled"}
+        return {"ok": False, "provider": "bundled", "error": "missing from this build"}
     try:
         installed = importlib.util.find_spec("sentence_transformers") is not None
     except Exception:

@@ -119,7 +119,7 @@ class Settings(BaseSettings):
     )
 
     # One local embedding runtime; each model generation gets a fresh index.
-    embedding_backend: Literal["ollama", "sentence_transformers"] = Field(default="ollama", alias="EMBEDDING_BACKEND")
+    embedding_backend: Literal["ollama", "llama_server", "sentence_transformers"] = Field(default="ollama", alias="EMBEDDING_BACKEND")
     embedding_model: str = Field(default="embeddinggemma-2:270m-q8_0-text", alias="EMBEDDING_MODEL")
     embedding_model_revision: str = Field(default="c21dd30c1e38444d3b4faa091407b6fa97221447b4965d74931d43d7f09bbbfd", alias="EMBEDDING_MODEL_REVISION")
     embedding_dimensions: int = Field(default=768, ge=1, le=4096, alias="EMBEDDING_DIMENSIONS")

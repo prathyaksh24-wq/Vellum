@@ -1,19 +1,21 @@
 """Which embedding model this install uses, decided once and then pinned.
 
-Vectors from different embedding models can't be compared, so an install
-must keep the model it started with:
+Every install uses Google's EmbeddingGemma 2 (Q8_0, 768 dimensions):
 
-- Users who run Ollama keep Google EmbeddingGemma 2 through Ollama, as before.
-- Users without Ollama (for example cloud-only users on Claude, OpenRouter or
-  Groq) get a bundled model that runs on the processor through
-  sentence-transformers: no Ollama, no download at runtime, nothing sent to
-  a cloud provider just to index memories. Claude and Groq have no
-  embedding API, and following the chat provider would force re-indexing
-  every memory whenever the user switched model.
+- Through Ollama when Ollama already has ``embeddinggemma-2:270m-q8_0-text``
+  (or an index built with it exists).
+- Otherwise through the copy bundled with Vellum, run by llama.cpp's
+  ``llama-server`` (agent/rag/embedding_server.py): no Ollama, no download at
+  runtime, nothing sent to a cloud provider just to index memories. Claude and
+  Groq have no embedding API, and following the chat provider would force
+  re-indexing every memory whenever the user switched model.
 
-The choice is written to ``data/embeddings/profile.json`` the first time the
-desktop backend starts (``ensure_profile``) and applied by ``get_settings``
-from then on. Explicit ``EMBEDDING_*`` / ``CHROMA_PATH`` settings always win.
+Both are the same model; their vectors agree to a cosine of 0.9998 or
+better. Each still keeps its own index, so an install never mixes vectors
+from two runtimes. The choice is written to ``data/embeddings/profile.json``
+the first time the desktop backend starts (``ensure_profile``) and applied by
+``get_settings`` from then on. Explicit ``EMBEDDING_*`` / ``CHROMA_PATH``
+settings always win.
 """
 from __future__ import annotations
 
@@ -34,21 +36,18 @@ PROFILES: dict[str, dict[str, Any]] = {
         "chroma_path": "data/embeddings/chroma-embeddinggemma2-v1",
     },
     BUNDLED: {
-        "embedding_backend": "sentence_transformers",
-        # Multilingual (100 languages), MIT licensed, 384 dimensions, about 4 ms
-        # per memory on a laptop CPU. Shipped as fp16 (253 MB) and loaded as fp32.
-        "embedding_model": "intfloat/multilingual-e5-small",
-        "embedding_dimensions": 384,
-        "embedding_model_revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
-        "chroma_path": "data/embeddings/chroma-e5-small-v1",
+        # ggml-org's official GGUF of google/embeddinggemma-2 (Apache 2.0); the
+        # revision is the file's sha256.
+        "embedding_backend": "llama_server",
+        "embedding_model": "embeddinggemma-2-Q8_0.gguf",
+        "embedding_dimensions": 768,
+        "embedding_model_revision": "2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135",
+        "chroma_path": "data/embeddings/chroma-embeddinggemma2-bundled-v1",
     },
 }
-# e5 was trained with these prefixes; leaving them out costs retrieval quality.
-BUNDLED_QUERY_PREFIX = "query: "
-BUNDLED_DOCUMENT_PREFIX = "passage: "
 # Bundled model folder: <resources>/engine-runtimes/embedding-models/<dir> when
 # packaged, .engines/embedding-models/<dir> in development.
-BUNDLED_DIR = "multilingual-e5-small"
+BUNDLED_DIR = "embeddinggemma-2"
 
 
 def profile_path(root: Path) -> Path:
@@ -114,12 +113,13 @@ def ensure_profile(root: Path, ollama_base_url: str) -> str:
 
 
 def bundled_model_path(root: Path) -> Path | None:
-    """The bundled model's local folder: packaged app first, then development."""
+    """The bundled GGUF: packaged app first, then development."""
     import sys
 
     resources = Path(sys.executable).resolve().parents[2]
+    name = PROFILES[BUNDLED]["embedding_model"]
     for folder in (resources / "engine-runtimes" / "embedding-models" / BUNDLED_DIR,
                    Path(root) / ".engines" / "embedding-models" / BUNDLED_DIR):
-        if (folder / "modules.json").is_file():
-            return folder
+        if (folder / name).is_file():
+            return folder / name
     return None

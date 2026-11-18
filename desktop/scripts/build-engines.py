@@ -5,8 +5,9 @@ with the backend's. This copies, per engine, a relocatable Windows Python
 (the base interpreter of the engine's development venv) plus that venv's
 site-packages into ``desktop/resources/engine-runtimes/<engine>/python``.
 Honcho also needs its source tree (``.../honcho/src``), copied without
-docs, tests, SDKs or git history. The embedding model bundled for users
-without Ollama goes to ``engine-runtimes/embedding-models``.
+docs, tests, SDKs or git history. EmbeddingGemma 2, bundled for installs
+without it in Ollama, goes to ``engine-runtimes/embedding-models`` and the
+llama-server that runs it to ``engine-runtimes/llama-server``.
 
 Prepare the development environments first:
 
@@ -31,6 +32,7 @@ ENGINES = {
     "honcho": {"venv": ROOT / ".engines/honcho/src/.venv", "source": ROOT / ".engines/honcho/src", "strip": ()},
 }
 EMBEDDING_MODELS = ROOT / ".engines" / "embedding-models"
+LLAMA_SERVER = ROOT / ".engines" / "llama-server"
 SOURCE_SKIP = {".git", ".venv", "docs", "tests", "sdks", "honcho-cli", ".github", "examples", "__pycache__"}
 
 
@@ -75,7 +77,7 @@ def build() -> None:
     if sys.platform != "win32":
         raise RuntimeError("Engine runtimes are staged for Windows x64 releases only.")
     missing = [name for name, spec in ENGINES.items() if not (spec["venv"] / "pyvenv.cfg").is_file()]
-    if not any(EMBEDDING_MODELS.glob("*/modules.json")):
+    if not any(EMBEDDING_MODELS.glob("*/*.gguf")) or not (LLAMA_SERVER / "llama-server.exe").is_file():
         missing.append("embedding-model")
     if missing:
         raise RuntimeError("Set up the engines first (python backend/scripts/setup_memory_engines.py): "
@@ -90,9 +92,10 @@ def build() -> None:
                                 ignore=lambda _d, names: {n for n in names if n in SOURCE_SKIP or n.endswith(".pyc")})
             size = sum(p.stat().st_size for p in (staging / name).rglob("*") if p.is_file())
             print(f"{name}: {size / 1024**3:.2f} GiB")
-        shutil.copytree(EMBEDDING_MODELS, staging / "embedding-models")
-        size = sum(p.stat().st_size for p in (staging / "embedding-models").rglob("*") if p.is_file())
-        print(f"embedding models: {size / 1024**3:.2f} GiB")
+        for source, name in ((EMBEDDING_MODELS, "embedding-models"), (LLAMA_SERVER, "llama-server")):
+            shutil.copytree(source, staging / name, ignore=shutil.ignore_patterns("*.part"))
+            size = sum(p.stat().st_size for p in (staging / name).rglob("*") if p.is_file())
+            print(f"{name}: {size / 1024**3:.2f} GiB")
         if DESTINATION.exists():
             if not DESTINATION.resolve().is_relative_to(PARENT.resolve()):
                 raise RuntimeError("Refusing to remove a path outside desktop/resources.")

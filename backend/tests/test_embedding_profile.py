@@ -47,7 +47,7 @@ def test_apply_pinned_sets_model_dimensions_and_its_own_index(tmp_path, monkeypa
     ep.apply_pinned(settings, tmp_path)
     bundled = ep.PROFILES[ep.BUNDLED]
     assert (settings.embedding_backend, settings.embedding_model, settings.embedding_dimensions) == (
-        "sentence_transformers", bundled["embedding_model"], bundled["embedding_dimensions"])
+        "llama_server", bundled["embedding_model"], bundled["embedding_dimensions"])
     assert settings.chroma_path == (tmp_path / bundled["chroma_path"]).resolve()
 
 
@@ -70,50 +70,126 @@ def test_unknown_or_corrupt_pin_is_ignored(tmp_path, monkeypatch):
     assert settings.embedding_backend == "ollama"
 
 
-def test_bundled_embedder_adds_e5_prefixes_and_its_own_fingerprint(monkeypatch):
-    from agent.rag.embedder import Embedder
+def test_bundled_embedder_uses_gemma_prefixes_and_its_own_fingerprint(monkeypatch):
+    from agent.rag import embedding_server
+    from agent.rag.embedder import DOCUMENT_PREFIX, QUERY_PREFIX, Embedder
 
-    class Recorder:
-        seen: list = []
+    sent = []
 
-        def encode(self, texts, **_):
-            self.seen.append(texts)
-            import numpy as np
-            return np.ones((len(texts), 384)) if isinstance(texts, list) else np.ones(384)
+    class Response:
+        def __init__(self, inputs):
+            self._inputs = inputs
 
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            # Out of order on purpose: results are matched by index.
+            return {"data": [{"index": i, "embedding": [1.0] + [0.0] * 767} for i in reversed(range(len(self._inputs)))]}
+
+    def fake_post(url, json, **_):
+        sent.append((url, json["input"]))
+        return Response(json["input"])
+
+    class FakeServer:
+        def url(self):
+            return "http://127.0.0.1:5"
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(embedding_server, "get_embedding_server", lambda: FakeServer())
     bundled = ep.PROFILES[ep.BUNDLED]
     embedder = Embedder(bundled["embedding_model"])
-    embedder.dimensions, embedder.model_revision = bundled["embedding_dimensions"], bundled["embedding_model_revision"]
-    embedder.__dict__["model"] = Recorder()
+    assert embedder.backend == "llama_server" and embedder.dimensions == 768
     embedder.embed_query("what food?")
-    embedder.embed_batch(["The user is vegan."])
-    embedder.embed("legacy document")
-    assert Recorder.seen == [["query: what food?"], ["passage: The user is vegan."], "passage: legacy document"]
-    assert embedder.bundled and embedder.revision.endswith(":retrieval-prefix-v1")
+    embedder.embed_batch(["The user is vegan.", "second"])
+    assert sent == [("http://127.0.0.1:5/v1/embeddings", [QUERY_PREFIX + "what food?"]),
+                    ("http://127.0.0.1:5/v1/embeddings", [DOCUMENT_PREFIX + "The user is vegan.",
+                                                          DOCUMENT_PREFIX + "second"])]
+    assert embedder.revision == bundled["embedding_model_revision"] + ":retrieval-prefix-v1"
+    ollama = Embedder(ep.PROFILES[ep.OLLAMA]["embedding_model"])
+    assert embedder.fingerprint != ollama.fingerprint  # never mixed into the Ollama index
 
 
-def test_other_sentence_transformer_models_get_no_prefix():
+def test_bundled_embedder_rejects_wrong_dimensions(monkeypatch):
+    from agent.rag import embedding_server
     from agent.rag.embedder import Embedder
 
-    embedder = Embedder("BAAI/bge-m3")
-    assert not embedder.bundled
-    assert embedder._prefixed(["x"], query=True) == ["x"]
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"index": 0, "embedding": [1.0] * 384}]}
+
+    class FakeServer:
+        def url(self):
+            return "http://127.0.0.1:5"
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: Response())
+    monkeypatch.setattr(embedding_server, "get_embedding_server", lambda: FakeServer())
+    with pytest.raises(ValueError, match="dimensions"):
+        Embedder(ep.PROFILES[ep.BUNDLED]["embedding_model"]).embed_query("x")
+
+
+def test_embedding_server_restarts_after_idle_stop(tmp_path, monkeypatch):
+    from agent.rag import embedding_server as es
+
+    launched = []
+
+    class Proc:
+        def __init__(self, argv, **_):
+            launched.append(argv)
+            self.pid, self.returncode, self.alive = 1000 + len(launched), None, True
+
+        def poll(self):
+            return None if self.alive else 0
+
+        def terminate(self):
+            self.alive = False
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            self.alive = False
+
+    monkeypatch.setattr(es.subprocess, "Popen", Proc)
+    monkeypatch.setattr(es, "_healthy", lambda url: True)
+    server = es.EmbeddingServer(tmp_path / "llama-server.exe", tmp_path / "model.gguf", idle_seconds=3600)
+    monkeypatch.setattr(server, "_attach_job", lambda pid: None)
+    monkeypatch.setattr(server, "_ensure_reaper", lambda: None)
+    first = server.url()
+    assert first.startswith("http://127.0.0.1:") and server.url() == first and len(launched) == 1
+    argv = launched[0]
+    assert "--embeddings" in argv and argv[argv.index("--host") + 1] == "127.0.0.1"
+    assert argv[argv.index("-m") + 1] == str(tmp_path / "model.gguf")
+    server.stop()  # what the idle reaper does
+    server.url()
+    assert len(launched) == 2
 
 
 @pytest.mark.skipif(ep.bundled_model_path(Path(__file__).resolve().parents[2]) is None,
                     reason="bundled model not prepared (setup_memory_engines.py embedding-model)")
-def test_bundled_model_loads_from_disk_and_ranks_memories(monkeypatch):
+def test_bundled_embeddinggemma_runs_without_ollama_and_ranks_memories(monkeypatch):
+    from agent.rag import embedding_server
     from agent.rag.embedder import Embedder
 
-    monkeypatch.setenv("HF_HUB_OFFLINE", "1")  # must never download
-    bundled = ep.PROFILES[ep.BUNDLED]
-    embedder = Embedder(bundled["embedding_model"])
-    docs = embedder.embed_batch(["The user is vegan and avoids animal products.",
-                                 "The user practices Japanese every evening."])
-    assert len(docs[0]) == bundled["embedding_dimensions"]
-    query = embedder.embed_query("which language is the user learning?")
-    scores = [sum(a * b for a, b in zip(query, doc)) for doc in docs]
-    assert scores[1] > scores[0]
+    monkeypatch.setattr(embedding_server, "_server", None)
+    embedder = Embedder(ep.PROFILES[ep.BUNDLED]["embedding_model"])
+    try:
+        docs = embedder.embed_batch(["The user is vegan and avoids animal products.",
+                                     "The user practices Japanese every evening."])
+        assert len(docs[0]) == 768
+        query = embedder.embed_query("which language is the user learning?")
+        scores = [sum(a * b for a, b in zip(query, doc)) for doc in docs]
+        assert scores[1] > scores[0]
+    finally:
+        if embedding_server._server is not None:
+            embedding_server._server.stop()
 
 
 def test_explicit_chroma_path_is_kept(tmp_path, monkeypatch):
