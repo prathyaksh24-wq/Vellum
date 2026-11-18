@@ -68,6 +68,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/vellum-face.jsx",
   "design/Velllum/uploads/components/app-theme-settings.jsx",
   "design/Velllum/uploads/components/accounts.jsx",
+  "design/Velllum/uploads/components/onboarding.jsx",
   "design/Velllum/uploads/components/profile.jsx",
   "design/Velllum/uploads/components/books-view.jsx",
   "design/Velllum/uploads/components/calendar-workspace.jsx",

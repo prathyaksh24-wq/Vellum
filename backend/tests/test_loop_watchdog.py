@@ -10,11 +10,12 @@ def test_watchdog_records_stacks_when_the_event_loop_stops_answering(tmp_path):
     log = tmp_path / "backend-stall.log"
     stop = start_loop_watchdog(loop, interval=0.05, stall_after=0.1, log_path=log)
     try:
-        # Wait for the report itself, not just the file: the watchdog creates
-        # the log before it finishes writing, and reading in between saw "".
+        # Wait for the whole report, not just the file: the watchdog creates the
+        # log, then writes the header, then the thread stacks. Reading in between
+        # has seen "" and a header with no stacks.
         deadline = time.monotonic() + 5
         text = ""
-        while time.monotonic() < deadline and "Event loop unresponsive" not in text:
+        while time.monotonic() < deadline and not ("Thread" in text or "vellum-loop-watchdog" in text):
             time.sleep(0.05)
             text = log.read_text(encoding="utf-8") if log.exists() else ""
         assert "Event loop unresponsive" in text

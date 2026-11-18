@@ -524,7 +524,7 @@ def provider_connections() -> list[ProviderConnection]:
     definitions = (
         ('ollama','Ollama','Gemma and your local models.','ollama-color','https://ollama.com/'),
         ('openrouter','OpenRouter','One connection, many model providers.','openrouter-color','https://openrouter.ai/settings/keys'),
-        ('openai','OpenAI','GPT models with your OpenAI API key.','openai','https://platform.openai.com/api-keys'),
+        ('openai','OpenAI','GPT models from OpenAI.','openai','https://platform.openai.com/api-keys'),
         ('anthropic','Claude','Claude models from Anthropic.','claude-color','https://platform.claude.com/settings/keys'),
         ('kimi','Kimi','Kimi models from Moonshot AI.','kimi-color','https://platform.moonshot.ai/console/api-keys'),
         ('groq','Groq','Fast inference for open models.','groq-color','https://console.groq.com/keys'),

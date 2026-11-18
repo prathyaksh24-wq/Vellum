@@ -4,43 +4,59 @@
 
 const { useState: useHW_useState, useEffect: useHW_useEffect } = React;
 
-const HW_TRUTH = {
-  ramGB: 32,    ramMeta: "DDR5-5600 · 4 slots",
-  vramGB: 12,   gpuName: "NVIDIA RTX 4070",
-  freeDiskGB: 184, diskMeta: "1 TB NVMe · 81% free",
-  cpuCores: 16, cpuName: "Ryzen 7 7700X · 5.4 GHz",
-};
+// Real scan from the backend (GET /api/setup/hardware): memory, disk, GPU,
+// CPU and whether Ollama is installed, plus a local-vs-cloud recommendation.
+const HW_API_BASE = (typeof window !== "undefined" && window.__VELLUM_API_BASE) || "http://localhost:8000";
 
-const SCAN_STEPS = [
-  { key: "ram",  line: "Inspecting memory…",       resolve: { ramGB: HW_TRUTH.ramGB, ramMeta: HW_TRUTH.ramMeta } },
-  { key: "gpu",  line: "Probing GPU…",             resolve: { vramGB: HW_TRUTH.vramGB, gpuName: HW_TRUTH.gpuName } },
-  { key: "disk", line: "Checking ~/.vellum/ path…", resolve: { freeDiskGB: HW_TRUTH.freeDiskGB, diskMeta: HW_TRUTH.diskMeta } },
-  { key: "cpu",  line: "Counting cores…",          resolve: { cpuCores: HW_TRUTH.cpuCores, cpuName: HW_TRUTH.cpuName } },
-];
+function scanSteps(hw) {
+  return [
+    { key: "ram",  line: "Inspecting memory…", resolve: { ramGB: hw.ram_gb, ramMeta: "installed" } },
+    { key: "gpu",  line: "Probing GPU…",       resolve: { vramGB: hw.vram_gb, gpuName: hw.gpu_name || "no dedicated GPU" } },
+    { key: "disk", line: "Checking free space…", resolve: { freeDiskGB: hw.free_disk_gb, diskMeta: "on Vellum's drive" } },
+    { key: "cpu",  line: "Counting cores…",    resolve: { cpuCores: hw.cpu_cores, cpuName: hw.cpu_name || "processor" } },
+  ];
+}
 
 function HardwareScreen({ s, setRoot, onAdvance }) {
   const [step, setStep] = useHW_useState(0);
-  const done = step >= SCAN_STEPS.length;
+  const [scan, setScan] = useHW_useState(null);   // { hardware, recommendation }
+  const [failed, setFailed] = useHW_useState(false);
+  const steps = scan ? scanSteps(scan.hardware) : [];
+  const done = !!scan && step >= steps.length;
 
-  // Progressive scan — each step resolves a slice of s.hw
   useHW_useEffect(() => {
-    if (done) return;
+    let live = true;
+    fetch(HW_API_BASE + "/api/setup/hardware")
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(body => { if (live) setScan(body); })
+      .catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, []);
+
+  // Progressive reveal of the real results; the last step stores the recommendation too.
+  useHW_useEffect(() => {
+    if (!scan || done) return;
     const t = setTimeout(() => {
-      setRoot("hw", { ...(s.hw || {}), ...SCAN_STEPS[step].resolve });
+      const next = { ...(s.hw || {}), ...steps[step].resolve };
+      if (step === steps.length - 1) {
+        next.recommendation = scan.recommendation;
+        next.ollamaInstalled = scan.hardware.ollama_installed;
+      }
+      setRoot("hw", next);
       setStep(i => i + 1);
     }, step === 0 ? 280 : 420);
     return () => clearTimeout(t);
-  }, [step, done, setRoot, s.hw]);
+  }, [scan, step, done, setRoot, s.hw]);
 
   // ENTER continues — only once scan completes
   useHW_useEffect(() => {
     const h = (e) => {
-      if (!done) return;
+      if (!done && !failed) return;
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onAdvance(); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [done, onAdvance]);
+  }, [done, failed, onAdvance]);
 
   return (
     <div className="oc-section">
@@ -53,15 +69,20 @@ function HardwareScreen({ s, setRoot, onAdvance }) {
       </div>
 
       <div className="hw-body">
-        {SCAN_STEPS.slice(0, step).map((st, i) => (
+        {failed && (
+          <div className="scan" style={{color: "var(--text-faint)"}}>
+            Couldn't read this computer's hardware. You can still pick a model on the next screen.
+          </div>
+        )}
+        {steps.slice(0, step).map((st, i) => (
           <div key={st.key} className="scan">
             <span className="ok">✓</span> <span>{st.line}</span> &nbsp;
             <span className="v">{describeResolve(st.resolve)}</span>
           </div>
         ))}
-        {!done && (
+        {!done && !failed && (
           <div className="scan" style={{color: "var(--text-faint)"}}>
-            <span style={{color: "var(--amber)"}}>·</span> {SCAN_STEPS[step].line}<Cursor />
+            <span style={{color: "var(--amber)"}}>·</span> {steps[step] ? steps[step].line : "Scanning this computer…"}<Cursor />
           </div>
         )}
 
@@ -69,11 +90,13 @@ function HardwareScreen({ s, setRoot, onAdvance }) {
           <>
             <div className="summary">
               Detected:&nbsp;
-              <b>{HW_TRUTH.ramGB} GB RAM</b> ·&nbsp;
-              <b>{HW_TRUTH.vramGB} GB VRAM</b> <span style={{color:"var(--text-faint)"}}>({HW_TRUTH.gpuName})</span> ·&nbsp;
-              <b>{HW_TRUTH.freeDiskGB} GB free</b>.
+              <b>{scan.hardware.ram_gb} GB RAM</b> ·&nbsp;
+              <b>{scan.hardware.vram_gb} GB VRAM</b> <span style={{color:"var(--text-faint)"}}>({scan.hardware.gpu_name || "no dedicated GPU"})</span> ·&nbsp;
+              <b>{scan.hardware.free_disk_gb} GB free</b>.
               <br />
-              You can run models up to <em>~27B comfortably</em>. I'll keep that in mind on the next screen.
+              {scan.recommendation.mode === "local"
+                ? <>Recommended: run <em>{scan.recommendation.label}</em> on this computer ({scan.recommendation.size_gb} GB). {scan.recommendation.reasons.join(". ")}.</>
+                : <>Recommended: use a <em>cloud model</em>. {scan.recommendation.reasons.join(" ")}</>}
             </div>
 
             <div className="oc-question" style={{marginTop: 22}}>Ready to choose a model?</div>

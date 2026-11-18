@@ -1,7 +1,9 @@
 """Shared local embedding owner for vault, memory projections and Books.
 
-Google EmbeddingGemma 2 uses the existing loopback Ollama service. Explicit
-SentenceTransformer instances remain available for legacy rollback. No cloud
+Google EmbeddingGemma 2 runs through the loopback Ollama service when Ollama
+has it, otherwise through the copy bundled with Vellum (llama-server; see
+agent/rag/embedding_profile.py). Explicit SentenceTransformer instances remain
+available for legacy rollback. No cloud
 fallback or automatic model download occurs on the request path.
 """
 
@@ -21,6 +23,8 @@ DEFAULT_MODEL_REVISION = "c21dd30c1e38444d3b4faa091407b6fa97221447b4965d74931d43
 VECTOR_SIZE = 768
 QUERY_PREFIX = "task: search result | query: "
 DOCUMENT_PREFIX = "title: none | text: "
+# EmbeddingGemma 2 through Ollama, or the copy bundled with Vellum (llama-server).
+GEMMA_BACKENDS = ("ollama", "llama_server")
 
 _singleton: "Embedder | None" = None
 _singleton_lock = threading.Lock()
@@ -51,10 +55,16 @@ class Embedder:
         from agent.config import get_settings
         settings = get_settings()
         self.model_name = model_name or settings.embedding_model
-        self.backend = settings.embedding_backend if model_name is None else (
-            'ollama' if model_name.startswith('embeddinggemma-2:') else 'sentence_transformers')
-        self.dimensions = settings.embedding_dimensions if model_name is None or self.backend == 'ollama' else 1024
-        self.model_revision = settings.embedding_model_revision if model_name is None or self.backend == 'ollama' else 'default'
+        self.backend = settings.embedding_backend if model_name is None else _backend_for(model_name)
+        gemma = self.backend in GEMMA_BACKENDS
+        if model_name is not None and self.backend == 'llama_server':
+            from agent.rag.embedding_profile import BUNDLED, PROFILES
+
+            self.dimensions = PROFILES[BUNDLED]['embedding_dimensions']
+            self.model_revision = PROFILES[BUNDLED]['embedding_model_revision']
+        else:
+            self.dimensions = settings.embedding_dimensions if model_name is None or gemma else 1024
+            self.model_revision = settings.embedding_model_revision if model_name is None or gemma else 'default'
         self.batch_size = settings.embedding_batch_size
         self.timeout = settings.embedding_timeout_seconds
         self.base_url = settings.ollama_base_url.rstrip('/').removesuffix('/v1')
@@ -62,7 +72,7 @@ class Embedder:
 
     @property
     def revision(self) -> str:
-        return self.model_revision + (':retrieval-prefix-v1' if self.backend == 'ollama' else '')
+        return self.model_revision + (':retrieval-prefix-v1' if self.backend in GEMMA_BACKENDS else '')
 
     @property
     def fingerprint(self) -> str:
@@ -72,7 +82,7 @@ class Embedder:
     @cached_property
     def model(self):
         if self.backend != 'sentence_transformers':
-            raise RuntimeError('Ollama owns this embedding model; no in-process model is loaded.')
+            raise RuntimeError('A local server owns this embedding model; no in-process model is loaded.')
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
@@ -113,18 +123,14 @@ class Embedder:
         with self._lock:
             if self.backend == 'sentence_transformers':
                 return _to_list(self.model.encode(texts, normalize_embeddings=True, batch_size=self.batch_size))
-            self._check_model()
+            if self.backend == 'ollama':
+                self._check_model()
             prefix = QUERY_PREFIX if query else DOCUMENT_PREFIX
             vectors = []
             for start in range(0, len(texts), self.batch_size):
                 batch = texts[start:start + self.batch_size]
-                response = self.client.post('/api/embed', json={
-                    'model': self.model_name, 'input': [prefix + (text or '') for text in batch],
-                    'dimensions': self.dimensions, 'truncate': False,
-                    'options': {'num_ctx': 8192}, 'keep_alive': '2m',
-                })
-                response.raise_for_status()
-                values = response.json().get('embeddings') or []
+                inputs = [prefix + (text or '') for text in batch]
+                values = self._bundled_batch(inputs) if self.backend == 'llama_server' else self._ollama_batch(inputs)
                 if len(values) != len(batch):
                     raise ValueError('Embedding response count does not match input count.')
                 for vector in values:
@@ -135,6 +141,28 @@ class Embedder:
                         raise ValueError('Embedding response contains a zero vector.')
                     vectors.append([float(v)/norm for v in vector])
             return vectors
+
+    def _ollama_batch(self, inputs: list[str]) -> list:
+        response = self.client.post('/api/embed', json={
+            'model': self.model_name, 'input': inputs,
+            'dimensions': self.dimensions, 'truncate': False,
+            'options': {'num_ctx': 8192}, 'keep_alive': '2m',
+        })
+        response.raise_for_status()
+        return response.json().get('embeddings') or []
+
+    def _bundled_batch(self, inputs: list[str]) -> list:
+        # The copy of EmbeddingGemma 2 bundled with Vellum (agent/rag/embedding_server.py).
+        import httpx
+
+        from agent.rag.embedding_server import get_embedding_server
+
+        url = get_embedding_server().url()
+        response = httpx.post(f'{url}/v1/embeddings', json={'model': self.model_name, 'input': inputs},
+                              timeout=self.timeout, trust_env=False, follow_redirects=False)
+        response.raise_for_status()
+        data = sorted(response.json().get('data') or [], key=lambda item: item.get('index', 0))
+        return [item.get('embedding') or [] for item in data]
 
     def embed(self, text: str) -> list[float]:
         """Legacy document API; query callers use embed_query instead."""
@@ -148,6 +176,14 @@ class Embedder:
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         return self._encode(texts, query=False)
+
+
+def _backend_for(model_name: str) -> str:
+    if model_name.startswith('embeddinggemma-2:'):
+        return 'ollama'
+    if model_name.endswith('.gguf'):
+        return 'llama_server'
+    return 'sentence_transformers'
 
 
 def _to_list(value):

@@ -59,17 +59,21 @@ beforeEach(() => {
 });
 afterEach(async () => {await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.restoreAllMocks();});
 
-test('first launch offers email registration, provider sign-in and a persistent guest choice', async () => {
+test('first launch offers Google and GitHub first, then email registration and a persistent guest choice', async () => {
   await render();
+  // New users can sign up with Google or GitHub directly, not only from "Sign in".
+  expect(button('Continue with Google').disabled).toBe(false);
+  expect(button('Continue with GitHub').disabled).toBe(false);
+  const labels = [...host.querySelectorAll('button')].map(b => b.textContent);
+  expect(labels.indexOf('Continue with Google')).toBeLessThan(labels.indexOf('Create account'));
   expect(button('Create account').disabled).toBe(false);
   expect(host.querySelector('#account-confirm-password')).toBeTruthy();
-  expect(button('Sign up with Google')).toBeUndefined();
   expect(host.textContent).not.toContain('SSO');
   await click('Sign in instead');
   expect(host.textContent).toContain('Sign in to Vellum');
   expect(button('Continue with Google').disabled).toBe(false);
   expect(button('Continue with GitHub').disabled).toBe(false);
-  await click('Continue as guest');
+  await click('Continue without an account');
   expect(host.textContent).toContain('Local workspace');
   expect(localStorage.getItem('vellum-local-welcome-v1')).toBe('1');
   expect(api.start).not.toHaveBeenCalled();
@@ -79,7 +83,7 @@ test('an unavailable backend preserves local access and explains the error', asy
   api.status.mockRejectedValue(new Error('Backend offline'));
   await render();
   expect(host.querySelector('[role="alert"]').textContent).toContain('Backend offline');
-  await click('Continue as guest');
+  await click('Continue without an account');
   expect(host.textContent).toContain('Local workspace');
 });
 
@@ -160,7 +164,7 @@ test('logout returns to sign-in even after local continuation and survives a sta
   await click('Sign up');
   expect(host.textContent).toContain('Create your Vellum account');
   expect(button('Create account')).toBeTruthy();
-  await click('Continue as guest');
+  await click('Continue without an account');
   expect(api.continueLocal).toHaveBeenCalledOnce();
   expect(host.textContent).toContain('Local workspace');
 });

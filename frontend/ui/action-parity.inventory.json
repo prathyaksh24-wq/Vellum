@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 966,
-      "sha256": "d3d4776754323447f86fc000c6b60747487d5558d3cdd7316ac309b9712e7dda"
+      "count": 967,
+      "sha256": "8deafab53d6415bee9b9b7384b388f5888ad204b35ce7800b9910aa18fde2768"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -324,6 +324,10 @@
     "design/Velllum/uploads/droplets-entry.js": {
       "count": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "design/Velllum/uploads/components/onboarding.jsx": {
+      "count": 29,
+      "sha256": "da04a327efadcbd080f5c9fea7fca837f2d1a7498a4d1ce2437a9e2b6d2db0b9"
     },
     "design/Velllum/uploads/components/memory-page.jsx": {
       "count": 58,
@@ -2714,6 +2718,10 @@
     {
       "scope": "Face color drafts, Glow Orange and reset-to-blue presets, and cloud pointer/keyboard animation",
       "reason": "Color input and Reset update only the unsaved preview. Apply dispatches settings.device.update and projects its revisioned receipt through the canonical device owner. Cloud pointer tracking, wink, floating and blinking are local presentation; visibility and reduced-motion controls do not persist data."
+    },
+    {
+      "scope": "First-run onboarding steps, tabs, model filters and search, provider choice, connector picks, privacy and learning choices before finishing, memory import paste and review, and the setup gate hand-off",
+      "reason": "Presentation and draft state inside the new-user setup wizard. Saving a provider key dispatches provider.credential.configure, chosen connectors dispatch plugin.state.set, kept imported memories dispatch memory.import.apply, and finishing applies the model and learning choices through settings.default_model.set and the memory settings action (/api/setup/complete). The user's own click in the wizard is the confirmation for those actions."
     }
   ],
   "deferred": [
@@ -2748,6 +2756,10 @@
     {
       "surface": "Direct local terminal session transport",
       "reason": "The user-operated terminal retains TerminalSessionManager and its dedicated loopback-origin-checked WebSocket for start/input/resize/terminate. It is not an agent tool or model-command channel. Session lifecycle and direct OS command input are outside generic App Action parity; only workspace presentation is covered by ui.surface.configure. No parity or runtime-test claim is made for shell execution."
+    },
+    {
+      "surface": "First-run local model download and privacy mode",
+      "reason": "Downloading a local model through Ollama (/api/setup/ollama/pull, which sets the default model when finished) and saving PRIVACY_MODE from setup have no App Action definitions yet. Both run only inside the new-user wizard and are covered by backend tests in test_setup_flow.py."
     }
   ]
 }

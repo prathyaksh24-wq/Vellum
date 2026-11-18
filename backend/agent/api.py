@@ -1672,6 +1672,10 @@ async def lifespan(app: FastAPI):
     scheduler = start_scheduler()
     app.state.scheduler = scheduler
     startup_mark("scheduler started")
+    if serving():
+        # Embedded memory engines (Hindsight, Honcho): background start, never blocks chat.
+        from agent.memory.engines.runtime import start_engines
+        start_engines()
     try:
         yield
     finally:
@@ -1690,6 +1694,8 @@ async def lifespan(app: FastAPI):
         await browser_shutdown_async()
         if _memory_orchestrator.provider_extensions is not None:
             await asyncio.to_thread(_memory_orchestrator.provider_extensions.shutdown)
+        from agent.memory.engines.runtime import stop_engines
+        await asyncio.to_thread(stop_engines)
 
 
 app = FastAPI(title="Personal Agent API", version="0.1.0", lifespan=lifespan)
@@ -1801,6 +1807,19 @@ _settings_runtime_actions = SettingsRuntimeActionService(
     ),
 )
 _app_action_runtime.set_settings_runtime_handler(_settings_runtime_actions.execute)
+
+
+def _dispatch_user_confirmed(action_id: str, arguments: dict[str, Any]) -> ActionReceipt:
+    """For first-run setup only: the user's own "Start using Vellum" click confirms these choices."""
+    request = AppActionRequest(action_id=action_id, arguments=arguments)
+    context = AppActionContext(source="ui")
+    receipt = _app_action_runtime.dispatch(request, context)
+    if receipt.status == "confirmation_required" and receipt.confirmation is not None:
+        receipt = _app_action_runtime.confirm(receipt.confirmation.token, request, context)
+    if receipt.status != "applied":
+        raise HTTPException(status_code=409, detail={"code": receipt.error_code or "APP_ACTION_FAILED",
+                                                     "message": receipt.message})
+    return receipt
 
 
 def _dispatch_compat_action(action_id: str, arguments: dict[str, Any]) -> ActionReceipt:
@@ -3093,6 +3112,14 @@ def _embedding_health() -> dict[str, Any]:
     backend = str(getattr(get_settings(), "embedding_backend", "") or "sentence_transformers").replace("-", "_")
     if backend == "ollama":
         return {"ok": True, "provider": "ollama"}
+    if backend == "llama_server":
+        from agent.config import REPO_ROOT
+        from agent.rag.embedding_profile import bundled_model_path
+        from agent.rag.embedding_server import bundled_server_path
+
+        if bundled_model_path(REPO_ROOT) and bundled_server_path(REPO_ROOT):
+            return {"ok": True, "provider": "bundled"}
+        return {"ok": False, "provider": "bundled", "error": "missing from this build"}
     try:
         installed = importlib.util.find_spec("sentence_transformers") is not None
     except Exception:
@@ -6793,6 +6820,14 @@ async def memory_growth() -> dict[str, Any]:
     return await asyncio.to_thread(growth_view, _memory_orchestrator.store)
 
 
+@router.get("/memory/engines")
+async def memory_engines() -> dict[str, Any]:
+    """Embedded memory engine status: starting / ready / needs_model / error, with a reason."""
+    from agent.memory.engines.runtime import engines_status
+
+    return await asyncio.to_thread(engines_status)
+
+
 @router.get("/memory/import/prompt")
 async def memory_import_prompt() -> dict[str, str]:
     from agent.memory.import_export import EXPORT_PROMPT
@@ -7059,9 +7094,12 @@ def _mcp_health_sync(probe: bool) -> dict[str, Any]:
     # Adjacent services belong to health inspection, not plugin browsing.
     vector = _vector_health()
 
+    from agent.memory.honcho_client import embedded_honcho_url
+
+    honcho_url = embedded_honcho_url() or settings.honcho_base_url
     honcho_reachable = False
     try:
-        health_url = f"{settings.honcho_base_url.rstrip('/')}/health"
+        health_url = f"{honcho_url.rstrip('/')}/health"
         with urllib.request.urlopen(health_url, timeout=1) as response:
             honcho_reachable = response.status == 200
     except Exception:
@@ -7071,9 +7109,9 @@ def _mcp_health_sync(probe: bool) -> dict[str, Any]:
         "mcp_servers": servers,
         "vector": vector,
         "honcho": {
-            "base_url": settings.honcho_base_url,
+            "base_url": honcho_url,
             "reachable": honcho_reachable,
-            "notes": "Self-hosted via Docker; if down, identity-memory layer is dead but chat still works.",
+            "notes": "Runs inside Vellum (or a configured server); if down, the user model pauses but chat still works.",
         },
     }
 
@@ -7220,7 +7258,8 @@ async def set_provider_key(request: ProviderKeyRequest, response: Response) -> d
     )
 
 
-_SETUP_STATE_PATH = Path("data/memory/setup_state.json")
+# Anchored to the workspace: a working-directory-relative path split state by launch folder.
+_SETUP_STATE_PATH = REPO_ROOT / "data" / "memory" / "setup_state.json"
 
 
 def _read_setup_state() -> dict[str, Any]:
@@ -7303,18 +7342,146 @@ async def setup_state_post(body: SetupStateBody) -> dict[str, Any]:
     return {"ok": True}
 
 
+@router.get("/setup/hardware")
+async def setup_hardware() -> dict[str, Any]:
+    """Scan this computer (memory, disk, GPU, Ollama) and recommend local or cloud."""
+    from agent.setup_hardware import scan_and_recommend
+
+    return await asyncio.to_thread(scan_and_recommend)
+
+
+@router.get("/setup/models")
+async def setup_models(q: str = "", category: str = "general", uncensored: bool = False) -> dict[str, Any]:
+    """Hugging Face GGUF models sized to this computer (best quantization that fits).
+
+    With ``q`` it searches; without, it returns a short trusted list for ``category``
+    (general, coding, small). Uncensored models appear only when ``uncensored`` is true.
+    """
+    from agent.setup_hardware import scan
+    from agent import setup_models as catalog
+    from dataclasses import asdict
+
+    hw = asdict(await asyncio.to_thread(scan))
+    try:
+        if q.strip():
+            models = await asyncio.to_thread(catalog.search, q.strip(), hw, include_uncensored=uncensored)
+        else:
+            models = await asyncio.to_thread(catalog.recommended, hw, category=category)
+    except Exception as exc:  # noqa: BLE001 - offline or Hugging Face unavailable
+        raise HTTPException(status_code=503, detail=f"Couldn't reach Hugging Face: {exc}") from exc
+    return {"hardware": {"vram_gb": hw["vram_gb"], "ram_gb": hw["ram_gb"]}, "models": models}
+
+
 @router.post("/setup/complete")
 async def setup_complete(body: SetupStateBody) -> dict[str, Any]:
-    """Finalize the wizard. Writes the snapshot to setup_state.json with a
-       completed_at marker. Provider keys are NOT written from here — the
-       wizard's key-input phase writes to ~/.vellum/.env directly via the
-       shell adapter when the real backend is mounted."""
+    """Finalize the wizard: save the snapshot, apply the chosen model, restart memory engines.
+
+    ``state.apply_model`` is a Vellum model id (e.g. ``ollama/qwen3.5:9b`` or an
+    OpenRouter id). API keys are never sent here: they go through the
+    ``provider.credential.configure`` action, so they are not saved in the
+    wizard's state file.
+    """
     from datetime import datetime, timezone
 
-    payload = dict(body.state)
+    from agent.setup_flow import PRIVACY_MODES
+
+    payload = {key: value for key, value in dict(body.state).items()
+               if not re.search(r"key|secret|token|password", str(key), re.I)}
     payload["completed_at"] = datetime.now(timezone.utc).isoformat()
+    applied: dict[str, Any] = {}
+    model = str(payload.get("apply_model") or "").strip()
+    if model:
+        try:
+            receipt = await asyncio.to_thread(_dispatch_user_confirmed, DEFAULT_MODEL_SET_ACTION_ID, {"model": model})
+            applied["model"] = receipt.result["model"]["id"]
+        except HTTPException as exc:
+            applied["model_error"] = exc.detail if isinstance(exc.detail, str) else exc.detail.get("message", "")
+    provider = str(payload.get("apply_provider") or "").strip().casefold()
+    if provider and not model:
+        # Picker-level providers switch as a whole; for the others, use that
+        # vendor's default model. Providers with no chat models listed here
+        # (e.g. Groq) still power memory through their saved key.
+        from agent.llm.providers import get_provider_registry, provider_connections
+
+        selectable = {c.id for c in provider_connections() if c.model_selection_supported}
+        vendor_group = {"anthropic": "anthropic", "google": "google", "kimi": "moonshot"}.get(provider)
+        arguments: dict[str, Any] = {}
+        if provider in selectable:
+            arguments = {"provider": provider}
+        elif vendor_group:
+            group = next((g for g in get_provider_registry().list_groups() if g.key == vendor_group), None)
+            if group is not None:
+                arguments = {"model": group.default_id}
+        if arguments:
+            try:
+                receipt = await asyncio.to_thread(_dispatch_user_confirmed, DEFAULT_MODEL_SET_ACTION_ID, arguments)
+                applied["model"] = receipt.result["model"]["id"]
+            except HTTPException as exc:
+                applied["model_error"] = exc.detail if isinstance(exc.detail, str) else exc.detail.get("message", "")
+        else:
+            applied["model"] = "unchanged"
+    privacy = str(payload.get("privacy") or "")
+    if privacy in PRIVACY_MODES:
+        await asyncio.to_thread(_set_env_value, "PRIVACY_MODE", privacy)
+        get_settings.cache_clear()
+        applied["privacy"] = privacy
+    if isinstance(payload.get("learn"), bool):
+        learn = payload["learn"]
+        receipt = await asyncio.to_thread(_dispatch_user_confirmed, MEMORY_SETTINGS_UPDATE_ACTION_ID,
+                                          {"patch": {"save_new_memories": learn, "reference_history_enabled": learn}})
+        applied["learn"] = learn
     _write_setup_state(payload)
-    return {"ok": True, "completed_at": payload["completed_at"]}
+    from agent.memory.engines.runtime import restart_engines
+
+    await asyncio.to_thread(restart_engines)
+    return {"ok": True, "completed_at": payload["completed_at"], "applied": applied}
+
+
+@router.get("/setup/onboarding")
+async def setup_onboarding() -> dict[str, Any]:
+    """New users see onboarding once; installs with conversations or memories never do."""
+    from agent.setup_flow import onboarding_status
+
+    return await asyncio.to_thread(onboarding_status, REPO_ROOT)
+
+
+def _apply_pulled_model(model: str) -> str:
+    receipt = _dispatch_user_confirmed(DEFAULT_MODEL_SET_ACTION_ID, {"model": f"ollama/{model}"})
+    from agent.memory.engines.runtime import restart_engines
+
+    restart_engines()
+    return str(receipt.result["model"]["id"])
+
+
+@lru_cache(maxsize=1)
+def _model_pull() -> Any:
+    from agent.setup_flow import ModelPull
+
+    return ModelPull(on_done=_apply_pulled_model)
+
+
+class SetupPullRequest(BaseModel):
+    model: str
+
+
+@router.get("/setup/ollama")
+async def setup_ollama() -> dict[str, Any]:
+    """Whether Ollama is installed and running, plus the current model download."""
+    from agent.setup_flow import ollama_status
+
+    status = await asyncio.to_thread(ollama_status, get_settings().ollama_base_url.removesuffix("/v1"))
+    return {**status, "pull": _model_pull().snapshot()}
+
+
+@router.post("/setup/ollama/pull")
+async def setup_ollama_pull(body: SetupPullRequest) -> dict[str, Any]:
+    """Download a local model in the background; it becomes the default when finished."""
+    try:
+        return _model_pull().start(get_settings().ollama_base_url.removesuffix("/v1"), body.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/terminal/profiles")
@@ -7537,6 +7704,11 @@ async def tool_search_config_patch(patch: ToolSearchConfigPatch) -> dict[str, An
     return apply_tool_search_config(overlay)
 
 app.include_router(router)
+
+from agent.memory.engines.embeddings_route import router as _engine_embeddings_router  # noqa: E402
+
+# Shared embeddings for the embedded memory engines: base URL <api>/api/v1.
+app.include_router(_engine_embeddings_router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)

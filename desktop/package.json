@@ -12,8 +12,9 @@
     "start": "node scripts/start.cjs .",
     "build": "node scripts/build-ui.cjs",
     "build:backend": "node scripts/build-backend.cjs",
-    "package": "node scripts/build-ui.cjs && node scripts/build-backend.cjs && electron-forge package",
-    "make": "node scripts/build-ui.cjs && node scripts/build-backend.cjs && electron-forge make",
+    "build:engines": "node scripts/build-engines.cjs",
+    "package": "node scripts/build-ui.cjs && node scripts/build-backend.cjs && node scripts/build-engines.cjs && electron-forge package",
+    "make": "node scripts/build-ui.cjs && node scripts/build-backend.cjs && node scripts/build-engines.cjs && electron-forge make",
     "test": "node --test test/*.test.cjs",
     "smoke": "node scripts/smoke.cjs",
     "smoke:browser": "node scripts/native-smoke.cjs"
