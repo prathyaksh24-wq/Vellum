@@ -30,6 +30,23 @@ def _is_local_url(url: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1", "host.docker.internal"}
 
 
+def _delete_hindsight_document(client: Any, bank_id: str, doc_id: str) -> None:
+    """Delete one document; works with hindsight-client 0.10 and 1.x.
+
+    Neither version has a sync delete-document wrapper, so this drives the
+    generated async Documents API with the client's own loop runner, which
+    lives in ``hindsight_client.hindsight_client`` (not the package root).
+    """
+    from hindsight_client.hindsight_client import _run_async  # type: ignore[attr-defined]
+
+    documents = getattr(client, "documents", None)  # 1.x exposes the API object
+    if documents is None:
+        from hindsight_client_api import DocumentsApi
+
+        documents = DocumentsApi(client._api_client)
+    _run_async(documents.delete_document(bank_id=bank_id, document_id=doc_id))
+
+
 def _hindsight_items(result: Any) -> list[dict[str, Any]]:
     if isinstance(result, dict):
         raw_items = result.get("results") or result.get("memories") or result.get("observations") or []
@@ -245,10 +262,7 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         if hasattr(client, "forget_document"):  # test doubles
             client.forget_document(self.bank_id, doc_id)
             return
-        from hindsight_client import _run_async  # type: ignore[attr-defined]
-        from hindsight_client_api import DocumentsApi
-
-        _run_async(DocumentsApi(client._api_client).delete_document(bank_id=self.bank_id, document_id=doc_id))
+        _delete_hindsight_document(client, self.bank_id, doc_id)
 
     def shutdown(self) -> None:
         client, self.client = self.client, None
