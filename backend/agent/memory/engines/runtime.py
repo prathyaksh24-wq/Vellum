@@ -103,7 +103,21 @@ def get_engine_supervisor() -> EngineSupervisor:
         supervisor.after_all(context.postgres.stop)
     for name, factory in engines:
         supervisor.add_engine(name, lambda factory=factory: factory(context))
+    if engines:
+        # Memory follows the user's model choice: picker, provider or key changes
+        # after onboarding restart the engines on the new model within ~15 s.
+        supervisor.watch_config(memory_llm_signature)
     return supervisor
+
+
+def memory_llm_signature() -> tuple[str, str, str, str]:
+    import hashlib
+
+    from agent.memory.engines.llm_routing import memory_engine_llm
+
+    llm = memory_engine_llm()
+    key = hashlib.sha256(llm.api_key.encode()).hexdigest()[:12] if llm.api_key else ""
+    return (llm.provider, llm.model, llm.base_url, key)
 
 
 def start_engines() -> None:
@@ -120,9 +134,7 @@ def restart_engines() -> None:
     from agent.config import get_settings
 
     get_settings.cache_clear()
-    from agent.llm.providers import get_provider_registry
-
-    get_provider_registry.cache_clear()
+    # Not get_provider_registry: it holds the picker's live choice, which must survive.
     if not get_engine_supervisor.cache_info().currsize or get_engine_supervisor()._thread is None:
         return  # engines never started in this process; the next launch reads the new choice
     supervisor = get_engine_supervisor()

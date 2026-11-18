@@ -99,6 +99,10 @@ class EngineSupervisor:
         self._poll = poll_interval
         self._stop = threading.Event()
         self._lock = threading.RLock()
+        self._config_fn: Callable[[], Any] | None = None
+        self._config_interval = 15.0
+        self._config_seen: Any = None
+        self._config_checked = 0.0
         self._thread: threading.Thread | None = None
 
     # -- configuration -------------------------------------------------------
@@ -106,6 +110,33 @@ class EngineSupervisor:
     def add_engine(self, name: str, factory: Callable[[], EngineSpec]) -> None:
         self._factories.append((name, factory))
         self._status.setdefault(name, EngineStatus())
+
+    def watch_config(self, signature: Callable[[], Any], *, interval: float = 15.0) -> None:
+        """Restart every engine when ``signature()`` changes (e.g. the user switches model)."""
+        self._config_fn, self._config_interval = signature, interval
+
+    def _config_changed(self) -> bool:
+        if self._config_fn is None or time.monotonic() - self._config_checked < self._config_interval:
+            return False
+        self._config_checked = time.monotonic()
+        try:
+            current = self._config_fn()
+        except Exception:  # noqa: BLE001 - a config read error is not a reason to restart
+            return False
+        changed = self._config_seen is not None and current != self._config_seen
+        self._config_seen = current
+        return changed
+
+    def restart_all(self) -> None:
+        """Relaunch every engine in order with fresh configuration; the database stays up."""
+        for name, _factory in reversed(self._factories):
+            self._terminate(name)
+            status = self._status[name]
+            status.state, status.reason, status.pid = "starting", "Switching to your new model", None
+        for name, factory in self._factories:
+            if self._stop.is_set():
+                return
+            self._launch(name, factory)
 
     def before_all(self, hook: Callable[[], None]) -> None:
         self._before_all.append(hook)
@@ -134,6 +165,12 @@ class EngineSupervisor:
             for status in self._status.values():
                 status.state, status.reason = "error", f"Database failed to start: {exc}"
             return
+        if self._config_fn is not None:
+            try:
+                self._config_seen = self._config_fn()
+            except Exception:  # noqa: BLE001
+                self._config_seen = None
+            self._config_checked = time.monotonic()
         for name, factory in self._factories:
             if self._stop.is_set():
                 return
@@ -194,6 +231,11 @@ class EngineSupervisor:
     def _watch(self) -> None:
         backoff: dict[str, float] = {}
         while not self._stop.is_set():
+            if self._config_changed():
+                logger.info("[ENGINES] memory model changed; restarting engines")
+                self.restart_all()
+                backoff.clear()
+                continue
             for name, factory in self._factories:
                 process = self._processes.get(name)
                 status = self._status[name]

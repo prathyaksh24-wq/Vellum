@@ -394,3 +394,37 @@ def test_honcho_client_follows_the_embedded_engine(monkeypatch):
     assert honcho.base_url == "http://localhost:8001"
     monkeypatch.setattr(honcho_client, "embedded_honcho_url", lambda: "http://127.0.0.1:61000")
     assert honcho.base_url == "http://127.0.0.1:61000"
+
+
+def test_engines_restart_when_the_user_switches_model():
+    launches = []
+
+    def popen(argv, **kwargs):
+        launches.append(argv[0])
+        return FakeProcess(argv)
+
+    choice = {"value": ("ollama", "qwen3.5:9b", "", "")}
+    supervisor = EngineSupervisor(health_check=lambda url: True, popen=popen, sleep=lambda s: None)
+    supervisor.add_engine("hindsight", lambda: _spec("hindsight"))
+    supervisor.add_engine("honcho", lambda: _spec("honcho"))
+    supervisor.watch_config(lambda: choice["value"], interval=0)
+    supervisor._config_seen = choice["value"]
+    for name, factory in supervisor._factories:
+        supervisor._launch(name, factory)
+    assert launches == ["hindsight", "honcho"]
+
+    assert supervisor._config_changed() is False  # unchanged: no restart
+    choice["value"] = ("openrouter", "google/gemma-3-12b-it", "https://openrouter.ai/api/v1", "abc")
+    assert supervisor._config_changed() is True
+    supervisor.restart_all()
+    assert launches == ["hindsight", "honcho", "hindsight", "honcho"]
+    assert supervisor._config_changed() is False  # settles on the new choice
+
+
+def test_memory_llm_signature_tracks_provider_model_and_key(monkeypatch):
+    from agent.memory.engines import llm_routing, runtime
+
+    monkeypatch.setattr(llm_routing, "memory_engine_llm",
+                        lambda: llm_routing.EngineLLM(provider="groq", model="m", api_key="secret-key"))
+    signature = runtime.memory_llm_signature()
+    assert signature[:2] == ("groq", "m") and signature[3] and "secret-key" not in str(signature)
