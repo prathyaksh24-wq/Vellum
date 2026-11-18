@@ -1,0 +1,14 @@
+# owner=Vellum maintainers
+# reviewed=2026-11-18
+# expires=2026-12-02
+#
+# picomatch is vulnerable to ReDoS through single-branch repeated extglobs, and
+# the advisory lists every release as affected: no patched version exists as of
+# 2026-11-18. Vellum reaches picomatch only through build and test tooling
+# (vite, vitest, @electron-forge, node-gyp); the shipped app does not match
+# user-supplied glob patterns with it. The only automatic fixes are major
+# downgrades of those tools (vite 7->6, vitest 4->3, @electron-forge 8->7),
+# which still ship picomatch. Remove this exception as soon as picomatch
+# publishes a fix, and recheck by expiry.
+# https://github.com/advisories/GHSA-fc5q-39xc-vjpf
+GHSA-fc5q-39xc-vjpf

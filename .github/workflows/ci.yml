@@ -69,7 +69,8 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm test
-      - run: npm audit --audit-level=high
+      # High and critical advisories fail, except reviewed ones in .github/npm-audit-exceptions.txt.
+      - run: node ../.github/scripts/npm-audit.mjs
 
   secret-scan:
     name: Secret scanning (gitleaks)
@@ -136,7 +137,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - name: npm audit
-        run: npm audit --audit-level=high
+        # High and critical advisories fail, except reviewed ones in .github/npm-audit-exceptions.txt.
+        run: node ../.github/scripts/npm-audit.mjs
 
   dependency-review:
     name: Dependency review
