@@ -20,6 +20,18 @@ def test_environment() -> None:
     return None
 
 
+@pytest.fixture(autouse=True, scope="session")
+def no_engine_job_object():
+    """Engine tests use made-up process ids. A real kill-on-close job could
+    capture an unrelated process that happens to have one of those ids."""
+    from agent.memory.engines import supervisor
+
+    original = supervisor._job_container
+    supervisor._job_container = lambda: (lambda pid: None)
+    yield
+    supervisor._job_container = original
+
+
 @pytest.fixture(autouse=True)
 def no_local_memory_model():
     """Memory features call local Ollama; tests must not depend on it running.

@@ -128,6 +128,14 @@ class EnginePostgres:
         self._pg = pg
         return self.uri("postgres")
 
+    def server_pid(self) -> int | None:
+        """The running server's process id, from Postgres's own postmaster.pid."""
+        try:
+            first = (self.data_dir / "postmaster.pid").read_text(encoding="utf-8").splitlines()[0]
+            return int(first.strip())
+        except (OSError, ValueError, IndexError):
+            return None
+
     def uri(self, database: str, *, driver: str = "postgresql") -> str:
         return f"{driver}://{USERNAME}:{self.state.password}@127.0.0.1:{self.state.port}/{database}"
 
