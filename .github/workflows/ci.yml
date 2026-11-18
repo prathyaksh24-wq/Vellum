@@ -148,3 +148,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v4
+        with:
+          # Same reviewed, expiring exception as .github/npm-audit-exceptions.txt
+          # (picomatch: no patched release exists). Remove both together.
+          allow-ghsas: GHSA-fc5q-39xc-vjpf

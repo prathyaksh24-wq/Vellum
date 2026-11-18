@@ -9,6 +9,7 @@
 # user-supplied glob patterns with it. The only automatic fixes are major
 # downgrades of those tools (vite 7->6, vitest 4->3, @electron-forge 8->7),
 # which still ship picomatch. Remove this exception as soon as picomatch
-# publishes a fix, and recheck by expiry.
+# publishes a fix, and recheck by expiry. The Dependency review step in
+# .github/workflows/ci.yml allows the same advisory (allow-ghsas); remove both.
 # https://github.com/advisories/GHSA-fc5q-39xc-vjpf
 GHSA-fc5q-39xc-vjpf
