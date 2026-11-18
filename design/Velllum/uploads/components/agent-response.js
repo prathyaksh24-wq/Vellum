@@ -18,11 +18,23 @@
       step:'m5 12 4 4L19 6', reasoning:'M9 18h6 M9 21h6 M8 14a6 6 0 1 1 8 0l-1 2H9Z',
       external:'M14 3h7v7 M21 3 10 14 M10 3H3v18h18v-7',
       error:'M12 8v5 M12 17h.01 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
+      memory:'M9.5 3A2.5 2.5 0 0 0 7 5.5a3 3 0 0 0-3 3 3 3 0 0 0 .5 1.7A3 3 0 0 0 4 13a3 3 0 0 0 2 2.8 2.7 2.7 0 0 0 5.5.7V5.5A2.5 2.5 0 0 0 9.5 3Z M14.5 3A2.5 2.5 0 0 1 17 5.5a3 3 0 0 1 3 3 3 3 0 0 1-.5 1.7A3 3 0 0 1 20 13a3 3 0 0 1-2 2.8 2.7 2.7 0 0 1-5.5.7',
     };
+    if (kind === 'memory' && window.VellumUI?.AppIcon) return h(window.VellumUI.AppIcon,{name:'MemoryOnRemember',size});
     return h('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.5,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':true},h('path',{d:paths[kind] || paths.step}));
+  }
+  const MEMORY_TOOLS = {conversation_history:['Searching past chats','Searched past chats'], memory_orchestrator:['Checking memory','Checked memory']};
+  const isMemoryItem = item => /^memory_/.test(item.type || '') || !!MEMORY_TOOLS[item.name] || item.name === 'memory'
+    || (item.name === 'delegate_to_agent' && /memory/i.test(String(item.metadata?.input?.agent_id || '')));
+  // Friendly names for the memory tools; other rows keep the backend's label.
+  function rowLabel(item) {
+    const names = MEMORY_TOOLS[item.name];
+    if (names && !['failed','error','blocked'].includes(item.status)) return names[terminal(item.status) ? 1 : 0];
+    return item.label || item.name || 'Activity';
   }
   function itemKind(item) {
     const type = item.type || '';
+    if (isMemoryItem(item)) return 'memory';
     if (/sub.?agent|delegat/.test(type+' '+(item.name || ''))) return 'agent';
     if (/source/.test(type)) return item.source?.source_type === 'book' ? 'book' : 'source';
     if (/reason|thinking/.test(type)) return 'reasoning';
@@ -64,6 +76,60 @@
     return h('div',{className:'agent-detail-block'},h('div',{className:'agent-detail-label'},label),
       h('pre',null,typeof value === 'string' ? value : JSON.stringify(value,null,2)));
   }
+  const memoryApi = () => window.VellumApi?.settings;
+  function UndoSave({text,threadId}) {
+    const [state,setState] = window.React.useState('idle');
+    const undo = async () => {
+      setState('busy');
+      try { await memoryApi().memoryUndoSave(text,threadId); setState('done'); }
+      catch (_) { setState('error'); }
+    };
+    if (state === 'done') return h('span',{className:'agent-memory-undo',role:'status'},'Removed from memory');
+    return h('span',{className:'agent-memory-undo'},
+      h('button',{type:'button',className:'agent-link-button',disabled:state === 'busy',onClick:undo},'Undo'),
+      state === 'error' && h('span',{className:'agent-memory-error'},'Could not undo'));
+  }
+  function recalledMemories(msg) {
+    const seen = new Map();
+    for (const item of activityItems(msg)) {
+      if (item.type !== 'memory_recall' || !Array.isArray(item.metadata?.memories)) continue;
+      for (const memory of item.metadata.memories) if (memory && memory.id != null && !seen.has(memory.id)) seen.set(memory.id, memory);
+    }
+    return [...seen.values()];
+  }
+  const ORIGIN_LABELS = {stated:'Stated', inferred:'Inferred', imported:'Imported'};
+  const MARK_LABELS = {relevant:'Marked relevant', irrelevant:'Marked not relevant', forget:'Vellum will stop using this'};
+  // "Recalled from memory · N": which memories shaped this answer, with feedback.
+  function MemoryRecall({msg}) {
+    const [open,setOpen] = window.React.useState(false);
+    const [marks,setMarks] = window.React.useState({});
+    const region = 'memory-recall-' + window.React.useId().replace(/:/g,'');
+    const memories = recalledMemories(msg);
+    if (!memories.length) return null;
+    const mark = async (memory, kind) => {
+      setMarks(current => ({...current,[memory.id]:'busy'}));
+      try {
+        if (kind === 'forget') await memoryApi().memorySuppress({memory_id:memory.id});
+        else await memoryApi().memoryFeedback(memory.id, kind === 'relevant');
+        setMarks(current => ({...current,[memory.id]:kind}));
+      } catch (_) { setMarks(current => ({...current,[memory.id]:'error'})); }
+    };
+    return h('div',{className:'agent-memory-recall'},
+      h('button',{type:'button',className:'agent-citations-heading','aria-expanded':open,'aria-controls':region,onClick:()=>setOpen(!open)},
+        h(Icon,{kind:'memory',size:14}),'Recalled from memory',h('span',{className:'agent-source-count'},memories.length),h(Icon,{kind:'chevron',size:12})),
+      open && h('ul',{id:region,className:'agent-memory-list'},memories.map(memory => {
+        const state = marks[memory.id], busy = state === 'busy';
+        return h('li',{key:memory.id,className:'agent-memory-row'},
+          h('div',{className:'agent-memory-copy'},h('span',{className:'agent-memory-title'},memory.title || 'Memory'),
+            h('span',{className:'agent-memory-meta'},[memory.topic, ORIGIN_LABELS[memory.origin]].filter(Boolean).join(' · '))),
+          MARK_LABELS[state] ? h('span',{className:'agent-memory-meta',role:'status'},MARK_LABELS[state])
+            : h('span',{className:'agent-memory-actions'},
+              state === 'error' && h('span',{className:'agent-memory-error'},'That did not save. Try again.'),
+              h('button',{type:'button',className:'agent-link-button',disabled:busy,onClick:()=>mark(memory,'relevant')},'Relevant'),
+              h('button',{type:'button',className:'agent-link-button',disabled:busy,onClick:()=>mark(memory,'irrelevant')},'Not relevant'),
+              h('button',{type:'button',className:'agent-link-button',disabled:busy,onClick:()=>mark(memory,'forget')},'Forget')));
+      })));
+  }
   function ActivityRow({item, runStatus}) {
     const [open,setOpen] = window.React.useState(false);
     const region = 'activity-' + window.React.useId().replace(/:/g,'');
@@ -73,14 +139,17 @@
     return h('div',{className:'agent-activity-row' + (open ? ' is-open' : ''),'data-status':status},
       h('button',{type:'button',className:'agent-activity-trigger','aria-expanded':open,'aria-controls':region,onClick:()=>setOpen(!open)},
         h('span',{className:'agent-row-icon' + (!terminal(status) ? ' is-active' : '')},h(Icon,{kind:failed ? 'error' : itemKind(item)})),
-        h('span',{className:'agent-row-label'},item.label || item.name || 'Activity'),
+        h('span',{className:'agent-row-label'},rowLabel(item)),
         meta.agent && h('span',{className:'agent-row-agent'},meta.agent),
         h('span',{className:'agent-row-status'},status === 'in_progress' ? 'Running' : status === 'waiting' ? 'Needs input' : status === 'completed' ? (seconds > 0 ? duration(seconds) : 'Done') : status),
         h('span',{className:'agent-chevron'},h(Icon,{kind:'chevron',size:12}))),
+      item.type === 'memory_save' && status === 'completed' && meta.text && h(UndoSave,{text:meta.text,threadId:meta.thread_id}),
       open && h('div',{id:region,className:'agent-activity-detail'},
         meta.reported_after_completion && h('p',{className:'agent-report-note'},'Reported by the specialist after completion.'),
         h(Preview,{label:'Input',value:meta.input ?? item.input}),
-        h(Preview,{label:item.type === 'reasoning_summary' ? 'Reasoning summary' : 'Details',value:item.detail}),
+        Array.isArray(meta.memories) && meta.memories.length > 0
+          ? h('ul',{className:'agent-memory-titles'},meta.memories.map((memory,index)=>h('li',{key:memory.id ?? index},memory.title || 'Memory',memory.topic && h('span',null,memory.topic))))
+          : h(Preview,{label:item.type === 'reasoning_summary' ? 'Reasoning summary' : 'Details',value:item.detail}),
         h(Preview,{label:'Result',value:meta.output}),
         meta.cache_status && h('p',null,`Cache: ${meta.cache_status}`),
         item.source && h(SourceDetails,{source:item.source}),
@@ -250,6 +319,7 @@
         h('span',{className:'agent-detail-label'},'From '+(source.title || 'the book')),h('blockquote',null,source.evidence.quote))),
       !msg.streaming && reveal.pending && h('button',{type:'button',className:'agent-show-full',onClick:reveal.finish},'Show full response'),
       msg.error && h('div',{className:'agent-response-error',role:'alert'},h(Icon,{kind:'error'}),msg.error),
+      !msg.streaming && h(MemoryRecall,{msg}),
       h(Citations,{sources:shownSources,idPrefix:prefix,activeId,onActivate:setActiveId}),
       !msg.streaming && !reveal.pending && h('div',{className:'agent-response-actions'},actions));
   }
@@ -259,5 +329,5 @@
     return h('div',{className:'agent-response'},h(AgentActivity,{msg,defaultOpen:true}),
       h(Citations,{sources:msg.sources || msg.trace?.sources || [],idPrefix:prefix,activeId,onActivate:setActiveId}));
   }
-  window.VellumUI={...window.VellumUI,AgentActivity,StreamingResponse,Citations,ActivityInspector,activityItems,responseSources};
+  window.VellumUI={...window.VellumUI,AgentActivity,StreamingResponse,Citations,ActivityInspector,MemoryRecall,activityItems,responseSources,recalledMemories};
 })();
