@@ -159,9 +159,21 @@ class FakePg:
         self.stopped = True
 
 
+class FakeKeyring:
+    def __init__(self):
+        self.items = {}
+
+    def get_password(self, service, user):
+        return self.items.get((service, user))
+
+    def set_password(self, service, user, value):
+        self.items[(service, user)] = value
+
+
 def test_postgres_uses_its_own_port_and_workspace_data_dir(tmp_path: Path):
     FakePg.instances.clear()
-    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54329)
+    keys = FakeKeyring()
+    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54329, keyring=keys)
     uri = pg.start()
     started = FakePg.instances[-1]
     assert started.kwargs["data_dir"] == str(tmp_path / "engines" / "postgres")
@@ -175,10 +187,23 @@ def test_postgres_uses_its_own_port_and_workspace_data_dir(tmp_path: Path):
     with pytest.raises(ValueError):
         pg.ensure_database("bad; drop")
 
-    again = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 1)
+    again = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 1, keyring=keys)
     assert (again.state.port, again.state.password) == (54329, pg.state.password)
+    # The password is in the credential store, never in the state file.
+    assert pg.state.password not in (tmp_path / "engines" / "postgres.json").read_text()
     pg.stop()
     assert started.stopped
+
+
+def test_postgres_moves_a_legacy_password_out_of_the_state_file(tmp_path: Path):
+    root = tmp_path / "engines"
+    root.mkdir()
+    (root / "postgres.json").write_text('{"port": 54400, "password": "old-file-password"}')
+    keys = FakeKeyring()
+    pg = EnginePostgres(root, pg_factory=FakePg, keyring=keys)
+    assert (pg.state.port, pg.state.password) == (54400, "old-file-password")
+    assert "password" not in (root / "postgres.json").read_text()
+    assert list(keys.items.values()) == ["old-file-password"]
 
 
 # -- supervisor ---------------------------------------------------------------------------
@@ -262,7 +287,7 @@ def test_hindsight_spec_wires_database_embeddings_reranker_and_llm(tmp_path: Pat
                         lambda: memory_engine_llm(_settings(groq="gsk-1", memory_engine_provider="groq"), _registry("x")))
     monkeypatch.setattr(embedder, "get_embedder", lambda: FakeEmbedder())
     FakePg.instances.clear()
-    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54400)
+    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54400, keyring=FakeKeyring())
     pg.start()
     spec = hindsight_engine.build_spec(EngineContext(tmp_path / "engines", pg, "http://127.0.0.1:8000"))
 
@@ -282,7 +307,7 @@ def test_hindsight_engine_reports_why_it_cannot_start(tmp_path: Path, monkeypatc
     from agent.memory.engines import hindsight_engine
     from agent.memory.engines.runtime import EngineContext
 
-    context = EngineContext(tmp_path, EnginePostgres(tmp_path, pg_factory=FakePg), "http://127.0.0.1:8000")
+    context = EngineContext(tmp_path, EnginePostgres(tmp_path, pg_factory=FakePg, keyring=FakeKeyring()), "http://127.0.0.1:8000")
     monkeypatch.setattr(hindsight_engine, "engine_python", lambda name: None)
     with pytest.raises(EngineNotReady) as missing:
         hindsight_engine.build_spec(context)
@@ -340,7 +365,7 @@ def _honcho_context(tmp_path: Path, monkeypatch):
                         lambda: memory_engine_llm(_settings(openrouter="sk-or-1"), _registry("x", "openrouter")))
     monkeypatch.setattr(embedder, "get_embedder", lambda: FakeEmbedder())
     FakePg.instances.clear()
-    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54500)
+    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, port_picker=lambda: 54500, keyring=FakeKeyring())
     pg.start()
     return honcho_engine, EngineContext(tmp_path / "engines", pg, "http://127.0.0.1:8000"), python, source
 

@@ -110,14 +110,19 @@ def get_engine_supervisor() -> EngineSupervisor:
     return supervisor
 
 
+# A random token per API key, so a changed key restarts the engines without the
+# signature carrying (or hashing) the key itself. In memory only.
+_KEY_TOKENS: dict[str, str] = {}
+
+
 def memory_llm_signature() -> tuple[str, str, str, str]:
-    import hashlib
+    import secrets
 
     from agent.memory.engines.llm_routing import memory_engine_llm
 
     llm = memory_engine_llm()
-    key = hashlib.sha256(llm.api_key.encode()).hexdigest()[:12] if llm.api_key else ""
-    return (llm.provider, llm.model, llm.base_url, key)
+    token = _KEY_TOKENS.setdefault(llm.api_key, secrets.token_hex(8)) if llm.api_key else ""
+    return (llm.provider, llm.model, llm.base_url, token)
 
 
 def start_engines() -> None:

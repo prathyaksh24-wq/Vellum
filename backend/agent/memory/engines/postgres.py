@@ -41,28 +41,56 @@ class PostgresState:
     password: str
 
 
+# The database password lives in the OS credential store (Windows Credential
+# Manager), never in a file; postgres.json keeps only the port.
+KEYRING_SERVICE = "vellum-memory-engines"
+
+
 class EnginePostgres:
     def __init__(self, root: Path, *, pg_factory: Callable[..., Any] | None = None,
-                 port_picker: Callable[[], int] = free_loopback_port) -> None:
+                 port_picker: Callable[[], int] = free_loopback_port, keyring: Any = None) -> None:
         self.root = Path(root)
         self.data_dir = self.root / "postgres"
         self.state_path = self.root / "postgres.json"
         self._pg_factory = pg_factory
         self._port_picker = port_picker
+        self._keyring = keyring
         self._pg: Any | None = None
         self.state = self._load_state()
+
+    @property
+    def _keyring_user(self) -> str:
+        return f"postgres:{self.data_dir.resolve()}"
+
+    def _store(self) -> Any:
+        if self._keyring is None:
+            import keyring as system_keyring
+
+            self._keyring = system_keyring
+        return self._keyring
 
     def _load_state(self) -> PostgresState:
         try:
             raw = json.loads(self.state_path.read_text(encoding="utf-8"))
-            return PostgresState(port=int(raw["port"]), password=str(raw["password"]))
-        except (OSError, ValueError, KeyError):
-            return PostgresState(port=0, password="")
+        except (OSError, ValueError):
+            raw = {}
+        port = int(raw.get("port") or 0) if isinstance(raw, dict) else 0
+        legacy = str(raw.get("password") or "") if isinstance(raw, dict) else ""
+        password = self._store().get_password(KEYRING_SERVICE, self._keyring_user) or ""
+        if legacy:
+            # Earlier builds wrote the password into postgres.json: move it out.
+            password = password or legacy
+            self._store().set_password(KEYRING_SERVICE, self._keyring_user, password)
+            self._write_port(port)
+        return PostgresState(port=port, password=password)
+
+    def _write_port(self, port: int) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.state_path.write_text(json.dumps({"port": port}), encoding="utf-8")
 
     def _save_state(self) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        self.state_path.write_text(json.dumps({"port": self.state.port, "password": self.state.password}),
-                                   encoding="utf-8")
+        self._store().set_password(KEYRING_SERVICE, self._keyring_user, self.state.password)
+        self._write_port(self.state.port)
 
     def _factory(self) -> Callable[..., Any]:
         if self._pg_factory is not None:
