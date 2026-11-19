@@ -27,6 +27,8 @@ def main() -> None:
     parser.add_argument("--json", type=Path, default=None)
     parser.add_argument("--recover", action="store_true",
                         help="use overflow recovery (fit_context) with --output as the answer floor")
+    parser.add_argument("--evidence", action="store_true",
+                        help="apply the live tool step's evidence ids and per-result bound (nothing is stored)")
     parser.add_argument("--reasoning-output", type=int, default=None,
                         help="reserve this much output (a reasoning mode); --output stays the answer floor")
     args = parser.parse_args()
@@ -50,11 +52,25 @@ def main() -> None:
     if args.window:
         budget = replace(budget, window=args.window, margin=max(512, -(-args.window * 5 // 100)))
 
-    reports = [replay_thread(thread_id, stream, prefix, visible, budget, project=project)
+    def with_evidence(message):
+        import json as _json
+        from agent.graph.tool_reuse import MAX_RESULT_CHARS, PREVIEW_CHARS, STORE_MIN_CHARS
+        content = message.content if isinstance(message.content, str) else ""
+        if len(content) <= STORE_MIN_CHARS:
+            return message
+        update = {"additional_kwargs": {**message.additional_kwargs, "vellum_evidence_id": "ev_replay"}}
+        if len(content) > MAX_RESULT_CHARS:
+            update["content"] = _json.dumps({"incomplete": True, "evidence_id": "ev_replay",
+                                             "total_chars": len(content), "excerpt": content[:PREVIEW_CHARS]})
+        return message.model_copy(update=update)
+
+    prepare = with_evidence if args.evidence else None
+    reports = [replay_thread(thread_id, stream, prefix, visible, budget, project=project, prepare_tool=prepare)
                for thread_id, stream in full_message_streams(ROOT / "data" / "memory" / "checkpoints.db",
                                                              min_messages=args.min_messages)]
     result = {"fixed_prefix_layers": project_context(prefix, visible, budget).report["layers"],
-              "token_ratio": budget.token_ratio, "recover": args.recover, **summarize(reports, budget)}
+              "token_ratio": budget.token_ratio, "recover": args.recover, "evidence": args.evidence,
+              **summarize(reports, budget)}
     print(json.dumps(result, indent=2))
     if args.json:
         args.json.write_text(json.dumps({"summary": result, "threads": [r.as_dict() for r in reports]}, indent=2),

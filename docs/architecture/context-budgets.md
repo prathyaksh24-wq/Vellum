@@ -103,6 +103,35 @@ generation at the reserve that fit (`recovery` and `output_reserved` in the
 report). Only when neither works does the request fail before provider
 submission with a request to narrow the material. Disabling compaction retains
 this overflow guard.
+Disabling it stops future compaction; it does not expand an already compacted
+checkpoint back into full history. The original saved chat remains available.
+
+### Tool-result evidence store
+
+Tool results that leave the working prompt stay retrievable
+(`agent/conversations/evidence.py`, `data/memory/evidence.db`):
+
+- MCP projections keep the full original. A connector call saves the
+  normalized result (up to 2 MB) and adds an `evidence_id` to its summary or
+  structured projection. It is captured below the thread boundary, so the
+  record starts unclaimed; unclaimed records expire after an hour.
+- The graph's tool step (`keep_evidence` in `graph/tool_reuse.py`) claims
+  those ids for the conversation, saves other results longer than 1,200
+  characters (shorter ones survive whole in the compaction excerpt), and
+  replaces any result over 16,000 characters with its first 12,000 characters,
+  its size and its id.
+- Compaction digest entries carry the `evidence_id` of removed tool results,
+  and the digest lists the 12 most recent under `evidence`.
+- `conversation_history(evidence_id=..., page=...)` pages through a stored
+  result (6,000 characters per page); with `query` it returns matching
+  passages with their offsets. Records are readable only from the conversation
+  that owns them and are returned as untrusted tool evidence, the same
+  disclosure path as the original result.
+- Deleting a conversation deletes its evidence (`SessionsReader.delete`);
+  evidence older than 90 days is removed, matching history retention.
+
+Specialist read loops still bound oversized results to an excerpt without
+storing them; specialists have no recall tool to read them back.
 
 ### Replay baseline
 
@@ -122,10 +151,15 @@ calls) on `ollama/gemma4:12b` at a 32,768-token window gave:
 
 The fixed prefix alone (instructions, personal memory, visible tool schemas)
 was about 18,000 estimated tokens before calibration (about 11,400 calibrated;
-real gemma4 instructions measured 8,737 tokens). Removed tool evidence cannot
-be retrieved again yet; that is the evidence-store step.
-Disabling it stops future compaction; it does not expand an already compacted
-checkpoint back into full history. The original saved chat remains available.
+real gemma4 instructions measured 8,737 tokens).
+
+`--evidence` applies the tool step's evidence ids and per-result bound to the
+replay (nothing is stored). With standard output, calibration and recovery,
+removed tool evidence fell from 66% to 51% of tool-result tokens, and the share
+that could not be recovered (removed, longer than a digest excerpt, and with no
+evidence id) fell from 63% to 0%; compaction (2.9%) and window use (46% / 66%)
+were unchanged. Historic threads predate connector capture, so this measures
+the main-graph path only.
 
 ## Persistence and privacy
 

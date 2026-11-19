@@ -4,6 +4,7 @@ No cross-turn cache, mutation replay or additional tool execution owner.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -46,6 +47,51 @@ def repeated_read_batch(state: dict) -> bool:
             break
         results.append(message)
     return bool(results) and all(m.additional_kwargs.get('vellum_reused_read') for m in results)
+
+
+# Results longer than this enter the prompt as a preview plus their evidence id.
+MAX_RESULT_CHARS = 16_000
+PREVIEW_CHARS = 12_000
+# Short results survive compaction whole inside the digest excerpt.
+STORE_MIN_CHARS = 1_200
+
+
+def keep_evidence(messages, thread_id):
+    """Keep tool results retrievable after they are trimmed or compacted away.
+
+    Claims evidence captured inside connector calls for this conversation,
+    saves other substantial results, and bounds oversized ones to a preview.
+    Storage failures leave the result exactly as it was.
+    """
+    if not thread_id:
+        return messages
+    from agent.conversations.evidence import EVIDENCE_ID, evidence_store
+    try:
+        store = evidence_store()
+        kept = []
+        for message in messages:
+            content = message.content if isinstance(message.content, str) else ''
+            if not content or message.additional_kwargs.get('vellum_evidence_id') or message.name == 'conversation_history':
+                kept.append(message)
+                continue
+            referenced = EVIDENCE_ID.findall(content)
+            store.claim(referenced, thread_id)
+            evidence_id = referenced[0] if referenced else None
+            update = {}
+            if evidence_id is None and len(content) > STORE_MIN_CHARS:
+                evidence_id = store.put(content, tool=message.name or '', thread_id=thread_id)
+                if len(content) > MAX_RESULT_CHARS:
+                    update['content'] = json.dumps({
+                        'incomplete': True, 'evidence_id': evidence_id, 'total_chars': len(content),
+                        'notice': 'Result exceeded the per-result budget; this is its beginning. Page the full '
+                                  'original with conversation_history(evidence_id=...), or pass query to find a passage.',
+                        'excerpt': content[:PREVIEW_CHARS]}, ensure_ascii=False)
+            if evidence_id:
+                update['additional_kwargs'] = {**message.additional_kwargs, 'vellum_evidence_id': evidence_id}
+            kept.append(message.model_copy(update=update) if update else message)
+        return kept
+    except Exception:  # noqa: BLE001 - evidence keeping must never break a tool round
+        return messages
 
 
 def reuse_tool_node(tools, *, before_call=None):
@@ -104,7 +150,7 @@ def reuse_tool_node(tools, *, before_call=None):
         subset = {**state, 'messages': [*messages[:-1], messages[-1].model_copy(update={'tool_calls': pending})]}
         return requested, subset, reused, aliases
 
-    def finish(requested, result, reused, aliases):
+    def finish(requested, result, reused, aliases, config=None):
         outputs = {message.tool_call_id: message for message in result.get('messages', [])}
         for target, source in aliases.items():
             # Unknown/failed/delegated writes are not memoized across rounds.
@@ -121,16 +167,17 @@ def reuse_tool_node(tools, *, before_call=None):
             if is_read(call) and reusable_result(message):
                 message=message.model_copy(update={'additional_kwargs':{**message.additional_kwargs,'vellum_read_only':True}})
             messages.append(message)
-        return {'messages': messages}
+        thread_id = str(((config or {}).get('configurable') or {}).get('thread_id') or '')
+        return {'messages': keep_evidence(messages, thread_id)}
 
     def invoke(state, config):
         requested, subset, reused, aliases = plan(state)
         result = node.invoke(subset, config) if subset['messages'][-1].tool_calls else {'messages': []}
-        return finish(requested, result, reused, aliases)
+        return finish(requested, result, reused, aliases, config)
 
     async def ainvoke(state, config):
         requested, subset, reused, aliases = plan(state)
         result = await node.ainvoke(subset, config) if subset['messages'][-1].tool_calls else {'messages': []}
-        return finish(requested, result, reused, aliases)
+        return await asyncio.to_thread(finish, requested, result, reused, aliases, config)
 
     return RunnableLambda(invoke, afunc=ainvoke)

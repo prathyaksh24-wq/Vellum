@@ -36,6 +36,7 @@ class ThreadReport:
     tool_tokens: int = 0
     tool_results_removed: int = 0
     tool_tokens_removed: int = 0
+    tool_tokens_unrecoverable: int = 0
     pressure: list[float] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -43,12 +44,14 @@ class ThreadReport:
 
 
 def replay_thread(thread_id: str, messages: Sequence[Any], prefix: Sequence[Any], tools: Sequence[Any],
-                  budget: ContextBudget, *, project: Callable = project_context) -> ThreadReport:
+                  budget: ContextBudget, *, project: Callable = project_context,
+                  prepare_tool: Callable[[Any], Any] | None = None) -> ThreadReport:
     """Replay the agent loop: the context node runs before every model call.
 
     `prefix` stands in for the instructions/memory/retrieval messages that
     `vellum_prompt` prepends on every call; `messages` is the thread's full,
-    uncompacted message stream in order.
+    uncompacted message stream in order. `prepare_tool` stands in for the
+    live tool step's evidence handling (no store is written).
     """
     report = ThreadReport(thread_id, messages=len(messages))
     state: list[Any] = []
@@ -70,10 +73,17 @@ def replay_thread(thread_id: str, messages: Sequence[Any], prefix: Sequence[Any]
                     removed = set(projection.removed_ids)
                     for item in state:
                         if _role(item) == "tool" and str(getattr(item, "id", "")) in removed:
+                            cost = prompt_tokens([item]) - 20
                             report.tool_results_removed += 1
-                            report.tool_tokens_removed += prompt_tokens([item]) - 20
+                            report.tool_tokens_removed += cost
+                            # Short results survive whole in the digest excerpt.
+                            whole = len(str(getattr(item, "content", ""))) <= 1200
+                            if not whole and not getattr(item, "additional_kwargs", {}).get("vellum_evidence_id"):
+                                report.tool_tokens_unrecoverable += cost
                     keep = {id(item) for item in prefix}
                     state = [item for item in projection.messages if id(item) not in keep]
+        if _role(message) == "tool" and prepare_tool is not None:
+            message = prepare_tool(message)
         state.append(message)
         if _role(message) == "tool":
             report.tool_results += 1
@@ -132,4 +142,5 @@ def summarize(reports: Sequence[ThreadReport], budget: ContextBudget) -> dict[st
         "window_use_p50": pct(.5), "window_use_p95": pct(.95),
         "tool_results": sum(r.tool_results for r in reports),
         "tool_evidence_removed_share": round(sum(r.tool_tokens_removed for r in reports) / tool_tokens, 4),
+        "tool_evidence_unrecoverable_share": round(sum(r.tool_tokens_unrecoverable for r in reports) / tool_tokens, 4),
     }

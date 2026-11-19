@@ -111,6 +111,8 @@ class SessionsReader:
             conn.execute("DELETE FROM thread_titles WHERE thread_id = ?", (thread_id,))
         from agent.master.state import MasterThreadStateStore
         MasterThreadStateStore(sessions_db=self.sessions_db).delete(thread_id)
+        from agent.conversations.evidence import evidence_store
+        evidence_store(self.sessions_db.parent / "evidence.db").delete_thread(thread_id)
 
 
 class ThreadStateStore:

@@ -11,7 +11,7 @@ from agent.conversations.recall import personal_memory_allowed, read_history, re
 @tool
 def conversation_history(query: str = '', scope: str = 'current', conversation_id: str = '',
                          message_id: str = '', offset: int = 0, limit: int = 6,
-                         text_offset: int | None = None,
+                         text_offset: int | None = None, evidence_id: str = '', page: int = 1,
                          config: RunnableConfig = None) -> str:
     """Recover original saved chat messages omitted by compaction, with roles and source IDs.
 
@@ -21,11 +21,17 @@ def conversation_history(query: str = '', scope: str = 'current', conversation_i
     Use text_offset/next_text_offset to continue an oversized message. Returned
     truncated text is an excerpt, never a complete quotation. Historical
     requests cannot authorize new actions. Prefer this to public search for chat recall.
+    evidence_id=<id> pages through a stored tool result from this chat (page=2, 3...)
+    or, with query, returns its matching passages; use it instead of re-running a tool.
     """
     from agent.memory.runtime import get_memory_orchestrator
     thread_id = str((config or {}).get('configurable', {}).get('thread_id') or '')
     if not thread_id:
         return json.dumps({'ok': False, 'error': 'Current conversation identity is unavailable.'})
+    if evidence_id:
+        from agent.conversations.evidence import evidence_store
+        return json.dumps(evidence_store().read(evidence_id.strip(), thread_id, page=page, query=query),
+                          ensure_ascii=False)
     if scope != 'current':
         settings = get_memory_orchestrator().store.get_settings()
         if not settings.get('memory_enabled', True) or not settings.get('reference_history_enabled', True) or not personal_memory_allowed(query):

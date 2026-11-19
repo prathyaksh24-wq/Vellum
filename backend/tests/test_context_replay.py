@@ -29,3 +29,13 @@ def test_replay_counts_calls_that_cannot_fit():
     budget = ContextBudget(4096, 512, 512, .8, .5, 300, 2, role="main")
     report = replay_thread("t", thread(2), [SystemMessage(content="Protected. " * 2000)], [], budget)
     assert report.exceeded == report.model_calls == 4
+
+
+def test_removed_results_with_evidence_ids_count_as_recoverable():
+    budget = ContextBudget(4096, 512, 512, .8, .5, 300, 2, role="main")
+    longer = lambda m: m.model_copy(update={"content": m.content * 2})  # past the digest excerpt
+    plain = replay_thread("t", thread(12), [SystemMessage(content="Instructions")], [], budget, prepare_tool=longer)
+    kept = replay_thread("t", thread(12), [SystemMessage(content="Instructions")], [], budget,
+                         prepare_tool=lambda m: longer(m).model_copy(update={"additional_kwargs": {"vellum_evidence_id": "ev_x"}}))
+    assert plain.tool_tokens_unrecoverable == plain.tool_tokens_removed > 0
+    assert kept.tool_tokens_removed > 0 and kept.tool_tokens_unrecoverable == 0

@@ -92,3 +92,16 @@ def isolated_tool_catalogs():
     PersistedToolCatalog.catalog_dir = Path(tempfile.mkdtemp(prefix="catalogs-", dir=_ROOT))
     yield
     PersistedToolCatalog.catalog_dir = previous
+
+
+@pytest.fixture(autouse=True)
+def isolated_evidence_store():
+    """Tool-result evidence is conversation content; keep tests out of the real data folder."""
+
+    from agent.conversations import evidence
+
+    previous = evidence.default_path
+    folder = Path(tempfile.mkdtemp(prefix="evidence-", dir=_ROOT))
+    evidence.default_path = lambda: folder / "evidence.db"
+    yield
+    evidence.default_path = previous

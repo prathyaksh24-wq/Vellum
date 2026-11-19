@@ -26,7 +26,7 @@ from agent.mcp.plugin_approvals import (
     PluginMcpApprovalStore,
     get_plugin_mcp_approval_store,
 )
-from agent.mcp.results import summarize_mcp_text, structured_mcp_text
+from agent.mcp.results import normalize_mcp_text, summarize_mcp_text, structured_mcp_text
 from agent.plugins.registry import PluginRegistry
 from agent.plugins.credential_binding import credential_digest as bind_credential
 from agent.privacy.classifier import DataClass, classify
@@ -441,7 +441,11 @@ class PluginMcpRuntime:
             started=started,
             outcome="success",
         )
-        return structured_mcp_text(result) if structured else summarize_mcp_text(result)
+        projected = structured_mcp_text(result) if structured else summarize_mcp_text(result)
+        # Projections drop fields and text; keep the original retrievable.
+        from agent.conversations.evidence import attach_evidence
+        return attach_evidence(projected, normalize_mcp_text(result, max_chars=2 * 1024 * 1024),
+                               tool=f"{plugin_id}.{tool_name}", structured=structured)
 
     def _audit(
         self,
