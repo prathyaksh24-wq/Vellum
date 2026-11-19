@@ -3202,6 +3202,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     audit.thread_id = response.thread_id
     audit.mark_first_token()
     audit.finalize("completed", tools_called=response.tools)
+    _summarize_compacted_context(response.thread_id)
     return response
 
 
@@ -3978,6 +3979,16 @@ async def _audited_turn_stream(events: Any, audit: TurnAudit):
         raise
     finally:
         audit.finalize(outcome, tools_called=tools_called)
+        _summarize_compacted_context(audit.thread_id)
+
+
+def _summarize_compacted_context(thread_id: str) -> None:
+    """After a reply finishes, summarize newly compacted ranges in the background."""
+    try:
+        from agent.conversations.context_archive import turn_finished
+        turn_finished(str(thread_id or ""))
+    except Exception:  # noqa: BLE001 - continuity work never affects the finished turn
+        _LOGGER.debug("Context summaries were not scheduled", exc_info=True)
 
 
 def _stream_id(prefix: str) -> str:
@@ -5139,6 +5150,7 @@ async def _stream_agent_turn_scoped(
         function_stream_items: dict[str, dict[str, Any]] = {}
         function_stream_args: dict[str, str] = {}
         reasoning_summaries: dict[str, str] = {}
+        compaction_row: str | None = None  # one chat row per automatic compaction
         local_thinking: dict[str, str] = {}
         last_chat_model_output: Any | None = None
         specialist_gap = ""
@@ -5228,13 +5240,25 @@ async def _stream_agent_turn_scoped(
                         item_id='context-' + str(event.get('run_id') or 'primary'), name='conversation_context',
                         status='completed' if context_done else 'in_progress',
                         metadata=_context_meter(event.get('data', {}).get('output')) if context_done else None)
+                if kind == "on_custom_event" and event.get("name") == "vellum_context_compacting":
+                    compaction_row = 'compaction-' + str(event.get('run_id') or uuid4().hex)
+                    yield _agent_activity_event(
+                        response_id=response_id, thread_id=active_thread_id, item_id=compaction_row,
+                        activity_type="context_compacting", label="Compacting context",
+                        name="conversation_context", status="in_progress")
                 if kind == "on_custom_event" and event.get("name") == "vellum_context_compacted":
+                    report = event.get("data") or {}
+                    removed = int(report.get("removed_messages") or 0)
+                    label = (f"Compacted context · {removed} earlier message{'s' if removed != 1 else ''} summarized"
+                             if report.get("compacted") else "Context already fits")
                     yield _agent_activity_event(
                         response_id=response_id, thread_id=active_thread_id,
-                        activity_type="context_compacted", label="Keeping earlier conversation context",
+                        item_id=compaction_row or "",
+                        activity_type="context_compacted", label=label,
                         name="conversation_context", status="completed",
-                        metadata={**(event.get("data") or {}), **(_context_meter({"context_budget": event.get("data")}) or {})},
+                        metadata={**report, **(_context_meter({"context_budget": report}) or {})},
                     )
+                    compaction_row = None
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):
                         summary_id = "summary-" + str(event.get("run_id") or "primary")

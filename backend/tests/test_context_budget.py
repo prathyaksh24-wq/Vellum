@@ -295,3 +295,39 @@ def test_graph_checkpoint_persists_digest_and_can_resume(tmp_path, monkeypatch):
     assert "23 November" in result["messages"][-1].content
     assert len(source) == 30
     connection.close()
+
+
+def test_automatic_compaction_announces_start_and_finish_and_archives_the_range(tmp_path, monkeypatch):
+    import agent.graph.agent as graph
+    import agent.llm.context as context
+    from agent.conversations.context_archive import context_archive
+
+    class Model:
+        max_tokens = 512
+        reasoning_mode = None
+        def invoke(self, messages, config):
+            return AIMessage(content="ORBIT launches on 23 November.")
+        async def astream(self, messages, config):
+            yield AIMessageChunk(content="ORBIT launches on 23 November.")
+
+    entry = SimpleNamespace(id="ollama/test", context=4096, tool_calling_compatibility="compatible")
+    monkeypatch.setattr(graph, "get_provider_registry", lambda: SimpleNamespace(resolve=lambda _:entry, current_model=lambda:entry))
+    monkeypatch.setattr(context, "context_budget", lambda *a, **k: policy())
+    monkeypatch.setattr(graph, "vellum_prompt", lambda state, config, **kwargs: [SystemMessage(content="Rules"),
+        *([digest_message(state["context_digest"])] if state.get("context_digest") else []), *state["messages"]])
+    from langgraph.checkpoint.memory import MemorySaver
+    runtime = graph._build_agent_runtime(llm=Model(), tools=[], checkpointer=MemorySaver(), runtime_model="ollama/test")
+    config = {"configurable": {"thread_id": "announce-qa"}}
+
+    async def run():
+        names = []
+        async for event in runtime.astream_events({"messages": history()[1:]}, config, version="v2"):
+            if event["event"] == "on_custom_event":
+                names.append((event["name"], event["data"].get("compacted") if event["data"] else None))
+        return names
+
+    events = asyncio.run(run())
+    assert events[0] == ("vellum_context_compacting", None)
+    assert events[1][0] == "vellum_context_compacted" and events[1][1] is True
+    blocks = context_archive().blocks("announce-qa")
+    assert blocks and "23 November" in blocks[0]["transcript"]

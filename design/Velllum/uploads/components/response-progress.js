@@ -6,7 +6,7 @@
     const n=typeof value==='number'?value:Date.parse(value);
     return Number.isFinite(n)?n:0;
   };
-  const internal=/^(thinking|thinking_started|runtime_preparing|runtime_prepared|context_preparing|context_ready|context_compacted|tool_call_preparing|function_call_preparing|function_call_prepared|final_answer.*)$/;
+  const internal=/^(thinking|thinking_started|runtime_preparing|runtime_prepared|context_preparing|context_ready|tool_call_preparing|function_call_preparing|function_call_prepared|final_answer.*)$/;
   const human=value=>String(value || '').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[_:.]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()).replace(/\bWeb Search\b/g,'web search');
   const sourceName=source=>{
     if(source.source_type==='book')return source.title || 'book';

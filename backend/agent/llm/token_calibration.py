@@ -102,14 +102,15 @@ def save(model_id: str, ratios: dict[str, float], *, path: Path | None = None) -
         temporary.replace(path)
 
 
-def ollama_counter(base_url: str, model: str, *, timeout: float = 300):
+def ollama_counter(base_url: str, model: str, *, num_ctx: int = 32768, timeout: float = 300):
+    """Same num_ctx as chat, so measuring never forces a model reload."""
     import httpx
 
     def count(text: str) -> int:
         response = httpx.post(base_url.rstrip("/").removesuffix("/v1") + "/api/chat", timeout=timeout, json={
             "model": model, "stream": False, "keep_alive": "5m",
             "messages": [{"role": "user", "content": secrets.token_hex(6) + "\n" + text}],
-            "options": {"num_predict": 1, "num_ctx": 32768}})
+            "options": {"num_predict": 1, "num_ctx": num_ctx}})
         response.raise_for_status()
         return int(response.json()["prompt_eval_count"])
     return count
@@ -126,7 +127,8 @@ def ensure_calibrated(model_id: str, settings) -> None:
 
     def run():
         try:
-            ratios = measure(model_id, ollama_counter(settings.ollama_base_url, model_id.removeprefix("ollama/")))
+            ratios = measure(model_id, ollama_counter(settings.ollama_base_url, model_id.removeprefix("ollama/"),
+                                                      num_ctx=min(settings.ollama_context_length, settings.main_context_length)))
             save(model_id, ratios)
             logger.info("Token estimate calibrated: model=%s prose=%.3f structured=%.3f",
                         model_id, ratios["prose"], ratios["structured"])

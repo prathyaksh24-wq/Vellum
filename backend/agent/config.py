@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     context_recent_turns: int = Field(default=4, ge=1, le=20, alias="CONTEXT_RECENT_TURNS")
     # Measure local models' real token counts once and scale estimates by them.
     context_token_calibration: bool = Field(default=True, alias="CONTEXT_TOKEN_CALIBRATION")
+    # Summarize compacted ranges and keep a working state with the local model, after each turn.
+    context_summaries_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARIES_ENABLED")
     ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     model_picker_provider: Literal['ollama', 'openrouter', 'openai'] | None = Field(default=None, alias='MODEL_PICKER_PROVIDER')

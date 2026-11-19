@@ -133,6 +133,47 @@ Tool results that leave the working prompt stay retrievable
 Specialist read loops still bound oversized results to an excerpt without
 storing them; specialists have no recall tool to read them back.
 
+### Long-conversation continuity
+
+`agent/conversations/context_archive.py` keeps a long chat's thread when
+compaction removes older turns, at any context window:
+
+- **Blocks.** Each compaction records the removed messages' transcript
+  (tool results cited by `evidence_id`, at most 2,000 characters each) as one
+  or more blocks of at most 24,000 characters, in the same local SQLite file
+  as tool-result evidence.
+- **Summaries and working state.** After a reply finishes (`turn_finished`,
+  called where the turn audit is finalized), a background worker asks the
+  local model (`MEMORY_LLM_MODEL`, same `num_ctx` as chat so Ollama never
+  reloads) to summarize each new block and update the conversation's working
+  state: goal, decisions, constraints, open items and durable facts. Output is
+  validated and bounded; a failed block keeps its excerpts and stops after two
+  attempts. When more than eight summaries exist, the oldest four are merged
+  into a higher-level summary. `CONTEXT_SUMMARIES_ENABLED=false` turns this off.
+- **Prompt.** The digest shows the working state and the newest summaries that
+  fit the summary budget (about 8% of the window, `summary_budget`), lists
+  older summaries by `block_id`, and hides excerpts a summary already covers.
+  Until a block is summarized, its excerpts cover it. Because blocks and the
+  working state do not depend on the window, raising it (for example to 65k or
+  128k) shows more of the same summaries with no migration.
+- **Tools** (always visible to the main agent): `context_status` (window,
+  used and free tokens by layer, compactions, summaries, stored results),
+  `search_context` (summaries, compacted transcripts, saved messages and
+  tool results of this chat), `decompress(block_id, page)` (a summary's
+  original messages, or a merged summary's parts) and `compress(focus)`
+  (compact before the next step). They mirror billion-context's
+  compress / decompress / search_context / status; compaction stays automatic.
+- **Visible progress.** When automatic compaction starts, the chat shows
+  "Compacting context"; the same row completes as "Compacted context · N earlier
+  messages summarized" (or "Context already fits").
+- Blocks and the working state live as long as the chat: deleting the
+  conversation deletes them.
+
+On three long recorded threads, the local gemma4 summarizer produced 9 of 9
+valid summaries with updated working states and kept every extracted specific
+(IDs, numbers, paths) it was given; calls took 25–100 seconds, which is why
+they run after the reply rather than before it.
+
 ### Replay baseline
 
 `scripts/context_replay.py` replays recorded threads (rebuilt uncompacted from

@@ -18,6 +18,7 @@ Ownership and privacy:
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import re
 import secrets
@@ -25,7 +26,7 @@ import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 MAX_CHARS = 2 * 1024 * 1024
 PAGE_CHARS = 6000
@@ -69,12 +70,18 @@ class EvidenceStore:
         self.path = Path(path)
         self._pruned_at: datetime | None = None
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Commit on success, roll back on error, and always close (Windows file locks)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self.path), timeout=5)
-        conn.row_factory = sqlite3.Row
-        conn.executescript(_SCHEMA)
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.executescript(_SCHEMA)
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def put(self, content: str, *, tool: str = "", thread_id: str | None = None) -> str:
         """Save one tool result; returns its evidence id."""
@@ -115,6 +122,25 @@ class EvidenceStore:
         result.update(page=page, text=content[start:start + page_chars],
                       next_page=page + 1 if page < pages else None)
         return result
+
+    def search(self, thread_id: str, query: str, *, limit: int = 6) -> list[dict[str, Any]]:
+        """Best passages across this conversation's stored tool results."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT evidence_id, tool, content FROM evidence WHERE thread_id = ? "
+                                "ORDER BY created_at DESC LIMIT 200", (thread_id,)).fetchall()
+        hits = []
+        terms = set(re.findall(r"\w{3,}", query.casefold()))
+        for row in rows:
+            for match in _matches(row["content"], query, limit=700)[:2]:
+                score = len(terms & set(re.findall(r"\w{3,}", match["text"].casefold())))
+                hits.append({"score": score, "evidence_id": row["evidence_id"], "tool": row["tool"],
+                             "offset": match["offset"], "text": match["text"][:700]})
+        hits.sort(key=lambda hit: -hit["score"])
+        return hits[:limit]
+
+    def count(self, thread_id: str) -> int:
+        with self._connect() as conn:
+            return int(conn.execute("SELECT COUNT(*) FROM evidence WHERE thread_id = ?", (thread_id,)).fetchone()[0])
 
     def delete_thread(self, thread_id: str) -> int:
         with self._connect() as conn:
