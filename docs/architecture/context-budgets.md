@@ -76,19 +76,54 @@ including the reasoning mode's scaled allowance. A safety margin of at least
 512 tokens (5% of the window) is withheld as well.
 
 The estimator uses UTF-8 bytes divided by three plus framing/schema overhead.
-It is an estimate, not the model tokenizer. Each image reserves 8192 tokens;
-actual multimodal costs differ by model. Provider-specific tokenization and
-multimodal calibration remain future work.
+It is an estimate, not the model tokenizer. For local Ollama models it is
+calibrated once per model (`agent/llm/token_calibration.py`): Vellum sends its
+own runtime documents and a JSON tool-schema sample to the model with a random
+prefix (defeating the prompt cache), reads Ollama's real `prompt_eval_count`,
+and stores real-per-estimated ratios for prose and for structured text, each
+with a 10% safety margin, in `data/llm-routing/token-calibration.json`.
+Estimates inside a projection then use the structured ratio for JSON-like text
+(schemas, tool results, tool calls) and the prose ratio otherwise. A model that
+has not been measured keeps the uncalibrated (conservative) estimate;
+`CONTEXT_TOKEN_CALIBRATION=false` turns calibration off. Each image reserves
+8192 tokens; multimodal calibration remains future work.
 
 Compaction starts when estimated input plus reserved output and margin exceeds
 80% of the window. It aims for 55% input occupancy, preferring recent turns
 while staying below the trigger. Protected instructions and a single current
 user request are never truncated. Within a single long task, closed older
 read-only tool rounds may also be compacted, with the two latest rounds kept
-exact. Mutation rounds and unknown/dynamic tool operations stay exact. If the
-protected material cannot fit, the request fails before
-provider submission with a request to narrow the material. Disabling compaction
-retains this overflow guard.
+exact. Specialist read rounds carry the same `vellum_read_only` provenance as
+the main graph's verified reads. Mutation rounds and unknown/dynamic tool
+operations stay exact. If the protected material still does not fit,
+`fit_context` recovers before rejecting: it first compacts as hard as a manual
+compaction, then gives back only the extra output reserve a reasoning mode
+added (never below the standard answer budget), and the routing engine caps
+generation at the reserve that fit (`recovery` and `output_reserved` in the
+report). Only when neither works does the request fail before provider
+submission with a request to narrow the material. Disabling compaction retains
+this overflow guard.
+
+### Replay baseline
+
+`scripts/context_replay.py` replays recorded threads (rebuilt uncompacted from
+`data/memory/checkpoints.db` through a private copy; no model calls) through
+the current prompt prefix, visible tool schemas and budget, and reports
+compaction rate, overflow rate, window use and how much tool evidence leaves
+the prompt. On 2026-11-19, 54 threads with at least 20 messages (1,487 model
+calls) on `ollama/gemma4:12b` at a 32,768-token window gave:
+
+| Configuration | Compacting calls | Overflowing calls | Median / p95 window use | Tool evidence removed |
+|---|---|---|---|---|
+| Standard output, before | 10.9% | 0% | 62% / 71% | 79% |
+| Standard output, calibrated + recovery | 3.0% | 0% | 46% / 66% | 66% |
+| 8,192-token reasoning reserve, before | 72.9% | 5.4% (19 threads) | 61% / 65% | 81% |
+| 8,192-token reasoning reserve, calibrated + recovery | 11.2% | 0% | 45% / 52% | 79% |
+
+The fixed prefix alone (instructions, personal memory, visible tool schemas)
+was about 18,000 estimated tokens before calibration (about 11,400 calibrated;
+real gemma4 instructions measured 8,737 tokens). Removed tool evidence cannot
+be retrieved again yet; that is the evidence-store step.
 Disabling it stops future compaction; it does not expand an already compacted
 checkpoint back into full history. The original saved chat remains available.
 

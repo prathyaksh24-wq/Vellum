@@ -148,6 +148,15 @@ def test_native_loop_reads_allowed_tool_and_observes_result():
     assert result.activity_events[0]["tool"] == "sports.query"
 
 
+def test_completed_specialist_reads_are_marked_so_old_rounds_can_be_compacted():
+    registry=ToolRegistry()
+    registry.register(CapabilityRecord("sports.query","sports",CapabilityAccess.READ,frozenset({"SportsAgent"}),"Read scores",lambda p:{"score":"12-10"}))
+    profile=AgentProfile(id="SportsAgent",executor="llm",tools={"allow":["sports.query"]})
+    model=ScriptedModel([tool_call("specialist_read",{"name":"sports.query","payload":{"query":"NBA"}}),AIMessage(content="12-10")])
+    loop(profile,model,registry)
+    assert model.messages[-1][-1].additional_kwargs == {"vellum_read_only": True}
+
+
 @pytest.mark.parametrize("payload",[{"action":"save"},{"action":"list","confirm":True}])
 def test_loop_cannot_turn_read_adapter_into_write(payload):
     registry=ToolRegistry(); calls=[]
@@ -155,6 +164,7 @@ def test_loop_cannot_turn_read_adapter_into_write(payload):
     model=ScriptedModel([tool_call("specialist_read",{"name":"spotify_library","payload":payload}),AIMessage(content="Read unavailable")])
     loop(builtin_profiles()["MusicAgent"],model,registry)
     assert calls == [] and "ToolPermissionError" in model.messages[-1][-1].content
+    assert "vellum_read_only" not in model.messages[-1][-1].additional_kwargs
 
 
 def test_chat_only_loop_validates_structured_steps():

@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
 
 from agent.llm.context import (ContextBudget, ContextBudgetExceeded, context_budget,
-                               digest_message, project_context, prompt_tokens)
+                               digest_message, fit_context, project_context, prompt_tokens)
 
 
 def policy(window=4096):
@@ -157,6 +157,46 @@ def test_tools_and_output_are_charged_to_same_budget():
         project_context([HumanMessage(content="Read")], tools, policy())
     with pytest.raises(ContextBudgetExceeded):
         context_budget("ollama/test", output_tokens=4096, settings=settings(), model_limit=4096)
+
+
+def reasoning_policy():
+    # 4096 window, 2048 output reserved for a deep reasoning mode: 1536 input room.
+    return ContextBudget(4096, 2048, 512, .8, .5, 300, 2, role="main")
+
+
+def test_overflow_recovery_gives_back_reasoning_reserve_but_not_the_answer_budget():
+    prompt = [SystemMessage(content="Protected instructions. " * 300), HumanMessage(content="Current task", id="u")]
+    with pytest.raises(ContextBudgetExceeded):
+        project_context(prompt, [], reasoning_policy())
+    result = fit_context(prompt, [], reasoning_policy(), min_output=512)
+    assert result.report["recovery"] == "output_reduced"
+    assert 512 <= result.report["output_reserved"] < 2048 and result.report["output_requested"] == 2048
+    assert result.report["estimated_input_tokens"] <= result.report["input_limit"]
+    assert result.messages[-1].content == "Current task"
+    with pytest.raises(ContextBudgetExceeded):
+        fit_context(prompt, [], reasoning_policy(), min_output=2048)
+
+
+def test_fitting_prompt_is_untouched_by_recovery():
+    prompt = [SystemMessage(content="Short"), HumanMessage(content="Hi", id="u")]
+    result = fit_context(prompt, [], reasoning_policy(), min_output=512)
+    assert "recovery" not in result.report and result.report["output_reserved"] == 2048
+
+
+def test_engine_caps_generation_at_the_recovered_reserve(tmp_path):
+    from test_routing_engine import build_engine, add_credential, FakeAdapter
+    async def run():
+        store, engine, _, _ = build_engine(tmp_path, openrouter_outcomes=[])
+        adapter = FakeAdapter([AIMessage(content="ok")])
+        adapter.context_length = 4096
+        engine.adapters["ollama"] = adapter
+        add_credential(store, "ollama", "local")
+        prompt = [SystemMessage(content="Protected instructions. " * 300), HumanMessage(content="Task")]
+        response = await engine.ainvoke(messages=prompt, primary_model="ollama/test", context_role="main",
+                                        max_tokens=512, reasoning_mode="ultra")
+        assert response.response_metadata["vellum_context"]["recovery"] == "output_reduced"
+        assert adapter.kwargs_history[0]["max_tokens"] == response.response_metadata["vellum_context"]["output_reserved"] < 2048
+    asyncio.run(run())
 
 
 def test_disabled_compaction_still_rejects_overflow():

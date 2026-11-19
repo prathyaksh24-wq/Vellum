@@ -10,6 +10,8 @@ os.environ["KNOWLEDGE_CORE_DB_PATH"] = str((_ROOT / "knowledge" / "core.db").res
 os.environ["KNOWLEDGE_BLOB_PATH"] = str((_ROOT / "knowledge" / "blobs").resolve())
 os.environ.setdefault("COMPUTER_USE_SCREENSHOT_DIR", str((_ROOT / "computer-use" / "screenshots").resolve()))
 os.environ.setdefault("COMPUTER_USE_EXCLUSIVE_CONTROL", "false")
+# Never read or start a real model calibration from tests.
+os.environ["CONTEXT_TOKEN_CALIBRATION"] = "false"
 # A developer .env may point Playwright at a local Node runtime; tests expect the default launcher.
 os.environ["PLAYWRIGHT_MCP_COMMAND"] = "npx"
 os.environ["PLAYWRIGHT_MCP_ARGS"] = "-y @playwright/mcp@latest --isolated"

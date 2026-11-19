@@ -703,7 +703,7 @@ def _make_model_node(bound_model, *, runtime_model: str | None = None, model_for
 
 def _make_context_node(*, llm, tool_defs, runtime_model, tool_defs_for_state=None):
     def prepare(state, config):
-        from agent.llm.context import context_budget, project_context
+        from agent.llm.context import context_budget, fit_context
         from agent.llm.routing.engine import RoutingEngine
 
         model_id = runtime_model or get_provider_registry().current_model().id
@@ -711,7 +711,8 @@ def _make_context_node(*, llm, tool_defs, runtime_model, tool_defs_for_state=Non
         budget = context_budget(model_id, role="main", output_tokens=output)
         options = (config or {}).get('configurable', {})
         active_defs = tool_defs_for_state(state) if tool_defs_for_state else tool_defs
-        projection = project_context(vellum_prompt(state, config, runtime_model=runtime_model), active_defs, budget,
+        projection = fit_context(vellum_prompt(state, config, runtime_model=runtime_model), active_defs, budget,
+            min_output=getattr(llm, "max_tokens", 2048),
             force=bool(options.get('vellum_manual_compact')), focus=str(options.get('vellum_compact_focus') or ''))
         update = {"context_budget": projection.report}
         if projection.report["compacted"]:

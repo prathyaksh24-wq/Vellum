@@ -5,7 +5,8 @@ their original role/ID and cannot grant permissions or become durable memory.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 import json
 import math
 import re
@@ -20,6 +21,18 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 _READ_TOOLS = frozenset({"conversation_history", "web_search", "tool_search", "tool_describe",
                          "read_file", "list_files", "library_docs", "specialist_read",
                          "specialist_schema", "specialist_skill", "specialist_memory"})
+
+
+# (prose, structured) real tokens per estimated token for the model being
+# projected; set only for the duration of one projection (see token_calibration).
+_TOKEN_RATIO: ContextVar[tuple[float, float]] = ContextVar("vellum_token_ratio", default=(1.0, 1.0))
+_STRUCTURE = frozenset('{}[]":,')
+
+
+def _structured(text: str) -> bool:
+    """JSON-like text (schemas, tool results) tokenizes far denser than prose."""
+    sample = text[:2000]
+    return bool(sample) and sum(ch in _STRUCTURE for ch in sample) / len(sample) > .06
 
 
 class ContextBudgetExceeded(ValueError):
@@ -37,6 +50,7 @@ class ContextBudget:
     keep_turns: int
     enabled: bool = True
     role: str = "specialist"
+    token_ratio: tuple[float, float] = (1.0, 1.0)
 
     @property
     def input_limit(self) -> int:
@@ -75,15 +89,23 @@ def context_budget(model_id: str, *, role: str = "specialist", output_tokens: in
     margin = max(512, math.ceil(window * .05))
     if window - output - margin < 1024:
         raise ContextBudgetExceeded("The selected context window leaves too little room for the request and answer. Reduce reasoning effort or increase its context budget.")
+    ratio = (1.0, 1.0)
+    if getattr(settings, "context_token_calibration", False):
+        from agent.llm.token_calibration import ensure_calibrated, token_ratios
+        ensure_calibrated(model_id, settings)
+        ratio = token_ratios(model_id)
     return ContextBudget(window, output, margin, settings.context_compaction_trigger_ratio,
                          settings.context_compaction_target_ratio, min(2048, window // 12),
-                         settings.context_recent_turns, settings.context_compaction_enabled, role)
+                         settings.context_recent_turns, settings.context_compaction_enabled, role, ratio)
 
 
 def estimate_tokens(value: Any) -> int:
-    """Conservative text estimate, not a claim of provider tokenizer accuracy."""
+    """Conservative text estimate, scaled by the model's measured ratio when known."""
+    structured = not isinstance(value, str)
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
-    return math.ceil(len(text.encode("utf-8")) / 3)
+    prose_ratio, structured_ratio = _TOKEN_RATIO.get()
+    ratio = structured_ratio if structured or _structured(text) else prose_ratio
+    return math.ceil(len(text.encode("utf-8")) / 3 * ratio)
 
 
 def _role(message: Any) -> str:
@@ -172,6 +194,19 @@ def digest_message(digest: dict[str, Any]) -> HumanMessage | None:
 
 def project_context(messages: Sequence[Any], tools: Sequence[Any], budget: ContextBudget, *,
                     force: bool = False, focus: str = '') -> ContextProjection:
+    token = _TOKEN_RATIO.set(budget.token_ratio)
+    try:
+        projection = _project_context(messages, tools, budget, force=force, focus=focus)
+    finally:
+        _TOKEN_RATIO.reset(token)
+    if budget.token_ratio != (1.0, 1.0):
+        projection.report.update(estimator="utf8_bytes_div3_calibrated",
+                                 token_ratio={"prose": budget.token_ratio[0], "structured": budget.token_ratio[1]})
+    return projection
+
+
+def _project_context(messages: Sequence[Any], tools: Sequence[Any], budget: ContextBudget, *,
+                     force: bool = False, focus: str = '') -> ContextProjection:
     original = list(messages)
     old_digest: dict[str, Any] = {}
     history = []
@@ -302,6 +337,38 @@ def project_context(messages: Sequence[Any], tools: Sequence[Any], budget: Conte
                   compaction_count=digest["compaction_count"])
     report['layers'] = context_layers(projected, tools)
     return ContextProjection(projected, digest, [str(m.id) for m in removed if getattr(m, "id", None)], report)
+
+
+def fit_context(messages: Sequence[Any], tools: Sequence[Any], budget: ContextBudget, *,
+                min_output: int, force: bool = False, focus: str = '') -> ContextProjection:
+    """Project the prompt, recovering before rejecting it.
+
+    When protected content (instructions, schemas, the current task and its
+    latest tool rounds) still overflows, first compact as hard as a manual
+    compaction would, then give back only the extra output reserve that a
+    reasoning mode added, never going below `min_output` (the standard answer
+    budget). The report records `recovery` and the reduced `output_reserved`;
+    callers must cap generation at that value.
+    """
+    try:
+        return project_context(messages, tools, budget, force=force, focus=focus)
+    except ContextBudgetExceeded as error:
+        failure = error
+    floor = max(256, min(int(min_output), budget.output))
+    candidates = [] if force else [budget]
+    output = budget.output
+    while output > floor:
+        output = max(floor, output // 2)
+        candidates.append(replace(budget, output=output))
+    for candidate in candidates:
+        try:
+            projection = project_context(messages, tools, candidate, force=True, focus=focus)
+        except ContextBudgetExceeded:
+            continue
+        projection.report.update(trigger='overflow_recovery', output_requested=budget.output,
+                                 recovery='output_reduced' if candidate.output < budget.output else 'forced_compaction')
+        return projection
+    raise failure
 
 
 async def summarize_digest(digest: dict, llm, *, timeout: float = 20) -> tuple[dict, str]:

@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     context_compaction_trigger_ratio: float = Field(default=.80, ge=.5, le=.95, alias="CONTEXT_COMPACTION_TRIGGER_RATIO")
     context_compaction_target_ratio: float = Field(default=.55, ge=.2, le=.8, alias="CONTEXT_COMPACTION_TARGET_RATIO")
     context_recent_turns: int = Field(default=4, ge=1, le=20, alias="CONTEXT_RECENT_TURNS")
+    # Measure local models' real token counts once and scale estimates by them.
+    context_token_calibration: bool = Field(default=True, alias="CONTEXT_TOKEN_CALIBRATION")
     ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     model_picker_provider: Literal['ollama', 'openrouter', 'openai'] | None = Field(default=None, alias='MODEL_PICKER_PROVIDER')
