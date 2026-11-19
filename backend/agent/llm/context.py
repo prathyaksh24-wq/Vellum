@@ -74,17 +74,27 @@ def context_budget(model_id: str, *, role: str = "specialist", output_tokens: in
     execution = get_profile_execution()
     if execution is not None:
         role = "specialist"
-    requested = settings.main_context_length if role == "main" else settings.specialist_context_length
+    # The window follows the model: its own limit, under whichever caps apply.
+    caps = []
+    if role == "main":
+        if getattr(settings, "main_context_length", None):
+            caps.append(settings.main_context_length)
+    else:
+        caps.append(settings.specialist_context_length)
     if execution is not None and execution.context_length is not None:
-        requested = min(requested, execution.context_length)
+        caps.append(execution.context_length)
     if model_id.startswith("ollama/"):
-        requested = min(requested, settings.ollama_context_length)
+        caps.append(settings.ollama_context_length)  # local memory decides this one
+    elif getattr(settings, "cloud_context_length", None):
+        caps.append(settings.cloud_context_length)  # optional cost cap for hosted models
     if transport_limit is not None:
-        requested = min(requested, transport_limit)
+        caps.append(transport_limit)
     if model_limit is None:
         from agent.llm.providers import get_provider_registry
         model_limit = get_provider_registry().context_limit(model_id)
-    window = min(requested, model_limit) if model_limit else requested
+    if model_limit:
+        caps.append(model_limit)
+    window = min(caps) if caps else UNKNOWN_MODEL_WINDOW
     output = max(256, output_tokens)
     margin = max(512, math.ceil(window * .05))
     if window - output - margin < 1024:
@@ -97,6 +107,12 @@ def context_budget(model_id: str, *, role: str = "specialist", output_tokens: in
     return ContextBudget(window, output, margin, settings.context_compaction_trigger_ratio,
                          settings.context_compaction_target_ratio, summary_budget(window),
                          settings.context_recent_turns, settings.context_compaction_enabled, role, ratio)
+
+
+def local_num_ctx(settings) -> int:
+    """The window local Ollama calls use; background calls must match chat's to avoid reloads."""
+    main = getattr(settings, "main_context_length", None)
+    return min(settings.ollama_context_length, main) if main else settings.ollama_context_length
 
 
 def summary_budget(window: int) -> int:
@@ -187,6 +203,9 @@ def _excerpt(message: Any, query: str) -> str:
         size += len(fragment) + 16
     return " [excerpt] ".join(text for _, text in sorted(chosen)) + " [remaining content omitted]"
 
+
+# Window for a model whose limit is unknown and has no cap.
+UNKNOWN_MODEL_WINDOW = 32768
 
 # Keys rendered from the context archive (not persisted in graph state).
 ARCHIVE_KEYS = ("working_state", "summaries", "older_summaries", "covered_ids")

@@ -331,3 +331,33 @@ def test_automatic_compaction_announces_start_and_finish_and_archives_the_range(
     assert events[1][0] == "vellum_context_compacted" and events[1][1] is True
     blocks = context_archive().blocks("announce-qa")
     assert blocks and "23 November" in blocks[0]["transcript"]
+
+
+
+def model_settings(main=None, cloud=None, ollama=32768):
+    value = settings()
+    value.main_context_length, value.cloud_context_length, value.ollama_context_length = main, cloud, ollama
+    return value
+
+
+def test_window_follows_the_chosen_model_under_its_caps():
+    # Hosted models get their own limit; local models stay under the Ollama window.
+    assert context_budget("anthropic/claude-opus-5", role="main", settings=model_settings(), model_limit=1_000_000).window == 1_000_000
+    assert context_budget("ollama/gemma4:12b", role="main", settings=model_settings(), model_limit=131072).window == 32768
+    # Optional cost cap for hosted models only, and an explicit cap for everything.
+    capped_cloud = model_settings(cloud=200_000)
+    assert context_budget("openai/gpt-5.6-sol", role="main", settings=capped_cloud, model_limit=1_050_000).window == 200_000
+    assert context_budget("ollama/gemma4:12b", role="main", settings=capped_cloud, model_limit=131072).window == 32768
+    assert context_budget("anthropic/claude-opus-5", role="main", settings=model_settings(main=65536), model_limit=1_000_000).window == 65536
+    # Specialists keep their own cap; unknown limits fall back safely.
+    assert context_budget("anthropic/claude-opus-5", settings=model_settings(), model_limit=1_000_000).window == 16384
+    assert context_budget("vendor/unknown", role="main", settings=model_settings(), model_limit=0).window == 32768
+
+
+def test_raising_the_local_window_keeps_the_same_summaries_with_more_room():
+    from agent.llm.context import local_num_ctx, summary_budget
+    assert local_num_ctx(model_settings()) == 32768
+    larger = model_settings(ollama=131072)
+    assert local_num_ctx(larger) == 131072 and local_num_ctx(model_settings(main=65536, ollama=131072)) == 65536
+    budget = context_budget("ollama/gemma4:12b", role="main", settings=larger, model_limit=131072)
+    assert budget.window == 131072 and budget.summary_tokens == summary_budget(131072) > summary_budget(32768)

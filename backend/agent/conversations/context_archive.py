@@ -411,6 +411,7 @@ def turn_finished(thread_id: str) -> None:
 
 def _run_jobs() -> None:
     from agent.config import get_settings
+    from agent.llm.context import local_num_ctx
     while True:
         try:
             thread_id = _jobs.get(timeout=60)
@@ -420,6 +421,6 @@ def _run_jobs() -> None:
         try:
             context_archive().summarize_pending(thread_id, ollama_summarizer(
                 base_url=settings.ollama_base_url, model=settings.memory_llm_model,
-                num_ctx=min(settings.ollama_context_length, settings.main_context_length)))
+                num_ctx=local_num_ctx(settings)))
         except Exception as exc:  # noqa: BLE001 - a later turn retries
             logger.warning("Context summaries skipped: error_type=%s", type(exc).__name__)

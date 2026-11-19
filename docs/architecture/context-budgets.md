@@ -2,11 +2,25 @@
 
 ## Ownership and defaults
 
-The main reasoning agent requests 32,768 context tokens. Specialist planning and
-synthesis request 16,384 tokens. These are per-request ceilings, not separate
-model copies or a guarantee that every prompt fits. AgentCatalog profiles may
-set `context_length` to narrow their specialist budget; it cannot expand the
-global specialist ceiling.
+The main reasoning agent's window follows the chosen model: its catalog limit,
+under whichever caps apply. Local Ollama models are capped by
+`OLLAMA_CONTEXT_LENGTH` (default 32,768, the window loaded in local memory;
+raise it to 65,536 or 131,072 when the GPU allows). Hosted models use their full
+limit (for example 1,000,000 for Claude Opus or 1,050,000 for GPT-5.6) unless the
+optional `CLOUD_CONTEXT_LENGTH` sets a cost cap. `MAIN_CONTEXT_LENGTH`, when
+set, caps every main-agent window. A model with no known limit and no cap gets
+32,768. Specialist planning and synthesis request 16,384 tokens. These are
+per-request ceilings, not separate model copies or a guarantee that every
+prompt fits. AgentCatalog profiles may set `context_length` to narrow their
+specialist budget; it cannot expand the global specialist ceiling.
+
+Everything that carries a long conversation scales with the window: the
+compaction trigger (80%) and target (55%), the summary budget (about 8%), and
+how many stored summaries are shown. Summaries, the working state and tool
+evidence do not depend on the window, so switching models mid-chat or raising a
+window later keeps continuity. Hosted prompts grow with the window: a 1M-token
+model compacts at about 750k input tokens, so every call in a very long chat
+sends far more than a 32k one; set `CLOUD_CONTEXT_LENGTH` to bound that cost.
 
 Local thinking capability does not enable additional reasoning automatically.
 Standard turns send `think=false`; explicitly selected reasoning modes retain

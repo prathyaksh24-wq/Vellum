@@ -74,7 +74,10 @@ class Settings(BaseSettings):
     )
     # Transport ceiling; role budgets below choose the actual request window.
     ollama_context_length: int = Field(default=32768, ge=4096, le=262144, alias="OLLAMA_CONTEXT_LENGTH")
-    main_context_length: int = Field(default=32768, ge=4096, le=262144, alias="MAIN_CONTEXT_LENGTH")
+    # Unset: the main agent's window follows the chosen model's own limit.
+    main_context_length: int | None = Field(default=None, ge=4096, le=2_000_000, alias="MAIN_CONTEXT_LENGTH")
+    # Optional cost cap for hosted (non-Ollama) models; unset uses their full limit.
+    cloud_context_length: int | None = Field(default=None, ge=4096, le=2_000_000, alias="CLOUD_CONTEXT_LENGTH")
     specialist_context_length: int = Field(default=16384, ge=4096, le=262144, alias="SPECIALIST_CONTEXT_LENGTH")
     context_summary_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARY_ENABLED")
     context_summary_timeout_seconds: float = Field(default=20.0, ge=1, le=120, alias="CONTEXT_SUMMARY_TIMEOUT_SECONDS")

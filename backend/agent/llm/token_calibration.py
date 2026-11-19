@@ -126,9 +126,10 @@ def ensure_calibrated(model_id: str, settings) -> None:
         _attempted.add(model_id)
 
     def run():
+        from agent.llm.context import local_num_ctx
         try:
             ratios = measure(model_id, ollama_counter(settings.ollama_base_url, model_id.removeprefix("ollama/"),
-                                                      num_ctx=min(settings.ollama_context_length, settings.main_context_length)))
+                                                      num_ctx=local_num_ctx(settings)))
             save(model_id, ratios)
             logger.info("Token estimate calibrated: model=%s prose=%.3f structured=%.3f",
                         model_id, ratios["prose"], ratios["structured"])
