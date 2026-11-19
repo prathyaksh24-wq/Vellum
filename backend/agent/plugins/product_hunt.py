@@ -82,10 +82,7 @@ class ProductHuntService:
             return ProductHuntStatus(enabled=enabled, status=exc.status, message=str(exc))
         configured = bool(data.get("token"))
         verified_at = data.get("verified_at")
-        fresh = bool(data.get("checked_epoch") and 0 <= self.clock() - data["checked_epoch"] < 86400)
         state = data.get("status", "not_checked") if configured else "not_connected"
-        if state == "ready" and not fresh:
-            state = "not_checked"
         connected = configured and state == "ready"
         message = {
             "ready": "Verified access to the official Product Hunt API. Public reads only.",

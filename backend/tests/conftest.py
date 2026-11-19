@@ -78,3 +78,15 @@ def reset_process_configuration_caches():
 
     get_settings.cache_clear()
     get_provider_registry.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def isolated_tool_catalogs():
+    """Connector services persist MCP catalogs; keep tests out of the real data folder."""
+
+    from agent.plugins.tool_catalog import PersistedToolCatalog
+
+    previous = PersistedToolCatalog.catalog_dir
+    PersistedToolCatalog.catalog_dir = Path(tempfile.mkdtemp(prefix="catalogs-", dir=_ROOT))
+    yield
+    PersistedToolCatalog.catalog_dir = previous

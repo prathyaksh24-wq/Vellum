@@ -100,8 +100,6 @@ class LinearService(KeyringRecordStore):
             return LinearStatus(**base, status=exc.status, message=str(exc))
         configured = bool(data.get("token")) and data.get("auth_type")=="oauth"
         state = data.get("status", "not_checked") if configured else "not_connected"
-        if state == "ready" and not 0 <= self.clock() - data.get("checked_epoch", 0) < 86400:
-            state = "not_checked"
         connected = configured and state == "ready" and base["enabled"]
         reconnect_required = configured and state in {'authorization_required', 'unauthorized', 'invalid_grant'}
         message = ("Verified Linear account and workspace. Your account permissions apply."

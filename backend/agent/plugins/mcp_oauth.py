@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import httpx
 from jsonschema import Draft202012Validator
 from agent.plugins.credentials import KeyringRecordStore
+from agent.plugins.tool_catalog import PersistedToolCatalog
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +83,7 @@ def catalog_failure(error, provider_name):
             pending.append(item.__context__)
     return ('mcp_transport_error', f'Vellum could not complete the {provider_name} MCP connection. The local diagnostic records the failure category; no workspace access was marked ready.')
 
-class OfficialMcpOAuthService(KeyringRecordStore):
+class OfficialMcpOAuthService(PersistedToolCatalog, KeyringRecordStore):
 
     def __init__(self, *, keyring=None, enabled=None, clock=time.time, request=None, transport=None, invalidator=invalidate_tools):
         if keyring is None:
@@ -92,7 +93,6 @@ class OfficialMcpOAuthService(KeyringRecordStore):
         self.enabled = enabled or self._enabled
         self.request, self.transport, self.invalidator = (request or httpx.request, transport, invalidator)
         self.lock, self.flows = (RLock(), {})
-        self.tools, self.tools_revision = ([], '')
 
     def _enabled(self):
         from agent.plugins.registry import get_plugin_registry
@@ -105,8 +105,9 @@ class OfficialMcpOAuthService(KeyringRecordStore):
         except self.error_type as exc:
             return self.status_model(enabled=enabled, status='keyring_unavailable', message=str(exc))
         configured = bool(data.get('access_token'))
-        fresh = 0 <= self.clock() - data.get('checked_epoch', 0) < 86400
-        connected = enabled and configured and (data.get('status') == 'ready') and fresh
+        # A saved, refreshable authorization stays connected across restarts and
+        # days; a rejected refresh or revocation flips status to reauthorization.
+        connected = enabled and configured and (data.get('status') == 'ready') and not data.get('refresh_rejected')
         return self.status_model(
             enabled=enabled, configured=configured, connected=connected,
             **self.public_identity(data), account_name=data.get('account_name'),
