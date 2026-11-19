@@ -1506,4 +1506,3 @@ def _set_context_window(arguments: dict[str, Any]) -> dict[str, Any]:
         note += ' CLOUD_CONTEXT_LENGTH in .env still takes precedence for hosted models.'
     return {'changed': True, 'context_window': state, '_target_kind': 'context_window', '_target_id': 'local',
             '_message': 'Context window saved (' + '; '.join(pieces) + '). It applies from the next message.' + note}
-

@@ -780,4 +780,3 @@ def test_a_plain_context_request_changes_only_the_current_model_kind(monkeypatch
     assert context_sizing.preferences() == {"local": 65536, "cloud": 200000}
     runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID, arguments={"window": 50000}), context("nlp"))
     assert context_sizing.preferences() == {"local": 65536, "cloud": 200000}
-
