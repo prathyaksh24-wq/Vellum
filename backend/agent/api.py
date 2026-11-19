@@ -100,6 +100,7 @@ from agent.automations.api import router as automations_router
 from agent.automations.prompts import scheduled_chat_prompt
 from agent.contracts.scheduled_tasks import ScheduledChatContext
 from agent.contracts.profile import ProfileActivity
+from agent.contracts.observability import RunTrace, ThreadContext
 from agent.llm.routing.api import configure_action_dispatcher, router as llm_routing_router
 from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
@@ -4161,17 +4162,41 @@ def _observability_days(period: str) -> int | None:
     return None
 
 
+def _context_meter(output: Any) -> dict[str, Any] | None:
+    """Numeric context-window shape for the context meter (no message content).
+
+    Keys avoid the word "token" so activity redaction keeps the numbers."""
+    report = output.get("context_budget") if isinstance(output, dict) else None
+    if not isinstance(report, dict) or not report.get("context_window"):
+        return None
+    layers = report.get("layers") if isinstance(report.get("layers"), dict) else {}
+    return {"context": {
+        "window": int(report.get("context_window") or 0),
+        "used": int(report.get("estimated_input_tokens") or 0),
+        "limit": int(report.get("input_limit") or 0),
+        "output_reserved": int(report.get("output_reserved") or 0),
+        "margin": int(report.get("safety_margin") or 0),
+        "layers": {str(name): int(value or 0) for name, value in layers.items()},
+        "compacted": bool(report.get("compacted")),
+        "removed_messages": int(report.get("removed_messages") or 0),
+    }}
+
+
 def _observability_snapshot(period: str) -> dict[str, Any]:
+    from agent.telemetry.turn_audit import summarize_turns
+
     days = _observability_days(period)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "vellum-native",
         "generated_at": _stream_now(),
         "period": period,
         "freshness": {"state": "live", "updated_at": _stream_now()},
         "usage": _api_ledger.observability_summary(days=days),
         "runs": _observability.summary(days=days),
-        "recent_runs": _observability.recent_runs(limit=12),
+        "recent_runs": _observability.recent_runs(limit=40),
+        "turns": summarize_turns(REPO_ROOT / "data" / "memory" / "audit_log.jsonl", days=days),
+        "context": _observability.context_summary(days=days),
     }
 
 
@@ -4205,6 +4230,19 @@ async def profile_activity(
 @router.get("/observability/runs")
 async def observability_runs(limit: int = Query(default=20, ge=1, le=100)) -> dict[str, Any]:
     return {"runs": await asyncio.to_thread(_observability.recent_runs, limit=limit)}
+
+
+@router.get("/observability/runs/{response_id}/trace", response_model=RunTrace)
+async def observability_run_trace(response_id: str) -> RunTrace:
+    trace = await asyncio.to_thread(_observability.run_trace, response_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="That run is not recorded.")
+    return RunTrace.model_validate(trace)
+
+
+@router.get("/observability/context", response_model=ThreadContext)
+async def observability_thread_context(thread_id: str = Query(min_length=1, max_length=128)) -> ThreadContext:
+    return ThreadContext.model_validate(await asyncio.to_thread(_observability.thread_context, thread_id))
 
 
 @router.post("/observability/refresh")
@@ -5188,13 +5226,14 @@ async def _stream_agent_turn_scoped(
                         activity_type='context_ready' if context_done else 'context_preparing',
                         label='Conversation context ready' if context_done else 'Preparing conversation context',
                         item_id='context-' + str(event.get('run_id') or 'primary'), name='conversation_context',
-                        status='completed' if context_done else 'in_progress')
+                        status='completed' if context_done else 'in_progress',
+                        metadata=_context_meter(event.get('data', {}).get('output')) if context_done else None)
                 if kind == "on_custom_event" and event.get("name") == "vellum_context_compacted":
                     yield _agent_activity_event(
                         response_id=response_id, thread_id=active_thread_id,
                         activity_type="context_compacted", label="Keeping earlier conversation context",
                         name="conversation_context", status="completed",
-                        metadata=event.get("data") or {},
+                        metadata={**(event.get("data") or {}), **(_context_meter({"context_budget": event.get("data")}) or {})},
                     )
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):

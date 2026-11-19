@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
 const pluginWorkspace = readFileSync(resolve(here, "../../design/Velllum/uploads/components/plugin-workspace.jsx"), "utf8");
 const memoryPage = readFileSync(resolve(here, "../../design/Velllum/uploads/components/memory-page.jsx"), "utf8");
+const analyticsPage = readFileSync(resolve(here, "../../design/Velllum/uploads/components/analytics-page.jsx"), "utf8");
 const composerEditor = readFileSync(resolve(here, "../../design/Velllum/uploads/components/composer-editor.js"), "utf8");
 const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
@@ -248,12 +249,14 @@ describe("Vellum default redesigned frontend", () => {
 
   test("routes observability navigation and controls through App Actions", () => {
     expect(html).toContain("dispatchObservabilityAction('observability.open', {})");
-    expect(html).toContain("dispatchControl('observability.stream.set', {enabled:true})");
-    expect(html).toContain("dispatchControl('observability.stream.set', {enabled:paused})");
-    expect(html).toContain("dispatchControl('observability.refresh', {period})");
+    expect(analyticsPage).toContain("dispatchControl('observability.stream.set', {enabled:true})");
+    expect(analyticsPage).toContain("dispatchControl('observability.stream.set', {enabled:paused})");
+    expect(analyticsPage).toContain("dispatchControl('observability.refresh', {period})");
     expect(html).toContain("ObservabilityActions.applyReceipt(current, receipt)");
     expect(html).toContain("navigation.view === 'ledger'");
-    expect(html).not.toContain("onClick={() => setPaused");
+    expect(analyticsPage).not.toContain("onClick={() => setPaused");
+    expect(html).toContain("{view === 'ledger' && <window.VellumUI.AnalyticsPage control={observabilityControl} onAction={dispatchObservabilityAction}/>}");
+    expect(html).not.toContain("CB_DATA");
   });
 
   test("keeps the main interface free of legacy coding launch controls", () => {

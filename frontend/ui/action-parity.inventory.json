@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 967,
-      "sha256": "8deafab53d6415bee9b9b7384b388f5888ad204b35ce7800b9910aa18fde2768"
+      "count": 964,
+      "sha256": "a707d9ef5c6ff18eeef64de1a33728516557f9c8871ef67443a5630254ee57a7"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -332,6 +332,14 @@
     "design/Velllum/uploads/components/memory-page.jsx": {
       "count": 58,
       "sha256": "0aa3082b18a2bbf0247dcdcafd038971826e800ff6d4a8a3cac7695836a295eb"
+    },
+    "design/Velllum/uploads/components/analytics-components.jsx": {
+      "count": 16,
+      "sha256": "e4ef81a6febde05b425012ed2f5100b70c82452de6f0316847bf90d5e2199168"
+    },
+    "design/Velllum/uploads/components/analytics-page.jsx": {
+      "count": 16,
+      "sha256": "1b235a624061214ac3c20d2d676a775d5b73671b45d0a6f9511e77af69113eef"
     }
   },
   "covered": [
@@ -862,7 +870,7 @@
       "name": "live, pause, reconnect",
       "actionId": "observability.stream.set",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "path": "design/Velllum/uploads/components/analytics-page.jsx",
         "text": "dispatchControl('observability.stream.set'"
       }
     },
@@ -871,7 +879,7 @@
       "name": "refresh period",
       "actionId": "observability.refresh",
       "probe": {
-        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "path": "design/Velllum/uploads/components/analytics-page.jsx",
         "text": "dispatchControl('observability.refresh'"
       }
     },
@@ -2722,6 +2730,10 @@
     {
       "scope": "First-run onboarding steps, tabs, model filters and search, provider choice, connector picks, privacy and learning choices before finishing, memory import paste and review, and the setup gate hand-off",
       "reason": "Presentation and draft state inside the new-user setup wizard. Saving a provider key dispatches provider.credential.configure, chosen connectors dispatch plugin.state.set, kept imported memories dispatch memory.import.apply, and finishing applies the model and learning choices through settings.default_model.set and the memory settings action (/api/setup/complete). The user's own click in the wizard is the confirmation for those actions."
+    },
+    {
+      "scope": "Analytics page tabs, period and metric toggles, run list filter and selection, trace span expand/collapse and detail, chart hover, the composer context meter and /context popover, Memory growth ledger expansion",
+      "reason": "Read-only presentation of local observability, turn-audit and memory records. Live streaming and refresh use observability.stream.set and observability.refresh; opening Analytics uses observability.open; /compact keeps its existing command path."
     }
   ],
   "deferred": [

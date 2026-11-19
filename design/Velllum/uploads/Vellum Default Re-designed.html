@@ -81,12 +81,16 @@
 <script src="components/spotify-playback.js"></script>
 <link rel="stylesheet" href="components/music-page.css?v=20261107-mp3"/>
 <script type="text/babel" data-presets="react" src="components/music-page.jsx?v=20261107-mp3"></script>
-<link rel="stylesheet" href="components/memory-page.css?v=20261117-mem1"/>
-<script type="text/babel" data-presets="react" src="components/memory-page.jsx?v=20261117-mem1"></script>
+<link rel="stylesheet" href="components/analytics.css?v=20261119-av1"/>
+<script type="text/babel" data-presets="react" src="components/analytics-components.jsx?v=20261119-av1"></script>
+<script type="text/babel" data-presets="react" src="components/analytics-page.jsx?v=20261119-av1"></script>
+<link rel="stylesheet" href="components/memory-page.css?v=20261119-av1"/>
+<script type="text/babel" data-presets="react" src="components/memory-page.jsx?v=20261119-av1"></script>
 <script src="api/automations.js"></script>
 <link rel="stylesheet" href="components/automation-notifications.css"/>
 <script type="text/babel" data-presets="react" src="components/automation-notifications.jsx"></script>
 <script src="api/settings.js?v=20261117-mem1"></script>
+<script src="api/observability.js?v=20261119-av1"></script>
 <script src="api/knowledge.js?v=20260710-wiki"></script>
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
@@ -277,75 +281,7 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .gp-item b{font-size:12.5px;color:var(--txt2);font-weight:500;display:block;margin-bottom:1px}
 .gp-item p{font-size:11.5px;color:var(--dim);line-height:1.45}
 .btn.primary:disabled{background:var(--line2);border-color:var(--line2);color:var(--dim);cursor:not-allowed;filter:none}
-/* ledger */
-.led-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-.cb-flame{color:#e0794a!important}
-.cb-badge{font-size:12px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ember);border:1px solid color-mix(in srgb,var(--ember) 38%,var(--line2));border-radius:20px;padding:1px 7px;margin-left:4px}
-.cb-export{display:flex;gap:6px;flex-shrink:0}
-.cb-exp-btn{border:1px solid var(--line2);background:var(--input);color:var(--txt2);font:inherit;font-size:11.5px;padding:5px 11px;border-radius:7px;cursor:pointer}
-.cb-exp-btn:hover{background:var(--hover)}
-.cb-periods{display:flex;gap:6px;margin:14px 0 16px;flex-wrap:wrap}
-.cb-period{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--input);color:var(--dim);font:inherit;font-size:12.5px;padding:7px 13px;border-radius:9px;cursor:pointer;transition:background .14s,color .14s,border-color .14s}
-.cb-period:hover{color:var(--txt2)}
-.cb-period.on{background:color-mix(in srgb,var(--ember) 14%,transparent);color:var(--txt2);border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
-.cb-pnum{display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;background:var(--line2);color:var(--dim);font-size:9.5px}
-.cb-period.on .cb-pnum{background:var(--ember);color:var(--onember)}
-.cb-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
-.cb-stat{border:1px solid var(--line2);border-radius:12px;background:var(--glass);padding:13px 14px}
-.cb-stat-v{font-size:21px;color:var(--txt2);letter-spacing:-.02em;font-weight:500}
-.cb-stat-v.cb-cost{color:#e0794a}
-.cb-stat-k{font-size:12px;color:var(--dim);text-transform:none;letter-spacing:0;margin-top:4px}
-.cb-panel{border:1px solid var(--line2);border-radius:13px;background:var(--glass);padding:15px 16px;margin-bottom:12px}
-.cb-panel-h{font-size:12.5px;color:var(--txt2);font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.cb-panel-sub{font-size:10.5px;color:var(--dim2);font-weight:400}
-.cb-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.cb-chart{display:flex;align-items:flex-end;gap:8px;height:120px;padding-top:6px}
-.cb-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
-.cb-bar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
-.cb-bar{width:60%;max-width:34px;min-height:4px;border-radius:5px 5px 0 0;background:linear-gradient(0deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%);background-size:100% 96px;background-position:center bottom;background-repeat:no-repeat}
-.cb-bar-lbl{font-size:10.5px;color:var(--dim)}
-.cb-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12.5px}
-.cb-row.sm{padding:5px 0;font-size:12px}
-.cb-row-nm{width:104px;flex-shrink:0;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cb-mcp-nm{display:flex;align-items:center;gap:6px}
-.cb-mcp-nm .conn-logo-img{border-radius:3px}
-.cb-row-bar{position:relative;flex:1;height:8px;border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%)}
-.cb-row-mask{position:absolute;top:0;right:0;bottom:0;background:var(--input)}
 
-.cb-row-v{width:84px;flex-shrink:0;text-align:right;color:var(--txt2);display:flex;flex-direction:column;line-height:1.25}
-.cb-row-v small{font-size:10px;color:var(--dim2)}
-.cb-act-head{display:grid;grid-template-columns:1fr 1fr 64px 52px;gap:10px;font-size:12px;color:var(--dim2);text-transform:none;letter-spacing:0;padding-bottom:8px;border-bottom:1px solid var(--line)}
-.cb-act-row{display:grid;grid-template-columns:1fr 1fr 64px 52px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
-.cb-act-row:last-child{border-bottom:none}
-.cb-act-nm{color:var(--txt2)}
-.cb-act-bar{position:relative;height:8px;border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%)}
-.cb-act-mask{position:absolute;top:0;right:0;bottom:0;background:var(--input)}
-.cb-act-cost{text-align:right;color:var(--txt2)}
-.cb-act-os{text-align:right;color:#6fae84;font-variant-numeric:tabular-nums}
-.cb-act-os.low{color:#d98a8a}
-.cb-empty{font-size:12px;color:var(--dim2);padding:8px 0}
-
-/* observability — CodexBar glass + Codeburn telemetry, driven by Vellum data */
-.obs-page{--obs-cool:#5ca8ff;--obs-cyan:#5fd0cb;--obs-warm:#e6bd55;--obs-hot:#eb805d;--obs-danger:#e26268;--obs-good:#64c88a;flex:1;min-width:0;overflow:auto;padding:26px 28px 34px;background:color-mix(in srgb,var(--bg) 88%,transparent)}
-[data-theme="light"] .obs-page{--obs-cool:#2779c7;--obs-cyan:#248f8a;--obs-warm:#a87705;--obs-hot:#c55634;--obs-danger:#c13f4b;--obs-good:#24874e}
-.obs-shell{width:min(1280px,100%);margin:0 auto;display:grid;gap:12px}
-.obs-head{display:flex;align-items:flex-start;gap:14px;padding:2px 2px 4px}.obs-head-copy{flex:1;min-width:0}.obs-title{font:500 27px/1.08 var(--font-d);letter-spacing:-.025em;color:var(--txt2)}.obs-sub{margin-top:5px;color:var(--dim);font-size:12px}.obs-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
-.obs-control{height:34px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:9px;padding:0 11px;background:color-mix(in srgb,var(--glass) 90%,transparent);color:var(--txt);font:500 12px var(--font-m);cursor:pointer;transition:background .16s,border-color .16s,transform .16s}.obs-control:hover{background:var(--hover);border-color:color-mix(in srgb,var(--ember) 42%,var(--line2));transform:none}.obs-control:focus-visible{outline:2px solid color-mix(in srgb,var(--ember) 65%,transparent);outline-offset:2px}.obs-control.on{color:var(--obs-good);border-color:color-mix(in srgb,var(--obs-good) 42%,var(--line2))}.obs-control.pause.on{color:var(--obs-warm);border-color:color-mix(in srgb,var(--obs-warm) 42%,var(--line2))}.obs-control.refreshing svg{animation:obsSpin .9s linear infinite}
-.obs-live-dot,.obs-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor;flex-shrink:0}.obs-live-dot{animation:obsPulse 1.7s ease-in-out infinite}
-.obs-source{display:flex;align-items:center;gap:7px;font:500 12px var(--font-m);color:var(--dim);padding:0 3px}.obs-source strong{color:var(--txt);font-weight:500}.obs-updated{font:12px var(--font-m);color:var(--dim2)}
-.obs-glass{border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 92%,transparent);backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%);box-shadow:0 18px 50px color-mix(in srgb,var(--background-surface-shadow) 68%,transparent),inset 0 1px color-mix(in srgb,var(--txt2) 7%,transparent)}
-.obs-overview{display:grid;grid-template-columns:minmax(0,1.55fr) repeat(3,minmax(170px,.72fr));gap:12px}.obs-active{min-height:144px;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}.obs-active::after{content:"";position:absolute;width:260px;height:180px;right:-80px;bottom:-110px;border-radius:50%;background:var(--obs-usage,var(--obs-cool));filter:blur(70px);opacity:.09;pointer-events:none}.obs-kicker{display:flex;align-items:center;gap:7px;font:600 12px var(--font-m);letter-spacing:0;text-transform:none;color:var(--obs-good)}.obs-active-title{font:500 22px/1.2 var(--font-d);color:var(--txt2);margin-top:12px}.obs-active-sub{font:12px/1.5 var(--font-m);color:var(--dim);margin-top:4px}.obs-run-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}.obs-meta-k{font:12px var(--font-m);color:var(--dim2);text-transform:none;letter-spacing:0}.obs-meta-v{font:12px var(--font-m);color:var(--txt);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.obs-stat{border-radius:14px;padding:15px 16px;min-height:144px;display:flex;flex-direction:column}.obs-stat-head{display:flex;align-items:center;gap:8px;color:var(--txt2);font:500 12px var(--font-d)}.obs-stat-head svg{color:var(--dim)}.obs-stat-value{font:500 25px/1.1 var(--font-d);color:var(--txt2);margin-top:17px}.obs-stat-value.usage{color:var(--obs-usage,var(--obs-cool))}.obs-stat-note{font:12px/1.45 var(--font-m);color:var(--dim);margin-top:6px}.obs-mini-bar{display:flex;gap:2px;height:8px;margin-top:auto;padding-top:13px}.obs-mini-bar i{flex:1;min-width:2px;border-radius:2px;background:color-mix(in srgb,var(--obs-usage,var(--obs-cool)) var(--seg-a,42%),var(--line2));transition:background .25s ease}.obs-health-good{color:var(--obs-good)!important}.obs-health-bad{color:var(--obs-danger)!important}
-.obs-main-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(260px,.62fr);gap:12px;align-items:start}.obs-observatory{border-radius:15px;overflow:hidden;position:relative}.obs-panel-head{height:48px;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:1px solid var(--line);color:var(--txt2);font:500 13px var(--font-d)}.obs-panel-head small{font:12px var(--font-m);color:var(--dim);font-weight:400}.obs-panel-head .spacer{flex:1}.obs-pressure{display:flex;align-items:center;gap:7px;font:12px var(--font-m);color:var(--dim)}.obs-pressure b{font-weight:500;color:var(--obs-usage,var(--obs-cool))}
-.obs-path{position:relative;display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));gap:0;padding:27px 14px 23px;overflow-x:auto;min-height:252px}.obs-path::before{content:"";position:absolute;left:8%;right:8%;top:55px;height:1px;background:var(--line2)}.obs-step{position:relative;min-width:92px;padding:0 5px;text-align:center}.obs-node{position:relative;z-index:2;width:43px;height:43px;margin:0 auto 13px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2);background:color-mix(in srgb,var(--modal) 90%,transparent);color:var(--dim);box-shadow:0 0 0 5px color-mix(in srgb,var(--bg) 80%,transparent);transition:color .2s,border-color .2s,box-shadow .2s}.obs-step.done .obs-node{color:var(--obs-good);border-color:color-mix(in srgb,var(--obs-good) 55%,var(--line2));box-shadow:0 0 0 5px color-mix(in srgb,var(--bg) 80%,transparent),0 0 20px color-mix(in srgb,var(--obs-good) 25%,transparent)}.obs-step.live .obs-node{color:var(--obs-usage,var(--obs-cool));border-color:var(--obs-usage,var(--obs-cool));box-shadow:0 0 0 5px color-mix(in srgb,var(--bg) 80%,transparent),0 0 24px color-mix(in srgb,var(--obs-usage,var(--obs-cool)) 38%,transparent);animation:obsNode 1.8s ease-in-out infinite}.obs-step-label{font:500 12px/1.35 var(--font-d);color:var(--txt)}.obs-step-state{font:12px/1.4 var(--font-m);color:var(--dim2);margin-top:5px}.obs-step.done .obs-step-state{color:var(--obs-good)}.obs-step.live .obs-step-state{color:var(--obs-usage,var(--obs-cool))}.obs-step-metric{margin-top:12px;padding-top:9px;border-top:1px solid var(--line);font:12px/1.45 var(--font-m);color:var(--dim)}
-.obs-run-footer{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(90px,.45fr));gap:1px;border-top:1px solid var(--line);background:var(--line)}.obs-run-foot-cell{min-height:61px;padding:12px 14px;background:color-mix(in srgb,var(--glass) 96%,var(--bg));display:flex;flex-direction:column;justify-content:center}.obs-run-foot-cell:first-child{color:var(--obs-usage,var(--obs-cool));font:500 12px var(--font-d)}.obs-run-foot-k{font:12px var(--font-m);color:var(--dim2);text-transform:none;letter-spacing:0}.obs-run-foot-v{font:12px var(--font-m);color:var(--txt);margin-top:4px}
-.obs-side{display:grid;gap:12px}.obs-side-card{border-radius:14px;overflow:hidden}.obs-side-body{padding:13px 15px}.obs-model-row{display:grid;grid-template-columns:minmax(0,1fr) 82px auto;align-items:center;gap:8px;padding:7px 0}.obs-model-name{font:12px var(--font-m);color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.obs-model-bar{height:6px;border-radius:4px;background:var(--input);overflow:hidden}.obs-model-bar i{display:block;height:100%;border-radius:inherit;background:var(--row-color,var(--obs-cool));transition:width .35s ease}.obs-model-value{font:12px var(--font-m);color:var(--dim);min-width:42px;text-align:right}.obs-empty{padding:24px 15px;color:var(--dim);font:12px/1.55 var(--font-m);text-align:center}.obs-recent{display:grid}.obs-recent-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:10px 15px;border-top:1px solid var(--line)}.obs-recent-row:first-child{border-top:0}.obs-recent-main{min-width:0}.obs-recent-name{font:12px var(--font-m);color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.obs-recent-meta{font:12px var(--font-m);color:var(--dim2);margin-top:4px}.obs-recent-status{display:flex;align-items:center;gap:5px;font:12px var(--font-m);color:var(--dim)}.obs-recent-status.completed{color:var(--obs-good)}.obs-recent-status.failed{color:var(--obs-danger)}.obs-recent-status.in_progress{color:var(--obs-warm)}
-.obs-activity{border-radius:14px;overflow:hidden}.obs-ribbon{display:flex;align-items:center;gap:3px;min-height:54px;padding:13px 15px;border-bottom:1px solid var(--line);overflow:hidden}.obs-ribbon i{height:9px;min-width:8px;flex:var(--event-weight,1);max-width:74px;border-radius:2px;background:var(--event-color,var(--obs-cool));opacity:.82}.obs-ribbon-empty{font:12px var(--font-m);color:var(--dim)}.obs-event-table{max-height:235px;overflow:auto}.obs-event-row{display:grid;grid-template-columns:68px 112px minmax(0,1fr) 74px;gap:12px;align-items:center;padding:9px 15px;border-top:1px solid var(--line);font:12px var(--font-m)}.obs-event-row:first-child{border-top:0}.obs-event-time{color:var(--dim2)}.obs-event-type{color:var(--event-color,var(--obs-cool));text-transform:none;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.obs-event-label{color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.obs-event-status{text-align:right;color:var(--dim)}
-.obs-error{border:1px solid color-mix(in srgb,var(--obs-danger) 35%,var(--line2));background:color-mix(in srgb,var(--obs-danger) 7%,var(--glass));border-radius:11px;padding:10px 12px;color:var(--obs-danger);font:12px/1.45 var(--font-m)}
-@keyframes obsPulse{50%{opacity:.35;transform:scale(.82)}}@keyframes obsNode{50%{transform:scale(1.05)}}@keyframes obsSpin{to{transform:rotate(360deg)}}
-@media(max-width:1120px){.obs-overview{grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(170px,.7fr))}.obs-stat:last-child{display:none}.obs-main-grid{grid-template-columns:1fr}.obs-side{grid-template-columns:1fr 1fr}.obs-path{grid-template-columns:repeat(7,minmax(112px,1fr))}}
-@media(max-width:760px){.obs-page{padding:18px 14px 28px}.obs-head{flex-direction:column}.obs-head-actions{justify-content:flex-start}.obs-overview{grid-template-columns:1fr 1fr}.obs-active{grid-column:1/-1}.obs-run-meta{grid-template-columns:1fr 1fr}.obs-side{grid-template-columns:1fr}.obs-run-footer{grid-template-columns:1fr 1fr}.obs-run-foot-cell:first-child{grid-column:1/-1}.obs-event-row{grid-template-columns:58px minmax(0,1fr) 68px}.obs-event-type{display:none}}
-@media(prefers-reduced-motion:reduce){.obs-live-dot,.obs-step.live .obs-node,.obs-control.refreshing svg{animation:none!important}.obs-control{transition:none}}
 .sb-head .wordmark{display:inline-flex;align-items:center;border:0;background:transparent;padding:0;color:var(--txt2);cursor:pointer}
 .sb-head .wordmark:focus-visible{outline:2px solid var(--ember);outline-offset:4px;border-radius:4px}
 .rail{gap:8px}.rail-scroll{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}.rail-btn,.rail-wrap{flex-shrink:0}.rail .avatar{flex-shrink:0}
@@ -387,8 +323,6 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .km-conf-dot{width:8px;height:8px;border-radius:50%}
 .km-card-vis{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .km-vis-chip{font-size:12px;color:var(--txt);background:var(--input);border:1px solid var(--line2);border-radius:20px;padding:2px 9px}
-.cb-legend{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--dim2);font-weight:400;text-transform:none;letter-spacing:0}
-.cb-leg-grad{width:80px;height:8px;border-radius:4px;display:inline-block;background:linear-gradient(90deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%)}
 .set-modal:focus,.set-modal:focus-visible{outline:none}
 .led-card{border:1px solid var(--line);border-radius:13px;padding:16px}
 .led-k{font-size:12px;color:var(--dim);text-transform:none;letter-spacing:0;margin-bottom:7px}
@@ -3482,6 +3416,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><window.VellumUI.AppIcon name="Music"/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
+      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Analytics" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
         <div className="chat-row" onClick={onNewProject}>
@@ -3701,6 +3636,7 @@ const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpen
 
 const TRENDING = ['Kennedy Center live stream', 'SpaceX IPO', 'Christian Pulisic', 'NBA Finals', 'AI chip export rules', 'Aurora forecast tonight'];
 const SLASH_ITEMS = [
+  { k: 'context', aliases:['tokens','window'], label: 'Context window', description: 'See what fills this chat’s context', ic: IcLedger, run: 'context' },
   { k: 'compact', label: 'Compact context', description: 'Shorten working context and keep saved history', ic: IcSparkle, run: 'compact' },
   { k: 'files', aliases:['attach','file','upload'], label: 'Add photos & files', description: 'Attach local context to this turn', ic: IcUpload, run: 'file' },
   { k: 'web', aliases:['search','internet'], label: 'Web search', description: 'Search current public sources', ic: IcGlobe, run: 'web' },
@@ -3858,8 +3794,9 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange}) => {
+const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange, onOpenContext}) => {
   const [attach, setAttach] = useState([]);
+  const [contextSignal, setContextSignal] = useState(0);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
   const [epubImportBusy, setEpubImportBusy] = useState('');
@@ -4014,6 +3951,7 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
     if(!item)return;
     if(item.kind==='command'){
       if(item.run==='compact'){taRef.current?.replaceActiveToken('/compact');return;}
+      if(item.run==='context'){stripSlash();if(onOpenContext)onOpenContext();else setContextSignal(n=>n+1);return;}
       if(item.run==='web'){enableSearch();return;}
       stripSlash();
       if(item.run==='file')fileRef.current?.click();
@@ -4129,6 +4067,8 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
             onClose={() => setPlusOpen(false)}/>}
           <div className="cspace"/>
           {dictationActive && dictationUi}
+          {/* A new chat has no header yet: /context shows its (empty) card here instead. */}
+          {!onOpenContext && contextSignal > 0 && window.VellumUI.ContextMeter && <window.VellumUI.ContextMeter threadId="" openSignal={contextSignal} model={model} hideButton/>}
           {searchMode
             ? <button className={'model-pill' + (scopeOpen ? ' select-open' : '')} onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
             : <button ref={modelTriggerRef} className={'model-pill' + (modelOpen ? ' select-open' : '')} aria-haspopup="dialog" aria-expanded={modelOpen} data-command="model.open" data-tip="Model and effort" onClick={() => setModelOpen(true)}><ModelLogo model={models.find(item=>item.id===model) || {id:model}}/><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
@@ -5633,340 +5573,6 @@ const ProjectPage = ({project, chats, onNewChat, model, setModel, models = MODEL
   );
 };
 
-/* Ledger */
-const CB_PERIODS = [['today','Today'],['7d','7 Days'],['30d','30 Days'],['month','Month'],['all','All Time']];
-const CB_DATA = {
-  today: { cost:0.62, calls:84, sessions:3, cache:0.86, days:[['',0.62]],
-    models:[['Opus 4.6',0.41,9200],['Sonnet 4.6',0.16,18400],['Haiku 4.2',0.05,12100]],
-    acts:[['Coding',0.28,0.90],['Debugging',0.16,0.62],['Feature Dev',0.11,0.74],['Exploration',0.07,null]],
-    projects:[['vellum',0.44,2],['vellum-workspace',0.18,1]],
-    tools:[['Edit',61],['Read',128],['Bash',44],['Grep',37]],
-    mcp:[['github',12],['filesystem',8]] },
-  '7d': { cost:3.40, calls:512, sessions:19, cache:0.83, days:[['Mon',0.31],['Tue',0.58],['Wed',0.44],['Thu',0.72],['Fri',0.39],['Sat',0.34],['Sun',0.62]],
-    models:[['Opus 4.6',2.10,58400],['Sonnet 4.6',0.92,121000],['Haiku 4.2',0.38,74000]],
-    acts:[['Coding',1.42,0.88],['Debugging',0.71,0.59],['Feature Dev',0.58,0.71],['Refactoring',0.31,0.81],['Exploration',0.22,null],['Testing',0.16,0.66]],
-    projects:[['vellum',2.31,11],['vellum-workspace',0.74,5],['scripts',0.35,3]],
-    tools:[['Edit',342],['Read',810],['Bash',265],['Grep',198],['Write',88]],
-    mcp:[['github',71],['filesystem',54],['postgres',9]] },
-  '30d': { cost:14.82, calls:2240, sessions:78, cache:0.81, days:[['W1',3.1],['W2',4.4],['W3',3.9],['W4',3.42]],
-    models:[['Opus 4.6',9.1,248000],['Sonnet 4.6',4.0,520000],['Haiku 4.2',1.72,310000]],
-    acts:[['Coding',6.2,0.86],['Debugging',3.1,0.57],['Feature Dev',2.4,0.69],['Refactoring',1.3,0.79],['Testing',0.9,0.64],['Git Ops',0.5,0.93],['Exploration',0.42,null]],
-    projects:[['vellum',9.8,44],['vellum-workspace',3.2,22],['scripts',1.1,8],['sandbox',0.72,4]],
-    tools:[['Edit',1420],['Read',3380],['Bash',1110],['Grep',840],['Write',360]],
-    mcp:[['github',290],['filesystem',220],['postgres',41],['brave',12]] },
-  month: { cost:12.10, calls:1880, sessions:64, cache:0.82, days:[['W1',3.1],['W2',4.4],['W3',3.9],['W4',0.7]],
-    models:[['Opus 4.6',7.4,198000],['Sonnet 4.6',3.4,430000],['Haiku 4.2',1.3,260000]],
-    acts:[['Coding',5.1,0.87],['Debugging',2.5,0.58],['Feature Dev',2.0,0.70],['Refactoring',1.1,0.80],['Testing',0.8,0.65],['Exploration',0.6,null]],
-    projects:[['vellum',8.0,36],['vellum-workspace',2.7,18],['scripts',0.9,6]],
-    tools:[['Edit',1180],['Read',2810],['Bash',920],['Grep',690],['Write',300]],
-    mcp:[['github',240],['filesystem',180],['postgres',33]] },
-  all: { cost:58.40, calls:9120, sessions:312, cache:0.80, days:[['Jan',9.2],['Feb',11.1],['Mar',14.8],['Apr',12.1],['May',11.2]],
-    models:[['Opus 4.6',34.2,980000],['Sonnet 4.6',16.4,2100000],['Haiku 4.2',7.8,1240000]],
-    acts:[['Coding',24.1,0.85],['Debugging',12.4,0.56],['Feature Dev',9.8,0.68],['Refactoring',5.1,0.78],['Testing',3.6,0.63],['Git Ops',2.0,0.92],['Exploration',1.4,null]],
-    projects:[['vellum',38.2,176],['vellum-workspace',12.9,82],['scripts',4.4,32],['sandbox',2.9,22]],
-    tools:[['Edit',5600],['Read',13400],['Bash',4420],['Grep',3310],['Write',1450]],
-    mcp:[['github',1140],['filesystem',880],['postgres',162],['brave',54]] },
-};
-const cbMoney = v => '$' + v.toFixed(2);
-const cbTok = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : ''+n;
-// Heat scale by intensity: far/low = blue, middle = yellow, close = orange, too close = red.
-const CB_HEAT = [[0,[74,143,217]],[0.34,[232,193,74]],[0.62,[224,121,74]],[0.85,[209,74,58]],[1,[183,42,42]]];
-function cbHeat(r){ r = Math.max(0, Math.min(1, r||0));
-  for(let i=1;i<CB_HEAT.length;i++){ if(r<=CB_HEAT[i][0]){ const a=CB_HEAT[i-1],b=CB_HEAT[i]; const t=(r-a[0])/((b[0]-a[0])||1);
-    const c=a[1].map((v,j)=>Math.round(v+(b[1][j]-v)*t)); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; } }
-  return 'rgb(183,42,42)';
-}
-const LedgerView = () => {
-  const [period, setPeriod] = useState('7d');
-  const d = CB_DATA[period];
-  const maxDay = Math.max(...d.days.map(x => x[1]), 0.01);
-  const maxModel = Math.max(...d.models.map(x => x[1]), 0.01);
-  const maxAct = Math.max(...d.acts.map(x => x[1]), 0.01);
-  const maxTool = Math.max(...d.tools.map(x => x[1]), 1);
-  const avgSess = d.cost / Math.max(d.sessions, 1);
-  return (
-    <div className="page">
-      <div className="page-inner" style={{maxWidth: 860}}>
-        <div className="page-head"><span className="page-head-ic cb-flame"><IcFlame size={18}/></span><div style={{flex:1}}><div className="page-title">Ledger</div><div className="page-sub">Token &amp; cost observability ? see where your AI coding spend goes. <span className="cb-badge">CodeBurn</span></div></div>
-          <div className="cb-export"><button className="cb-exp-btn">CSV</button><button className="cb-exp-btn">JSON</button></div></div>
-        <div className="cb-periods">{CB_PERIODS.map(([k,l],i) => (<button key={k} className={'cb-period'+(period===k?' on':'')} onClick={()=>setPeriod(k)}><span className="cb-pnum">{i+1}</span>{l}</button>))}</div>
-        <div className="cb-stats">
-          <div className="cb-stat"><div className="cb-stat-v cb-cost">{cbMoney(d.cost)}</div><div className="cb-stat-k">Total cost</div></div>
-          <div className="cb-stat"><div className="cb-stat-v">{d.calls.toLocaleString()}</div><div className="cb-stat-k">API calls</div></div>
-          <div className="cb-stat"><div className="cb-stat-v">{d.sessions}</div><div className="cb-stat-k">Sessions</div></div>
-          <div className="cb-stat"><div className="cb-stat-v">{Math.round(d.cache*100)}%</div><div className="cb-stat-k">Cache hit</div></div>
-          <div className="cb-stat"><div className="cb-stat-v">{cbMoney(avgSess)}</div><div className="cb-stat-k">Avg / session</div></div>
-        </div>
-        <div className="cb-panel">
-          <div className="cb-panel-h">Cost over time<span className="cb-legend">low<span className="cb-leg-grad"/>high</span></div>
-          <div className="cb-chart">{d.days.map(([lbl,v],i) => (<div key={i} className="cb-bar-col"><div className="cb-bar-wrap"><div className="cb-bar" style={{height: Math.max(4, v/maxDay*100)+'%'}} title={cbMoney(v)}/></div><div className="cb-bar-lbl">{lbl||'\u2014'}</div></div>))}</div>
-        </div>
-        <div className="cb-cols">
-          <div className="cb-panel">
-            <div className="cb-panel-h">By model</div>
-            {d.models.map(([nm,cost,tok],i) => (<div key={i} className="cb-row"><span className="cb-row-nm">{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-cost/maxModel*100)+'%'}}/></div><span className="cb-row-v">{cbMoney(cost)}<small>{cbTok(tok)}</small></span></div>))}
-          </div>
-          <div className="cb-panel">
-            <div className="cb-panel-h">By project</div>
-            {d.projects.map(([nm,cost,sess],i) => (<div key={i} className="cb-row"><span className="cb-row-nm">{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-cost/d.projects[0][1]*100)+'%'}}/></div><span className="cb-row-v">{cbMoney(cost)}<small>{sess} sess</small></span></div>))}
-          </div>
-        </div>
-        <div className="cb-panel">
-          <div className="cb-panel-h">By activity <span className="cb-panel-sub">1-shot = succeeded without retry</span></div>
-          <div className="cb-act-head"><span>Category</span><span>Cost</span><span>1-shot</span></div>
-          {d.acts.map(([nm,cost,os],i) => (<div key={i} className="cb-act-row"><span className="cb-act-nm">{nm}</span><div className="cb-act-bar"><div className="cb-act-mask" style={{width: (100-cost/maxAct*100)+'%'}}/></div><span className="cb-act-cost">{cbMoney(cost)}</span><span className={'cb-act-os'+(os!=null && os<0.6?' low':'')}>{os!=null ? Math.round(os*100)+'%' : '\u2014'}</span></div>))}
-        </div>
-        <div className="cb-cols">
-          <div className="cb-panel">
-            <div className="cb-panel-h">Core tools</div>
-            {d.tools.map(([nm,n],i) => (<div key={i} className="cb-row sm"><span className="cb-row-nm">{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-n/maxTool*100)+'%'}}/></div><span className="cb-row-v">{n.toLocaleString()}</span></div>))}
-          </div>
-          <div className="cb-panel">
-            <div className="cb-panel-h">MCP servers</div>
-            {d.mcp.length ? d.mcp.map(([nm,n],i) => (<div key={i} className="cb-row sm"><span className="cb-row-nm cb-mcp-nm"><ConnLogo c={{id:nm}} size={13}/>{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-n/d.mcp[0][1]*100)+'%'}}/></div><span className="cb-row-v">{n}</span></div>)) : <div className="cb-empty">No MCP usage in this window.</div>}
-          </div>
-        </div>
-        <div className="quiet-foot">Read locally from session data on disk. No wrapper, no proxy, no API keys. Pricing via LiteLLM.</div>
-      </div>
-    </div>
-  );
-};
-
-const OBS_PERIODS = [['today','Today'],['7d','7 days'],['30d','30 days'],['month','This month'],['all','All time']];
-const OBS_STEP_DEFS = [
-  {key:'user', label:'User message', types:['run_started'], Icon:IcChat},
-  {key:'thinking', label:'Planning', types:['thinking_started'], Icon:IcSparkle},
-  {key:'retrieval', label:'Retrieval', types:['memory_retrieved','source_discovered','source_reading'], Icon:IcSearch},
-  {key:'tool', label:'Tool calls', types:['tool_call_started','tool_call_delta','tool_call_completed'], Icon:IcTool},
-  {key:'agent', label:'Sub-agent', types:['sub_agent_started','sub_agent_completed'], Icon:IcBot},
-  {key:'model', label:'Model synthesis', types:['final_answer_started','final_answer_delta'], Icon:IcPenLine},
-  {key:'answer', label:'Streaming answer', types:['final_answer_completed','run_completed'], Icon:IcCheck},
-];
-const obsTokens = value => {
-  const n = Number(value || 0);
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k';
-  return n.toLocaleString();
-};
-const obsMoney = value => '$' + Number(value || 0).toFixed(Number(value || 0) < .1 ? 4 : 2);
-const obsShortId = value => String(value || '').replace(/^resp[_-]?/,'').slice(0, 9) || 'waiting';
-const obsClock = value => {
-  if (!value) return '\u2014';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '\u2014' : date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-};
-const obsDuration = run => {
-  if (!run || !run.started_at) return '\u2014';
-  const start = new Date(run.started_at).getTime();
-  const end = run.completed_at ? new Date(run.completed_at).getTime() : Date.now();
-  const seconds = Math.max(0, Math.round((end - start) / 1000));
-  if (seconds < 60) return seconds + 's';
-  return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
-};
-const obsContextTokens = raw => {
-  if (typeof raw === 'number') return raw;
-  const text = String(raw || '').trim().toLowerCase().replace(/,/g,'');
-  const match = text.match(/([\d.]+)\s*([km]?)/);
-  if (!match) return 0;
-  const scale = match[2] === 'm' ? 1e6 : match[2] === 'k' ? 1e3 : 1;
-  return Number(match[1]) * scale;
-};
-const obsTone = ratio => {
-  const r = Math.max(0, Math.min(1, Number(ratio || 0)));
-  if (r < .24) return 'var(--obs-cool)';
-  if (r < .48) return 'var(--obs-cyan)';
-  if (r < .72) return 'var(--obs-warm)';
-  if (r < .9) return 'var(--obs-hot)';
-  return 'var(--obs-danger)';
-};
-const obsEventTone = type => {
-  const value = String(type || '');
-  if (value.includes('failed')) return 'var(--obs-danger)';
-  if (value.includes('tool')) return 'var(--obs-warm)';
-  if (value.includes('source') || value.includes('retriev')) return 'var(--obs-cyan)';
-  if (value.includes('agent')) return 'var(--obs-cool)';
-  if (value.includes('answer') || value.includes('model')) return 'var(--obs-usage,var(--obs-hot))';
-  if (value.includes('completed')) return 'var(--obs-good)';
-  return 'var(--obs-cool)';
-};
-
-const ObservabilityView = ({control, onAction}) => {
-  const [period, setPeriod] = useState('7d');
-  const [snapshot, setSnapshot] = useState(null);
-  const [health, setHealth] = useState(null);
-  const [models, setModels] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [connection, setConnection] = useState('connecting');
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const lastEventId = useRef(0);
-  const paused = !control || control.streaming === false;
-
-  const load = async (quiet=false) => {
-    if (!quiet) setRefreshing(true);
-    try {
-      const results = await Promise.allSettled([
-        API.client.request('/api/observability/summary?period=' + encodeURIComponent(period)),
-        API.client.request('/api/health'),
-        API.client.request('/api/models'),
-      ]);
-      if (results[0].status !== 'fulfilled') throw results[0].reason;
-      setSnapshot(results[0].value);
-      if (results[1].status === 'fulfilled') setHealth(results[1].value);
-      if (results[2].status === 'fulfilled') setModels(results[2].value.models || []);
-      setError('');
-    } catch (err) {
-      setError(err && err.message ? err.message : 'Analytics is unreachable.');
-    } finally {
-      if (!quiet) setRefreshing(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [period]);
-  useEffect(() => {
-    if (control && control.snapshot && control.snapshot.period === period) {
-      setSnapshot(control.snapshot);
-      setError('');
-    }
-  }, [control && control.snapshot, period]);
-  useEffect(() => {
-    if (paused) return;
-    const timer = setInterval(() => load(true), 10000);
-    return () => clearInterval(timer);
-  }, [period, paused]);
-  useEffect(() => {
-    if (paused) { setConnection('paused'); return; }
-    setConnection('connecting');
-    const url = API.client.backendBase() + '/api/observability/stream?last_event_id=' + lastEventId.current;
-    const source = new EventSource(url);
-    const onLive = event => {
-      try {
-        const item = JSON.parse(event.data);
-        lastEventId.current = Math.max(lastEventId.current, Number(item.id || 0));
-        setEvents(previous => [item, ...previous.filter(existing => existing.id !== item.id)].slice(0, 250));
-        setConnection('live');
-        if (item.type === 'run_completed' || item.type === 'run_failed') load(true);
-      } catch (_) {}
-    };
-    source.onopen = () => setConnection('live');
-    source.onerror = () => setConnection('reconnecting');
-    source.addEventListener('observability.event', onLive);
-    return () => { source.removeEventListener('observability.event', onLive); source.close(); };
-  }, [paused, control && control.reconnectRevision, period]);
-
-  const dispatchControl = async (actionId, arguments_ = {}) => {
-    if (typeof onAction !== 'function') return null;
-    const receipt = await onAction(actionId, arguments_);
-    if (!receipt || receipt.status !== 'applied') {
-      setError(receipt && receipt.message ? receipt.message : 'Analytics is unreachable.');
-    }
-    return receipt;
-  };
-  const refresh = async () => {
-    setRefreshing(true);
-    try { await dispatchControl('observability.refresh', {period}); }
-    finally { setRefreshing(false); }
-  };
-
-  const data = snapshot || {};
-  const usage = data.usage || {models:[], daily:[], recent:[]};
-  const runs = data.runs || {total:0, completed:0, failed:0, active:0, success_rate:0};
-  const recentRuns = data.recent_runs || [];
-  const run = runs.active_run || recentRuns[0] || null;
-  const runEvents = run ? events.filter(item => item.response_id === run.response_id) : [];
-  const usageRow = run && usage.recent ? (usage.recent.find(item => item.thread_id === run.thread_id) || usage.recent[0]) : null;
-  const runTokens = usageRow ? Number(usageRow.input_tokens || 0) + Number(usageRow.output_tokens || 0) : 0;
-  const modelInfo = usageRow ? models.find(item => item.id === usageRow.model || item.label === usageRow.model) : null;
-  const contextTokens = obsContextTokens(modelInfo && modelInfo.context);
-  const tokenRatio = contextTokens ? Math.min(runTokens / contextTokens, 1) : Math.min(runTokens / 32000, 1);
-  const usageColor = obsTone(tokenRatio);
-  const liveEvent = runEvents[0] || null;
-  const totalModelTokens = (usage.models || []).reduce((sum, item) => sum + Number(item.input_tokens || 0) + Number(item.output_tokens || 0), 0);
-  const dailyMax = Math.max(1, ...(usage.daily || []).map(item => Number(item.input_tokens || 0) + Number(item.output_tokens || 0)));
-  const style = {'--obs-usage':usageColor};
-  const statusLabel = paused ? 'Paused' : connection === 'live' ? 'Live' : connection === 'reconnecting' ? 'Reconnecting' : 'Connecting';
-
-  const stepState = definition => {
-    const matching = runEvents.filter(item => definition.types.includes(item.type));
-    if (!matching.length) return {className:'pending', label:run && run.status === 'completed' ? 'Skipped' : 'Pending'};
-    const isLive = run && run.status === 'in_progress' && liveEvent && definition.types.includes(liveEvent.type) && liveEvent.status !== 'completed';
-    return isLive ? {className:'live', label:'Live now'} : {className:'done', label:'Completed'};
-  };
-  const stepMetric = key => {
-    if (!run) return '\u2014';
-    if (key === 'user') return obsClock(run.started_at);
-    if (key === 'retrieval') return (run.source_count || 0) + ' sources';
-    if (key === 'tool') return (run.tool_count || 0) + ' tools';
-    if (key === 'model' || key === 'answer') return runTokens ? obsTokens(runTokens) + ' tokens' : 'Awaiting usage';
-    if (key === 'agent') return runEvents.filter(item => item.type === 'sub_agent_started').length + ' agents';
-    return obsDuration(run);
-  };
-
-  return (
-    <div className="obs-page" style={style}>
-      <div className="obs-shell">
-        <div className="obs-head">
-          <div className="obs-head-copy"><div className="obs-title">Analytics</div><div className="obs-sub">Live insight into Vellum runs, token pressure, cost, and system health.</div></div>
-          <div className="obs-head-actions">
-            <div className="obs-source"><span className="obs-status-dot" style={{color:connection === 'live' ? 'var(--obs-good)' : 'var(--obs-warm)'}}/><span>Source</span><strong>Vellum native</strong></div>
-            <button className={'obs-control on' + (paused ? '' : ' live')} onClick={() => dispatchControl('observability.stream.set', {enabled:true})} aria-pressed={!paused}><span className="obs-live-dot"/>Live</button>
-            <button className={'obs-control pause' + (paused ? ' on' : '')} onClick={() => dispatchControl('observability.stream.set', {enabled:paused})} aria-pressed={paused}>{paused ? 'Resume' : 'Pause'}</button>
-            <button className="obs-control" onClick={() => dispatchControl('observability.stream.set', {enabled:true,reconnect:true})}>Reconnect</button>
-            <button className={'obs-control' + (refreshing ? ' refreshing' : '')} onClick={refresh} disabled={refreshing}><IcRefresh size={13}/>{refreshing ? 'Refreshing' : 'Refresh'}</button>
-            <span className="obs-updated">{snapshot ? 'Updated ' + obsClock(snapshot.generated_at) : 'Waiting for data'}</span>
-          </div>
-        </div>
-
-        {error && <div className="obs-error">{error} Live data will resume automatically when the Vellum API is available.</div>}
-
-        <div className="obs-overview">
-          <section className="obs-active obs-glass">
-            <div className="obs-kicker"><span className="obs-live-dot"/>{run && run.status === 'in_progress' ? 'Live run' : run ? 'Latest run' : 'Ready'}</div>
-            <div className="obs-active-title">{run ? 'Run ' + obsShortId(run.response_id) : 'Waiting for your next Vellum turn'}</div>
-            <div className="obs-active-sub">{run ? (liveEvent ? liveEvent.label : run.status === 'completed' ? 'Run completed' : 'Listening for live activity') : 'Start chatting or use a tool and the observatory will fill in here.'}</div>
-            <div className="obs-run-meta">
-              <div><div className="obs-meta-k">Thread</div><div className="obs-meta-v">{run ? obsShortId(run.thread_id) : '\u2014'}</div></div>
-              <div><div className="obs-meta-k">Elapsed</div><div className="obs-meta-v">{obsDuration(run)}</div></div>
-              <div><div className="obs-meta-k">Model</div><div className="obs-meta-v">{usageRow ? usageRow.model : '\u2014'}</div></div>
-              <div><div className="obs-meta-k">Stream</div><div className="obs-meta-v">{statusLabel}</div></div>
-            </div>
-          </section>
-          <section className="obs-stat obs-glass"><div className="obs-stat-head"><IcLedger size={15}/>Token usage</div><div className="obs-stat-value usage">{obsTokens(usage.total_tokens || 0)}</div><div className="obs-stat-note">{obsTokens(usage.input_tokens || 0)} in · {obsTokens(usage.output_tokens || 0)} out</div>{usage.daily && usage.daily.length ? <div className="obs-mini-bar">{usage.daily.slice(-14).map((item,index) => { const total=Number(item.input_tokens||0)+Number(item.output_tokens||0); return <i key={item.day || index} style={{'--seg-a':(25 + total/dailyMax*70)+'%'}} title={(item.day||'')+' · '+obsTokens(total)}/>; })}</div> : <div className="obs-stat-note" style={{marginTop:'auto'}}>No usage recorded in this window.</div>}</section>
-          <section className="obs-stat obs-glass"><div className="obs-stat-head"><IcFlame size={15}/>Cost</div><div className="obs-stat-value">{obsMoney(usage.cost_usd || 0)}</div><div className="obs-stat-note">{Number(usage.calls || 0).toLocaleString()} model calls · {Number(usage.sessions || 0).toLocaleString()} sessions</div></section>
-          <section className="obs-stat obs-glass"><div className="obs-stat-head"><IcShield size={15}/>System health</div><div className={'obs-stat-value ' + (health && health.ok ? 'obs-health-good' : health ? 'obs-health-bad' : '')}>{health ? (health.ok ? 'Operational' : 'Attention') : 'Checking'}</div><div className="obs-stat-note">{health && health.models ? health.models.primary : 'Waiting for the health endpoint'}</div></section>
-        </div>
-
-        <div className="obs-main-grid">
-          <section className="obs-observatory obs-glass">
-            <div className="obs-panel-head"><IcEye size={15}/>Live Run Observatory<small>{run ? run.event_count + ' events' : 'waiting'}</small><span className="spacer"/><span className="obs-pressure">Token pressure <b>{contextTokens ? Math.round(tokenRatio*100)+'%' : runTokens ? obsTokens(runTokens) : '\u2014'}</b></span></div>
-            <div className="obs-path">
-              {OBS_STEP_DEFS.map(definition => { const state=stepState(definition); const Icon=definition.Icon; return <div className={'obs-step '+state.className} key={definition.key}><div className="obs-node"><Icon size={17}/></div><div className="obs-step-label">{definition.label}</div><div className="obs-step-state">{state.label}</div><div className="obs-step-metric">{stepMetric(definition.key)}</div></div>; })}
-            </div>
-            <div className="obs-run-footer">
-              <div className="obs-run-foot-cell">{run ? (liveEvent ? liveEvent.label : run.status === 'completed' ? 'Run complete' : 'Listening for the next event') : 'The observatory is ready'}</div>
-              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Tokens</span><span className="obs-run-foot-v">{runTokens ? obsTokens(runTokens) : '\u2014'}</span></div>
-              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Cost</span><span className="obs-run-foot-v">{usageRow ? obsMoney(usageRow.cost_usd) : '\u2014'}</span></div>
-              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Tools</span><span className="obs-run-foot-v">{run ? run.tool_count : 0}</span></div>
-              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Status</span><span className="obs-run-foot-v">{run ? run.status : 'idle'}</span></div>
-            </div>
-          </section>
-
-          <aside className="obs-side">
-            <section className="obs-side-card obs-glass"><div className="obs-panel-head"><IcLedger size={14}/>Model usage<span className="spacer"/><small>real tokens</small></div><div className="obs-side-body">{usage.models && usage.models.length ? usage.models.slice(0,6).map((item,index) => { const total=Number(item.input_tokens||0)+Number(item.output_tokens||0); const ratio=total/Math.max(totalModelTokens,1); return <div className="obs-model-row" key={item.model}><div className="obs-model-name">{item.model}</div><div className="obs-model-bar"><i style={{width:Math.max(3,ratio*100)+'%','--row-color':obsTone(Math.min(total/32000,1))}}/></div><div className="obs-model-value">{obsTokens(total)}</div></div>; }) : <div className="obs-empty">No model usage has been recorded for this period.</div>}</div></section>
-            <section className="obs-side-card obs-glass"><div className="obs-panel-head"><IcRefresh size={14}/>Recent runs<span className="spacer"/><small>{runs.total || 0} total</small></div><div className="obs-recent">{recentRuns.length ? recentRuns.slice(0,7).map(item => <div className="obs-recent-row" key={item.response_id}><div className="obs-recent-main"><div className="obs-recent-name">Run {obsShortId(item.response_id)}</div><div className="obs-recent-meta">{obsClock(item.started_at)} · {item.event_count} events · {item.tool_count} tools</div></div><div className={'obs-recent-status '+item.status}><span className="obs-status-dot"/>{item.status === 'in_progress' ? 'Live' : item.status}</div></div>) : <div className="obs-empty">Recent Vellum runs will appear here automatically.</div>}</div></section>
-          </aside>
-        </div>
-
-        <section className="obs-activity obs-glass">
-          <div className="obs-panel-head"><IcTerminal size={14}/>Live activity<small>Codeburn-style telemetry, Vellum-native events</small><span className="spacer"/><span className="obs-pressure">{connection === 'live' ? 'streaming' : statusLabel.toLowerCase()}</span></div>
-          <div className="obs-ribbon">{events.length ? events.slice(0,48).reverse().map(item => <i key={item.id} style={{'--event-color':obsEventTone(item.type),'--event-weight':item.type.includes('delta') ? .55 : item.type.includes('tool') ? 1.25 : 1}} title={item.label || item.type}/>) : <span className="obs-ribbon-empty">The ribbon animates from real model, retrieval, tool, sub-agent, and answer events.</span>}</div>
-          <div className="obs-event-table">{events.length ? events.slice(0,18).map(item => <div className="obs-event-row" key={item.id} style={{'--event-color':obsEventTone(item.type)}}><span className="obs-event-time">{obsClock(item.ts)}</span><span className="obs-event-type">{item.type.replaceAll('_',' ')}</span><span className="obs-event-label">{item.label || item.name || 'Activity'}</span><span className="obs-event-status">{item.status}</span></div>) : <div className="obs-empty">No live events yet. Keep this page open while chatting with Vellum.</div>}</div>
-        </section>
-      </div>
-    </div>
-  );
-};
-
 /* â”€â”€â”€ skills â”€â”€â”€ */
 /* Legacy Skills view removed from runtime.
 Legacy component removed. ({skills, onApprove, onRetire}) => {
@@ -7155,7 +6761,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
         <div className="set-body">
           <div className="settings-content">
           {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat} onDeleteAll={onDeleteArchivedChats}/>}
-          {tab === 'Analytics' && <ObservabilityView control={analyticsControl} onAction={onAnalyticsAction}/>}
+          {tab === 'Analytics' && <div className="set-row">Analytics has its own page: runs, traces, context and usage.<span className="sr-end"><button type="button" className="btn" onClick={() => onAnalyticsAction && onAnalyticsAction('observability.open',{})}>Open Analytics</button></span></div>}
           {tab === 'Profile' && <window.VellumUI.Profile.Page key={profile.accountId} profile={profile} onSave={onProfileSave}/>}
           {tab === 'Account' && <window.VellumUI.Accounts.Settings details={<window.VellumUI.Profile.AccountDetails key={profile.accountId} profile={profile} onSave={onProfileSave}/>}/>}
 
@@ -8398,6 +8004,8 @@ const App = ({setupHandoff = null} = {}) => {
   const mainSidebarTrigger=useRef(null),sidebarWasVisible=useRef(sidebarPinned);
   useEffect(()=>{if(sidebarWasVisible.current!==sidebarPinned)mainSidebarTrigger.current?.focus({preventScroll:true});sidebarWasVisible.current=sidebarPinned;},[sidebarPinned]);
   const settingsOpen = workspaceLayout.surfaces.settings.visible;
+  // /context in the composer opens the context meter in the chat toolbar.
+  const [contextSignal, setContextSignal] = useState(0);
 
   const desktopWorkspace = window.VellumDesktop?.runtime === 'electron';
   const rightPanelVisible = workspaceLayout.surfaces['right-panel'].visible;
@@ -9041,17 +8649,19 @@ const [slashSkills, setSlashSkills] = useState([]);
   const nav = v => {
     setScheduledChatId(null);
     // Keep older shortcuts, links, and action receipts on their new Settings home.
-    if (['skills','ledger','archive'].includes(v)) {
+    if (['skills','archive'].includes(v)) {
       if (v === 'skills') setSettingsPluginTarget({v:'settings',tab:'skills'});
-      setSettingsTab(v === 'ledger' ? 'Analytics' : v === 'archive' ? 'Archive' : 'Plugins');
+      setSettingsTab(v === 'archive' ? 'Archive' : 'Plugins');
       dispatchSurfacePresentation('settings', {visible:true}, {notify:false});
-      setView(current => ['skills','ledger','archive'].includes(current) ? 'chat' : current);
+      setView(current => ['skills','archive'].includes(current) ? 'chat' : current);
       setMenu(null);
       setActivityMsg(null);
       return;
     }
     const next = APP_VIEW_IDS.has(v) ? v : '404';
     if (next === 'music') navigationEpochRef.current += 1;
+    // Analytics is a full page; leave Settings when it is opened from there.
+    if (next === 'ledger' && settingsOpen) dispatchSurfacePresentation('settings', {visible:false}, {notify:false});
     if (next === '404') {
       try {
         const url = new URL(window.location.href);
@@ -9063,7 +8673,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     setMenu(null);
     setActivityMsg(null);
   };
-  useEffect(() => { if(['skills','ledger','archive'].includes(view))nav(view); }, [view]);
+  useEffect(() => { if(['skills','archive'].includes(view))nav(view); }, [view]);
   const applyAgentSelection = id => {
     if (id === 'vellum') { setView('chat'); setActiveAgentId(null); }
     else { setView('agent'); setActiveAgentId(id); }
@@ -10976,7 +10586,9 @@ const [slashSkills, setSlashSkills] = useState([]);
             conversation={workspaceConversation} sidebarVisible={contextualSidebarVisible} project={view==='chat'?activeChatProject:null} onNewChat={newChat} onOpenProject={openProject} detailsOpen={workspaceDetailsVisible}
             onDetails={()=>{setActivityMsg(null);configureChatDetails({visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}}
             onShare={()=>activeChatId && dispatchConversationAction('conversation.share',{conversation_id:activeChatId})}
-            onOptions={event=>setMenu({type:'chathead',x:event.currentTarget.getBoundingClientRect().right,y:event.currentTarget.getBoundingClientRect().bottom})}/>}
+            onOptions={event=>setMenu({type:'chathead',x:event.currentTarget.getBoundingClientRect().right,y:event.currentTarget.getBoundingClientRect().bottom})}
+            contextMeter={workspaceConversation && window.VellumUI.ContextMeter ? <window.VellumUI.ContextMeter threadId={workspaceConversation.thread_id || workspaceConversation.id || ''}
+              refreshKey={(workspaceConversation.messages || []).some(message => message.streaming) ? 'busy' : 'idle'} openSignal={contextSignal} model={selModel} placement="below"/> : null}/>}
           <div className="workspace-panels">
           <window.VellumUI.BrowserSplitView active={workspacePanelVisible} mode={workspaceMode} onMotionChange={setWorkspaceMotion} value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}
             onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={workspaceController.hide}>
@@ -10994,7 +10606,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={null}
               onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
+              composerExtras={{pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider, onOpenContext:workspaceHasHeader && workspaceConversation ? () => setContextSignal(n => n + 1) : undefined}}/>}
             {view === 'library' && <LibraryView projects={projects} items={libraryProjection} section={librarySection} onSection={setLibrarySection} onUpdate={updateLibraryItems} onUpload={uploadLibraryFiles} onOpenChat={openChat}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -11012,6 +10624,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onOpenChat={openScheduledRunChat} onOpenTask={openScheduledTask} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={pluginSidebarVisible} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
+            {view === 'ledger' && <window.VellumUI.AnalyticsPage control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'memory' && <window.VellumUI.MemoryPage onMemoryAction={dispatchMemoryAction} onOpenChat={prompt => sendMessage(prompt, [], {forceNew:true, projectId:null})} onOpenSettings={() => {setSettingsTab('Personalization');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>
