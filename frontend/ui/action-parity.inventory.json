@@ -326,8 +326,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/components/onboarding.jsx": {
-      "count": 29,
-      "sha256": "da04a327efadcbd080f5c9fea7fca837f2d1a7498a4d1ce2437a9e2b6d2db0b9"
+      "count": 30,
+      "sha256": "5ff4f0e85a5186933c31a58932b7e776f7eb164e2b977daaa420bf3b381cf481"
     },
     "design/Velllum/uploads/components/memory-page.jsx": {
       "count": 58,
@@ -340,6 +340,10 @@
     "design/Velllum/uploads/components/analytics-page.jsx": {
       "count": 16,
       "sha256": "1b235a624061214ac3c20d2d676a775d5b73671b45d0a6f9511e77af69113eef"
+    },
+    "design/Velllum/uploads/components/context-window-settings.jsx": {
+      "count": 2,
+      "sha256": "14f5ddfa4fc45fd9f7a59c4820e7b7943f7367a9dda909180fa9b30312f041f8"
     }
   },
   "covered": [
@@ -1700,6 +1704,15 @@
       "probe": {
         "path": "design/Velllum/uploads/components/web-search-settings.jsx",
         "text": "settings.web_search.set"
+      }
+    },
+    {
+      "surface": "Context window",
+      "name": "set local and hosted context windows",
+      "actionId": "settings.context_window.set",
+      "probe": {
+        "path": "design/Velllum/uploads/components/context-window-settings.jsx",
+        "text": "settings.context_window.set"
       }
     },
     {

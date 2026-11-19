@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     context_token_calibration: bool = Field(default=True, alias="CONTEXT_TOKEN_CALIBRATION")
     # Summarize compacted ranges and keep a working state with the local model, after each turn.
     context_summaries_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARIES_ENABLED")
+    # Measure each local model's largest GPU-resident window once, after a reply.
+    context_auto_size: bool = Field(default=True, alias="CONTEXT_AUTO_SIZE")
     ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     model_picker_provider: Literal['ollama', 'openrouter', 'openai'] | None = Field(default=None, alias='MODEL_PICKER_PROVIDER')

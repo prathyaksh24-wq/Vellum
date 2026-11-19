@@ -743,3 +743,41 @@ def test_droplets_rejects_non_boolean_preferences(value):
     receipt=runtime.dispatch(AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,arguments={'patch':{'appearance':{'droplets':value}}}),context('ui'))
     assert receipt.status!='applied'
     assert 'device_settings_patch' not in receipt.result
+
+
+def test_context_window_can_be_set_from_chat_or_settings(monkeypatch) -> None:
+    from agent.app_actions.settings_runtime import CONTEXT_WINDOW_SET_ACTION_ID
+    from agent.llm import context_sizing, providers as provider_module
+    entry = SimpleNamespace(id="ollama/gemma4:12b")
+    monkeypatch.setattr(provider_module, "get_provider_registry", lambda: SimpleNamespace(current_model=lambda: entry))
+    runtime, *_ = make_runtime()
+
+    receipt = runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID, arguments={"local": 65536}), context("nlp"))
+    assert receipt.status == "applied" and "65,536 tokens" in receipt.message
+    assert context_sizing.preferences()["local"] == 65536
+
+    receipt = runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID,
+                                                arguments={"local": "auto", "cloud": 200000}), context("ui"))
+    assert receipt.status == "applied"
+    assert context_sizing.preferences() == {"local": "auto", "cloud": 200000}
+
+    for bad in ({"local": 50000}, {"cloud": "half"}, {}):
+        receipt = runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID, arguments=bad), context("nlp"))
+        assert receipt.status != "applied"
+    assert context_sizing.preferences() == {"local": "auto", "cloud": 200000}
+
+
+def test_a_plain_context_request_changes_only_the_current_model_kind(monkeypatch) -> None:
+    from agent.app_actions.settings_runtime import CONTEXT_WINDOW_SET_ACTION_ID
+    from agent.llm import context_sizing, providers as provider_module
+    current = SimpleNamespace(id="ollama/gemma4:12b")
+    monkeypatch.setattr(provider_module, "get_provider_registry", lambda: SimpleNamespace(current_model=lambda: current))
+    runtime, *_ = make_runtime()
+    runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID, arguments={"window": 65536}), context("nlp"))
+    assert context_sizing.preferences() == {"local": 65536, "cloud": "full"}
+    current.id = "anthropic/claude-opus-5"
+    runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID, arguments={"window": 200000}), context("nlp"))
+    assert context_sizing.preferences() == {"local": 65536, "cloud": 200000}
+    runtime.dispatch(AppActionRequest(action_id=CONTEXT_WINDOW_SET_ACTION_ID, arguments={"window": 50000}), context("nlp"))
+    assert context_sizing.preferences() == {"local": 65536, "cloud": 200000}
+

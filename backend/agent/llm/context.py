@@ -83,10 +83,11 @@ def context_budget(model_id: str, *, role: str = "specialist", output_tokens: in
         caps.append(settings.specialist_context_length)
     if execution is not None and execution.context_length is not None:
         caps.append(execution.context_length)
+    from agent.llm.context_sizing import cloud_cap, local_window
     if model_id.startswith("ollama/"):
-        caps.append(settings.ollama_context_length)  # local memory decides this one
-    elif getattr(settings, "cloud_context_length", None):
-        caps.append(settings.cloud_context_length)  # optional cost cap for hosted models
+        caps.append(local_window(model_id, settings))  # what this computer's GPU holds
+    elif cloud_cap(settings):
+        caps.append(cloud_cap(settings))  # optional cost cap for hosted models
     if transport_limit is not None:
         caps.append(transport_limit)
     if model_limit is None:
@@ -111,8 +112,10 @@ def context_budget(model_id: str, *, role: str = "specialist", output_tokens: in
 
 def local_num_ctx(settings) -> int:
     """The window local Ollama calls use; background calls must match chat's to avoid reloads."""
+    from agent.llm.context_sizing import local_window
+    window = local_window("ollama/" + str(getattr(settings, "memory_llm_model", "")), settings)
     main = getattr(settings, "main_context_length", None)
-    return min(settings.ollama_context_length, main) if main else settings.ollama_context_length
+    return min(window, main) if main else window
 
 
 def summary_budget(window: int) -> int:

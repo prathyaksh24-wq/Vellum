@@ -7299,7 +7299,20 @@ async def public_settings() -> dict[str, Any]:
         "enable_nightly_digest": settings.enable_nightly_digest,
         "provider_keys": configured_provider_keys(),
         "provider_connections": [connection.model_dump() for connection in provider_connections()],
+        "context_window": _context_window_settings(settings),
     }
+
+
+def _context_window_settings(settings) -> dict[str, Any]:
+    from agent.llm.context import context_budget
+    from agent.llm.context_sizing import describe
+    model_id = get_provider_registry().current_model().id
+    state = describe(settings, model_id)
+    try:
+        state["active_window"] = context_budget(model_id, role="main").window
+    except Exception:  # noqa: BLE001 - informational
+        state["active_window"] = None
+    return state
 
 
 @router.post("/settings/provider-key")
@@ -7520,7 +7533,18 @@ def _apply_pulled_model(model: str) -> str:
 def _model_pull() -> Any:
     from agent.setup_flow import ModelPull
 
-    return ModelPull(on_done=_apply_pulled_model)
+    return ModelPull(on_done=_apply_pulled_model, on_sized=_size_pulled_model)
+
+
+def _size_pulled_model(model_id: str) -> dict[str, Any] | None:
+    """Size a freshly downloaded local model to this computer's GPU (onboarding shows the result)."""
+    from agent.llm import context_sizing
+    settings = get_settings()
+    model_id = model_id if model_id.startswith("ollama/") else "ollama/" + model_id
+    if not context_sizing.needs_measurement(model_id, settings):
+        window = context_sizing.local_window(model_id, settings)
+        return {"window": window, "placement": "settings"}
+    return context_sizing.measure_now(model_id, settings)
 
 
 class SetupPullRequest(BaseModel):

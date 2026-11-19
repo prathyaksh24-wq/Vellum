@@ -129,7 +129,7 @@
             <span className="ob-logo"><Logo src={who.logo} alt={who.name}/></span>
             <span>
               <span className="ob-opt-title">{modelName(m.repo)}<code>{m.quant}</code>{m.fine_tuned && <span className="ob-tag warn">Fine-tune</span>}{m.uncensored && <span className="ob-tag warn">Uncensored</span>}</span>
-              <span className="ob-opt-sub">{who.name} · {m.size_gb} GB download · {FIT[m.fit]}{m.repo.split('/')[0] !== who.name ? ` · packaged by ${m.repo.split('/')[0]}` : ''}</span>
+              <span className="ob-opt-sub">{who.name} · {m.size_gb} GB download · {FIT[m.fit]}{m.context_estimate ? ` · ${contextLabel(m)}` : ''}{m.repo.split('/')[0] !== who.name ? ` · packaged by ${m.repo.split('/')[0]}` : ''}</span>
             </span>
             {index === recommendedIndex(state.models, scan) && !query && category === 'general' ? <span className="ob-tag rec">Recommended</span> : <span className="ob-tag">{m.fit === 'gpu' ? 'Fast' : m.fit === 'cpu' ? 'Fits' : 'Too large'}</span>}
           </button>;
@@ -280,10 +280,16 @@
     const [keep, setKeep] = useState([]);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState('');
+    const [promptError, setPromptError] = useState('');
     const names = {chatgpt: 'ChatGPT', claude: 'Claude'};
+    const loadPrompt = async () => {
+      setPromptError('');
+      try {setPrompt((await api.importPrompt()).prompt);}
+      catch (error) {setPromptError(error.message || 'The message could not be loaded.');}
+    };
     const open = async which => {
       setSource(which); setPlan(null); setNote(''); setText('');
-      if (!prompt) {try {setPrompt((await api.importPrompt()).prompt);} catch (error) {setNote(error.message);}}
+      if (!prompt) await loadPrompt();
     };
     const review = async () => {
       setBusy(true); setNote('');
@@ -307,7 +313,10 @@
       </div>
       {source && !plan && <div className="ob-importer">
         <p className="ob-hint">1. Copy this message and send it to {names[source]}.</p>
-        <div className="ob-prompt"><pre>{prompt || 'Loading…'}</pre><button className="ob-btn" disabled={!prompt} onClick={() => navigator.clipboard?.writeText(prompt).then(() => setNote('Copied.'))}>Copy</button></div>
+        <div className="ob-prompt"><pre>{prompt || (promptError ? 'Couldn’t load the message.' : 'Loading…')}</pre>{promptError && !prompt
+          ? <button className="ob-btn" onClick={loadPrompt}>Try again</button>
+          : <button className="ob-btn" disabled={!prompt} onClick={() => navigator.clipboard?.writeText(prompt).then(() => setNote('Copied.'))}>Copy</button>}</div>
+        {promptError && !prompt && <p className="ob-hint err" role="alert">{promptError}</p>}
         <p className="ob-hint">2. Paste {names[source]}’s whole reply here.</p>
         <textarea className="ob-paste" rows={6} value={text} onChange={e => setText(e.target.value)} aria-label={`${names[source]}'s reply`}/>
         <div><button className="ob-btn" disabled={busy || !text.trim()} onClick={review}>{busy ? 'Reading…' : 'Review memories'}</button></div>
@@ -339,11 +348,22 @@
     </div>;
   }
 
+  // Context windows: "131072" -> "128k". Estimates are floors until the download is measured.
+  const kTokens = value => Math.round(value / 1024) + 'k';
+  function contextLabel(m) {
+    return m.fit === 'cpu' ? `${kTokens(m.context_estimate)} context` : `${kTokens(m.context_estimate)}+ context on your GPU`;
+  }
+  function readyLabel(pull) {
+    if (pull.context_state === 'sizing') return 'Model ready · sizing its context window for your GPU…';
+    if (pull.context_state !== 'sized' || !pull.context_window) return 'Model ready';
+    const where = {gpu: 'fully on your GPU', cpu: 'on your processor', partial: 'partly on your GPU', settings: 'from your settings'}[pull.context_placement] || '';
+    return `Model ready · ${kTokens(pull.context_window)} context window${where ? ', ' + where : ''}`;
+  }
   function PullProgress({pull}) {
     if (!pull || pull.state === 'idle') return null;
     const gb = n => (n / 1e9).toFixed(1);
     return <div className="ob-pull" role="status">
-      <small>{pull.state === 'done' ? 'Model ready' : pull.state === 'error' ? 'Download stopped' : `Downloading · ${pull.total ? `${gb(pull.completed)} of ${gb(pull.total)} GB` : pull.detail}`}</small>
+      <small>{pull.state === 'done' ? readyLabel(pull) : pull.state === 'error' ? 'Download stopped' : `Downloading · ${pull.total ? `${gb(pull.completed)} of ${gb(pull.total)} GB` : pull.detail}`}</small>
       {pull.state !== 'error' && <i><b style={{width: `${pull.state === 'done' ? 100 : pull.percent}%`}}/></i>}
       {pull.state === 'error' && <small className="err">{pull.error}</small>}
     </div>;
@@ -372,10 +392,11 @@
     const [pull, setPull] = useState(null);
     const id = STEPS[step].id, copy = COPY[id];
     useEffect(() => {
-      if (!pull || pull.state !== 'pulling') return;
+      // Keep polling through the download and the context measurement that follows it.
+      if (!pull || (pull.state !== 'pulling' && pull.context_state !== 'sizing')) return;
       const timer = setInterval(() => api.ollama().then(status => setPull(status.pull)).catch(() => {}), 1500);
       return () => clearInterval(timer);
-    }, [pull?.state]);
+    }, [pull?.state, pull?.context_state]);
     useEffect(() => {setError(''); setOllama(null);}, [step, choice?.id]);
     const needsKey = choice?.kind === 'cloud' && !keys[choice.id] && !plans[choice.id] && !choice.configured;
     const advance = () => setStep(step + 1);

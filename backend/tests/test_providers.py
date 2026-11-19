@@ -294,7 +294,7 @@ def test_ollama_inventory_reads_context_and_tool_compatibility(monkeypatch) -> N
 
     assert inventory.reachable is True
     assert inventory.models[0].id == "ollama/gemma4:12b"
-    assert inventory.models[0].context == providers.get_settings().ollama_context_length
+    assert inventory.models[0].context == 262144  # the model's own maximum; budgets pick the window
     assert inventory.models[0].capabilities == ("completion", "thinking", "tools")
     assert inventory.models[0].tool_calling_compatibility == "compatible"
 

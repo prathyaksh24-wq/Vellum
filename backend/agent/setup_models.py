@@ -54,6 +54,31 @@ class ModelOption:
     base_model: str = ""
     trusted: bool = False
     other_quants: list[dict[str, Any]] = field(default_factory=list)
+    context_estimate: int = 0  # tokens this computer can likely hold; measured exactly after download
+
+
+_PARAMS_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*[bB](?![a-zA-Z])")
+GB_BYTES = 1024 ** 3
+
+
+def estimate_context(repo: str, size_gb: float, fit: str, hw: dict[str, Any]) -> int:
+    """A conservative context window for onboarding, before the model is downloaded.
+
+    Uses the common dense-model rule of about 16 KB of attention cache per token
+    per billion parameters against the GPU memory left after the weights.
+    Sliding-window models (Gemma 4) need far less, so this is a floor; Vellum
+    measures the real window right after the download.
+    """
+    from agent.llm.context_sizing import CANDIDATES, CPU_WINDOW
+    if fit == "cpu":
+        return CPU_WINDOW
+    if fit != "gpu":
+        return 0
+    match = _PARAMS_RE.search(repo.split("/")[-1])
+    params_b = float(match.group(1)) if match else max(1.0, size_gb / 0.6)  # Q4 is about 0.6 GB per billion
+    spare = (float(hw.get("vram_gb") or 0) - size_gb - 0.8) * GB_BYTES
+    tokens = spare / (params_b * 16 * 1024) if spare > 0 else 0
+    return next((window for window in CANDIDATES if window <= tokens), 8192)
 
 
 Fetch = Callable[[str], Any]
@@ -142,6 +167,7 @@ def search(query: str, hw: dict[str, Any], *, include_uncensored: bool = False, 
             continue
         options.append(ModelOption(
             repo=repo, quant=quant, size_gb=size, fit=fit, ollama_model=f"hf.co/{repo}:{quant}",
+            context_estimate=estimate_context(repo, size, fit, hw),
             downloads=int(model.get("downloads") or 0), uncensored=uncensored, fine_tuned=fine_tuned,
             base_model=base, trusted=repo.split("/", 1)[0] in TRUSTED_UPLOADERS,
             other_quants=[{"quant": q, "size_gb": sizes[q]} for q in QUANT_ORDER if q in sizes],

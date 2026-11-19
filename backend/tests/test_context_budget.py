@@ -334,9 +334,11 @@ def test_automatic_compaction_announces_start_and_finish_and_archives_the_range(
 
 
 
-def model_settings(main=None, cloud=None, ollama=32768):
+def model_settings(main=None, cloud=None, ollama=None):
     value = settings()
-    value.main_context_length, value.cloud_context_length, value.ollama_context_length = main, cloud, ollama
+    value.main_context_length, value.cloud_context_length = main, cloud
+    if ollama is not None:  # an explicit OLLAMA_CONTEXT_LENGTH
+        value.ollama_context_length, value.model_fields_set = ollama, {"ollama_context_length"}
     return value
 
 

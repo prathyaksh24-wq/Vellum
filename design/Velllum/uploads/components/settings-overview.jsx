@@ -35,6 +35,7 @@
         <div className="cfg-current-identity"><ProviderLogo provider={current}/><div><span className="settings-small-label">Current provider</span><strong>{current?.name || 'Loading providers…'}</strong></div><span className="cfg-state in-use">In use</span></div>
         <div className="cfg-current-model"><span>Default model</span><VSelect className="agent-select-control" ariaLabel="Default model" value={model} onValueChange={onModel} placeholder="Choose a model" disabled={!models.length} options={models.map(item=>({value:item.id,label:item.label,icon:modelIcon?.(item)}))}/></div>
       </section>
+      {window.VellumUI.ContextWindowSettings && <window.VellumUI.ContextWindowSettings/>}
       <div className="cfg-provider-heading"><div><h2>Model providers</h2><p>Add a key to connect another account.</p></div><span>{connected} configured</span></div>
       <div className="cfg-provider-layout">
         <section className="cfg-provider-browser" aria-label="Provider library" id="provider-library">

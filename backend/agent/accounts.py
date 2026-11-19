@@ -89,7 +89,7 @@ class AccountService:
                 self._email_config()
                 email_ready, email_reason = available, "" if available else "Unlock the system credential store to sign in."
             except AccountError:
-                email_ready, email_reason = False, "Email sign-in is not available yet. You can sign in with Google or GitHub, or continue as guest."
+                email_ready, email_reason = False, "Email sign-in is not available yet. You can sign in with Google or GitHub."
             return AccountStatus(**data, providers=providers, storage_available=available,
                                  email_auth_available=email_ready, email_auth_reason=email_reason)
 
@@ -127,10 +127,10 @@ class AccountService:
                     except (ValueError, AttributeError):
                         error_code = ""
                     messages = {
-                        "email_address_not_authorized": "Verification email cannot be delivered to this address yet. Try Google or GitHub, or continue as guest.",
+                        "email_address_not_authorized": "Verification email cannot be delivered to this address yet. Try Google or GitHub.",
                         "over_email_send_rate_limit": "Too many verification emails were requested. Wait a while and try again.",
                         "weak_password": "Choose a stronger password and try again.",
-                        "signup_disabled": "Account creation is not available right now. You can continue as guest.",
+                        "signup_disabled": "Account creation is not available right now. Try Google or GitHub.",
                     }
                     if error_code in messages:
                         raise AccountError(messages[error_code])

@@ -10,6 +10,7 @@
   }
 
   function SignIn({state, error, onRefresh, onComplete, onLocal, adding=false, initialMode='signup'}) {
+    const canSignIn = (state.providers || []).some(provider => provider.available) || !!state.email_auth_available;
     const [mode, setMode] = useState(initialMode);
     const [busy, setBusy] = useState(false);
     const [flow, setFlow] = useState(null);
@@ -104,7 +105,7 @@
           <input id="account-confirm-password" type="password" autoComplete="new-password" maxLength={1024} value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required disabled={busy}/>
         </React.Fragment>}
         <button type="submit" className="account-primary" disabled={busy || !state.email_auth_available}>{busy ? mode === 'signup' ? 'Creating account…' : 'Signing in…' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
-        {!state.email_auth_available && <p className="account-field-help">{state.email_auth_reason || 'Email sign-in is not available yet. You can continue as guest.'}</p>}
+        {!state.email_auth_available && <p className="account-field-help">{state.email_auth_reason || 'Email sign-in is not available yet.'}</p>}
       </form>}
       {waiting && <div className="account-feedback" role="status">
         {flow.provider === 'email' ? flow.message : flow.user_code ? <React.Fragment>Enter this code on GitHub, then authorize Vellum.<strong className="account-code">{flow.user_code}</strong></React.Fragment> : 'Complete sign-in in your browser. Vellum will open when you finish.'}
@@ -114,7 +115,8 @@
       </div>}
       {(failure || error) && <div className="account-feedback" role="alert">{failure || error}<button className="account-secondary" onClick={async () => {await cancel(); await onRefresh();}}>Try again</button></div>}
       {!waiting && <React.Fragment>
-        {!adding && <button className="account-mode account-guest" onClick={onLocal} disabled={busy}>Continue without an account</button>}
+        {/* Sign-in is required. Local use remains only as a fallback when no sign-in method works, so nobody is locked out of their own device. */}
+        {!adding && !canSignIn && <button className="account-mode account-guest" onClick={onLocal} disabled={busy}>Sign-in is unavailable · continue on this device</button>}
         {adding && <button className="account-secondary" onClick={onLocal} disabled={busy}>Back to Vellum</button>}
         {(!adding || !state.active_account_id) && <p>{mode === 'signup' ? 'Already have an account?' : 'New to Vellum?'} <button className="account-mode" onClick={changeMode} disabled={busy}>{mode === 'signup' ? 'Sign in instead' : 'Sign up'}</button></p>}
       </React.Fragment>}
@@ -140,9 +142,9 @@
       {active ? <section className="account-current" aria-label="Signed-in account"><h3>Signed in as</h3>{accountRow(active,true)}</section> : <div className="account-guest"><h3>Using Vellum as a guest</h3><p className="account-note">No account is currently signed in.</p></div>}
       {saved.length>0 && <section className="account-saved" aria-label="Saved accounts"><h3>Saved on this device</h3>{saved.map(account=>accountRow(account,false))}</section>}
       <div className="account-settings-actions">
-        {context.state.active_account_id && <button className="btn" disabled={context.busy} onClick={context.logOut}>Log out</button>}
+        <button className="btn" disabled={context.busy} onClick={context.logOut}>Log out</button>
       </div>
-      <p className="account-note">Accounts share this device’s local chats and memory. Google Calendar, YouTube, and other connected services can use different accounts. Log out returns to sign-in; Remove account only forgets that saved identity.</p>
+      <p className="account-note">Accounts share this device’s local chats and memory. Google Calendar, YouTube, and other connected services can use different accounts. Log out returns to the sign-in screen, including from guest use; your chats and memory stay on this device. Remove account only forgets that saved identity.</p>
     </section>;
   }
 

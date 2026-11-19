@@ -3,12 +3,33 @@
 ## Ownership and defaults
 
 The main reasoning agent's window follows the chosen model: its catalog limit,
-under whichever caps apply. Local Ollama models are capped by
-`OLLAMA_CONTEXT_LENGTH` (default 32,768, the window loaded in local memory;
-raise it to 65,536 or 131,072 when the GPU allows). Hosted models use their full
-limit (for example 1,000,000 for Claude Opus or 1,050,000 for GPT-5.6) unless the
-optional `CLOUD_CONTEXT_LENGTH` sets a cost cap. `MAIN_CONTEXT_LENGTH`, when
-set, caps every main-agent window. A model with no known limit and no cap gets
+under whichever caps apply. A local Ollama model runs at the window this
+computer can hold (`agent/llm/context_sizing.py`), in this order of precedence:
+an explicit `OLLAMA_CONTEXT_LENGTH`; the choice in Settings → Configuration →
+Context window (or the `settings.context_window.set` App Action, which chat can
+also use: "set the context to 64k"); the measured window; 32,768 until a
+measurement exists. Hosted models use their full limit (for example 1,000,000
+for Claude Opus or 1,050,000 for GPT-5.6) unless `CLOUD_CONTEXT_LENGTH` or the
+Settings cap applies. `MAIN_CONTEXT_LENGTH`, when set, caps every main-agent
+window.
+
+**Hardware sizing.** After a reply finishes (and right after an onboarding
+download), Vellum loads an unmeasured local model at 131,072, 65,536, 32,768 and
+16,384 tokens in turn and asks Ollama where it placed it (`/api/ps`: `size_vram`
+against `size`). The largest window that keeps the whole model in GPU memory
+wins; a model with no GPU placement gets 32,768 (on a processor, speed rather
+than memory is the limit); partial placement keeps 32,768. This works on any
+GPU Ollama supports and accounts for architectures such as Gemma 4's
+sliding-window attention, where a 131,072 window costs only about 270 MB more
+than 65,536. The result, with the GPU it was measured on, is stored in
+`data/llm-routing/context-sizing.json`, and the model is left loaded at the
+chosen window so the next reply does not reload it. Automatic sizing stops at
+131,072; Settings can go higher. `CONTEXT_AUTO_SIZE=false` turns it off.
+Onboarding shows a conservative estimate on each model card before download
+(about 16 KB of attention cache per token per billion parameters against the
+GPU memory left after the weights) and the measured window once the download
+finishes. Model discovery now reports a local model's own maximum; the window
+it runs at is chosen per request. A model with no known limit and no cap gets
 32,768. Specialist planning and synthesis request 16,384 tokens. These are
 per-request ceilings, not separate model copies or a guarantee that every
 prompt fits. AgentCatalog profiles may set `context_length` to narrow their

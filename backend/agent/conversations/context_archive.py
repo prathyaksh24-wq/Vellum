@@ -396,10 +396,11 @@ _worker_lock = threading.Lock()
 
 
 def turn_finished(thread_id: str) -> None:
-    """Summarize this conversation's new blocks in the background, after the reply is done."""
+    """After a reply: size the local model once, and summarize this conversation's new blocks."""
     from agent.config import get_settings
     settings = get_settings()
-    if not thread_id or not getattr(settings, "context_summaries_enabled", False):
+    wanted = getattr(settings, "context_summaries_enabled", False) or getattr(settings, "context_auto_size", False)
+    if not thread_id or not wanted:
         return
     global _worker
     _jobs.put(thread_id)
@@ -418,6 +419,16 @@ def _run_jobs() -> None:
         except queue.Empty:
             return
         settings = get_settings()
+        try:
+            from agent.llm.context_sizing import measure_now, needs_measurement
+            from agent.llm.providers import get_provider_registry
+            model_id = get_provider_registry().current_model().id
+            if needs_measurement(model_id, settings):
+                measure_now(model_id, settings)
+        except Exception as exc:  # noqa: BLE001 - the default window stays in effect
+            logger.warning("Context sizing skipped: error_type=%s", type(exc).__name__)
+        if not getattr(settings, "context_summaries_enabled", False):
+            continue
         try:
             context_archive().summarize_pending(thread_id, ollama_summarizer(
                 base_url=settings.ollama_base_url, model=settings.memory_llm_model,

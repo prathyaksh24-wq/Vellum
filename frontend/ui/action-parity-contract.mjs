@@ -91,6 +91,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/exa.jsx",
   "design/Velllum/uploads/components/tavily.jsx",
   "design/Velllum/uploads/components/web-search-settings.jsx",
+  "design/Velllum/uploads/components/context-window-settings.jsx",
   "design/Velllum/uploads/components/slack.jsx",
   "design/Velllum/uploads/components/google-connections.jsx",
   "design/Velllum/uploads/components/youtube-history.jsx",

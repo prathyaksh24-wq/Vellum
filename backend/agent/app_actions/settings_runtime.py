@@ -51,9 +51,11 @@ ROUTING_POOL_RESET_ACTION_ID = "llm.routing.pool.reset"
 DICTATION_SETTINGS_ACTION_ID = "dictation.settings.update"
 DICTATION_DELETE_ACTION_ID = "dictation.history.delete"
 WEB_SEARCH_SET_ACTION_ID = 'settings.web_search.set'
+CONTEXT_WINDOW_SET_ACTION_ID = 'settings.context_window.set'
 
 SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     WEB_SEARCH_SET_ACTION_ID,
+    CONTEXT_WINDOW_SET_ACTION_ID,
     DICTATION_SETTINGS_ACTION_ID,
     DICTATION_DELETE_ACTION_ID,
     DEVICE_SETTINGS_INSPECT_ACTION_ID,
@@ -186,6 +188,8 @@ class SettingsRuntimeActionService:
         *,
         confirmed: bool = False,
     ) -> dict[str, Any]:
+        if action_id == CONTEXT_WINDOW_SET_ACTION_ID:
+            return _set_context_window(arguments)
         if action_id == WEB_SEARCH_SET_ACTION_ID:
             from agent.contracts.web_search import WebSearchSelection
             try:
@@ -1138,7 +1142,21 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         'personalization':personalization_schema,
         'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','maxLength':120},'email':{'type':'string','maxLength':254},'website':{'type':'string','maxLength':2048},'accountId':{'type':'string','maxLength':200}}},
     }
+    from agent.llm.context_sizing import CHOICES, CLOUD_CHOICES
     specs = [
+        (CONTEXT_WINDOW_SET_ACTION_ID, 'Set context window',
+            'Set how much conversation the model keeps in view. When the user just asks to set, increase or '
+            'reduce "the context" to a size, use window: it changes only the current model\'s kind (local or '
+            'hosted). Use local or cloud only when the user names that kind. local: "auto" sizes each local '
+            'model to this computer\'s GPU, or a fixed number of tokens. cloud: "full" uses a hosted model\'s '
+            'whole limit, or a cost cap in tokens. 16k means 16384, 32k 32768, 64k 65536, 128k 131072. '
+            'Applies from the next message.',
+            'process', 'none',
+            {'window': {'oneOf': [{'type': 'string', 'enum': ['auto', 'full']},
+                                  {'type': 'integer', 'enum': sorted(set(CHOICES) | set(CLOUD_CHOICES))}]},
+             'local': {'oneOf': [{'type': 'string', 'enum': ['auto']}, {'type': 'integer', 'enum': list(CHOICES)}]},
+             'cloud': {'oneOf': [{'type': 'string', 'enum': ['full']}, {'type': 'integer', 'enum': list(CLOUD_CHOICES)}]}},
+            'settings-context-window'),
         (WEB_SEARCH_SET_ACTION_ID, 'Choose web search provider', 'Use this provider exclusively for public web searches, or choose automatic fallback. No credentials are changed.', 'process', 'none',
             {'provider': {'type': 'string', 'enum': ['auto', 'serpapi', 'exa', 'tavily', 'brave', 'ddgs']}}, 'settings-web-search'),
         (DICTATION_SETTINGS_ACTION_ID,'Update dictation settings','Set the local dictation language and whether completed transcripts are saved.','device','none',
@@ -1452,3 +1470,40 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
         )
         for action_id, title, description, scope, confirmation, properties, ui_reference in specs
     ]
+
+
+def _set_context_window(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Save the Settings / chat choice; the next budget uses it (context_sizing precedence)."""
+    from agent.config import get_settings
+    from agent.llm import context_sizing
+    from agent.llm.providers import get_provider_registry
+    local, cloud = arguments.get('local'), arguments.get('cloud')
+    if arguments.get('window') is not None:
+        # "Set the context to 64k": the window of the model in use, local or hosted.
+        window = arguments['window']
+        if get_provider_registry().current_model().id.startswith('ollama/'):
+            local = 'auto' if window in {'auto', 'full'} else window
+        else:
+            cloud = 'full' if window in {'auto', 'full'} else window
+    if local is None and cloud is None:
+        raise SettingsRuntimeActionError('CONTEXT_WINDOW_INVALID', 'Choose a local window, a hosted-model cap, or both.')
+    try:
+        context_sizing.set_preferences(local=local, cloud=cloud)
+    except (ValueError, OSError) as exc:
+        raise SettingsRuntimeActionError('CONTEXT_WINDOW_INVALID', str(exc) or 'That window is not supported.') from None
+    settings = get_settings()
+    model_id = get_provider_registry().current_model().id
+    state = context_sizing.describe(settings, model_id)
+    pieces = []
+    if local is not None:
+        pieces.append('local models: ' + ('automatic' if local == 'auto' else f'{int(local):,} tokens'))
+    if cloud is not None:
+        pieces.append('hosted models: ' + ('full limit' if cloud == 'full' else f'up to {int(cloud):,} tokens'))
+    note = ''
+    if state['local_source'] == 'environment' and local is not None:
+        note = ' OLLAMA_CONTEXT_LENGTH in .env still takes precedence for local models.'
+    if state['cloud_source'] == 'environment' and cloud is not None:
+        note += ' CLOUD_CONTEXT_LENGTH in .env still takes precedence for hosted models.'
+    return {'changed': True, 'context_window': state, '_target_kind': 'context_window', '_target_id': 'local',
+            '_message': 'Context window saved (' + '; '.join(pieces) + '). It applies from the next message.' + note}
+
