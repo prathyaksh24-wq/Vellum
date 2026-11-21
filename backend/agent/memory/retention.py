@@ -191,29 +191,163 @@ def snapshot_growth(store: Any, *, now: datetime | None = None) -> dict[str, Any
     return {"day": day, "counts": counts, "milestones": milestones[:12]}
 
 
+# Audit events the change ledger shows, as (verb, before status, after status).
+LEDGER_EVENTS = {
+    "saved": ("Saved", "", "Saved"),
+    "auto_promoted": ("Saved what you said", "", "Saved"),
+    "promoted": ("Confirmed", "Pending", "Saved"),
+    "pending_created": ("Noticed", "", "Pending"),
+    "archived": ("Archived", "Saved", "Archived"),
+    "restored": ("Restored", "Archived", "Saved"),
+    "updated": ("Edited", "", ""),
+    "pinned": ("Pinned", "", ""),
+    "unpinned": ("Unpinned", "", ""),
+    "suppressed": ("Stopped using", "In use", "Not used"),
+    "unsuppressed": ("Using again", "Not used", "In use"),
+    "deleted": ("Deleted", "", ""),
+    "retention_deleted": ("Removed after 90 days", "Archived", ""),
+}
+# Cleanup events describe things that were never real memories: a reason, never the text.
+FILTER_EVENTS = {"noise_archived", "quality_archived", "quality_cleanup_archived"}
+
+
+def _day(value: Any) -> str:
+    parsed = _parse(value)
+    return parsed.date().isoformat() if parsed else ""
+
+
+def _clip(text: Any, limit: int = 140) -> str:
+    value = " ".join(str(text or "").split())
+    return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
+
+
+def _derived_milestones(durable: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Milestones rebuilt from when each durable memory was learned."""
+    out: list[dict[str, Any]] = []
+    seen_topics: set[str] = set()
+    corrected = False
+    ordered = sorted(durable, key=lambda m: str(m.get("created_at") or ""))
+    for count, item in enumerate(ordered, start=1):
+        day = _day(item.get("created_at"))
+        if not day:
+            continue
+        if count in MILESTONE_COUNTS:
+            plural = "s" if count > 1 else ""
+            out.append({"kind": "count", "day": day, "text": f"Knows {count} thing{plural} about you"})
+        topic = str(item.get("topic") or "")
+        if topic and topic not in seen_topics:
+            seen_topics.add(topic)
+            out.append({"kind": "topic", "day": day, "text": f"Started learning about {topic.lower()}"})
+        if item.get("kind") == "correction" and not corrected:
+            corrected = True
+            out.append({"kind": "correction", "day": day, "text": "Took your first correction on board"})
+        if item.get("origin") == "stated" and item.get("kind") in {"preference", "correction"}:
+            label = item.get("title") or item["text"]
+            out.append({"kind": "learned", "day": day, "memory_id": str(item["id"]), "text": f"Learned: {label}"})
+    return out
+
+
+def _ledger(store: Any, items: dict[int, dict[str, Any]], durable_ids: set[int], *, limit: int = 30) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for entry in store.audit_log(limit=400):
+        event = str(entry.get("event") or "")
+        memory_id = entry.get("memory_id")
+        if event in FILTER_EVENTS:
+            reason = _clip(entry.get("detail"), 80)
+            last = rows[-1] if rows else None
+            if last and last["event"] == "filtered" and last["reason"] == reason:
+                last["count"] += 1
+                continue
+            rows.append({"id": int(entry["id"]), "event": "filtered", "verb": "Filtered out", "count": 1,
+                         "reason": reason, "before": "", "after": "Archived", "at": entry.get("created_at"),
+                         "memory_id": None, "title": "", "topic": "", "origin": ""})
+        elif event in LEDGER_EVENTS:
+            verb, before, after = LEDGER_EVENTS[event]
+            item = items.get(int(memory_id)) if memory_id is not None else None
+            deleted = event in {"deleted", "retention_deleted"}
+            # Deleted memories never resurface; other rows need a real, durable memory.
+            if not deleted and (item is None or int(item["id"]) not in durable_ids):
+                continue
+            item = {} if deleted else item
+            rows.append({"id": int(entry["id"]), "event": event, "verb": verb, "count": 1, "reason": "",
+                         "before": before, "after": after, "at": entry.get("created_at"),
+                         "memory_id": None if deleted else int(memory_id),
+                         "title": _clip(item.get("title") or item.get("text")) if item else "",
+                         "topic": str(item.get("topic") or ""), "origin": str(item.get("origin") or "")})
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def growth_view(store: Any, *, now: datetime | None = None) -> dict[str, Any]:
-    """Day N of knowing the user, the known-facts series and recent milestones."""
+    """Day N of knowing the user: a daily known-facts series rebuilt from when each
+    memory was learned, what it is made of, what gets recalled, and what changed."""
+    from agent.memory.orchestrator import _durable_memories
+
     now = now or datetime.now(UTC)
     all_items = store.list_all()
     first = min((str(item.get("created_at") or "") for item in all_items if item.get("created_at")), default="")
     first_day = first[:10] if first else None
-    day_number = (now.date() - datetime.fromisoformat(first_day).date()).days + 1 if first_day else 0
-    history = store.growth(limit=90)
-    series = [{"day": row["day"], "known": int(row["counts"].get("known", 0))} for row in history]
-    today = now.date().isoformat()
+    first_date = datetime.fromisoformat(first_day).date() if first_day else None
+    day_number = (now.date() - first_date).days + 1 if first_date else 0
     live = _counts(store)
-    if not series or series[-1]["day"] != today:
-        series.append({"day": today, "known": live["known"]})
-    milestones = [
-        {**milestone, "day": row["day"],
-         "day_number": (datetime.fromisoformat(row["day"]).date() - datetime.fromisoformat(first_day).date()).days + 1
-         if first_day else 0}
-        for row in history for milestone in row["milestones"]
-    ]
+    durable = _durable_memories([item for item in all_items if item.get("status") in {"saved", "archived"}])
+    durable_ids = {int(item["id"]) for item in durable}
+
+    today = now.date()
+    start = max(first_date, today - timedelta(days=29)) if first_date else today
+    learned_days = [day for day in (_day(item.get("created_at")) for item in durable) if day]
+    series = []
+    cursor = start
+    while cursor <= today:
+        day = cursor.isoformat()
+        added = [item for item in durable if _day(item.get("created_at")) == day]
+        by_origin: dict[str, int] = {}
+        for item in added:
+            origin = str(item.get("origin") or "inferred")
+            by_origin[origin] = by_origin.get(origin, 0) + 1
+        series.append({
+            "day": day,
+            "known": sum(1 for learned in learned_days if learned <= day),
+            "added": len(added),
+            "by_origin": by_origin,
+            "archived": sum(1 for item in durable if _day(item.get("archived_at")) == day),
+        })
+        cursor += timedelta(days=1)
+    week_ago = (today - timedelta(days=7)).isoformat()
+    known_week_ago = sum(1 for learned in learned_days if learned <= week_ago)
+
+    recorded = [{**milestone, "day": row["day"]} for row in store.growth(limit=400) for milestone in row["milestones"]]
+    milestones, seen = [], set()
+    for milestone in sorted(_derived_milestones(durable) + recorded, key=lambda m: m["day"]):
+        if milestone["text"] in seen:
+            continue
+        seen.add(milestone["text"])
+        number = (datetime.fromisoformat(milestone["day"]).date() - first_date).days + 1 if first_date else 0
+        milestones.append({**milestone, "day_number": number})
+
+    topics: dict[str, int] = {}
+    for item in durable:
+        name = str(item.get("topic") or "") or "Uncategorized"
+        topics[name] = topics.get(name, 0) + 1
+    recalled = sorted((item for item in durable if int(item.get("use_count") or 0) > 0),
+                      key=lambda m: -int(m.get("use_count") or 0))
+    recent_cutoff = (now - timedelta(days=7)).isoformat()
     return {
         "day_number": day_number,
         "first_day": first_day,
-        "counts": live,
-        "series": series[-30:],
+        "counts": {**live, "known": len(durable)},
+        "series": series,
+        "week_delta": len(durable) - known_week_ago if first_date else 0,
+        "topics": [{"topic": name, "count": count} for name, count in sorted(topics.items(), key=lambda kv: -kv[1])],
+        "recall": {
+            "total": sum(int(item.get("use_count") or 0) for item in durable),
+            "used": len(recalled),
+            "used_recently": sum(1 for item in recalled if str(item.get("last_used_at") or "") >= recent_cutoff),
+            "top": [{"id": int(item["id"]), "title": _clip(item.get("title") or item.get("text")),
+                     "topic": str(item.get("topic") or ""), "use_count": int(item.get("use_count") or 0),
+                     "last_used_at": item.get("last_used_at")} for item in recalled[:5]],
+        },
+        "ledger": _ledger(store, {int(item["id"]): item for item in all_items}, durable_ids),
         "milestones": list(reversed(milestones))[:40],
     }

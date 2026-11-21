@@ -124,7 +124,7 @@
       </div></aside>,document.body)}
     </div>;
   }
-  function WorkspaceToolbar({controller:c,workspace:w,sidebar,title,conversation,project,sidebarVisible=true,onNewChat,onOpenProject,onDetails,detailsOpen,onOptions}) {
+  function WorkspaceToolbar({controller:c,workspace:w,sidebar,title,conversation,project,sidebarVisible=true,onNewChat,onOpenProject,onDetails,detailsOpen,onOptions,contextMeter=null}) {
     const full=w.mode==='full'&&w.tabs.length>0;
     const tabIcon=tab=>tab.kind==='chat'?'Chat':['files','directory'].includes(tab.kind)?'Files':tab.kind==='terminal'?'Terminal':tab.kind==='integration'?'ConnectApps':tab.kind==='launcher'?'Tabs':'Globe';
     const count=w.tabs.length,showRetained=!w.visible&&count>0;
@@ -134,7 +134,7 @@
     </button>;
     const actions=<div className="workspace-header-actions">
       {full&&!fullSideChat&&<><button type="button" className="tbtn" aria-label="Restore split view" data-tip="Restore split view" onClick={()=>w.layout('split')}><Icon name="Restore" size={17}/></button><button type="button" className="tbtn" aria-label="Hide workspace views" onClick={w.hide}><Icon name="X" size={17}/></button></>}
-      {conversation&&!fullSideChat&&<><button type="button" className="tbtn" aria-label="Chat options" data-tip="Chat options" onClick={onOptions}><Icon name="DotsHorizontal" size={18}/></button><button type="button" className="tbtn workspace-summary-toggle" data-tip="Toggle summary" data-command="workspace.summary" aria-label="Toggle summary" aria-pressed={detailsOpen} aria-expanded={detailsOpen} aria-controls="workspace-summary" aria-keyshortcuts="Control+Shift+S Meta+Shift+S" onClick={onDetails}><Icon name="Summary" size={18}/></button></>}
+      {conversation&&!fullSideChat&&<>{contextMeter}<button type="button" className="tbtn" aria-label="Chat options" data-tip="Chat options" onClick={onOptions}><Icon name="DotsHorizontal" size={18}/></button><button type="button" className="tbtn workspace-summary-toggle" data-tip="Toggle summary" data-command="workspace.summary" aria-label="Toggle summary" aria-pressed={detailsOpen} aria-expanded={detailsOpen} aria-controls="workspace-summary" aria-keyshortcuts="Control+Shift+S Meta+Shift+S" onClick={onDetails}><Icon name="Summary" size={18}/></button></>}
       {!full&&!w.visible&&<>{conversation&&<span className="workspace-control-divider"/>}{newTab}</>}
     </div>;
     return <header className={'workspace-header'+(full?' workspace-unified-tabs':'')} aria-label="Workspace controls">

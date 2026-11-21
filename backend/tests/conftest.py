@@ -10,6 +10,10 @@ os.environ["KNOWLEDGE_CORE_DB_PATH"] = str((_ROOT / "knowledge" / "core.db").res
 os.environ["KNOWLEDGE_BLOB_PATH"] = str((_ROOT / "knowledge" / "blobs").resolve())
 os.environ.setdefault("COMPUTER_USE_SCREENSHOT_DIR", str((_ROOT / "computer-use" / "screenshots").resolve()))
 os.environ.setdefault("COMPUTER_USE_EXCLUSIVE_CONTROL", "false")
+# Never read or start a real model calibration from tests.
+os.environ["CONTEXT_TOKEN_CALIBRATION"] = "false"
+os.environ["CONTEXT_SUMMARIES_ENABLED"] = "false"
+os.environ["CONTEXT_AUTO_SIZE"] = "false"
 # A developer .env may point Playwright at a local Node runtime; tests expect the default launcher.
 os.environ["PLAYWRIGHT_MCP_COMMAND"] = "npx"
 os.environ["PLAYWRIGHT_MCP_ARGS"] = "-y @playwright/mcp@latest --isolated"
@@ -18,6 +22,18 @@ os.environ["PLAYWRIGHT_MCP_ARGS"] = "-y @playwright/mcp@latest --isolated"
 @pytest.fixture(autouse=True, scope="session")
 def test_environment() -> None:
     return None
+
+
+@pytest.fixture(autouse=True, scope="session")
+def no_engine_job_object():
+    """Engine tests use made-up process ids. A real kill-on-close job could
+    capture an unrelated process that happens to have one of those ids."""
+    from agent.memory.engines import supervisor
+
+    original = supervisor._job_container
+    supervisor._job_container = lambda: (lambda pid: None)
+    yield
+    supervisor._job_container = original
 
 
 @pytest.fixture(autouse=True)
@@ -66,3 +82,41 @@ def reset_process_configuration_caches():
 
     get_settings.cache_clear()
     get_provider_registry.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def isolated_tool_catalogs():
+    """Connector services persist MCP catalogs; keep tests out of the real data folder."""
+
+    from agent.plugins.tool_catalog import PersistedToolCatalog
+
+    previous = PersistedToolCatalog.catalog_dir
+    PersistedToolCatalog.catalog_dir = Path(tempfile.mkdtemp(prefix="catalogs-", dir=_ROOT))
+    yield
+    PersistedToolCatalog.catalog_dir = previous
+
+
+@pytest.fixture(autouse=True)
+def isolated_evidence_store():
+    """Tool-result evidence is conversation content; keep tests out of the real data folder."""
+
+    from agent.conversations import evidence
+
+    previous = evidence.default_path
+    folder = Path(tempfile.mkdtemp(prefix="evidence-", dir=_ROOT))
+    evidence.default_path = lambda: folder / "evidence.db"
+    yield
+    evidence.default_path = previous
+
+
+@pytest.fixture(autouse=True)
+def isolated_context_sizing():
+    """Measured windows and Settings choices are machine state; never read them in tests."""
+
+    from agent.llm import context_sizing
+
+    previous = context_sizing.sizing_path
+    folder = Path(tempfile.mkdtemp(prefix="sizing-", dir=_ROOT))
+    context_sizing.sizing_path = lambda: folder / "context-sizing.json"
+    yield
+    context_sizing.sizing_path = previous

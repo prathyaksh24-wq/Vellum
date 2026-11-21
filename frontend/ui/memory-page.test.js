@@ -7,11 +7,12 @@ import {fileURLToPath} from 'node:url';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 
 const require=createRequire(import.meta.url),rootPath=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
-const original=globalThis.Uint8Array;let pageCode;
+const original=globalThis.Uint8Array;let pageCode,analyticsCode;
 try{
   globalThis.Uint8Array=new TextEncoder().encode('').constructor;
   const esbuild=createRequire(require.resolve('vite'))('esbuild');
   pageCode=esbuild.transformSync(readFileSync(resolve(rootPath,'design/Velllum/uploads/components/memory-page.jsx'),'utf8'),{loader:'jsx'}).code;
+  analyticsCode=esbuild.transformSync(readFileSync(resolve(rootPath,'design/Velllum/uploads/components/analytics-components.jsx'),'utf8'),{loader:'jsx'}).code;
 }finally{globalThis.Uint8Array=original;}
 const chatCode=readFileSync(resolve(rootPath,'design/Velllum/uploads/components/agent-response.js'),'utf8');
 
@@ -59,6 +60,7 @@ beforeEach(()=>{
   onMemoryAction=vi.fn(async actionId=>({status:'applied',action_id:actionId,result:actionId==='memory.import.apply'?{saved:2}:{}}));
   onOpenChat=vi.fn();
   window.VellumUI={};window.React=React;
+  new Function('React',analyticsCode)(React);
   new Function('React',pageCode)(React);
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();});
@@ -160,12 +162,24 @@ test('Growth explains day zero, then shows day N, the known-facts line and miles
   await render(page());
   await click(button('Growth'));
   expect(host.textContent).toContain('Vellum is just getting to know you.');
-  api.memoryGrowth.mockResolvedValue({day_number:4,first_day:'2026-11-14',counts:{known:6,topics:['Preferences','Projects'],recalls:9},
-    series:[{day:'2026-11-14',known:1},{day:'2026-11-15',known:3},{day:'2026-11-17',known:6}],
+  api.memoryGrowth.mockResolvedValue({day_number:4,first_day:'2026-11-14',week_delta:5,counts:{known:6,archived:1,topics:['Preferences','Projects'],recalls:9},
+    series:[{day:'2026-11-14',known:1,added:1,by_origin:{stated:1}},{day:'2026-11-15',known:3,added:2,by_origin:{inferred:2}},
+      {day:'2026-11-16',known:3,added:0,by_origin:{}},{day:'2026-11-17',known:6,added:3,by_origin:{imported:3}}],
+    topics:[{topic:'Preferences',count:4},{topic:'Projects',count:2}],
+    recall:{total:9,used:2,used_recently:2,top:[{id:1,title:'Prefers concise answers.',topic:'Preferences',use_count:7,last_used_at:new Date().toISOString()}]},
+    ledger:[{id:3,event:'deleted',verb:'Deleted',count:1,reason:'',before:'',after:'',at:new Date().toISOString(),memory_id:null,title:'',topic:'',origin:''},
+      {id:2,event:'filtered',verb:'Filtered out',count:38,reason:'Not a durable memory: request',before:'',after:'Archived',at:new Date().toISOString(),memory_id:null,title:'',topic:'',origin:''},
+      {id:1,event:'promoted',verb:'Confirmed',count:1,reason:'',before:'Pending',after:'Saved',at:new Date().toISOString(),memory_id:1,title:'Prefers concise answers.',topic:'Preferences',origin:'stated'}],
     milestones:[{kind:'correction',text:'Took your first correction on board',day:'2026-11-17',day_number:4}]});
   await act(async()=>window.dispatchEvent(new CustomEvent('vellum:memory-changed')));
   expect(host.querySelector('.mp-growth h2').textContent).toBe('Day 4');
-  expect(host.querySelector('.mp-spark svg').getAttribute('aria-label')).toBe('Known facts rose from 1 to 6');
+  expect(host.querySelector('.av-growth svg').getAttribute('aria-label')).toBe('Known memories went from 1 to 6');
+  expect(host.querySelector('.mp-stats').textContent).toContain('+5 this week');
+  expect(host.querySelector('.mp-recalled li').textContent).toContain('used 7×');
+  const ledger=[...host.querySelectorAll('.av-ledger-list li')].map(node=>node.textContent);
+  expect(ledger[0]).toContain('Deleteda memory');
+  expect(ledger[1]).toContain('Filtered out 38non-memories');
+  expect(ledger[2]).toContain('Pending→Saved');
   expect(host.querySelector('.mp-milestones li').textContent).toBe('Day 4Took your first correction on board');
 });
 

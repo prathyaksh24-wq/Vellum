@@ -6,6 +6,10 @@ visible on its own. Startup runs in the background, so chat never waits for
 an engine. A crashed engine restarts with backoff (2 s doubling to 60 s,
 like the desktop shell's backend supervisor). Shutdown stops engines in
 reverse order and the shared Postgres last.
+
+On Windows every engine (and the shared Postgres) also belongs to a job
+object that ends with the backend process, so a crash or force-quit of the
+backend can never leave engines running on their own.
 """
 from __future__ import annotations
 
@@ -86,7 +90,9 @@ class EngineSupervisor:
     def __init__(self, *, health_check: Callable[[str], bool] = http_ok,
                  popen: Callable[..., subprocess.Popen] = subprocess.Popen,
                  sleep: Callable[[float], None] = time.sleep,
-                 poll_interval: float = 1.0) -> None:
+                 poll_interval: float = 1.0,
+                 container: Callable[[int], None] | None = None) -> None:
+        self._container = container
         self._factories: list[tuple[str, Callable[[], EngineSpec]]] = []
         self._status: dict[str, EngineStatus] = {}
         self._processes: dict[str, subprocess.Popen] = {}
@@ -137,6 +143,15 @@ class EngineSupervisor:
             if self._stop.is_set():
                 return
             self._launch(name, factory)
+
+    def contain(self, pid: int) -> None:
+        """Tie a process to the backend's lifetime (Windows job object); best effort elsewhere."""
+        try:
+            if self._container is None:
+                self._container = _job_container()
+            self._container(pid)
+        except Exception:  # noqa: BLE001 - normal shutdown still stops it
+            logger.warning("[ENGINES] could not tie process %s to the backend's lifetime", pid)
 
     def before_all(self, hook: Callable[[], None]) -> None:
         self._before_all.append(hook)
@@ -204,6 +219,7 @@ class EngineSupervisor:
             logger.exception("[ENGINES] %s failed to start", name)
             status.state, status.reason = "error", f"Failed to start: {exc}"
             return False
+        self.contain(process.pid)
         with self._lock:
             self._processes[name], self._specs[name] = process, spec
         status.pid, status.started_at = process.pid, time.time()
@@ -292,6 +308,23 @@ class EngineSupervisor:
     def url(self, name: str) -> str:
         status = self._status.get(name)
         return status.url if status and status.state == "ready" else ""
+
+
+_JOB = None
+_JOB_LOCK = threading.Lock()
+
+
+def _job_container() -> Callable[[int], None]:
+    """One kill-on-close job for this backend process; a no-op off Windows."""
+    if sys.platform != "win32":
+        return lambda pid: None
+    global _JOB
+    with _JOB_LOCK:
+        if _JOB is None:
+            from agent.mcp.windows_browser_job import WindowsBrowserJob  # generic kill-on-close job
+
+            _JOB = WindowsBrowserJob()
+    return _JOB.assign
 
 
 def child_env(extra: dict[str, str]) -> dict[str, str]:

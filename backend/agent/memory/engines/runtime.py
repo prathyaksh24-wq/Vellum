@@ -99,7 +99,13 @@ def get_engine_supervisor() -> EngineSupervisor:
     with _REGISTRY_LOCK:
         engines = list(_REGISTRY)
     if engines:
-        supervisor.before_all(context.postgres.start)
+        def start_postgres() -> None:
+            context.postgres.start()
+            pid = context.postgres.server_pid()
+            if pid:
+                supervisor.contain(pid)  # ends with the backend, even after a crash
+
+        supervisor.before_all(start_postgres)
         supervisor.after_all(context.postgres.stop)
     for name, factory in engines:
         supervisor.add_engine(name, lambda factory=factory: factory(context))

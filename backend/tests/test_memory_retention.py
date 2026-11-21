@@ -169,5 +169,27 @@ def test_growth_tracks_day_number_known_facts_and_milestones(world):
 
     view = growth_view(store, now=T0 + timedelta(days=3))
     assert view["day_number"] == 4 and view["first_day"] == "2026-08-01"
-    assert [point["known"] for point in view["series"]] == [1, 2]
+    # One point per day, rebuilt from when each memory was learned.
+    assert [point["known"] for point in view["series"]] == [1, 1, 1, 2]
+    assert [point["added"] for point in view["series"]] == [1, 0, 0, 1]
+    assert view["series"][3]["by_origin"] == {"stated": 1}
     assert view["milestones"][0]["day_number"] == 4
+    texts = [m["text"] for m in view["milestones"]]
+    assert len(texts) == len(set(texts))
+
+
+def test_growth_ledger_and_recall_never_resurface_deleted_text(world):
+    _orchestrator, store, _fts, _provider, backdate = world
+    kept = _add(store, "Prefers concise answers.", origin="stated", kind="preference")
+    gone = _add(store, "Lives near the old harbour.", origin="inferred")
+    backdate(kept, T0)
+    store.mark_used([kept])
+    store.delete(gone)
+
+    view = growth_view(store, now=T0 + timedelta(days=1))
+    assert "old harbour" not in repr(view)
+    verbs = [row["verb"] for row in view["ledger"]]
+    assert "Deleted" in verbs and "Confirmed" in verbs
+    deleted = next(row for row in view["ledger"] if row["verb"] == "Deleted")
+    assert deleted["title"] == "" and deleted["memory_id"] is None
+    assert view["topics"] and view["recall"]["total"] >= 0

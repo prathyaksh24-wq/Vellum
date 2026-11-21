@@ -100,6 +100,7 @@ from agent.automations.api import router as automations_router
 from agent.automations.prompts import scheduled_chat_prompt
 from agent.contracts.scheduled_tasks import ScheduledChatContext
 from agent.contracts.profile import ProfileActivity
+from agent.contracts.observability import RunTrace, ThreadContext
 from agent.llm.routing.api import configure_action_dispatcher, router as llm_routing_router
 from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
@@ -3201,6 +3202,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     audit.thread_id = response.thread_id
     audit.mark_first_token()
     audit.finalize("completed", tools_called=response.tools)
+    _summarize_compacted_context(response.thread_id)
     return response
 
 
@@ -3977,6 +3979,16 @@ async def _audited_turn_stream(events: Any, audit: TurnAudit):
         raise
     finally:
         audit.finalize(outcome, tools_called=tools_called)
+        _summarize_compacted_context(audit.thread_id)
+
+
+def _summarize_compacted_context(thread_id: str) -> None:
+    """After a reply finishes, summarize newly compacted ranges in the background."""
+    try:
+        from agent.conversations.context_archive import turn_finished
+        turn_finished(str(thread_id or ""))
+    except Exception:  # noqa: BLE001 - continuity work never affects the finished turn
+        _LOGGER.debug("Context summaries were not scheduled", exc_info=True)
 
 
 def _stream_id(prefix: str) -> str:
@@ -4161,17 +4173,41 @@ def _observability_days(period: str) -> int | None:
     return None
 
 
+def _context_meter(output: Any) -> dict[str, Any] | None:
+    """Numeric context-window shape for the context meter (no message content).
+
+    Keys avoid the word "token" so activity redaction keeps the numbers."""
+    report = output.get("context_budget") if isinstance(output, dict) else None
+    if not isinstance(report, dict) or not report.get("context_window"):
+        return None
+    layers = report.get("layers") if isinstance(report.get("layers"), dict) else {}
+    return {"context": {
+        "window": int(report.get("context_window") or 0),
+        "used": int(report.get("estimated_input_tokens") or 0),
+        "limit": int(report.get("input_limit") or 0),
+        "output_reserved": int(report.get("output_reserved") or 0),
+        "margin": int(report.get("safety_margin") or 0),
+        "layers": {str(name): int(value or 0) for name, value in layers.items()},
+        "compacted": bool(report.get("compacted")),
+        "removed_messages": int(report.get("removed_messages") or 0),
+    }}
+
+
 def _observability_snapshot(period: str) -> dict[str, Any]:
+    from agent.telemetry.turn_audit import summarize_turns
+
     days = _observability_days(period)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "vellum-native",
         "generated_at": _stream_now(),
         "period": period,
         "freshness": {"state": "live", "updated_at": _stream_now()},
         "usage": _api_ledger.observability_summary(days=days),
         "runs": _observability.summary(days=days),
-        "recent_runs": _observability.recent_runs(limit=12),
+        "recent_runs": _observability.recent_runs(limit=40),
+        "turns": summarize_turns(REPO_ROOT / "data" / "memory" / "audit_log.jsonl", days=days),
+        "context": _observability.context_summary(days=days),
     }
 
 
@@ -4205,6 +4241,19 @@ async def profile_activity(
 @router.get("/observability/runs")
 async def observability_runs(limit: int = Query(default=20, ge=1, le=100)) -> dict[str, Any]:
     return {"runs": await asyncio.to_thread(_observability.recent_runs, limit=limit)}
+
+
+@router.get("/observability/runs/{response_id}/trace", response_model=RunTrace)
+async def observability_run_trace(response_id: str) -> RunTrace:
+    trace = await asyncio.to_thread(_observability.run_trace, response_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="That run is not recorded.")
+    return RunTrace.model_validate(trace)
+
+
+@router.get("/observability/context", response_model=ThreadContext)
+async def observability_thread_context(thread_id: str = Query(min_length=1, max_length=128)) -> ThreadContext:
+    return ThreadContext.model_validate(await asyncio.to_thread(_observability.thread_context, thread_id))
 
 
 @router.post("/observability/refresh")
@@ -5101,6 +5150,7 @@ async def _stream_agent_turn_scoped(
         function_stream_items: dict[str, dict[str, Any]] = {}
         function_stream_args: dict[str, str] = {}
         reasoning_summaries: dict[str, str] = {}
+        compaction_row: str | None = None  # one chat row per automatic compaction
         local_thinking: dict[str, str] = {}
         last_chat_model_output: Any | None = None
         specialist_gap = ""
@@ -5188,14 +5238,27 @@ async def _stream_agent_turn_scoped(
                         activity_type='context_ready' if context_done else 'context_preparing',
                         label='Conversation context ready' if context_done else 'Preparing conversation context',
                         item_id='context-' + str(event.get('run_id') or 'primary'), name='conversation_context',
-                        status='completed' if context_done else 'in_progress')
+                        status='completed' if context_done else 'in_progress',
+                        metadata=_context_meter(event.get('data', {}).get('output')) if context_done else None)
+                if kind == "on_custom_event" and event.get("name") == "vellum_context_compacting":
+                    compaction_row = 'compaction-' + str(event.get('run_id') or uuid4().hex)
+                    yield _agent_activity_event(
+                        response_id=response_id, thread_id=active_thread_id, item_id=compaction_row,
+                        activity_type="context_compacting", label="Compacting context",
+                        name="conversation_context", status="in_progress")
                 if kind == "on_custom_event" and event.get("name") == "vellum_context_compacted":
+                    report = event.get("data") or {}
+                    removed = int(report.get("removed_messages") or 0)
+                    label = (f"Compacted context · {removed} earlier message{'s' if removed != 1 else ''} summarized"
+                             if report.get("compacted") else "Context already fits")
                     yield _agent_activity_event(
                         response_id=response_id, thread_id=active_thread_id,
-                        activity_type="context_compacted", label="Keeping earlier conversation context",
+                        item_id=compaction_row or "",
+                        activity_type="context_compacted", label=label,
                         name="conversation_context", status="completed",
-                        metadata=event.get("data") or {},
+                        metadata={**report, **(_context_meter({"context_budget": report}) or {})},
                     )
+                    compaction_row = None
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):
                         summary_id = "summary-" + str(event.get("run_id") or "primary")
@@ -7236,7 +7299,20 @@ async def public_settings() -> dict[str, Any]:
         "enable_nightly_digest": settings.enable_nightly_digest,
         "provider_keys": configured_provider_keys(),
         "provider_connections": [connection.model_dump() for connection in provider_connections()],
+        "context_window": _context_window_settings(settings),
     }
+
+
+def _context_window_settings(settings) -> dict[str, Any]:
+    from agent.llm.context import context_budget
+    from agent.llm.context_sizing import describe
+    model_id = get_provider_registry().current_model().id
+    state = describe(settings, model_id)
+    try:
+        state["active_window"] = context_budget(model_id, role="main").window
+    except Exception:  # noqa: BLE001 - informational
+        state["active_window"] = None
+    return state
 
 
 @router.post("/settings/provider-key")
@@ -7457,7 +7533,18 @@ def _apply_pulled_model(model: str) -> str:
 def _model_pull() -> Any:
     from agent.setup_flow import ModelPull
 
-    return ModelPull(on_done=_apply_pulled_model)
+    return ModelPull(on_done=_apply_pulled_model, on_sized=_size_pulled_model)
+
+
+def _size_pulled_model(model_id: str) -> dict[str, Any] | None:
+    """Size a freshly downloaded local model to this computer's GPU (onboarding shows the result)."""
+    from agent.llm import context_sizing
+    settings = get_settings()
+    model_id = model_id if model_id.startswith("ollama/") else "ollama/" + model_id
+    if not context_sizing.needs_measurement(model_id, settings):
+        window = context_sizing.local_window(model_id, settings)
+        return {"window": window, "placement": "settings"}
+    return context_sizing.measure_now(model_id, settings)
 
 
 class SetupPullRequest(BaseModel):

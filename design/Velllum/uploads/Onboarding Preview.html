@@ -75,9 +75,12 @@ const wait = (value, ms = 500) => new Promise(resolve => setTimeout(() => resolv
 const HW = {
   hardware: {ram_gb: 15.7, free_disk_gb: 212.4, cpu_cores: 16, cpu_name: 'AMD Ryzen 7 7840HS', gpu_name: 'NVIDIA GeForce RTX 4060 Laptop GPU', vram_gb: 8, ollama_installed: false},
   recommendation: {mode: 'local', model: 'qwen3.5:9b', label: 'Qwen 3.5 9B', size_gb: 5.5,
-    reasons: ['Runs on your NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)', 'Qwen 3.5 9B is about 5.5 GB to download', 'Ollama will need to be installed to run it']},
+    reasons: ['Runs on your NVIDIA GeForce RTX 4060 Laptop GPU (8 GB)', 'Qwen 3.5 9B is about 5.5 GB to download',
+      'Context window: at least 8k tokens on your GPU; Vellum measures the exact size after download', 'Ollama will need to be installed to run it']},
 };
-const M = (repo, quant, size_gb, fit, extra = {}) => ({repo, quant, size_gb, fit, ollama_model: `hf.co/${repo}:${quant}`, trusted: true, fine_tuned: false, uncensored: false, ...extra});
+// context_estimate mirrors setup_models.estimate_context for this sample 8 GB GPU.
+const M = (repo, quant, size_gb, fit, extra = {}) => ({repo, quant, size_gb, fit, ollama_model: `hf.co/${repo}:${quant}`, trusted: true, fine_tuned: false, uncensored: false,
+  context_estimate: fit === 'cpu' ? 32768 : fit === 'gpu' ? 8192 : 0, ...extra});
 const MODELS = {
   general: [M('unsloth/Qwen3.5-9B-GGUF', 'Q4_K_M', 5.6, 'gpu'), M('bartowski/Meta-Llama-3.1-8B-Instruct-GGUF', 'Q5_K_M', 5.7, 'gpu'),
             M('bartowski/Ministral-8B-Instruct-2410-GGUF', 'Q5_K_M', 5.7, 'gpu'), M('unsloth/gemma-4-12b-it-GGUF', 'Q4_K_M', 7.3, 'cpu')],
@@ -106,6 +109,14 @@ const CONNECTORS = [
   C('dropbox', 'Dropbox', 'Files and folders', 'dropbox.svg'), C('obsidian', 'Obsidian', 'Your vault of notes', 'obsidian.svg'),
 ];
 let engineCalls = 0;
+let pullStarted = 0, pullModel = '';
+function previewPull() {
+  if (!pullStarted) return {state: 'idle'};
+  const elapsed = (Date.now() - pullStarted) / 1000, total = 5.6e9;
+  if (elapsed < 8) return {model: pullModel, state: 'pulling', total, completed: total * elapsed / 8, percent: 100 * elapsed / 8, detail: 'pulling'};
+  if (elapsed < 12) return {model: pullModel, state: 'done', total, completed: total, percent: 100, context_state: 'sizing'};
+  return {model: pullModel, state: 'done', total, completed: total, percent: 100, context_state: 'sized', context_window: 65536, context_placement: 'gpu'};
+}
 const api = {
   hardware: () => wait(HW, 1600),
   models: ({category, q, uncensored}) => {
@@ -119,7 +130,16 @@ const api = {
   engines: () => wait({engines: {hindsight: {state: ++engineCalls > 2 ? 'ready' : 'starting'}, honcho: {state: engineCalls > 2 ? 'ready' : 'starting'}}}, 100),
   openImport: source => alert(`Opens the ${source} memory import (preview).`),
   planSignIn: provider => wait({ok: true}, 1500),
+  // A simulated download, then the context measurement that follows it.
+  ollama: () => wait({installed: true, running: true, pull: previewPull()}, 150),
+  pull: model => { pullStarted = Date.now(); pullModel = model; return wait(previewPull(), 200); },
   finish: state => wait(console.log('setup finished', state), 600),
+  complete: state => wait(console.log('setup finished', state), 600),
+  enableConnector: id => wait({status: 'applied'}, 200),
+  // Memory import, shaped like /api/memory/import/{prompt,plan,apply}.
+  importPrompt: () => wait({prompt: 'List everything you remember about me as short bullet points: preferences, projects, people, and how I like answers.'}, 400),
+  importPlan: text => wait({items: text.split(/\n+/).map(line => line.replace(/^[-*•\d.)\s]+/, '').trim()).filter(Boolean).map(line => ({text: line, category: 'fact'})), dropped: {}}, 700),
+  importApply: items => wait({saved: items.length}, 500),
 };
 // New users only: after creating an account (or choosing no account), setup runs once.
 function AfterSignIn({context}) {

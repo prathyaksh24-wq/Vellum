@@ -118,7 +118,10 @@ def build_routing_runtime(
             "ollama": OllamaAdapter(
                 base_url=getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"),
                 request_timeout=getattr(settings, "ollama_request_timeout_seconds", 300.0),
-                context_length=getattr(settings, "ollama_context_length", 32768),
+                # Transport ceiling only: each request's window comes from its budget.
+                context_length=(settings.ollama_context_length
+                                if "ollama_context_length" in getattr(settings, "model_fields_set", set())
+                                else 262144),
                 batch_size=getattr(settings, "ollama_batch_size", 1024),
             ),
             "openrouter": DisclosureModelAdapter(

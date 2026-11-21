@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
 
 from agent.llm.context import (ContextBudget, ContextBudgetExceeded, context_budget,
-                               digest_message, project_context, prompt_tokens)
+                               digest_message, fit_context, project_context, prompt_tokens)
 
 
 def policy(window=4096):
@@ -159,6 +159,46 @@ def test_tools_and_output_are_charged_to_same_budget():
         context_budget("ollama/test", output_tokens=4096, settings=settings(), model_limit=4096)
 
 
+def reasoning_policy():
+    # 4096 window, 2048 output reserved for a deep reasoning mode: 1536 input room.
+    return ContextBudget(4096, 2048, 512, .8, .5, 300, 2, role="main")
+
+
+def test_overflow_recovery_gives_back_reasoning_reserve_but_not_the_answer_budget():
+    prompt = [SystemMessage(content="Protected instructions. " * 300), HumanMessage(content="Current task", id="u")]
+    with pytest.raises(ContextBudgetExceeded):
+        project_context(prompt, [], reasoning_policy())
+    result = fit_context(prompt, [], reasoning_policy(), min_output=512)
+    assert result.report["recovery"] == "output_reduced"
+    assert 512 <= result.report["output_reserved"] < 2048 and result.report["output_requested"] == 2048
+    assert result.report["estimated_input_tokens"] <= result.report["input_limit"]
+    assert result.messages[-1].content == "Current task"
+    with pytest.raises(ContextBudgetExceeded):
+        fit_context(prompt, [], reasoning_policy(), min_output=2048)
+
+
+def test_fitting_prompt_is_untouched_by_recovery():
+    prompt = [SystemMessage(content="Short"), HumanMessage(content="Hi", id="u")]
+    result = fit_context(prompt, [], reasoning_policy(), min_output=512)
+    assert "recovery" not in result.report and result.report["output_reserved"] == 2048
+
+
+def test_engine_caps_generation_at_the_recovered_reserve(tmp_path):
+    from test_routing_engine import build_engine, add_credential, FakeAdapter
+    async def run():
+        store, engine, _, _ = build_engine(tmp_path, openrouter_outcomes=[])
+        adapter = FakeAdapter([AIMessage(content="ok")])
+        adapter.context_length = 4096
+        engine.adapters["ollama"] = adapter
+        add_credential(store, "ollama", "local")
+        prompt = [SystemMessage(content="Protected instructions. " * 300), HumanMessage(content="Task")]
+        response = await engine.ainvoke(messages=prompt, primary_model="ollama/test", context_role="main",
+                                        max_tokens=512, reasoning_mode="ultra")
+        assert response.response_metadata["vellum_context"]["recovery"] == "output_reduced"
+        assert adapter.kwargs_history[0]["max_tokens"] == response.response_metadata["vellum_context"]["output_reserved"] < 2048
+    asyncio.run(run())
+
+
 def test_disabled_compaction_still_rejects_overflow():
     with pytest.raises(ContextBudgetExceeded):
         project_context(history(), [], replace(policy(), enabled=False))
@@ -255,3 +295,71 @@ def test_graph_checkpoint_persists_digest_and_can_resume(tmp_path, monkeypatch):
     assert "23 November" in result["messages"][-1].content
     assert len(source) == 30
     connection.close()
+
+
+def test_automatic_compaction_announces_start_and_finish_and_archives_the_range(tmp_path, monkeypatch):
+    import agent.graph.agent as graph
+    import agent.llm.context as context
+    from agent.conversations.context_archive import context_archive
+
+    class Model:
+        max_tokens = 512
+        reasoning_mode = None
+        def invoke(self, messages, config):
+            return AIMessage(content="ORBIT launches on 23 November.")
+        async def astream(self, messages, config):
+            yield AIMessageChunk(content="ORBIT launches on 23 November.")
+
+    entry = SimpleNamespace(id="ollama/test", context=4096, tool_calling_compatibility="compatible")
+    monkeypatch.setattr(graph, "get_provider_registry", lambda: SimpleNamespace(resolve=lambda _:entry, current_model=lambda:entry))
+    monkeypatch.setattr(context, "context_budget", lambda *a, **k: policy())
+    monkeypatch.setattr(graph, "vellum_prompt", lambda state, config, **kwargs: [SystemMessage(content="Rules"),
+        *([digest_message(state["context_digest"])] if state.get("context_digest") else []), *state["messages"]])
+    from langgraph.checkpoint.memory import MemorySaver
+    runtime = graph._build_agent_runtime(llm=Model(), tools=[], checkpointer=MemorySaver(), runtime_model="ollama/test")
+    config = {"configurable": {"thread_id": "announce-qa"}}
+
+    async def run():
+        names = []
+        async for event in runtime.astream_events({"messages": history()[1:]}, config, version="v2"):
+            if event["event"] == "on_custom_event":
+                names.append((event["name"], event["data"].get("compacted") if event["data"] else None))
+        return names
+
+    events = asyncio.run(run())
+    assert events[0] == ("vellum_context_compacting", None)
+    assert events[1][0] == "vellum_context_compacted" and events[1][1] is True
+    blocks = context_archive().blocks("announce-qa")
+    assert blocks and "23 November" in blocks[0]["transcript"]
+
+
+
+def model_settings(main=None, cloud=None, ollama=None):
+    value = settings()
+    value.main_context_length, value.cloud_context_length = main, cloud
+    if ollama is not None:  # an explicit OLLAMA_CONTEXT_LENGTH
+        value.ollama_context_length, value.model_fields_set = ollama, {"ollama_context_length"}
+    return value
+
+
+def test_window_follows_the_chosen_model_under_its_caps():
+    # Hosted models get their own limit; local models stay under the Ollama window.
+    assert context_budget("anthropic/claude-opus-5", role="main", settings=model_settings(), model_limit=1_000_000).window == 1_000_000
+    assert context_budget("ollama/gemma4:12b", role="main", settings=model_settings(), model_limit=131072).window == 32768
+    # Optional cost cap for hosted models only, and an explicit cap for everything.
+    capped_cloud = model_settings(cloud=200_000)
+    assert context_budget("openai/gpt-5.6-sol", role="main", settings=capped_cloud, model_limit=1_050_000).window == 200_000
+    assert context_budget("ollama/gemma4:12b", role="main", settings=capped_cloud, model_limit=131072).window == 32768
+    assert context_budget("anthropic/claude-opus-5", role="main", settings=model_settings(main=65536), model_limit=1_000_000).window == 65536
+    # Specialists keep their own cap; unknown limits fall back safely.
+    assert context_budget("anthropic/claude-opus-5", settings=model_settings(), model_limit=1_000_000).window == 16384
+    assert context_budget("vendor/unknown", role="main", settings=model_settings(), model_limit=0).window == 32768
+
+
+def test_raising_the_local_window_keeps_the_same_summaries_with_more_room():
+    from agent.llm.context import local_num_ctx, summary_budget
+    assert local_num_ctx(model_settings()) == 32768
+    larger = model_settings(ollama=131072)
+    assert local_num_ctx(larger) == 131072 and local_num_ctx(model_settings(main=65536, ollama=131072)) == 65536
+    budget = context_budget("ollama/gemma4:12b", role="main", settings=larger, model_limit=131072)
+    assert budget.window == 131072 and budget.summary_tokens == summary_budget(131072) > summary_budget(32768)

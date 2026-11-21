@@ -453,3 +453,33 @@ def test_memory_llm_signature_tracks_provider_model_and_key(monkeypatch):
                         lambda: llm_routing.EngineLLM(provider="groq", model="m", api_key="secret-key"))
     signature = runtime.memory_llm_signature()
     assert signature[:2] == ("groq", "m") and signature[3] and "secret-key" not in str(signature)
+
+
+def test_every_launched_engine_is_tied_to_the_backend(tmp_path: Path):
+    contained = []
+    supervisor = EngineSupervisor(health_check=lambda url: True, popen=FakeProcess, sleep=lambda s: None,
+                                  container=contained.append)
+    supervisor.add_engine("hindsight", lambda: EngineSpec(name="hindsight", argv=["x"], env={},
+                                                          health_url="http://127.0.0.1:1/health"))
+    supervisor._launch("hindsight", supervisor._factories[0][1])
+    assert contained == [supervisor._processes["hindsight"].pid]
+
+
+def test_containment_failure_does_not_stop_an_engine(tmp_path: Path):
+    def broken(pid):
+        raise OSError("access denied")
+
+    supervisor = EngineSupervisor(health_check=lambda url: True, popen=FakeProcess, sleep=lambda s: None,
+                                  container=broken)
+    supervisor.add_engine("hindsight", lambda: EngineSpec(name="hindsight", argv=["x"], env={},
+                                                          health_url="http://127.0.0.1:1/health"))
+    assert supervisor._launch("hindsight", supervisor._factories[0][1]) is True
+
+
+def test_postgres_server_pid_comes_from_postmaster_pid(tmp_path: Path):
+    pg = EnginePostgres(tmp_path / "engines", pg_factory=FakePg, keyring=FakeKeyring())
+    assert pg.server_pid() is None
+    pg.data_dir.mkdir(parents=True)
+    (pg.data_dir / "postmaster.pid").write_text(chr(10).join(["4321", "C:/data", "1795007453"]))
+    assert pg.server_pid() == 4321
+

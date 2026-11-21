@@ -153,11 +153,13 @@ class RoutingEngine:
                 )
                 continue
 
-            from agent.llm.context import context_budget, project_context
+            from agent.llm.context import context_budget, fit_context
             effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
             budget = context_budget(target.model, role=context_role, output_tokens=effective_max_tokens,
                                     transport_limit=getattr(adapter, "context_length", None))
-            projection = project_context(messages, tools, budget)
+            projection = fit_context(messages, tools, budget, min_output=max_tokens)
+            # Overflow recovery may give back reasoning reserve; never generate past it.
+            effective_max_tokens = min(effective_max_tokens, projection.report["output_reserved"])
 
             preferred_id: str | None = None
             transient_retries = 0
@@ -387,11 +389,13 @@ class RoutingEngine:
                 )
                 continue
 
-            from agent.llm.context import context_budget, project_context
+            from agent.llm.context import context_budget, fit_context
             effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
             budget = context_budget(target.model, role=context_role, output_tokens=effective_max_tokens,
                                     transport_limit=getattr(adapter, "context_length", None))
-            projection = project_context(messages, tools, budget)
+            projection = fit_context(messages, tools, budget, min_output=max_tokens)
+            # Overflow recovery may give back reasoning reserve; never generate past it.
+            effective_max_tokens = min(effective_max_tokens, projection.report["output_reserved"])
 
             preferred_id: str | None = None
             transient_retries = 0

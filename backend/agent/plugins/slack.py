@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import httpx
 from jsonschema import Draft202012Validator
 
+from agent.plugins.tool_catalog import PersistedToolCatalog
 from agent.contracts.slack import SlackAppRegistration, SlackFlowStart, SlackFlowStatus, SlackMcpTool, SlackOAuthRequest, SlackStatus
 
 SERVER = "https://mcp.slack.com/mcp"
@@ -98,7 +99,9 @@ def tool_name(name):
     return value if len(value) <= 64 else value[:45] + "_" + hashlib.sha256(value.encode()).hexdigest()[:12]
 
 
-class SlackService(KeyringRecordStore):
+class SlackService(PersistedToolCatalog, KeyringRecordStore):
+    catalog_key = "slack"
+
     def __init__(self, *, keyring=None, enabled=None, clock=time.time, request=None, transport=None, invalidator=invalidate_tools):
         if keyring is None:
             import keyring as keyring
@@ -107,7 +110,6 @@ class SlackService(KeyringRecordStore):
         self.enabled = enabled or self._enabled
         self.request, self.transport, self.invalidator = request or httpx.request, transport, invalidator
         self.lock, self.flows = RLock(), {}
-        self.tools, self.tools_revision = [], ""
 
     @staticmethod
     def _enabled():
@@ -133,8 +135,7 @@ class SlackService(KeyringRecordStore):
             return SlackStatus(enabled=enabled, status="keyring_unavailable", message=str(exc))
         app = data.get("app") or {}
         configured = bool(data.get("access_token"))
-        fresh = 0 <= self.clock() - data.get("checked_epoch", 0) < 86400
-        connected = enabled and configured and data.get("status") == "ready" and fresh
+        connected = enabled and configured and data.get("status") == "ready"
         return SlackStatus(enabled=enabled, configured=configured, connected=connected, oauth_available=bool(app),
             app_id=app.get("app_id"), client_id=app.get("client_id"), account_name=data.get("account_name"),
             workspace_name=data.get("workspace_name"), verified_at=data.get("verified_at"),

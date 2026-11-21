@@ -69,11 +69,26 @@ def recommend(hw: Hardware) -> Recommendation:
             why = [f"Runs on your {hw.gpu_name or 'GPU'} ({hw.vram_gb:.0f} GB)" if on_gpu
                    else f"Runs on your processor with {hw.ram_gb:.0f} GB memory (no suitable GPU; slower)",
                    f"{tier['label']} is about {tier['size_gb']} GB to download"]
+            why.append(_context_reason(tier, on_gpu, hw))
             if not hw.ollama_installed:
                 why.append("Ollama will need to be installed to run it")
             return Recommendation(mode="local", model=tier["model"], label=tier["label"],
                                   size_gb=tier["size_gb"], reasons=why)
     return Recommendation(mode="cloud", reasons=["No local model fits this machine."])
+
+
+def _context_reason(tier: dict[str, Any], on_gpu: bool, hw: Hardware) -> str:
+    """How much conversation the recommended model can keep in view on this computer."""
+    from agent.llm.context_sizing import _read
+    measured = (_read().get("measured") or {}).get("ollama/" + tier["model"]) or {}
+    if measured.get("window"):
+        return f"Context window: {measured['window'] // 1024}k tokens, measured on this computer"
+    from agent.setup_models import estimate_context
+    tokens = estimate_context(tier["label"], tier["size_gb"], "gpu" if on_gpu else "cpu",
+                              {"vram_gb": hw.vram_gb, "ram_gb": hw.ram_gb})
+    if not on_gpu:
+        return f"Context window: about {tokens // 1024}k tokens on your processor"
+    return f"Context window: at least {tokens // 1024}k tokens on your GPU; Vellum measures the exact size after download"
 
 
 def scan(workspace: Path | None = None) -> Hardware:

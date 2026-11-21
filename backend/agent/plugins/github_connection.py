@@ -19,6 +19,7 @@ import httpx
 from jsonschema import Draft202012Validator
 
 from agent.config import get_settings
+from agent.plugins.tool_catalog import PersistedToolCatalog
 from agent.contracts.github_connection import GitHubConnectionRequest, GitHubConnectionStatus, GitHubFlowStart, GitHubFlowStatus, GitHubMcpTool
 
 MCP_URL = "https://api.githubcopilot.com/mcp/x/all"
@@ -44,7 +45,9 @@ def invalidate_tools():
     agent.invalidate()
 
 
-class GitHubConnectionService:
+class GitHubConnectionService(PersistedToolCatalog):
+    catalog_key = "github"
+
     def __init__(self, *, keyring=None, settings=get_settings, clock=time.time, enabled=None, request=None, transport=None, invalidator=invalidate_tools):
         if keyring is None:
             import keyring as keyring
@@ -55,8 +58,6 @@ class GitHubConnectionService:
         self.invalidator = invalidator
         self.lock = RLock()
         self.flows = {}
-        self.tools = []
-        self.tools_revision = ""
 
     @staticmethod
     def _enabled():
@@ -98,7 +99,7 @@ class GitHubConnectionService:
         except GitHubConnectionError as exc:
             return GitHubConnectionStatus(**base, status="keyring_unavailable", message=str(exc))
         configured = bool(data.get("access_token"))
-        connected = configured and enabled and data.get("status") == "ready" and 0 <= self.clock() - data.get("checked_epoch", 0) < 86400
+        connected = configured and enabled and data.get("status") == "ready"
         needs_reconnect = configured and data.get("status") == "reauthorization_required"
         return GitHubConnectionStatus(**base, configured=configured, connected=connected,
             status="disabled" if not enabled else "ready" if connected else "reauthorization_required" if needs_reconnect else "not_connected",

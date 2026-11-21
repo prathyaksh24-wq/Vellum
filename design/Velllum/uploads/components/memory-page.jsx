@@ -358,17 +358,30 @@
     </div>;
   }
 
-  function Sparkline({series}) {
-    const values = series.map(point => point.known);
-    if (values.length < 2) return null;
-    const max = Math.max(1, ...values), width = 300, height = 64;
-    const points = values.map((value, index) => [index / (values.length - 1) * width, height - 4 - value / max * (height - 8)]);
-    return <figure className="mp-spark">
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`Known facts rose from ${values[0]} to ${values[values.length - 1]}`}>
-        <polyline points={points.map(point => point.join(',')).join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>
-      </svg>
-      <figcaption><span>{shortDate(series[0].day)}</span><span>{shortDate(series[series.length - 1].day)}</span></figcaption>
-    </figure>;
+  const TOPIC_TONES = ['var(--av-c-instr)', 'var(--av-c-convo)', 'var(--av-c-memory)', 'var(--av-c-summary)', 'var(--av-c-retrieved)', 'var(--av-c-tools)'];
+
+  // Counts up with the analytics count-up (#007) when that module is loaded; plain text otherwise.
+  function Num({value, slot = 0}) {
+    const Analytics = window.VellumUI.Analytics;
+    return Analytics ? <Analytics.CountUp value={value} delay={150 + slot * 120}/> : String(value);
+  }
+
+  function TopicBars({topics}) {
+    const max = Math.max(1, ...topics.map(topic => topic.count));
+    return <div className="av-layers">{topics.slice(0, 8).map((topic, index) => <div className="av-layer-row" key={topic.topic}>
+      <span>{topic.topic}</span>
+      <span className="av-layer-bar"><i className="av-fill" style={{width: (topic.count / max * 100) + '%', background: TOPIC_TONES[index % TOPIC_TONES.length], '--slot': index}}/></span>
+      <span className="av-layer-v">{topic.count}</span>
+    </div>)}</div>;
+  }
+
+  function MostRecalled({recall}) {
+    const top = (recall && recall.top) || [];
+    if (!top.length) return <p className="mp-muted">Nothing has been recalled in a reply yet.</p>;
+    return <ol className="mp-recalled">{top.map((item, index) => <li key={item.id} className="av-enter" style={{'--slot': index}}>
+      <span className="mp-recalled-text">{item.title}</span>
+      <span className="mp-recalled-meta">{item.topic ? item.topic + ' · ' : ''}used {item.use_count}× · {relativeTime(item.last_used_at)}</span>
+    </li>)}</ol>;
   }
 
   function Growth({revision}) {
@@ -384,17 +397,31 @@
     if (!growth) return <p className="mp-muted" role="status">Loading…</p>;
     if (!growth.day_number) return <div className="mp-empty-state"><h2>Vellum is just getting to know you.</h2><p>As you chat, what it learns shows up here day by day: what you’ve told it, what it has picked up, and what you’ve corrected.</p></div>;
     const counts = growth.counts || {};
+    const recall = growth.recall || {total: counts.recalls || 0, used: 0, top: []};
+    const topics = growth.topics || (counts.topics || []).map(topic => ({topic, count: 0}));
+    const series = growth.series || [];
+    const added = series.reduce((sum, point) => sum + (point.added || 0), 0);
+    const Analytics = window.VellumUI.Analytics;
     return <div className="mp-growth">
       <header><h2>Day {growth.day_number}</h2><span className="mp-updated">Since {shortDate(growth.first_day)}</span></header>
       <dl className="mp-stats">
-        <div><dt>Known</dt><dd>{counts.known || 0}</dd></div>
-        <div><dt>Topics</dt><dd>{(counts.topics || []).length}</dd></div>
-        <div><dt>Recalled</dt><dd>{counts.recalls || 0}</dd></div>
+        <div><dt>Known</dt><dd><Num value={counts.known || 0} slot={0}/></dd>{growth.week_delta > 0 && <span className="mp-stat-note">+{growth.week_delta} this week</span>}</div>
+        <div><dt>Topics</dt><dd><Num value={topics.length} slot={1}/></dd></div>
+        <div><dt>Recalled</dt><dd><Num value={recall.total || 0} slot={2}/></dd>{recall.used > 0 && <span className="mp-stat-note">{recall.used} {recall.used === 1 ? 'memory' : 'memories'} used</span>}</div>
+        <div><dt>Archived</dt><dd><Num value={counts.archived || 0} slot={3}/></dd><span className="mp-stat-note">still recallable</span></div>
       </dl>
-      <Sparkline series={growth.series || []}/>
+      <section className="mp-growth-card">
+        <h3>How it built up <span className="mp-muted">{added ? `${added} learned in the last ${series.length} days` : ''}</span></h3>
+        {Analytics ? <Analytics.GrowthChart series={series}/> : null}
+      </section>
+      <div className="mp-growth-cols">
+        <section className="mp-growth-card"><h3>What it knows</h3>{topics.length ? <TopicBars topics={topics}/> : <p className="mp-muted">No topics yet.</p>}</section>
+        <section className="mp-growth-card"><h3>Most recalled</h3><MostRecalled recall={recall}/></section>
+      </div>
+      {Analytics && growth.ledger && <Analytics.ChangeLedger rows={growth.ledger} title="Ledger" subtitle="What changed in memory"/>}
       <section>
         <h3>Milestones</h3>
-        {(growth.milestones || []).length ? <ol className="mp-milestones">{growth.milestones.map((milestone, index) => <li key={index}><span className="mp-day">Day {milestone.day_number}</span><span>{milestone.text}</span></li>)}</ol>
+        {(growth.milestones || []).length ? <ol className="mp-milestones">{growth.milestones.map((milestone, index) => <li key={index} className="av-enter" style={{'--slot': Math.min(index, 14)}}><span className="mp-day">Day {milestone.day_number}</span><span>{milestone.text}</span></li>)}</ol>
           : <p className="mp-muted">Milestones appear as Vellum learns more.</p>}
       </section>
     </div>;

@@ -212,6 +212,7 @@ def run_profile(*, profile, executor, model, goal, context, thread_id, memory_re
         for call in calls:
             if time.monotonic() >= deadline:
                 return SpecialistResponse(agent=profile.id,status="error",summary="This specialist reached its time limit; no changes were made.")
+            completed_read = False
             try:
                 tool = by_name[call["name"]]
                 result = tool.invoke(call.get("args") or {})
@@ -223,12 +224,17 @@ def run_profile(*, profile, executor, model, goal, context, thread_id, memory_re
                 text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
                 if len(text) > 16000:
                     text = json.dumps({"incomplete":True,"notice":"Tool evidence exceeded this run's budget; narrow the query.","excerpt":text[:12000]})
+                # Writes return through action_results above, so a result that
+                # reaches the transcript is a completed read: older read rounds
+                # may then leave the prompt like the main graph's verified reads.
+                completed_read = True
             except Exception as exc:
                 # Do not expose provider errors or credentials to the model.
                 errors += 1
                 text = json.dumps({"error":type(exc).__name__,"notice":"Read unavailable or outside the profile permissions. Do not claim success."})
             if native_tools:
-                messages.append(ToolMessage(content=text, name=call['name'], tool_call_id=str(call.get("id") or "")))
+                messages.append(ToolMessage(content=text, name=call['name'], tool_call_id=str(call.get("id") or ""),
+                                            additional_kwargs={"vellum_read_only": True} if completed_read else {}))
             else:
                 messages.append(HumanMessage(content="Untrusted tool evidence:\n" + text))
         if errors >= 3:

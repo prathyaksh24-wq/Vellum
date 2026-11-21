@@ -2,11 +2,46 @@
 
 ## Ownership and defaults
 
-The main reasoning agent requests 32,768 context tokens. Specialist planning and
-synthesis request 16,384 tokens. These are per-request ceilings, not separate
-model copies or a guarantee that every prompt fits. AgentCatalog profiles may
-set `context_length` to narrow their specialist budget; it cannot expand the
-global specialist ceiling.
+The main reasoning agent's window follows the chosen model: its catalog limit,
+under whichever caps apply. A local Ollama model runs at the window this
+computer can hold (`agent/llm/context_sizing.py`), in this order of precedence:
+an explicit `OLLAMA_CONTEXT_LENGTH`; the choice in Settings → Configuration →
+Context window (or the `settings.context_window.set` App Action, which chat can
+also use: "set the context to 64k"); the measured window; 32,768 until a
+measurement exists. Hosted models use their full limit (for example 1,000,000
+for Claude Opus or 1,050,000 for GPT-5.6) unless `CLOUD_CONTEXT_LENGTH` or the
+Settings cap applies. `MAIN_CONTEXT_LENGTH`, when set, caps every main-agent
+window.
+
+**Hardware sizing.** After a reply finishes (and right after an onboarding
+download), Vellum loads an unmeasured local model at 131,072, 65,536, 32,768 and
+16,384 tokens in turn and asks Ollama where it placed it (`/api/ps`: `size_vram`
+against `size`). The largest window that keeps the whole model in GPU memory
+wins; a model with no GPU placement gets 32,768 (on a processor, speed rather
+than memory is the limit); partial placement keeps 32,768. This works on any
+GPU Ollama supports and accounts for architectures such as Gemma 4's
+sliding-window attention, where a 131,072 window costs only about 270 MB more
+than 65,536. The result, with the GPU it was measured on, is stored in
+`data/llm-routing/context-sizing.json`, and the model is left loaded at the
+chosen window so the next reply does not reload it. Automatic sizing stops at
+131,072; Settings can go higher. `CONTEXT_AUTO_SIZE=false` turns it off.
+Onboarding shows a conservative estimate on each model card before download
+(about 16 KB of attention cache per token per billion parameters against the
+GPU memory left after the weights) and the measured window once the download
+finishes. Model discovery now reports a local model's own maximum; the window
+it runs at is chosen per request. A model with no known limit and no cap gets
+32,768. Specialist planning and synthesis request 16,384 tokens. These are
+per-request ceilings, not separate model copies or a guarantee that every
+prompt fits. AgentCatalog profiles may set `context_length` to narrow their
+specialist budget; it cannot expand the global specialist ceiling.
+
+Everything that carries a long conversation scales with the window: the
+compaction trigger (80%) and target (55%), the summary budget (about 8%), and
+how many stored summaries are shown. Summaries, the working state and tool
+evidence do not depend on the window, so switching models mid-chat or raising a
+window later keeps continuity. Hosted prompts grow with the window: a 1M-token
+model compacts at about 750k input tokens, so every call in a very long chat
+sends far more than a 32k one; set `CLOUD_CONTEXT_LENGTH` to bound that cost.
 
 Local thinking capability does not enable additional reasoning automatically.
 Standard turns send `think=false`; explicitly selected reasoning modes retain
@@ -76,21 +111,131 @@ including the reasoning mode's scaled allowance. A safety margin of at least
 512 tokens (5% of the window) is withheld as well.
 
 The estimator uses UTF-8 bytes divided by three plus framing/schema overhead.
-It is an estimate, not the model tokenizer. Each image reserves 8192 tokens;
-actual multimodal costs differ by model. Provider-specific tokenization and
-multimodal calibration remain future work.
+It is an estimate, not the model tokenizer. For local Ollama models it is
+calibrated once per model (`agent/llm/token_calibration.py`): Vellum sends its
+own runtime documents and a JSON tool-schema sample to the model with a random
+prefix (defeating the prompt cache), reads Ollama's real `prompt_eval_count`,
+and stores real-per-estimated ratios for prose and for structured text, each
+with a 10% safety margin, in `data/llm-routing/token-calibration.json`.
+Estimates inside a projection then use the structured ratio for JSON-like text
+(schemas, tool results, tool calls) and the prose ratio otherwise. A model that
+has not been measured keeps the uncalibrated (conservative) estimate;
+`CONTEXT_TOKEN_CALIBRATION=false` turns calibration off. Each image reserves
+8192 tokens; multimodal calibration remains future work.
 
 Compaction starts when estimated input plus reserved output and margin exceeds
 80% of the window. It aims for 55% input occupancy, preferring recent turns
 while staying below the trigger. Protected instructions and a single current
 user request are never truncated. Within a single long task, closed older
 read-only tool rounds may also be compacted, with the two latest rounds kept
-exact. Mutation rounds and unknown/dynamic tool operations stay exact. If the
-protected material cannot fit, the request fails before
-provider submission with a request to narrow the material. Disabling compaction
-retains this overflow guard.
+exact. Specialist read rounds carry the same `vellum_read_only` provenance as
+the main graph's verified reads. Mutation rounds and unknown/dynamic tool
+operations stay exact. If the protected material still does not fit,
+`fit_context` recovers before rejecting: it first compacts as hard as a manual
+compaction, then gives back only the extra output reserve a reasoning mode
+added (never below the standard answer budget), and the routing engine caps
+generation at the reserve that fit (`recovery` and `output_reserved` in the
+report). Only when neither works does the request fail before provider
+submission with a request to narrow the material. Disabling compaction retains
+this overflow guard.
 Disabling it stops future compaction; it does not expand an already compacted
 checkpoint back into full history. The original saved chat remains available.
+
+### Tool-result evidence store
+
+Tool results that leave the working prompt stay retrievable
+(`agent/conversations/evidence.py`, `data/memory/evidence.db`):
+
+- MCP projections keep the full original. A connector call saves the
+  normalized result (up to 2 MB) and adds an `evidence_id` to its summary or
+  structured projection. It is captured below the thread boundary, so the
+  record starts unclaimed; unclaimed records expire after an hour.
+- The graph's tool step (`keep_evidence` in `graph/tool_reuse.py`) claims
+  those ids for the conversation, saves other results longer than 1,200
+  characters (shorter ones survive whole in the compaction excerpt), and
+  replaces any result over 16,000 characters with its first 12,000 characters,
+  its size and its id.
+- Compaction digest entries carry the `evidence_id` of removed tool results,
+  and the digest lists the 12 most recent under `evidence`.
+- `conversation_history(evidence_id=..., page=...)` pages through a stored
+  result (6,000 characters per page); with `query` it returns matching
+  passages with their offsets. Records are readable only from the conversation
+  that owns them and are returned as untrusted tool evidence, the same
+  disclosure path as the original result.
+- Deleting a conversation deletes its evidence (`SessionsReader.delete`);
+  evidence older than 90 days is removed, matching history retention.
+
+Specialist read loops still bound oversized results to an excerpt without
+storing them; specialists have no recall tool to read them back.
+
+### Long-conversation continuity
+
+`agent/conversations/context_archive.py` keeps a long chat's thread when
+compaction removes older turns, at any context window:
+
+- **Blocks.** Each compaction records the removed messages' transcript
+  (tool results cited by `evidence_id`, at most 2,000 characters each) as one
+  or more blocks of at most 24,000 characters, in the same local SQLite file
+  as tool-result evidence.
+- **Summaries and working state.** After a reply finishes (`turn_finished`,
+  called where the turn audit is finalized), a background worker asks the
+  local model (`MEMORY_LLM_MODEL`, same `num_ctx` as chat so Ollama never
+  reloads) to summarize each new block and update the conversation's working
+  state: goal, decisions, constraints, open items and durable facts. Output is
+  validated and bounded; a failed block keeps its excerpts and stops after two
+  attempts. When more than eight summaries exist, the oldest four are merged
+  into a higher-level summary. `CONTEXT_SUMMARIES_ENABLED=false` turns this off.
+- **Prompt.** The digest shows the working state and the newest summaries that
+  fit the summary budget (about 8% of the window, `summary_budget`), lists
+  older summaries by `block_id`, and hides excerpts a summary already covers.
+  Until a block is summarized, its excerpts cover it. Because blocks and the
+  working state do not depend on the window, raising it (for example to 65k or
+  128k) shows more of the same summaries with no migration.
+- **Tools** (always visible to the main agent): `context_status` (window,
+  used and free tokens by layer, compactions, summaries, stored results),
+  `search_context` (summaries, compacted transcripts, saved messages and
+  tool results of this chat), `decompress(block_id, page)` (a summary's
+  original messages, or a merged summary's parts) and `compress(focus)`
+  (compact before the next step). They mirror billion-context's
+  compress / decompress / search_context / status; compaction stays automatic.
+- **Visible progress.** When automatic compaction starts, the chat shows
+  "Compacting context"; the same row completes as "Compacted context · N earlier
+  messages summarized" (or "Context already fits").
+- Blocks and the working state live as long as the chat: deleting the
+  conversation deletes them.
+
+On three long recorded threads, the local gemma4 summarizer produced 9 of 9
+valid summaries with updated working states and kept every extracted specific
+(IDs, numbers, paths) it was given; calls took 25–100 seconds, which is why
+they run after the reply rather than before it.
+
+### Replay baseline
+
+`scripts/context_replay.py` replays recorded threads (rebuilt uncompacted from
+`data/memory/checkpoints.db` through a private copy; no model calls) through
+the current prompt prefix, visible tool schemas and budget, and reports
+compaction rate, overflow rate, window use and how much tool evidence leaves
+the prompt. On 2026-11-19, 54 threads with at least 20 messages (1,487 model
+calls) on `ollama/gemma4:12b` at a 32,768-token window gave:
+
+| Configuration | Compacting calls | Overflowing calls | Median / p95 window use | Tool evidence removed |
+|---|---|---|---|---|
+| Standard output, before | 10.9% | 0% | 62% / 71% | 79% |
+| Standard output, calibrated + recovery | 3.0% | 0% | 46% / 66% | 66% |
+| 8,192-token reasoning reserve, before | 72.9% | 5.4% (19 threads) | 61% / 65% | 81% |
+| 8,192-token reasoning reserve, calibrated + recovery | 11.2% | 0% | 45% / 52% | 79% |
+
+The fixed prefix alone (instructions, personal memory, visible tool schemas)
+was about 18,000 estimated tokens before calibration (about 11,400 calibrated;
+real gemma4 instructions measured 8,737 tokens).
+
+`--evidence` applies the tool step's evidence ids and per-result bound to the
+replay (nothing is stored). With standard output, calibration and recovery,
+removed tool evidence fell from 66% to 51% of tool-result tokens, and the share
+that could not be recovered (removed, longer than a digest excerpt, and with no
+evidence id) fell from 63% to 0%; compaction (2.9%) and window use (46% / 66%)
+were unchanged. Historic threads predate connector capture, so this measures
+the main-graph path only.
 
 ## Persistence and privacy
 

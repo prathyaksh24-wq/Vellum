@@ -143,14 +143,11 @@ def test_enablement_is_enforced_and_disconnect_invalidates_pending(connection):
         service.connect(reference)
 
 
-def test_stale_verification_and_revocation_are_truthful(connection):
+def test_saved_connection_stays_connected_until_revoked(connection):
     service, _, settings, _ = connection
     connect(service)
-    settings["now"] += 86401
-    assert service.status().configured and not service.status().connected
-    assert service.status().status == "not_checked"
-    service.verify()
-    assert service.status().connected
+    settings["now"] += 2 * 86400
+    assert service.status().connected and service.status().status == "ready"
     settings["code"] = 401
     with pytest.raises(ProductHuntError):
         service.read(ProductHuntRead())

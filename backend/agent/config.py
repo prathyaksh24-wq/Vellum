@@ -74,7 +74,10 @@ class Settings(BaseSettings):
     )
     # Transport ceiling; role budgets below choose the actual request window.
     ollama_context_length: int = Field(default=32768, ge=4096, le=262144, alias="OLLAMA_CONTEXT_LENGTH")
-    main_context_length: int = Field(default=32768, ge=4096, le=262144, alias="MAIN_CONTEXT_LENGTH")
+    # Unset: the main agent's window follows the chosen model's own limit.
+    main_context_length: int | None = Field(default=None, ge=4096, le=2_000_000, alias="MAIN_CONTEXT_LENGTH")
+    # Optional cost cap for hosted (non-Ollama) models; unset uses their full limit.
+    cloud_context_length: int | None = Field(default=None, ge=4096, le=2_000_000, alias="CLOUD_CONTEXT_LENGTH")
     specialist_context_length: int = Field(default=16384, ge=4096, le=262144, alias="SPECIALIST_CONTEXT_LENGTH")
     context_summary_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARY_ENABLED")
     context_summary_timeout_seconds: float = Field(default=20.0, ge=1, le=120, alias="CONTEXT_SUMMARY_TIMEOUT_SECONDS")
@@ -82,6 +85,12 @@ class Settings(BaseSettings):
     context_compaction_trigger_ratio: float = Field(default=.80, ge=.5, le=.95, alias="CONTEXT_COMPACTION_TRIGGER_RATIO")
     context_compaction_target_ratio: float = Field(default=.55, ge=.2, le=.8, alias="CONTEXT_COMPACTION_TARGET_RATIO")
     context_recent_turns: int = Field(default=4, ge=1, le=20, alias="CONTEXT_RECENT_TURNS")
+    # Measure local models' real token counts once and scale estimates by them.
+    context_token_calibration: bool = Field(default=True, alias="CONTEXT_TOKEN_CALIBRATION")
+    # Summarize compacted ranges and keep a working state with the local model, after each turn.
+    context_summaries_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARIES_ENABLED")
+    # Measure each local model's largest GPU-resident window once, after a reply.
+    context_auto_size: bool = Field(default=True, alias="CONTEXT_AUTO_SIZE")
     ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     model_picker_provider: Literal['ollama', 'openrouter', 'openai'] | None = Field(default=None, alias='MODEL_PICKER_PROVIDER')

@@ -93,6 +93,10 @@ class PullStatus:
     started_at: float = 0.0
     applied_model: str = ""
     error: str = ""
+    # After the download: the measured context window for this computer.
+    context_state: str = ""  # "" | sizing | sized | skipped
+    context_window: int = 0
+    context_placement: str = ""  # gpu | cpu | partial
 
     def as_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -104,9 +108,11 @@ class ModelPull:
     """One background Ollama pull at a time, with progress for the wizard."""
 
     def __init__(self, *, opener: Callable[..., Any] = urllib.request.urlopen,
-                 on_done: Callable[[str], str] | None = None) -> None:
+                 on_done: Callable[[str], str] | None = None,
+                 on_sized: Callable[[str], dict[str, Any] | None] | None = None) -> None:
         self._open = opener
         self._on_done = on_done
+        self._on_sized = on_sized
         self._lock = threading.Lock()
         self.status = PullStatus()
         self._thread: threading.Thread | None = None
@@ -149,9 +155,27 @@ class ModelPull:
                 self.status.state, self.status.detail, self.status.applied_model = "done", "Ready", applied
                 if self.status.total:
                     self.status.completed = self.status.total
+                self.status.context_state = "sizing" if self._on_sized else ""
         except Exception as exc:  # noqa: BLE001 - reported to the wizard
             with self._lock:
                 self.status.state, self.status.error = "error", _friendly_pull_error(exc)
+            return
+        if self._on_sized:
+            self._size(applied or model)
+
+    def _size(self, model_id: str) -> None:
+        """Measure the new model's context window on this computer (the model is ready either way)."""
+        try:
+            result = self._on_sized(model_id)
+        except Exception:  # noqa: BLE001 - the default window stays in effect
+            result = None
+        with self._lock:
+            if result and result.get("window"):
+                self.status.context_state = "sized"
+                self.status.context_window = int(result["window"])
+                self.status.context_placement = str(result.get("placement") or "")
+            else:
+                self.status.context_state = "skipped"
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

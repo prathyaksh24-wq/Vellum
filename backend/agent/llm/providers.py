@@ -185,8 +185,8 @@ def _show_ollama_model(base_url: str, name: str) -> tuple[int | None, tuple[str,
             if parsed > 0:
                 context_length = parsed
                 break
-    if context_length is not None:
-        context_length = min(context_length, get_settings().ollama_context_length)
+    # The model's own maximum; the window it runs at is chosen per request
+    # (context_sizing.local_window) from this computer's measured capacity.
     return context_length, capabilities, compatibility
 
 
