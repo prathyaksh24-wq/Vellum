@@ -66,3 +66,15 @@ def test_rejected_refresh_is_not_reported_as_connected(connection):
     connection.use_configured()
     connection.save({**connection.load(), 'refresh_rejected': True})
     assert not connection.status().connected
+
+
+def test_old_unsalted_cache_files_are_ignored(connection):
+    import hashlib
+    connection.use_configured()
+    connection.catalog()
+    revision = connection.load()['revision']
+    legacy = {'format': 'vellum-tool-catalog-v1', 'revision_sha256': hashlib.sha256(revision.encode()).hexdigest(),
+              'tools': [{'name': 'planted'}]}
+    connection._catalog_path().write_text(json.dumps(legacy), encoding='utf-8')
+    later = restart(connection, connection.keyring, clock=lambda: 1000)
+    assert later.cached_tools() == []

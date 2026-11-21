@@ -3,13 +3,15 @@
 Connector services compare their in-memory catalog revision with the revision
 saved in the OS credential store. Without a durable copy, every restart left the
 catalog empty and each connector reported "catalog changed, refresh" until the
-user reconnected. This mixin stores only the public tool schemas and a SHA-256
-of the connection revision; credentials and the revision itself stay in the OS
-credential store, and a catalog is restored only when that hash still matches.
+user reconnected. This mixin stores only the public tool schemas and a salted
+PBKDF2 digest of the connection revision; credentials and the revision itself
+stay in the OS credential store, and a catalog is restored only when the digest
+still matches. Files from the earlier SHA-256 format are ignored (one refresh).
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -17,7 +19,10 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
-FORMAT = "vellum-tool-catalog-v1"
+FORMAT = "vellum-tool-catalog-v2"
+# The revision comes from the credential store, so it is hashed like a stored
+# secret: salted and deliberately slow, never a bare fast hash.
+KDF_ITERATIONS = 120_000
 
 
 def default_catalog_dir() -> Path:
@@ -25,8 +30,8 @@ def default_catalog_dir() -> Path:
     return Path(REPO_ROOT) / "data" / "plugins" / "tool-catalogs"
 
 
-def _digest(revision: str) -> str:
-    return hashlib.sha256(revision.encode("utf-8")).hexdigest()
+def _digest(revision: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", revision.encode("utf-8"), bytes.fromhex(salt), KDF_ITERATIONS).hex()
 
 
 class PersistedToolCatalog:
@@ -73,7 +78,8 @@ class PersistedToolCatalog:
                 return
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(".tmp")
-            temporary.write_text(json.dumps({"format": FORMAT, "revision_sha256": _digest(revision),
+            salt = os.urandom(16).hex()
+            temporary.write_text(json.dumps({"format": FORMAT, "salt": salt, "revision_digest": _digest(revision, salt),
                                              "tools": tools}, ensure_ascii=False), encoding="utf-8")
             os.replace(temporary, path)
         except OSError as exc:  # a missing cache only costs one catalog refresh
@@ -95,6 +101,11 @@ class PersistedToolCatalog:
         except Exception:  # credential store locked: keep the cache for a later read
             self.__dict__["_catalog_restored"] = False
             return
-        if revision and _digest(revision) == stored.get("revision_sha256"):
+        salt, expected = str(stored.get("salt") or ""), str(stored.get("revision_digest") or "")
+        try:
+            matches = bool(revision and salt and expected) and hmac.compare_digest(_digest(revision, salt), expected)
+        except ValueError:  # malformed salt
+            matches = False
+        if matches:
             self.__dict__["_catalog_tools"] = tools
             self.__dict__["_catalog_revision"] = revision
