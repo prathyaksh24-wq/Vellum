@@ -1,18 +1,14 @@
 /* Settings and discovery share the catalog owner, with different reading layouts. */
 .settings-analytics .settings-content{max-width:1280px}
 .settings-analytics .set-body{padding:44px clamp(20px,3vw,48px) 64px}
-.settings-analytics .obs-page{overflow:visible;padding:0;background:transparent}
-.settings-analytics .obs-head{flex-wrap:wrap}
-.settings-analytics .obs-title{font-size:26px;font-weight:500}
-.settings-analytics .obs-head-actions{flex-wrap:wrap}
-.settings-analytics .obs-overview{grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(150px,.7fr))}
-.settings-analytics .obs-stat:last-child{display:none}
+.settings-analytics .av-page{height:auto;overflow:visible}
+.settings-analytics .av-page-inner{max-width:none;padding:0}
+.settings-analytics .av-page-head h1{font-size:26px;font-weight:500}
 .settings-archive .page{overflow:visible;padding:0}
 .settings-archive .page-inner{max-width:none!important}
 .settings-archive .page-title{font-size:26px;font-weight:500}
 .settings-archive .arc-row{gap:12px;flex-wrap:wrap;overflow-wrap:anywhere}
-@media(max-width:1000px){.settings-analytics .obs-overview{grid-template-columns:1fr 1fr}.settings-analytics .obs-active{grid-column:1/-1}.settings-analytics .obs-side{grid-template-columns:1fr}.settings-analytics .obs-run-meta{grid-template-columns:1fr 1fr}}
-@media(max-width:650px){.settings-analytics .set-body{padding:30px 20px 50px}.settings-analytics .obs-overview{grid-template-columns:minmax(0,1fr)}.settings-analytics .obs-active{grid-column:auto}.settings-analytics .obs-sub{max-width:100%}.settings-archive .arc-act{margin-left:auto}}
+@media(max-width:650px){.settings-analytics .set-body{padding:30px 20px 50px}.settings-archive .arc-act{margin-left:auto}}
 @media(max-width:650px){.settings-page .set-nav .sn-title{padding:5px 0;font-size:17px}.sk-source-head{flex-wrap:wrap}.sk-source-panel .sk-source-head h3{flex-basis:100%;font-size:16px}.sk-source-panel .sk-source-rendered{padding:20px}.sk-source-rendered .skill-metadata>div{grid-template-columns:100px minmax(0,1fr);gap:12px}}
 .plugin-add{position:relative}.plugin-add-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:30;width:244px;padding:6px;border:1px solid var(--line2);border-radius:12px;background:var(--menu-solid);box-shadow:0 16px 40px rgba(0,0,0,.3)}.plugin-add-menu button{display:block;width:100%;border:0;border-radius:7px;background:none;color:var(--txt2);padding:11px 12px;text-align:left;font:inherit;font-size:12px;cursor:pointer}.plugin-add-menu button:hover{background:var(--hover)}.plugin-setup-backdrop{position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:24px}.plugin-setup-dialog{width:min(540px,100%);max-height:90vh;overflow:auto;padding:28px;border:1px solid var(--line2);border-radius:16px;background:var(--menu-solid);color:var(--txt2);box-shadow:0 30px 100px rgba(0,0,0,.4)}.plugin-setup-dialog h2{font-family:var(--font-d);font-size:23px;font-weight:500;margin-bottom:12px}.plugin-setup-dialog p{font-size:12px;color:var(--dim);line-height:1.8;margin-bottom:18px}.plugin-setup-dialog fieldset{border:0;min-width:0}.plugin-setup-dialog label{display:block;font-size:12px;margin:18px 0 8px}.plugin-setup-dialog :is(input,textarea,select){display:block;width:100%;border:1px solid var(--line2);border-radius:8px;background:var(--input);color:var(--txt2);font:inherit;font-size:12px;padding:10px 12px;margin-top:8px;caret-color:var(--txt2)}.plugin-setup-dialog textarea{min-height:76px;resize:vertical}.plugin-setup-actions,.plugin-setup-review>div{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}.plugin-setup-review{padding-top:20px;border-top:1px solid var(--line);margin-top:20px}.plugin-setup-review h3{font-size:14px;margin-bottom:12px}.plugin-setup-review pre{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:16px}.plugin-directory,.plugin-directory-nav{scrollbar-color:var(--line2) transparent}
 .voice-settings-tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-bottom:24px}.voice-settings-tabs button{border:0;border-bottom:2px solid transparent;padding:0 0 13px;background:none;color:var(--dim);font:inherit;font-size:13px;cursor:pointer}.voice-settings-tabs button[aria-pressed=true]{color:var(--txt2);border-color:var(--txt2)}

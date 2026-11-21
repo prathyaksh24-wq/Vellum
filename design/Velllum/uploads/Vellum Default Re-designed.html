@@ -813,8 +813,8 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 /* reusable vertical preview rail - shared by chats and sub-agent chats */
 .conversation-preview-anchor{position:absolute;inset:56px 0 24px;z-index:24;pointer-events:none;container-type:inline-size}
 .preview-rail{position:absolute;inset-block:0;left:4px;width:52px;display:flex;align-items:center;overflow:visible;isolation:isolate;pointer-events:none}
-.thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:56px}
-[data-preview-rail-position=right] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:24px;padding-right:56px}
+.thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:80px}
+[data-preview-rail-position=right] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:24px;padding-right:80px}
 [data-preview-rail-visibility=hidden] .conversation-preview-anchor{display:none}
 [data-preview-rail-visibility=hidden] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-inline:24px}
 [data-preview-rail-position=right] .preview-rail{left:auto;right:4px;justify-content:flex-end}
@@ -3417,7 +3417,6 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><window.VellumUI.AppIcon name="Music"/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
-      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Analytics" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
         <div className="chat-row" onClick={onNewProject}>
@@ -5300,7 +5299,7 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, onEditMessage, sideChat=false}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, onEditMessage, sideChat=false, hidePreviewRail=false}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -5335,7 +5334,8 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
       <div className="thread-col">
       {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
 
-      <ConversationPreviewRail messages={msgs}/>
+      {/* The rail steps aside while a workspace tab (browser, files…) shares the screen. */}
+      {!hidePreviewRail && <ConversationPreviewRail messages={msgs}/>}
       <div className="msgs">
         {sideChat && !msgs.length && <div className="side-chat-identity"><IcChat size={30}/><h1>Side chat</h1></div>}
         <div className="msgs-inner">
@@ -6650,7 +6650,7 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
 const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onOpenMemory, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
-  const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
+  const selectSettingsTab = next => setTab(next);
   const [settingsQuery, setSettingsQuery] = useState('');
   const settingsPageRef = useRef(null);
   useEffect(() => {
@@ -6761,8 +6761,8 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
         </div>
         <div className="set-body">
           <div className="settings-content">
+          {tab === 'Analytics' && window.VellumUI.AnalyticsPage && <window.VellumUI.AnalyticsPage control={analyticsControl} onAction={onAnalyticsAction} embedded/>}
           {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat} onDeleteAll={onDeleteArchivedChats}/>}
-          {tab === 'Analytics' && <div className="set-row">Analytics has its own page: runs, traces, context and usage.<span className="sr-end"><button type="button" className="btn" onClick={() => onAnalyticsAction && onAnalyticsAction('observability.open',{})}>Open Analytics</button></span></div>}
           {tab === 'Profile' && <window.VellumUI.Profile.Page key={profile.accountId} profile={profile} onSave={onProfileSave}/>}
           {tab === 'Account' && <window.VellumUI.Accounts.Settings details={<window.VellumUI.Profile.AccountDetails key={profile.accountId} profile={profile} onSave={onProfileSave}/>}/>}
 
@@ -8650,19 +8650,17 @@ const [slashSkills, setSlashSkills] = useState([]);
   const nav = v => {
     setScheduledChatId(null);
     // Keep older shortcuts, links, and action receipts on their new Settings home.
-    if (['skills','archive'].includes(v)) {
+    if (['skills','ledger','archive'].includes(v)) {
       if (v === 'skills') setSettingsPluginTarget({v:'settings',tab:'skills'});
-      setSettingsTab(v === 'archive' ? 'Archive' : 'Plugins');
+      setSettingsTab(v === 'ledger' ? 'Analytics' : v === 'archive' ? 'Archive' : 'Plugins');
       dispatchSurfacePresentation('settings', {visible:true}, {notify:false});
-      setView(current => ['skills','archive'].includes(current) ? 'chat' : current);
+      setView(current => ['skills','ledger','archive'].includes(current) ? 'chat' : current);
       setMenu(null);
       setActivityMsg(null);
       return;
     }
     const next = APP_VIEW_IDS.has(v) ? v : '404';
     if (next === 'music') navigationEpochRef.current += 1;
-    // Analytics is a full page; leave Settings when it is opened from there.
-    if (next === 'ledger' && settingsOpen) dispatchSurfacePresentation('settings', {visible:false}, {notify:false});
     if (next === '404') {
       try {
         const url = new URL(window.location.href);
@@ -8674,7 +8672,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     setMenu(null);
     setActivityMsg(null);
   };
-  useEffect(() => { if(['skills','archive'].includes(view))nav(view); }, [view]);
+  useEffect(() => { if(['skills','ledger','archive'].includes(view))nav(view); }, [view]);
   const applyAgentSelection = id => {
     if (id === 'vellum') { setView('chat'); setActiveAgentId(null); }
     else { setView('agent'); setActiveAgentId(id); }
@@ -10595,7 +10593,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={workspaceController.hide}>
           <div className="main" data-variant="inset" data-main-sidebar={sidebarPinned?'open':'closed'}>
 
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
+            {view === 'chat' && <ChatView hidePreviewRail={workspacePanelVisible} chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
               onEditVoiceTranscript={(messageId, value) => updateTurn(activeChatId, messageId, m => ({...m, text:value, transcriptEdited:true}), true)}
               onEditMessage={(messageId,value) => editUserMessage(activeChatId,messageId,value)}
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
@@ -10625,7 +10623,6 @@ const [slashSkills, setSlashSkills] = useState([]);
               onOpenChat={openScheduledRunChat} onOpenTask={openScheduledTask} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={pluginSidebarVisible} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
-            {view === 'ledger' && <window.VellumUI.AnalyticsPage control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'memory' && <window.VellumUI.MemoryPage onMemoryAction={dispatchMemoryAction} onOpenChat={prompt => sendMessage(prompt, [], {forceNew:true, projectId:null})} onOpenSettings={() => {setSettingsTab('Personalization');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>

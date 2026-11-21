@@ -255,7 +255,10 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("ObservabilityActions.applyReceipt(current, receipt)");
     expect(html).toContain("navigation.view === 'ledger'");
     expect(analyticsPage).not.toContain("onClick={() => setPaused");
-    expect(html).toContain("{view === 'ledger' && <window.VellumUI.AnalyticsPage control={observabilityControl} onAction={dispatchObservabilityAction}/>}");
+    // Analytics lives inside Settings (with the Settings sidebar), not as a separate page.
+    expect(html).toContain("{tab === 'Analytics' && window.VellumUI.AnalyticsPage && <window.VellumUI.AnalyticsPage control={analyticsControl} onAction={onAnalyticsAction} embedded/>}");
+    expect(html).toContain("setSettingsTab(v === 'ledger' ? 'Analytics'");
+    expect(html).toContain("{!hidePreviewRail && <ConversationPreviewRail messages={msgs}/>}");
     expect(html).not.toContain("CB_DATA");
   });
 
