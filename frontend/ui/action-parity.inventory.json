@@ -238,8 +238,8 @@
       "sha256": "425e2db7dbeb616b78e742b164457fe7af916f58744d28cb43c17ba82023e0a7"
     },
     "design/Velllum/uploads/components/streaming-text.js": {
-      "count": 8,
-      "sha256": "948198c6d6c61ea3e4cc51cba1e836188f279bac2e54cbfa8cce420ac4ac637d"
+      "count": 11,
+      "sha256": "c126eb21dd72ba4378b29c3c145d96a2455cb4b5b57894e5264d1341e704d565"
     },
     "design/Velllum/uploads/components/thinking-orbs.jsx": {
       "count": 0,
@@ -2747,6 +2747,10 @@
     {
       "scope": "Analytics page tabs, period and metric toggles, run list filter and selection, trace span expand/collapse and detail, chart hover, the composer context meter and /context popover, Memory growth ledger expansion",
       "reason": "Read-only presentation of local observability, turn-audit and memory records. Live streaming and refresh use observability.stream.set and observability.refresh; opening Analytics uses observability.open; /compact keeps its existing command path."
+    },
+    {
+      "scope": "Responses settings for thinking and work steps, and opening the live Thinking / Thought process panel",
+      "reason": "The new switches (Think before every answer, Show memory steps, Show work steps) save through the existing settings.device.update App Action like the other Responses preferences. Opening the thinking panel is presentation only."
     }
   ],
   "deferred": [

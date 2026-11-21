@@ -2676,16 +2676,19 @@ async def _compact_conversation_stream(request, thread_id):
 
 async def _run_agent(*args, **kwargs):
     from agent.llm.providers import request_model_scope
-    from agent.personalization import personalization_scope
+    from agent.personalization import personalization_scope, thinking_scope
     from agent.tools.app_actions import app_action_session, drain_app_action_events
 
+    from agent.foreground import mark_user_active
+
+    mark_user_active()  # background model work waits while the user chats
     model = kwargs.get('model', args[2] if len(args) > 2 else None)
     preferences = kwargs.pop('personalization', None)
     explicit_web_search = kwargs.pop('explicit_web_search', False)
     query = kwargs.get('message', args[0] if args else '')
     action_context = kwargs.pop('app_action_context', None)
     thread_id = kwargs.get('thread_id', args[1] if len(args) > 1 else get_settings().thread_id)
-    with request_model_scope(model), personalization_scope(preferences, query, explicit_web_search=explicit_web_search), app_action_session(action_context, thread_id, _app_action_runtime):
+    with request_model_scope(model), personalization_scope(preferences, query, explicit_web_search=explicit_web_search), thinking_scope(action_context), app_action_session(action_context, thread_id, _app_action_runtime):
         response = await _run_agent_scoped(*args, **kwargs)
         response.action_receipts.extend(ActionReceipt.model_validate(event['receipt']) for event in drain_app_action_events())
         return response
@@ -4897,13 +4900,16 @@ async def _stream_agent_turn(**kwargs):
 
 async def _stream_agent_turn_events(**kwargs):
     from agent.llm.providers import request_model_scope
-    from agent.personalization import personalization_scope
+    from agent.personalization import personalization_scope, thinking_scope
     from agent.tools.app_actions import app_action_session
 
+    from agent.foreground import mark_user_active
+
+    mark_user_active()  # background model work waits while the user chats
     preferences = kwargs.pop('personalization', None)
     explicit_web_search = kwargs.pop('explicit_web_search', False)
     action_context = kwargs.pop('app_action_context', None)
-    with request_model_scope(kwargs.get("model")), personalization_scope(preferences, kwargs.get('clean_message', ''), explicit_web_search=explicit_web_search), app_action_session(action_context, kwargs['active_thread_id'], _app_action_runtime):
+    with request_model_scope(kwargs.get("model")), personalization_scope(preferences, kwargs.get('clean_message', ''), explicit_web_search=explicit_web_search), thinking_scope(action_context), app_action_session(action_context, kwargs['active_thread_id'], _app_action_runtime):
         async for event in _stream_agent_turn_scoped(**kwargs):
             yield event
 
@@ -5277,10 +5283,11 @@ async def _stream_agent_turn_scoped(
                     if not _is_primary_chat_model_stream_event(event):
                         continue
                     chunk = event.get("data", {}).get("chunk")
-                    # Ollama deliberately exposes a separate local thinking output.
-                    if str(resolved_model).startswith('ollama/'):
+                    # Any provider's streamed thinking: Ollama's own, and OpenAI-compatible
+                    # providers' (kept by the routing adapters' reasoning client).
+                    if True:
                         additional = chunk.get('additional_kwargs', {}) if isinstance(chunk, dict) else getattr(chunk, 'additional_kwargs', {})
-                        thinking = additional.get('reasoning_content', '')
+                        thinking = (additional or {}).get('reasoning_content', '')
                         if isinstance(thinking, str) and thinking:
                             thinking_id = "thought-" + str(event.get("run_id") or "primary")
                             local_thinking[thinking_id] = local_thinking.get(thinking_id, '') + thinking
@@ -6887,8 +6894,35 @@ async def memory_growth() -> dict[str, Any]:
 async def memory_engines() -> dict[str, Any]:
     """Embedded memory engine status: starting / ready / needs_model / error, with a reason."""
     from agent.memory.engines.runtime import engines_status
+    from agent.memory.orchestrator import SYNC_PROVIDER
 
-    return await asyncio.to_thread(engines_status)
+    status = await asyncio.to_thread(engines_status)
+    store = _memory_orchestrator.store
+    if store is not None:
+        # Self-healing sync at a glance: synced / pending / failed (retrying) / stopped.
+        status["sync"] = await asyncio.to_thread(store.sync_counts, SYNC_PROVIDER)
+    return status
+
+
+@router.get("/memory/learning")
+async def memory_learning_status() -> dict[str, Any]:
+    """How much of the user's history Vellum has learned from, and its recent learning journal."""
+    from agent.memory.learner import default_learner
+
+    learner = await asyncio.to_thread(default_learner)
+    status = await asyncio.to_thread(learner.status)
+    journal = [entry for entry in await asyncio.to_thread(_memory_orchestrator.store.audit_log, limit=200)
+               if entry.get("event") in {"learned", "corrected", "retired"}][:50]
+    return {**status, "journal": journal}
+
+
+@router.post("/memory/learning/run")
+async def memory_learning_run() -> dict[str, Any]:
+    """Learn from due conversations now instead of waiting for the next scheduled run."""
+    from agent.memory.learner import default_learner
+
+    learner = await asyncio.to_thread(default_learner)
+    return await asyncio.to_thread(learner.run)
 
 
 @router.get("/memory/import/prompt")

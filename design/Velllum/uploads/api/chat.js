@@ -255,7 +255,9 @@
         emitTrace();
       } else if (ev === 'response.reasoning_text.delta' || ev === 'response.reasoning_text.done') {
         const id=data.item_id || 'model-thinking',old=activity.find(item=>item.id===id),done=ev.endsWith('.done');
-        upsert({id,type:'model_reasoning',label:'Thought process',detail:done?(data.text || old?.detail || ''):(old?.detail || '')+(data.delta || ''),status:done?'completed':'in_progress'});emitTrace();
+        // Start and end times give the "Thinking · 12s" / "Thought for 12s" timer.
+        upsert({id,type:'model_reasoning',label:'Thought process',detail:done?(data.text || old?.detail || ''):(old?.detail || '')+(data.delta || ''),status:done?'completed':'in_progress',
+          at:old?.at || Date.now(),...(done?{completedAt:Date.now()}:{})});emitTrace();
       } else if (ev === 'response.reasoning_summary_text.delta') {
         const id = data.item_id || 'reasoning-summary';
         const old = activity.find(item => item.id === id);

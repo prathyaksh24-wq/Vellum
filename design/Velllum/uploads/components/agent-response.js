@@ -89,6 +89,10 @@
       h('button',{type:'button',className:'agent-link-button',disabled:state === 'busy',onClick:undo},'Undo'),
       state === 'error' && h('span',{className:'agent-memory-error'},'Could not undo'));
   }
+  // What Vellum shows while it works follows Settings > Responses.
+  function visibleSteps(items, prefs) {
+    return items.filter(item => isMemoryItem(item) ? prefs.memory_steps !== false : prefs.work_steps !== false);
+  }
   function recalledMemories(msg) {
     const seen = new Map();
     for (const item of activityItems(msg)) {
@@ -105,7 +109,7 @@
     const [marks,setMarks] = window.React.useState({});
     const region = 'memory-recall-' + window.React.useId().replace(/:/g,'');
     const memories = recalledMemories(msg);
-    if (!memories.length) return null;
+    if (!memories.length || window.VellumUI.useResponsePreferences().memory_steps === false) return null;
     const mark = async (memory, kind) => {
       setMarks(current => ({...current,[memory.id]:'busy'}));
       try {
@@ -159,7 +163,8 @@
   }
   function ResponseProgress({msg}) {
     const progress=window.VellumUI.responseProgress(msg),identity=window.VellumUI.responseModel(msg);
-    const items=window.VellumUI.workItems(msg),steps=items.filter(item=>!['model_reasoning','reasoning_summary'].includes(item.type));
+    const prefs=window.VellumUI.useResponsePreferences();
+    const items=window.VellumUI.workItems(msg),steps=visibleSteps(items.filter(item=>!['model_reasoning','reasoning_summary'].includes(item.type)),prefs);
     const hasReasoning=items.some(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim());
     const hasDetails=steps.length>0 || hasReasoning;
     const [expanded,setExpanded]=window.React.useState(null);
@@ -208,7 +213,7 @@
     const viewport = window.React.useRef(null), following = window.React.useRef(true), previouslyWorking = window.React.useRef(msg.streaming);
     const progress=window.VellumUI.responseProgress(msg), identity=window.VellumUI.responseModel(msg);
     const allItems=activityItems(msg);
-    const items = allItems.filter(item=>!['model_reasoning','reasoning_summary'].includes(item.type)), working = progress.active;
+    const items = visibleSteps(allItems.filter(item=>!['model_reasoning','reasoning_summary'].includes(item.type)),prefs), working = progress.active;
     const hasReasoning=prefs.thinking && allItems.some(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim());
     const hasDetails=items.length>0 || hasReasoning;
     const status = msg.responseStatus || msg.trace?.status || (working ? 'thinking' : 'done');
@@ -257,13 +262,28 @@
   function ThoughtProcess({msg}) {
     const prefs=window.VellumUI.useResponsePreferences();
     const [open,setOpen]=window.React.useState(false);
+    const [now,setNow]=window.React.useState(Date.now());
     const region='thought-'+window.React.useId().replace(/:/g,'');
+    const textRef=window.React.useRef(null);
     const items=activityItems(msg).filter(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim());
+    const thinking=!!msg.streaming && items.some(item=>item.status!=='completed');
+    const first=items.reduce((min,item)=>Math.min(min,time(item.at) ?? Infinity),Infinity);
+    const last=items.reduce((max,item)=>Math.max(max,time(item.completedAt ?? item.at) ?? 0),0);
+    window.React.useEffect(()=>{if(!thinking)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[thinking]);
+    // Follow the live text while it streams, like watching it think.
+    window.React.useEffect(()=>{if(open && thinking && textRef.current)textRef.current.scrollTop=textRef.current.scrollHeight;});
     if(!items.length || !prefs.thinking)return null;
-    return h('section',{className:'agent-thought-process'},
+    const seconds=Number.isFinite(first)?Math.max(1,Math.round(((thinking?now:(last||now))-first)/1000)):0;
+    const summaryOnly=!items.some(item=>item.type==='model_reasoning');
+    const label=thinking?(summaryOnly?'Summarizing its reasoning':'Thinking')
+      :summaryOnly?'Reasoning summary':seconds?`Thought for ${seconds}s`:'Thought process';
+    return h('section',{className:'agent-thought-process'+(thinking?' is-thinking':'')},
       h('button',{type:'button',className:'agent-thought-heading','aria-expanded':open,'aria-controls':region,onClick:()=>setOpen(!open)},
-        h(Icon,{kind:'reasoning'}),items.some(item=>item.type==='model_reasoning')?'Thought process':'Reasoning summary',h(Icon,{kind:'chevron',size:12})),
-      open && h('div',{id:region,className:'agent-thought-text'},items.map(item=>h(window.VellumUI.AnswerMarkdown,{key:item.id,text:item.detail || ''}))));
+        h(Icon,{kind:'reasoning'}),
+        thinking && window.VellumUI.AnimatedStatus ? h(window.VellumUI.AnimatedStatus,{text:label+(seconds?` · ${seconds}s`:''),variant:prefs.loading || 'cascade'}) : label,
+        h(Icon,{kind:'chevron',size:12})),
+      open && h('div',{id:region,ref:textRef,className:'agent-thought-text','aria-live':thinking?'polite':undefined},
+        items.map(item=>h(window.VellumUI.AnswerMarkdown,{key:item.id,text:item.detail || ''}))));
   }
   function Citations({sources=[],idPrefix,activeId,onActivate}) {
     const [open,setOpen]=window.React.useState(false);

@@ -124,6 +124,12 @@ class DeviceStreamingSettings(BaseModel):
     speed: int = Field(default=12,ge=2,le=24)
     pencil: bool = True
     thinking: bool = True
+    # Thinking models (Gemma 4, Qwen 3...) think before every reply, not only
+    # in the reasoning modes. Slower answers; the thinking streams live.
+    think_always: bool = False
+    # What Vellum shows while it works, besides the answer.
+    memory_steps: bool = True
+    work_steps: bool = True
     citations: Literal['auto','always','hidden'] = 'auto'
 
 
