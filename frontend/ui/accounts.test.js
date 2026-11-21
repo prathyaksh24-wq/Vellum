@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 afterEach(async () => {await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.restoreAllMocks();});
 
-test('first launch offers Google and GitHub first, then email registration and a persistent guest choice', async () => {
+test('first launch offers Google and GitHub first, then email registration, and requires sign-in', async () => {
   await render();
   // New users can sign up with Google or GitHub directly, not only from "Sign in".
   expect(button('Continue with Google').disabled).toBe(false);
@@ -73,17 +73,28 @@ test('first launch offers Google and GitHub first, then email registration and a
   expect(host.textContent).toContain('Sign in to Vellum');
   expect(button('Continue with Google').disabled).toBe(false);
   expect(button('Continue with GitHub').disabled).toBe(false);
-  await click('Continue without an account');
+  // Sign-in works here, so there is no way around it.
+  expect(button('Continue without an account')).toBeUndefined();
+  expect(button('Sign-in is unavailable · continue on this device')).toBeUndefined();
+  expect(host.textContent).not.toContain('Local workspace');
+  expect(api.start).not.toHaveBeenCalled();
+});
+
+test('when no sign-in method works, this device stays usable', async () => {
+  state = {...state, email_auth_available:false,
+    providers:state.providers.map(provider => ({...provider, available:false, reason:'Not configured.'}))};
+  await render();
+  await click('Sign-in is unavailable · continue on this device');
+  expect(api.continueLocal).toHaveBeenCalledOnce();
   expect(host.textContent).toContain('Local workspace');
   expect(localStorage.getItem('vellum-local-welcome-v1')).toBe('1');
-  expect(api.start).not.toHaveBeenCalled();
 });
 
 test('an unavailable backend preserves local access and explains the error', async () => {
   api.status.mockRejectedValue(new Error('Backend offline'));
   await render();
   expect(host.querySelector('[role="alert"]').textContent).toContain('Backend offline');
-  await click('Continue without an account');
+  await click('Sign-in is unavailable · continue on this device');
   expect(host.textContent).toContain('Local workspace');
 });
 
@@ -164,9 +175,9 @@ test('logout returns to sign-in even after local continuation and survives a sta
   await click('Sign up');
   expect(host.textContent).toContain('Create your Vellum account');
   expect(button('Create account')).toBeTruthy();
-  await click('Continue without an account');
-  expect(api.continueLocal).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Local workspace');
+  // Logging out leads back to sign-in; it is not a side door into guest use.
+  expect(button('Sign-in is unavailable · continue on this device')).toBeUndefined();
+  expect(api.continueLocal).not.toHaveBeenCalled();
 });
 
 test('persisted logout overrides a local-use marker left in another tab', async () => {

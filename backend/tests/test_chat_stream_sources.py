@@ -733,9 +733,14 @@ def test_stream_agent_turn_emits_delegated_agent_reach_activity_events(monkeypat
 
 
 def test_stream_agent_turn_starts_before_slow_x_dispatch_finishes(monkeypatch):
+    # Compare the two moments directly: a wall-clock bound also counts cold
+    # imports before dispatch starts, which depend on which tests ran first.
+    finished = []
+
     class SlowDispatcher:
         def maybe_handle(self, message, thread_id):
             time.sleep(0.15)
+            finished.append(time.perf_counter())
             return LiveAgentResult(
                 handled=True,
                 agent_name="XAgent",
@@ -753,16 +758,16 @@ def test_stream_agent_turn_starts_before_slow_x_dispatch_finishes(monkeypatch):
             model=None,
             store=False,
         )
-        started = time.perf_counter()
         first = await anext(stream)
-        elapsed = time.perf_counter() - started
+        received = time.perf_counter()
+        await asyncio.sleep(0.3)  # let the slow dispatch finish
         await stream.aclose()
-        return first, elapsed
+        return first, received
 
-    first, elapsed = asyncio.run(_first_event())
+    first, received = asyncio.run(_first_event())
 
     assert "event: response.created" in first
-    assert elapsed < 0.1
+    assert finished and received < finished[0]
 
 
 def test_stream_agent_turn_chunks_x_passthrough_answer(monkeypatch):
