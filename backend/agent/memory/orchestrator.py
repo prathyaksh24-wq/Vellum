@@ -61,6 +61,11 @@ DEFAULT_MEMORY_SETTINGS: dict[str, bool | int] = {
 
 # The provider that mirrors durable memories (via the memory_sync ledger).
 SYNC_PROVIDER = "hindsight"
+# Self-healing sync: back off between failed tries, stop after a few, then
+# retry stopped items once a day or as soon as the provider works again.
+SYNC_MAX_ATTEMPTS = 5
+SYNC_MAX_BACKOFF_SECONDS = 3600.0
+SYNC_DAILY_RETRY_SECONDS = 86400.0
 
 # Where a memory came from. Stated memories are things the user said directly;
 # they are never removed by retention.
@@ -485,17 +490,65 @@ class SQLiteMemoryStore:
                  1 if error else 0, _squash(error, limit=300), now),
             )
 
-    def sync_pending(self, provider: str, *, max_attempts: int = 5, limit: int = 50) -> list[dict[str, Any]]:
+    def sync_pending(self, provider: str, *, max_attempts: int = SYNC_MAX_ATTEMPTS, limit: int = 50) -> list[dict[str, Any]]:
+        """Items due for another try: new ones now, failed ones after a growing wait.
+
+        A failed item waits 2, 4, 8, 16... minutes (capped at an hour) between
+        tries and stops after ``max_attempts``. A stopped item still gets one
+        try a day, in case whatever broke it was fixed.
+        """
+        now = datetime.now(UTC)
         with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM memory_sync
-                WHERE provider = ? AND state IN ('pending', 'failed', 'forget') AND attempts < ?
-                ORDER BY updated_at ASC LIMIT ?
+                WHERE provider = ? AND state IN ('pending', 'failed', 'forget')
+                ORDER BY updated_at ASC
                 """,
-                (provider, int(max_attempts), int(limit)),
+                (provider,),
             ).fetchall()
-        return [_row_dict(row) for row in rows]
+        due: list[dict[str, Any]] = []
+        for row in map(_row_dict, rows):
+            attempts = int(row.get("attempts") or 0)
+            try:
+                waited = (now - datetime.fromisoformat(str(row["updated_at"]))).total_seconds()
+            except (TypeError, ValueError):
+                waited = float("inf")
+            if attempts >= max_attempts:
+                wait = SYNC_DAILY_RETRY_SECONDS  # stopped: one try a day
+            elif attempts:
+                wait = min(60.0 * 2 ** attempts, SYNC_MAX_BACKOFF_SECONDS)
+            else:
+                wait = 0.0
+            if waited >= wait:
+                due.append(row)
+            if len(due) >= limit:
+                break
+        return due
+
+    def sync_revive(self, provider: str, *, max_attempts: int = SYNC_MAX_ATTEMPTS) -> int:
+        """Give stopped items a fresh start once the provider is working again."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE memory_sync SET attempts = 0 WHERE provider = ? AND state IN ('failed', 'forget') AND attempts >= ?",
+                (provider, int(max_attempts)),
+            )
+            return int(cursor.rowcount or 0)
+
+    def sync_counts(self, provider: str, *, max_attempts: int = SYNC_MAX_ATTEMPTS) -> dict[str, int]:
+        """What memory sync looks like right now, for status screens."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT CASE WHEN state IN ('failed', 'forget') AND attempts >= ? THEN 'stopped'
+                            WHEN state = 'forget' THEN 'pending' ELSE state END AS bucket, COUNT(*)
+                FROM memory_sync WHERE provider = ? GROUP BY bucket
+                """,
+                (int(max_attempts), provider),
+            ).fetchall()
+        counts = {"synced": 0, "pending": 0, "failed": 0, "stopped": 0}
+        counts.update({str(bucket): int(count) for bucket, count in rows})
+        return counts
 
     def record_provider_doc(self, doc_id: str, provider: str, kind: str) -> None:
         if not doc_id:
@@ -747,7 +800,13 @@ class MemoryOrchestrator:
         if provider is None or not hasattr(provider, "retain_memory") or (callable(health) and not health()):
             result["skipped"] = "provider_unavailable"
             return result
+        from agent.foreground import user_is_active
+
         for row in self.store.sync_pending(SYNC_PROVIDER, limit=limit):
+            if user_is_active():
+                # Hindsight extracts with the same model the user is chatting with: wait.
+                result["skipped"] = "user_active"
+                break
             memory_id = int(row["memory_id"])
             try:
                 if row["state"] == "forget":
@@ -770,6 +829,9 @@ class MemoryOrchestrator:
                 self.store.sync_mark(memory_id, SYNC_PROVIDER, state="failed" if row["state"] != "forget" else "forget",
                                      error=str(exc))
                 result["failed"] += 1
+        if result["retained"] or result["forgotten"]:
+            # The provider works again: whatever had given up gets a fresh start.
+            result["revived"] = self.store.sync_revive(SYNC_PROVIDER)
         return result
 
     def lookup_specialist_response(self, *, profile: AgentProfile, query: str) -> CacheDecision:
@@ -998,8 +1060,11 @@ class MemoryOrchestrator:
         from agent.memory.recall import select_relevant_memories
 
         assert self.store is not None
+        # Standing memories ride along with every message (like custom instructions);
+        # they're marked so the chat doesn't show them as "recalled" each time.
         standing = [
-            item for item in _durable_memories(self.store.list_saved(scopes=baseline_scopes))
+            {**item, "standing": True}
+            for item in _durable_memories(self.store.list_saved(scopes=baseline_scopes))
             if item.get("pinned") or item.get("kind") in {"preference", "correction"}
         ][:6] if baseline_scopes else []
         standing_ids = {item["id"] for item in standing}

@@ -49,11 +49,17 @@ def keyword_rank(query: str, memories: list[dict[str, Any]], *, limit: int) -> l
     terms = _terms(query)
     if not terms:
         return []
+    # One shared word counts only when it's distinctive ("coffee" in one memory).
+    # A word many memories mention ("github") needs a second matching word.
+    haystacks = [_terms(f"{m.get('title')} {m.get('description')} {m.get('text')}") for m in memories]
+    common_at = max(1, int(0.03 * len(memories)))
+    frequency = {term: sum(term in h for h in haystacks) for term in terms}
+    distinctive = {term for term, count in frequency.items() if count <= common_at}
     scored = []
-    for memory in memories:
-        haystack = _terms(f"{memory.get('title')} {memory.get('description')} {memory.get('text')}")
-        overlap = len(terms & haystack)
-        if overlap:
+    for memory, haystack in zip(memories, haystacks):
+        shared = terms & haystack
+        overlap = len(shared)
+        if overlap >= 2 or shared & distinctive or (overlap and len(terms) == 1):
             score = overlap + 0.25 * int(memory.get("feedback_score") or 0) + 0.05 * min(int(memory.get("use_count") or 0), 20)
             scored.append((score, memory))
     scored.sort(key=lambda pair: pair[0], reverse=True)

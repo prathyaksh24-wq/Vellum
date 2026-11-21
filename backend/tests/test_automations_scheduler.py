@@ -278,6 +278,36 @@ def test_fire_skips_when_run_already_in_flight(tmp_path) -> None:
     assert runs[0]["status"] == "running"
 
 
+def test_a_run_left_running_by_a_restart_no_longer_blocks_its_schedule(tmp_path) -> None:
+    store = AutomationStore(tmp_path)
+    automation = _create(store, name="interrupted")
+    store.record_run(automation["id"], "run-before-restart")
+    calls = []
+
+    async def fake_executor(record, _store):
+        calls.append(record["id"])
+        return {"status": "complete"}
+
+    automation_scheduler = AutomationScheduler(store, scheduler=FakeScheduler(), executor=fake_executor)
+    automation_scheduler.install_all()  # what the backend does at startup
+
+    stale = store.runs(automation["id"])[0]
+    assert stale["status"] == "failed" and "Interrupted" in stale["error"]
+    asyncio.run(automation_scheduler._fire(automation["id"]))
+    assert calls == [automation["id"]]
+
+
+def test_a_run_stuck_for_hours_stops_blocking(tmp_path) -> None:
+    from agent.automations import scheduler as scheduler_module
+
+    automation = {"run_history": [{"status": "running",
+                                   "started_at": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()}]}
+    assert AutomationScheduler._busy(automation) is False
+    automation["run_history"][0]["started_at"] = datetime.now(timezone.utc).isoformat()
+    assert AutomationScheduler._busy(automation) is True
+    assert scheduler_module.STUCK_RUN_SECONDS == 2 * 3600
+
+
 def test_fire_records_executor_crash(tmp_path) -> None:
     store = AutomationStore(tmp_path)
     automation = _create(store, name="crashy")

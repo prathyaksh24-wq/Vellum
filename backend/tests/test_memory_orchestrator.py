@@ -519,6 +519,52 @@ class FakeHindsight:
         return None
 
 
+def _age_sync_rows(store: SQLiteMemoryStore, *, seconds: float) -> None:
+    """Pretend the last sync try happened ``seconds`` ago."""
+    import sqlite3
+    from datetime import UTC, datetime, timedelta
+
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute("UPDATE memory_sync SET updated_at = ?",
+                     ((datetime.now(UTC) - timedelta(seconds=seconds)).isoformat(),))
+
+
+def test_sync_backs_off_stops_after_five_failures_then_heals(tmp_path: Path) -> None:
+    provider = FakeHindsight(fail=True)
+    orchestrator, store = _orchestrator_with(tmp_path, provider)
+    orchestrator.save_explicit_memory(kind="fact", text="Lives near the coast.", source_thread_id="t1", confidence=0.95)
+    tries = 0
+    for _ in range(12):  # many sync runs, each long after the last
+        tries += orchestrator.flush_provider_sync()["failed"]
+        _age_sync_rows(store, seconds=3600)
+    assert tries == 5  # backed off between tries and stopped after five
+    assert store.sync_counts("hindsight")["stopped"] == 1
+
+    # Once a day a stopped item is tried again, in case the cause was fixed.
+    provider.fail = False
+    _age_sync_rows(store, seconds=86400)
+    assert orchestrator.flush_provider_sync()["retained"] == 1
+    assert store.sync_counts("hindsight") == {"synced": 1, "pending": 0, "failed": 0, "stopped": 0}
+
+
+def test_a_working_provider_revives_items_that_gave_up(tmp_path: Path) -> None:
+    provider = FakeHindsight(fail=True)
+    orchestrator, store = _orchestrator_with(tmp_path, provider)
+    stuck = orchestrator.save_explicit_memory(kind="fact", text="Owns a sourdough starter.", source_thread_id="t1",
+                                              confidence=0.95)
+    for _ in range(5):
+        orchestrator.flush_provider_sync()
+        _age_sync_rows(store, seconds=3600)
+    assert store.sync_counts("hindsight")["stopped"] == 1
+
+    provider.fail = False
+    orchestrator.save_explicit_memory(kind="fact", text="Practices Japanese.", source_thread_id="t1", confidence=0.95)
+    first = orchestrator.flush_provider_sync()  # the new memory goes through: the provider works
+    assert first["retained"] == 1 and first["revived"] == 1
+    assert orchestrator.flush_provider_sync()["retained"] == 1  # the stuck one heals right away
+    assert f"vellum-memory-{stuck['id']}" in provider.docs
+
+
 def _orchestrator_with(tmp_path: Path, provider) -> tuple[MemoryOrchestrator, SQLiteMemoryStore]:
     from agent.memory.provider_extensions import MemoryProviderExtensionManager
 
@@ -586,6 +632,8 @@ def test_failed_hindsight_sends_stay_queued_and_unsent_deletes_need_nothing(tmp_
     assert orchestrator.flush_provider_sync()["failed"] == 1
     assert store.sync_status("hindsight") == {"failed": 1}
     provider.fail = False
+    assert orchestrator.flush_provider_sync()["retained"] == 0  # backing off, not hammering
+    _age_sync_rows(store, seconds=180)
     assert orchestrator.flush_provider_sync()["retained"] == 1
 
     other = orchestrator.save_explicit_memory(kind="fact", text="Never synced memory.",

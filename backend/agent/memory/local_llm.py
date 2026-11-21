@@ -23,13 +23,29 @@ def _endpoint() -> tuple[str, str]:
     return settings.ollama_base_url.rstrip("/"), settings.memory_llm_model
 
 
+def shared_context(model: str) -> dict[str, int]:
+    """Ask Ollama for the same context size chat uses for this model.
+
+    Ollama loads a separate copy of a model for each context size, so memory
+    work at its own size doubled GPU memory and pushed models onto the
+    processor. Matching chat's window shares the one loaded copy.
+    """
+    try:
+        from agent.config import get_settings
+        from agent.llm.context_sizing import local_window
+
+        return {"num_ctx": int(local_window(f"ollama/{model}", get_settings()))}
+    except Exception:  # noqa: BLE001 - fall back to Ollama's default
+        return {}
+
+
 def _body(system: str, prompt: str, *, model: str, json_mode: bool, stream: bool, max_tokens: int) -> bytes:
     payload: dict[str, Any] = {
         "model": model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         "stream": stream,
         "think": False,
-        "options": {"temperature": 0.2, "num_predict": max_tokens},
+        "options": {"temperature": 0.2, "num_predict": max_tokens, **shared_context(model)},
     }
     if json_mode:
         payload["format"] = "json"

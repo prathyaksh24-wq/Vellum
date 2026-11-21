@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 JOB_PREFIX = "automation-"
 MISFIRE_GRACE_SECONDS = 3600
+# No automation run should take longer than this; one that claims to is stuck.
+STUCK_RUN_SECONDS = 2 * 3600
 
 
 class AutomationScheduler:
@@ -38,6 +40,9 @@ class AutomationScheduler:
         self.executor = executor or run_automation_now
 
     def install_all(self) -> list[str]:
+        # Runs still marked "running" at startup belong to a process that is gone
+        # (a restart or crash mid-run). Left alone they block their schedule forever.
+        self.recover_interrupted_runs()
         registered: list[str] = []
         for automation in self.store.list():
             if automation.get("state") == "active" and self.install(automation):
@@ -128,9 +133,30 @@ class AutomationScheduler:
         store.record_run(automation_id, run_id)
         store.finish_run(automation_id, run_id, status="failed", error=reason)
 
+    def recover_interrupted_runs(self) -> int:
+        recovered = 0
+        for automation in self.store.list():
+            for run in automation.get("run_history", []):
+                if run.get("status") == "running":
+                    self.store.finish_run(automation["id"], run["id"], status="failed",
+                                          error="Interrupted: Vellum restarted during this run")
+                    recovered += 1
+        if recovered:
+            logger.info("[AUTOMATIONS] Marked %s interrupted run(s) so their schedules resume", recovered)
+        return recovered
+
     @staticmethod
     def _busy(automation: dict[str, Any]) -> bool:
-        return any(run.get("status") == "running" for run in automation.get("run_history", []))
+        # A run claiming to be in flight for longer than any run should take is
+        # stuck; it must not block the schedule forever.
+        now = datetime.now(timezone.utc)
+        for run in automation.get("run_history", []):
+            if run.get("status") != "running":
+                continue
+            started = _date(run.get("started_at"))
+            if started is None or now - started < timedelta(seconds=STUCK_RUN_SECONDS):
+                return True
+        return False
 
     @staticmethod
     def _job_id(automation_id: str) -> str:

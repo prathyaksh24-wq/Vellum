@@ -28,6 +28,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 STATES = ("off", "starting", "ready", "needs_model", "error", "stopped")
+SETUP_STEP_TIMEOUT = 180.0  # a migration or setup script that runs longer is stuck
+LAUNCH_RETRY_FIRST = 10.0   # an engine that failed to start retries after 10 s...
+LAUNCH_RETRY_MAX = 1800.0   # ...doubling up to every 30 minutes
 
 
 class EngineNotReady(Exception):
@@ -206,8 +209,9 @@ class EngineSupervisor:
         status.state, status.reason, status.url = "starting", "", spec.url
         try:
             for step in spec.before_start:
+                # Never wait on input, and give up early: a stuck step heals on the next try.
                 done = subprocess.run(step, env=spec.env, cwd=spec.cwd, capture_output=True,  # noqa: S603
-                                      timeout=600, check=False)
+                                      stdin=subprocess.DEVNULL, timeout=SETUP_STEP_TIMEOUT, check=False)
                 if done.returncode != 0:
                     tail = (done.stderr or done.stdout or b"").decode("utf-8", "replace").strip().splitlines()[-3:]
                     raise RuntimeError(f"setup step failed ({' '.join(step[-2:])}): {' | '.join(tail)}")
@@ -246,16 +250,35 @@ class EngineSupervisor:
 
     def _watch(self) -> None:
         backoff: dict[str, float] = {}
+        retry_at: dict[str, float] = {}  # engines that never started: when to try again
         while not self._stop.is_set():
             if self._config_changed():
                 logger.info("[ENGINES] memory model changed; restarting engines")
                 self.restart_all()
                 backoff.clear()
+                retry_at.clear()
                 continue
             for name, factory in self._factories:
                 process = self._processes.get(name)
                 status = self._status[name]
-                if process is None or process.poll() is None or self._stop.is_set():
+                if self._stop.is_set():
+                    return
+                if process is None and status.state == "error":
+                    # Failed before it ever ran (e.g. a setup step timed out): try again,
+                    # waiting 10 s, then doubling up to 30 minutes.
+                    now = time.monotonic()
+                    if name not in retry_at:
+                        delay = backoff.get(name, LAUNCH_RETRY_FIRST)
+                        retry_at[name] = now + delay
+                        backoff[name] = min(delay * 2, LAUNCH_RETRY_MAX)
+                        status.reason = f"{status.reason}; trying again in {int(delay)}s"
+                    elif now >= retry_at[name]:
+                        del retry_at[name]
+                        status.restarts += 1
+                        if self._launch(name, factory):
+                            backoff.pop(name, None)
+                    continue
+                if process is None or process.poll() is None:
                     continue
                 delay = backoff.get(name, 2.0)
                 status.state, status.reason = "error", f"Stopped unexpectedly; restarting in {int(delay)}s"

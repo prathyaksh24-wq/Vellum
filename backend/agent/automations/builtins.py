@@ -48,6 +48,15 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
         "schedule": "0 2 * * *",
     },
     {
+        "key": "memory_learning",
+        "name": "Learn from conversations",
+        "instructions": (
+            "Read conversations that have gone quiet, learn durable things about the user, correct or retire "
+            "memories they contradict, and log every change. Failures back off and retry, then stop."
+        ),
+        "schedule": "every 10m",
+    },
+    {
         "key": "memory_provider_sync",
         "name": "Memory engine sync",
         "instructions": "Send new, edited and forgotten memories to the local Hindsight memory engine; failed sends retry.",
@@ -185,6 +194,12 @@ async def _memory_retention_handler() -> dict[str, Any]:
     return result
 
 
+async def _memory_learning_handler() -> dict[str, Any]:
+    from agent.memory.learner import default_learner
+
+    return await asyncio.to_thread(lambda: default_learner().run())
+
+
 async def _memory_provider_sync_handler() -> dict[str, Any]:
     from agent import api  # lazy: the main api module mounts this package's router
 
@@ -232,6 +247,7 @@ _HANDLERS: dict[str, Any] = {
     "youtube_creator_tracking": _youtube_creator_handler,
     "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
+    "memory_learning": _memory_learning_handler,
     "memory_provider_sync": _memory_provider_sync_handler,
     "memory_retention": _memory_retention_handler,
     "nightly_digest": _nightly_digest_handler,

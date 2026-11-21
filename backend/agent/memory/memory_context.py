@@ -155,10 +155,10 @@ def build_memory_block(thread_id: str, *, query: str = "", active_project: str |
             "how you respond — their tone, depth, and what they care about. Do not recite it "
             "back unless they ask what you remember.\n\n" + user_model
         )
+    if not needs_recall(query):
+        return "\n\n".join(parts).strip()[:6000]  # "hi", "thanks": nothing to look up
     try:
         announce = _first_build_this_turn(thread_id, query)
-        if announce:
-            _emit_recall(thread_id, query, status="in_progress")
         packet = orchestrator.build_memory_packet(
             thread_id=thread_id,
             query=query,
@@ -182,6 +182,28 @@ def build_memory_block(thread_id: str, *, query: str = "", active_project: str |
     return "\n\n".join(parts).strip()[:6000]
 
 
+# Small talk never needs a memory lookup (or a "recalling" step in the chat).
+_SMALL_TALK = frozenset("""
+hi hii hiii hello hey heya hiya yo sup howdy greetings namaste hola
+thanks thank thx ty cheers appreciated welcome
+ok okay okk k kk cool nice great awesome perfect sure yes yeah yep yup no nope nah fine alright right got it
+bye goodbye cya later goodnight gn gm
+good morning afternoon evening night day
+lol haha hahaha hmm hm oh wow
+you u there how are doing whats what's up
+""".split())
+
+
+def needs_recall(query: str) -> bool:
+    """Whether a message could use saved memories. Greetings and acknowledgements can't."""
+    import re
+
+    words = re.findall(r"[a-z']+", str(query or "").lower())
+    if not words:
+        return False
+    return not (len(words) <= 6 and all(word in _SMALL_TALK for word in words))
+
+
 _ANNOUNCED: dict[tuple[str, str], float] = {}
 _ANNOUNCE_TTL_SECONDS = 180.0
 
@@ -202,21 +224,26 @@ def _first_build_this_turn(thread_id: str, query: str) -> bool:
 
 
 def _emit_recall(thread_id: str, query: str, *, status: str, packet: dict[str, Any] | None = None) -> None:
+    """Show a memory step in the chat only when memories actually shaped the answer."""
     from agent.observability.activity import emit_activity
 
     item_id = f"memory-recall-{abs(hash((thread_id, query))) % 10**12}"
     if status != "completed" or packet is None:
-        emit_activity("memory_recall", "memory", item_id=item_id, label="Checking memory…", status="in_progress")
         return
+    # Only memories picked because they're relevant to this message count as a
+    # recall. Standing preferences go with every message, and the long-term
+    # engines always return their closest matches, so neither is shown alone.
     memories = [
         {"id": item.get("id"), "title": item.get("title") or str(item.get("text") or "")[:60],
          "topic": item.get("topic") or "", "origin": item.get("origin") or ""}
-        for item in packet.get("saved_memories") or [] if isinstance(item, dict) and item.get("id") is not None
+        for item in packet.get("saved_memories") or []
+        if isinstance(item, dict) and item.get("id") is not None and not item.get("standing")
     ]
     external = [item for item in packet.get("external_providers") or [] if item.get("context")]
     count = len(memories)
-    label = (f"Recalled {count} {'memory' if count == 1 else 'memories'}" if count
-             else "No saved memories needed")
+    if not count:
+        return  # nothing was actually recalled for this message: no step
+    label = f"Recalled {count} {'memory' if count == 1 else 'memories'}"
     if external:
         label += " · long-term memory checked"
     emit_activity("memory_recall", "memory", item_id=item_id, label=label, status="completed",

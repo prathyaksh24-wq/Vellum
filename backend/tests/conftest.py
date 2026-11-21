@@ -24,6 +24,28 @@ def test_environment() -> None:
     return None
 
 
+@pytest.fixture(autouse=True)
+def user_starts_idle():
+    """Chat tests mark the user active; background-work tests must not inherit that."""
+    from agent import foreground
+
+    foreground._last_active = -1e12
+    yield
+    foreground._last_active = -1e12
+
+
+@pytest.fixture(autouse=True, scope="session")
+def no_live_ollama_model_list():
+    """Memory model choice checks which models Ollama has installed; tests must not
+    depend on this machine's models. Tests that need a list pass ``installed=``."""
+    from agent.memory.engines import llm_routing
+
+    original = llm_routing._ollama_models
+    llm_routing._ollama_models = lambda root: None
+    yield
+    llm_routing._ollama_models = original
+
+
 @pytest.fixture(autouse=True, scope="session")
 def no_engine_job_object():
     """Engine tests use made-up process ids. A real kill-on-close job could
