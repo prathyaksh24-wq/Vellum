@@ -397,6 +397,14 @@
     const nativeBridge = window.VellumDesktop?.browser;
     const [frame, setFrame] = useState(null);
     const [nativeStill,setNativeStill] = useState('');
+    // Google refuses sign-in inside embedded browsers; hand it to a real one.
+    const [signin,setSignin] = useState(null);
+    const [signinBrowser,setSigninBrowser] = useState('');
+    const startSignIn = () => {
+      setMoreOpen(false);
+      setSignin({status:'waiting', browser:signinBrowser});
+      nativeBridge?.signIn?.().catch(failure => setSignin(current => current?.status==='cancelled' ? null : {status:'error', browser:signinBrowser, message:String(failure?.message || '').replace(/^Error invoking remote method '[^']+': (Error: )?/,'') || 'Sign-in did not finish.'}));
+    };
     const [localPointer,setLocalPointer]=useState(null);
     const [error, setError] = useState('');
     const [viewError, setViewError] = useState('');
@@ -608,12 +616,16 @@
       document.addEventListener('visibilitychange',update);
       update();
       return ()=>{cancelled=true;cancelAnimationFrame(frame);observer?.disconnect();layoutObserver?.disconnect();window.removeEventListener('resize',update);window.removeEventListener('vellum:composer-popup',update);window.removeEventListener('vellum:shell-overlay',update);document.removeEventListener('visibilitychange',update);};
-    }, [native,state.running,state.native_target_id,home,expanded,suspended,overlayVisible,moreOpen,downloadsOpen,addressOpen,suggestions.length]);
+    }, [native,state.running,state.native_target_id,home,expanded,suspended,overlayVisible,moreOpen,downloadsOpen,addressOpen,suggestions.length,signin?.status]);
     useEffect(()=>()=>{if(native)nativeBridge?.mount({visible:false}).catch(()=>{});},[native,nativeBridge]);
+    useEffect(()=>{if(native)nativeBridge?.signIn?.({check:true}).then(result=>setSigninBrowser(result?.browser||'')).catch(()=>{});},[native,nativeBridge]);
+    useEffect(()=>{if(signin?.status!=='done')return;const timer=setTimeout(()=>setSignin(null),8000);return()=>clearTimeout(timer);},[signin]);
 
     useEffect(()=>{
       if (!native || !nativeBridge) return;
       return nativeBridge.subscribe(event=>{
+        if (event.type==='signin_needed') { if(event.browser)setSigninBrowser(event.browser); setSignin(state=>state && ['checking','waiting','finishing','importing'].includes(state.status) ? state : {status:'offer', browser:event.browser || ''}); return; }
+        if (event.type==='signin') { setSignin(event.status==='cancelled' ? null : event); return; }
         if(current.current.suspended)return;
         if (event.type==='take_over') { if (current.current.state.control==='agent') command('take_over'); return; }
         if(event.type==='command'){window.VellumCommands?.runtime?.dispatch({...event.input,preventDefault(){},stopPropagation(){}},{native:true,browser:true});return;}
@@ -857,6 +869,7 @@
         {state.features?.find&&<button type="button" className="browser-menu-row" onClick={()=>{setFindOpen(true);setMoreOpen(false);}}><Icon name="search"/>Find in page</button>}
         {state.features?.zoom&&<div className="browser-zoom-controls"><span>Zoom</span><button type="button" aria-label="Zoom out" disabled={state.zoom_factor<=0.25} onClick={()=>command('zoom',{zoom_factor:Math.max(0.25,(state.zoom_factor||1)-0.1)})}><window.VellumUI.WorkspaceIcon name="Minus" size={14}/></button><button type="button" aria-label="Reset zoom" onClick={()=>command('zoom',{zoom_factor:1})}>{Math.round((state.zoom_factor||1)*100)}%</button><button type="button" aria-label="Zoom in" disabled={state.zoom_factor>=3} onClick={()=>command('zoom',{zoom_factor:Math.min(3,(state.zoom_factor||1)+0.1)})}><window.VellumUI.AppIcon name="Plus" size={14}/></button></div>}
         {state.features?.print&&<button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);command('print');}}>Print…</button>}
+        {native&&nativeBridge?.signIn&&signinBrowser&&<button type="button" className="browser-menu-row" onClick={startSignIn}><Icon name="globe"/>Sign in to Google with {signinBrowser}</button>}
         <button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);setDownloadsOpen(true);command('ack_downloads');}}><Icon name="download"/>Downloads</button>
         <button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);onSettings?.();}}><Icon name="settings"/>History and browser settings</button>
         <label className="browser-menu-row"><input type="checkbox" checked={preferences.suggestions_enabled !== false} onChange={event => command('preferences', {suggestions_enabled:event.target.checked})}/>Search suggestions</label><p>Suggestions use {engine.name}.</p>
@@ -873,6 +886,20 @@
         </div>) : <p>No downloads in this session.</p>}
       </section>}
       {(error || viewError || active?.error) && <div className="browser-error" role="alert">{error || viewError || active.error}<button className="browser-link" onClick={() => onRefresh()}>Refresh</button></div>}
+      {signin && native && (()=>{const name=signin.browser||signinBrowser;return <div className="browser-signin-notice" role="status" data-status={signin.status}>
+        <Icon name="globe" size={16}/>
+        <span>{signin.status==='offer' ? (name ? 'Google doesn’t allow signing in inside app browsers. Sign in once with '+name+' and Vellum keeps you signed in here.' : 'Google doesn’t allow signing in inside app browsers. Install Chrome, Edge or Brave to sign in.')
+          : signin.status==='checking' ? 'Checking your Google sign-in…'
+          : signin.status==='waiting' ? 'Google sign-in opened in '+(name||'your browser')+'. Finish signing in there and Vellum brings you back automatically.'
+          : signin.status==='finishing' ? 'Signed in. Closing '+(name||'the browser')+' and bringing you back…'
+          : signin.status==='importing' ? 'Bringing your sign-in into Vellum…'
+          : signin.status==='done' ? (signin.imported ? 'Signed in. Vellum copied your session from '+name+'.' : 'No sign-in was found in '+name+'. Try again and finish signing in before closing it.')
+          : signin.message || 'Sign-in did not finish.'}</span>
+        {signin.status==='offer' && name && <button type="button" className="browser-button" onClick={startSignIn}>Sign in with {name}</button>}
+        {signin.status==='error' && name && <button type="button" className="browser-button secondary" onClick={startSignIn}>Try again</button>}
+        {signin.status==='waiting' && <button type="button" className="browser-button secondary" onClick={()=>{setSignin(null);nativeBridge?.signIn?.({cancel:true}).catch(()=>{});}}>Cancel</button>}
+        {!['checking','waiting','finishing','importing'].includes(signin.status) && <button type="button" className="browser-icon" aria-label="Dismiss sign-in notice" onClick={()=>setSignin(null)}><Icon name="close" size={12}/></button>}
+      </div>;})()}
       {findOpen&&<div className="browser-find-row"><window.VellumUI.SurfaceFind label="Find in browser page" onFind={(text,find_next,forward)=>{findQuery.current=text;command('find',{text,find_next,forward});}} onClose={()=>{setFindOpen(false);command('find',{text:''});}}/></div>}
       <div ref={screenRef} className={'browser-screen' + (manual ? ' manual' : '') + (home ? ' browser-screen-home' : '')} tabIndex={state.running && !home && !native ? 0 : -1} role="region" aria-label={home ? 'Browser homepage' : native ? 'Embedded browser page' : manual ? 'Browser page. Click to focus a field, then type. Tab leaves the preview.' : 'Live browser page. Click to take control.'}
         onPointerDown={click} onPointerMove={hover} onPointerLeave={() => {

@@ -130,6 +130,9 @@ if (!app.requestSingleInstanceLock()) {
       console.warn('[Vellum] Restarting the backend because '+reason+'.');
       restarting = serially(async () => {
         await backend.kill();
+        // The new backend starts without a browser session; tabs from the old
+        // one would keep running (and playing audio) out of Vellum's reach.
+        await nativeBrowser?.closeTabs().catch(() => {});
         if (quitting) return;
         backendSpec = launchSpec(backendOptions);
         backend = manage(backendSpec);
