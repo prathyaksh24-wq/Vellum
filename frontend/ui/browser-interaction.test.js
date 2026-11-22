@@ -459,3 +459,24 @@ test('native home never streams frames or forwards typing, and switching engines
     expect(braveSearch.value).toBe('browser tools');
   } finally {await act(async()=>root.unmount());rootContainer.remove();}
 });
+
+test('a blocked Google sign-in offers the real-browser hand-off and tracks it to completion',async()=>{
+  const api=await autocompleteApi();
+  let emit=()=>{};
+  const native={mount:vi.fn(async()=>({})),subscribe:vi.fn(callback=>{emit=callback;return()=>{};}),
+    signIn:vi.fn(async data=>data?.check ? {browser:'Brave'} : new Promise(()=>{}))};
+  window.VellumDesktop={browser:native};
+  const panel=await mountPanel(api,{...manualState(),render_transport:'native',native_target_id:'owned-guest'});
+  try {
+    expect(native.signIn).toHaveBeenCalledWith({check:true});
+    expect(panel.container.querySelector('.browser-signin-notice')).toBeNull();
+    await act(async()=>emit({type:'signin_needed',target_id:'owned-guest',browser:'Brave'}));
+    const notice=panel.container.querySelector('.browser-signin-notice');
+    expect(notice.textContent).toContain('Google doesn’t allow signing in inside app browsers');
+    await act(async()=>[...notice.querySelectorAll('button')].find(button=>button.textContent==='Sign in with Brave').click());
+    expect(native.signIn).toHaveBeenLastCalledWith();
+    expect(panel.container.querySelector('.browser-signin-notice').textContent).toContain('Vellum brings you back automatically');
+    await act(async()=>emit({type:'signin',status:'done',browser:'Brave',imported:42}));
+    expect(panel.container.querySelector('.browser-signin-notice').textContent).toContain('Signed in. Vellum copied your session from Brave.');
+  } finally {await panel.cleanup();delete window.VellumDesktop;}
+});

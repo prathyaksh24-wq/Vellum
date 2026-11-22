@@ -4316,6 +4316,21 @@ def _agent_activity_event(
 
 from agent.tools.web import extract_web_sources
 
+
+async def _browser_step_preview(tool_name: str) -> dict[str, Any] | None:
+    """A saved picture of the page after an agent browser step, for the chat.
+
+    Best effort: a slow or failed capture never delays or fails the response.
+    """
+    if not (tool_name.startswith("browser_") or tool_name == "browser_action"):
+        return None
+    try:
+        from agent.mcp.playwright_tools import browser_session
+        preview = await asyncio.wait_for(asyncio.to_thread(browser_session, "step_preview"), 6)
+    except Exception:
+        return None
+    return preview if isinstance(preview, dict) and preview.get("image") else None
+
 _ACTIVITY_LABELS = {
     "web_search": "Searched the web",
     "read_file": "Read a saved page",
@@ -5612,6 +5627,10 @@ async def _stream_agent_turn_scoped(
                             thread_id=active_thread_id,
                             item=done_item, status=tool_status,
                         )
+                        completed_metadata = {"output":_tool_output_text(event.get("data", {}).get("output"))}
+                        preview = await _browser_step_preview(str(done_item.get("name") or ""))
+                        if preview:
+                            completed_metadata["preview"] = preview
                         yield _agent_activity_event(
                             response_id=response_id,
                             thread_id=active_thread_id,
@@ -5620,7 +5639,7 @@ async def _stream_agent_turn_scoped(
                             status=tool_status,
                             item_id=str(done_item["id"]),
                             name=str(done_item.get("name") or ""),
-                            metadata={"output":_tool_output_text(event.get("data", {}).get("output"))},
+                            metadata=completed_metadata,
                         )
                 elif kind == "on_tool_error":
                     if str(event.get('run_id') or '') in nested_tool_runs:
