@@ -3221,6 +3221,25 @@ async def list_conversations() -> dict[str, Any]:
     return {"conversations": conversations}
 
 
+class ConversationTitleRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=20000)
+    reply: str = Field(default="", max_length=20000)
+
+
+class ConversationTitleResponse(BaseModel):
+    title: str
+    source: Literal["model", "fallback"]
+
+
+@router.post("/conversations/title-suggestion", response_model=ConversationTitleResponse)
+async def conversation_title_suggestion(request: ConversationTitleRequest) -> ConversationTitleResponse:
+    """A short title for a chat, judged from its first request and reply."""
+    from agent.conversations.titles import suggest_title
+
+    result = await asyncio.to_thread(suggest_title, request.message, request.reply)
+    return ConversationTitleResponse(**result)
+
+
 @router.get("/conversations/library", response_model=ConversationLibraryResponse)
 async def conversation_library(include_messages: bool = True) -> ConversationLibraryResponse:
     projection = await asyncio.to_thread(

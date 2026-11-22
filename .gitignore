@@ -17,6 +17,7 @@ data/llm-routing/*.db-*
 data/skills/*.db
 data/skills/*.db-*
 data/automations.json
+data/automation-suggestions.json
 data/privacy/
 data/apify-budget.json
 data/oauth-flows/

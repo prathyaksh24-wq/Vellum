@@ -35,6 +35,13 @@ class FakeScheduler:
     def get_jobs(self):
         return list(self.jobs)
 
+    def get_job(self, job_id: str):
+        return next((job for job in self.jobs if job.get("id") == job_id), None)
+
+    @property
+    def removed_schedules(self) -> list[str]:
+        return [job_id for job_id in self.removed if job_id.startswith(JOB_PREFIX)]
+
 
 def _create(store: AutomationStore, **overrides) -> dict:
     schedule = overrides.pop(
@@ -178,7 +185,7 @@ def test_uninstall_and_sync_remove_stale_jobs(tmp_path) -> None:
     assert len(scheduler.jobs) == 2
 
     automation_scheduler.uninstall(first["id"])
-    assert scheduler.removed == [f"{JOB_PREFIX}{first['id']}"]
+    assert scheduler.removed_schedules == [f"{JOB_PREFIX}{first['id']}"]
     assert len(scheduler.jobs) == 1
 
     automation_scheduler.sync([second["id"]])
@@ -198,10 +205,10 @@ def test_sync_one_handles_create_pause_and_delete(tmp_path) -> None:
     store.update(automation["id"], state="paused")
     automation_scheduler.sync_one(automation["id"])
     assert scheduler.jobs == []
-    assert scheduler.removed == [f"{JOB_PREFIX}{automation['id']}"]
+    assert scheduler.removed_schedules == [f"{JOB_PREFIX}{automation['id']}"]
 
     automation_scheduler.sync_one("automation-ghost")
-    assert scheduler.removed == [
+    assert scheduler.removed_schedules == [
         f"{JOB_PREFIX}{automation['id']}",
         f"{JOB_PREFIX}automation-ghost",
     ]
@@ -223,23 +230,113 @@ def test_fire_skips_paused_automation(tmp_path) -> None:
     assert store.runs(automation["id"]) == []
 
 
-def test_fire_requires_full_access_opt_in(tmp_path) -> None:
+def test_automation_without_opt_in_is_scheduled_and_runs_ask_first(tmp_path) -> None:
+    from agent.automations.runner import run_message
+
     store = AutomationStore(tmp_path)
     automation = _create(store, name="no-access", permission={"full_access": False})
     calls = []
 
     async def fake_executor(record, _store):
-        calls.append(record["id"])
+        calls.append(record)
 
-    automation_scheduler = AutomationScheduler(store, scheduler=FakeScheduler(), executor=fake_executor)
+    scheduler = FakeScheduler()
+    automation_scheduler = AutomationScheduler(store, scheduler=scheduler, executor=fake_executor)
 
+    assert automation_scheduler.install_all() == [automation["id"]]
     asyncio.run(automation_scheduler._fire(automation["id"]))
 
-    assert calls == []
-    runs = store.runs(automation["id"])
-    assert len(runs) == 1
-    assert runs[0]["status"] == "failed"
-    assert "full-access" in runs[0]["error"]
+    assert [record["id"] for record in calls] == [automation["id"]]
+    assert calls[0]["_unattended"] is True
+    message = run_message(calls[0])
+    assert message.startswith("[Scheduled run") and "approval" in message
+    assert message.endswith("Summarize what changed.")
+    # Run now (attended) and opted-in unattended runs get the plain instructions.
+    assert run_message(automation) == "Summarize what changed."
+    assert run_message({**automation, "_unattended": True, "permission": {"full_access": True}}) == "Summarize what changed."
+
+
+def _catch_up_jobs(scheduler: FakeScheduler) -> list[dict]:
+    from agent.automations.scheduler import CATCH_UP_PREFIX
+
+    return [job for job in scheduler.jobs if job["id"].startswith(CATCH_UP_PREFIX)]
+
+
+def _backdate(store: AutomationStore, automation_id: str, when: datetime) -> None:
+    import json
+
+    data = json.loads(store.path.read_text(encoding="utf-8"))
+    data[automation_id]["created_at"] = data[automation_id]["updated_at"] = when.isoformat()
+    store.path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_daily_run_missed_while_closed_is_caught_up_once(tmp_path) -> None:
+    store = AutomationStore(tmp_path)
+    now = datetime.now(timezone.utc)
+    due = (now - timedelta(hours=3)).replace(second=0, microsecond=0)
+    automation = _create(store, name="daily", schedule={"kind": "cron", "expression": f"{due.minute} {due.hour} * * *"})
+    _backdate(store, automation["id"], now - timedelta(days=2))
+
+    scheduler = FakeScheduler()
+    automation_scheduler = AutomationScheduler(store, scheduler=scheduler)
+    automation_scheduler.install_all()
+
+    jobs = _catch_up_jobs(scheduler)
+    assert [job["args"] for job in jobs] == [[automation["id"]]]
+    assert jobs[0]["trigger"].run_date > now
+    assert automation_scheduler.missed_fire_at(store.get(automation["id"]), now) == due
+
+    # Once it has run after the due time, nothing is missed any more.
+    run = store.record_run(automation["id"], "run-after")
+    store.finish_run(automation["id"], run["id"], status="complete")
+    assert automation_scheduler.missed_fire_at(store.get(automation["id"]), datetime.now(timezone.utc)) is None
+
+
+def test_catch_up_skips_frequent_paused_and_new_automations(tmp_path) -> None:
+    store = AutomationStore(tmp_path)
+    now = datetime.now(timezone.utc)
+    frequent = _create(store, name="frequent", schedule={"kind": "cron", "expression": "*/5 * * * *"})
+    _backdate(store, frequent["id"], now - timedelta(days=1))
+    paused = _create(store, name="paused", state="paused", schedule={"kind": "cron", "expression": "0 * * * *"})
+    _backdate(store, paused["id"], now - timedelta(days=1))
+    _create(store, name="fresh", schedule={"kind": "cron", "expression": "0 9 * * *"})
+
+    scheduler = FakeScheduler()
+    AutomationScheduler(store, scheduler=scheduler).install_all()
+
+    assert _catch_up_jobs(scheduler) == []
+
+
+def test_one_shot_that_never_ran_is_caught_up_but_not_rerun(tmp_path) -> None:
+    store = AutomationStore(tmp_path)
+    now = datetime.now(timezone.utc)
+    run_at = now - timedelta(hours=2)
+    automation = _create(store, name="once", schedule={"kind": "iso", "expression": run_at.isoformat(), "run_at": run_at.isoformat()})
+    _backdate(store, automation["id"], now - timedelta(days=1))
+
+    scheduler = FakeScheduler()
+    automation_scheduler = AutomationScheduler(store, scheduler=scheduler)
+    assert automation_scheduler.install_all() == []
+    assert len(_catch_up_jobs(scheduler)) == 1
+
+    run = store.record_run(automation["id"], "run-once")
+    store.finish_run(automation["id"], run["id"], status="complete")
+    rescheduler = FakeScheduler()
+    AutomationScheduler(store, scheduler=rescheduler).install_all()
+    assert _catch_up_jobs(rescheduler) == []
+
+
+def test_pausing_removes_a_pending_catch_up(tmp_path) -> None:
+    from agent.automations.scheduler import CATCH_UP_PREFIX
+
+    store = AutomationStore(tmp_path)
+    automation = _create(store, name="pause-me")
+    scheduler = FakeScheduler()
+    automation_scheduler = AutomationScheduler(store, scheduler=scheduler)
+    store.update(automation["id"], state="paused")
+    automation_scheduler.sync_one(automation["id"])
+
+    assert f"{CATCH_UP_PREFIX}{automation['id']}" in scheduler.removed
 
 
 def test_fire_executes_full_access_automation(tmp_path) -> None:
@@ -347,3 +444,27 @@ def test_install_automation_jobs_wires_mutation_hook(tmp_path) -> None:
         automations_api._notify_mutation("automation-ghost")
     finally:
         automations_api.set_store(None)
+
+
+def test_run_without_a_model_uses_the_active_chat_model(monkeypatch) -> None:
+    from agent import api
+    from agent.automations import runner
+
+    seen = {}
+
+    class FakeAgent:
+        async def ainvoke(self, payload, *, config, model, reasoning_mode):
+            seen["model"] = model
+            seen["content"] = payload["messages"][0]["content"]
+            return {"messages": []}
+
+    monkeypatch.setattr(api, "agent", FakeAgent())
+    monkeypatch.setattr(runner, "active_chat_model", lambda: "ollama/gemma4:12b")
+
+    asyncio.run(runner._execute_reasoning_turn({
+        "id": "a", "name": "Brief", "instructions": "Summarize.", "destination": {"kind": "notification"},
+        "permission": {"full_access": False}, "_unattended": True,
+    }))
+
+    assert seen["model"] == "ollama/gemma4:12b"
+    assert seen["content"].startswith("[Scheduled run") and seen["content"].endswith("Summarize.")

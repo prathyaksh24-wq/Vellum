@@ -1739,6 +1739,9 @@ body{font-size:14px;font-family:var(--font-ui)}
 .au-idea-copy{min-width:0;display:grid;gap:5px}
 .au-idea-copy strong{font-size:14px;font-weight:600}
 .au-idea-copy>span{color:var(--dim);font-size:13px;line-height:1.5}
+.au-idea-copy>small{color:var(--dim);font-size:12px;line-height:1.4;opacity:.8}
+.au-ideas-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:40px;color:var(--dim);font-size:13px;text-align:left}
+.au-ideas-head+.au-ideas{margin-top:12px}
 @container(max-width:500px){.au-ideas{grid-template-columns:minmax(0,1fr);margin-top:24px}}
 .au-dialog{position:fixed;inset:0;margin:auto;padding:0;width:min(620px,calc(100vw - 24px));height:fit-content;max-width:unset;max-height:min(790px,calc(100dvh - 40px));border:1px solid var(--line2);border-radius:16px;background:var(--menu-solid);color:var(--txt);box-shadow:0 18px 68px rgba(0,0,0,.4);overflow:hidden}
 .au-dialog::backdrop{background:rgba(0,0,0,.48)}
@@ -7224,8 +7227,8 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
           {!model && <div className="au-form-row"><span>Model tier</span><AutomationSelect ariaLabel="Automation model tier" value={tier} onValueChange={setTier} options={AUTOMATION_TIERS}/></div>}
           <div className="au-form-row"><span>Reasoning</span><AutomationSelect ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/></div>
           <div className="au-form-row"><span>Notifications</span><AutomationSelect ariaLabel="Automation notifications" value={notification} onValueChange={setNotification} options={AUTOMATION_NOTIFICATIONS}/></div>
-          <div className="au-form-row"><span>Run unattended</span><button type="button" className={'sw'+(fullAccess?' on':'')} role="switch" aria-checked={fullAccess} aria-label="Run unattended (full access)" onClick={()=>setFullAccess(!fullAccess)}/></div>
-          <p className={fullAccess?'au-warn':'au-form-hint'}>{fullAccess ? 'Unattended runs can perform actions without asking first. Enable this only for tasks you trust.' : 'With unattended access off, start runs yourself with Run now.'}</p>
+          <div className="au-form-row"><span>Act without asking</span><button type="button" className={'sw'+(fullAccess?' on':'')} role="switch" aria-checked={fullAccess} aria-label="Act without asking (full access)" onClick={()=>setFullAccess(!fullAccess)}/></div>
+          <p className={fullAccess?'au-warn':'au-form-hint'}>{fullAccess ? 'Unattended runs can perform actions without asking first. Enable this only for tasks you trust.' : 'Runs on schedule and asks first: anything that needs your approval is listed in the result instead of done.'}</p>
         </fieldset>
       </div>
       <footer className="au-form-actions">{error && <p className="au-form-error" role="alert">{error}</p>}<button type="button" className="btn" disabled={saving} onClick={requestDiscard}>Discard</button><button type="submit" className="btn primary" disabled={saving}>{saving ? 'Saving…' : isNew ? 'Create task' : 'Save changes'}</button></footer>
@@ -7234,16 +7237,15 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
 };
 
 const AUTOMATION_GROUPS = [['active','Active'], ['paused','Paused'], ['ended','Completed']];
+// Shown only until the backend answers; the page asks /api/automations/suggestions for ideas
+// learned from the user's memories and recent chats.
 const AUTOMATION_IDEAS = [
-  {name:'On-device voice AI research', icon:'microscope', request:'Every Friday, brief me on voice AI research worth testing in Vellum.'},
-  {name:'Music playback integrations', icon:'music', request:'Let me know when music platforms change APIs or policies that could affect playback in Vellum.'},
-  {name:'Vellum pull request alerts', icon:'computer', request:'Alert me when Vellum pull request checks, reviews, or merges reveal issues that need my attention.'},
-  {name:'Find weekend reads', icon:'book', request:'Send me a great article to read every Saturday.'},
-  {name:'Price alerts', icon:'shopping', request:'Check prices daily and alert me when my item costs less.'},
-  {name:'Find concerts', icon:'music', request:'Check weekly for new concerts that match my taste.'},
-  {name:'Plan my weekend', icon:'pin', request:'Send me local weekend ideas every Thursday.'},
+  {name:'Morning brief', icon:'news', request:'Every weekday at 8am, brief me on the news and topics I care about.'},
+  {name:'Weekend reads', icon:'book', request:'Every Saturday morning, send me one great long read that matches my interests.'},
+  {name:'Weekly review', icon:'calendar', request:'Every Sunday evening, summarize what I worked on and talked about this week and suggest priorities for next week.'},
+  {name:'Price watch', icon:'shopping', request:'Check daily whether an item I name drops in price and tell me when it does.'},
 ];
-const AUTOMATION_IDEA_ICONS = {microscope:'\u{1f52c}', music:'\u{1f3b5}', computer:'\u{1f4bb}', book:'\u{1f4d6}', shopping:'\u{1f6cd}\ufe0f', pin:'\u{1f4cd}'};
+const AUTOMATION_IDEA_ICONS = {research:'\u{1f52c}', microscope:'\u{1f52c}', news:'\u{1f4f0}', music:'\u{1f3b5}', book:'\u{1f4d6}', shopping:'\u{1f6cd}️', calendar:'\u{1f4c5}', code:'\u{1f4bb}', computer:'\u{1f4bb}', sports:'\u{1f3c0}', travel:'\u{2708}️', health:'\u{1f33f}', money:'\u{1f4b0}', work:'\u{1f4bc}', learning:'\u{1f393}', home:'\u{1f3e0}', pin:'\u{1f4cd}'};
 const automationGroup = task => task.schedule_ended ? 'ended' : task.state === 'paused' ? 'paused' : 'active';
 const automationRunning = task => (task.run_history || []).some(run=>run.status === 'running');
 const automationUnread = run => run.status !== 'running' && Object.hasOwn(run,'read_at') && !run.read_at && !run.archived_at;
@@ -7289,6 +7291,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [starting, setStarting] = useState('');
+  const [ideas, setIdeas] = useState({suggestions:AUTOMATION_IDEAS, source:'starter', status:'loading'});
   const menuBody = useRef(null);
   const searchButton = useRef(null);
   const searchInput = useRef(null);
@@ -7329,6 +7332,26 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
       document.removeEventListener('visibilitychange',refreshVisible);
     };
   },[]);
+  const ideaPoll = useRef({timer:null, tries:0, alive:true});
+  const loadIdeas = async (refresh=false) => {
+    clearTimeout(ideaPoll.current.timer);
+    if(refresh)ideaPoll.current.tries=0;
+    try{
+      const data = await API.automations.suggestions(refresh);
+      if(!ideaPoll.current.alive)return;
+      if(Array.isArray(data?.suggestions) && data.suggestions.length)setIdeas(data);
+      else setIdeas(current=>({...current, status:data?.status || 'ready'}));
+      // Suggestions are generated in the background; check back until they land.
+      if(data?.status === 'refreshing' && ideaPoll.current.tries++ < 40)ideaPoll.current.timer=setTimeout(()=>loadIdeas(),4000);
+    }catch(_){
+      if(ideaPoll.current.alive)setIdeas(current=>({...current, status:'ready'}));
+    }
+  };
+  useEffect(()=>{
+    ideaPoll.current.alive=true;
+    if(showPage)loadIdeas();
+    return ()=>{ideaPoll.current.alive=false;clearTimeout(ideaPoll.current.timer);};
+  },[showPage]);
   useEffect(()=>{if(searchOpen && sidebarVisible)searchInput.current?.focus();},[searchOpen,sidebarVisible]);
   useEffect(()=>{if(!sidebarVisible){setMenu(null);setFilterOpen(false);}},[sidebarVisible]);
   useLayoutEffect(()=>{if(menu)menuBody.current?.querySelector('button:not(:disabled)')?.focus();},[menu]);
@@ -7471,10 +7494,14 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
         <div className="au-start">
           <div className="au-start-icon" aria-hidden="true">{'\u{1f553}'}</div>
           <h1>Schedule a task</h1><p>Have Vellum handle recurring tasks and bring you the results.</p>
-          <section className="au-ideas" aria-label="Task ideas">
-            {AUTOMATION_IDEAS.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
-              <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon]}</span>
-              <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span></span>
+          <div className="au-ideas-head">
+            <span>{ideas.source==='learned' ? 'Suggested for you' : 'Ideas to start with'}{ideas.status==='refreshing' || ideas.status==='loading' ? ' · Updating…' : ''}</span>
+            <button type="button" className="btn" disabled={ideas.status==='refreshing' || ideas.status==='loading'} onClick={()=>loadIdeas(true)}>Refresh ideas</button>
+          </div>
+          <section className="au-ideas" aria-label="Task ideas" aria-busy={ideas.status==='refreshing' || ideas.status==='loading'}>
+            {ideas.suggestions.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
+              <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon] || AUTOMATION_IDEA_ICONS.research}</span>
+              <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span>{idea.reason && <small>{idea.reason}</small>}</span>
             </button>)}
           </section>
         </div>
@@ -8929,6 +8956,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const renameChat = (id, title) => {
     setRenamingId(null);
     if (title && title.trim()) {
+      autoTitleChats.current.delete(id);
       if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.rename', {conversation_id:id, title:title.trim()});
       else setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
     }
@@ -9269,6 +9297,20 @@ const [slashSkills, setSlashSkills] = useState([]);
     turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
 
+  // New chats get a short title that says what they are about once their first reply lands.
+  const autoTitleChats = useRef(new Set());
+  const autoTitleChat = async (chatId, message, reply) => {
+    try {
+      const result = await API.conversations.suggestTitle(String(message || '').slice(0, 4000), String(reply || '').slice(0, 4000));
+      const title = String(result?.title || '').trim();
+      // A rename by the user while this was running wins.
+      if (!title || !autoTitleChats.current.delete(chatId)) return;
+      setChats(cs => cs.map(c => c.id === chatId ? {...c, title} : c));
+      if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.rename', {conversation_id:chatId, title}, {applyNavigation:false, notify:false});
+    } catch (_) {
+      autoTitleChats.current.delete(chatId);
+    }
+  };
   const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}, modelId = selModel) => {
     const completedSpotifyTools = new Set();
     const task = automations.find(item=>scheduledTaskConversationId(item.id)===chatId);
@@ -9376,6 +9418,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           },
           done: final => {
             finishTurn(assistantId);
+            if (autoTitleChats.current.has(chatId) && final.text) autoTitleChat(chatId, opts.submittedText || message, final.text);
             const liveSources = normalizeSources(final.sources || []);
             updateChat(chatId, c => ({
               ...c,
@@ -9431,7 +9474,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
     if (!chatId) {
       chatId = uid();
-      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
+      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
+      autoTitleChats.current.add(chatId);
       const record = {id: chatId, thread_id: chatId, model: turnModel, reasoning_mode:turnReasoningMode, title, pinned: false, archived: false, projectId: opts.projectId === undefined ? draftProjectId : opts.projectId, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
       if (FEATURE_FLAGS.realConversations) saveConversation({...record, messages:[userMsg]});
@@ -9456,6 +9500,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
+    return chatId;
   };
 
   const sendInProject = projId => (text, attach, opts = {}) => {
@@ -10241,6 +10286,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   const workspaceMode=workspaceLayout.surfaces['right-panel'].properties.layout==='full'?'full':'split';
   const featureOwnsSidebar=['apps','music'].includes(view);
   const activeScheduledTask = automations.find(task=>scheduledTaskConversationId(task.id)===activeChatId);
+  // Chats opened from Scheduled (task chats, run results, setup chats from ideas) stay in the
+  // Scheduled page: the chat shows with the Scheduled sidebar, like any chat otherwise.
   const scheduledContext=view==='scheduled' || view==='chat' && (Boolean(activeScheduledTask) || Boolean(scheduledChatId) && scheduledChatId===activeChatId);
   const mainSidebarContext=sidebarPeeking&&['chat','library','scheduled'].includes(railPreview)?railPreview:scheduledContext?'scheduled':view==='library'?'library':'chat';
   const shellSidebarPinned=!featureOwnsSidebar&&(scheduledContext?scheduledSidebarOpen:sidebarPinned);

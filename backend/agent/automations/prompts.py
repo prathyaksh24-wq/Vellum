@@ -24,7 +24,7 @@ Please help me set it up:
    - one-time local clock time: '2027-01-12T09:00 @ Asia/Kolkata'; an ISO timestamp with a UTC offset also works
    Confirm the actual time zone for clock-based schedules, and use a future date for one-time tasks.
 4. Propose a result destination: 'new_chat', 'existing_chat' with a pinned conversation, or 'notification'.
-5. Confirm the name, instructions, schedule with time zone, destination, and notification preference with me. Enable unattended full access only if I explicitly opt in after you explain that it lets the task act without asking each time.
+5. Confirm the name, instructions, schedule with time zone, destination, and notification preference with me. The task runs on its schedule either way; without full access each run asks first, listing anything that needs my approval instead of doing it. Enable full access only if I explicitly opt in after you explain that it lets the task act without asking each time.
 
 Then create it with the cronjob tool (action='create'). You can also list, update, pause/resume, run-now, or remove automations from any chat with cronjob.
 """

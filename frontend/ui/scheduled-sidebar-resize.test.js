@@ -64,6 +64,8 @@ test('Scheduled owns the docked state and width without changing other sidebar p
 
   expect(state('scheduled', null, false)).toMatchObject({shellSidebarPinned:false, shellSidebarVisible:false});
   expect(state('chat', 'scheduled', false, 'run')).toMatchObject({shellSidebarPinned:false, shellSidebarVisible:true, activeSidebarWidth:205});
+  // A chat opened from Scheduled keeps the Scheduled sidebar.
+  expect(state('chat', null, true, 'run')).toMatchObject({mainSidebarContext:'scheduled', shellSidebarPinned:true, activeSidebarWidth:205});
   expect(state('scheduled', 'library', false)).toMatchObject({mainSidebarContext:'library', shellSidebarVisible:true, activeSidebarWidth:320});
   expect(state('chat', null, false)).toMatchObject({shellSidebarPinned:true, activeSidebarWidth:320});
   for (const view of ['apps', 'music', 'library']) {

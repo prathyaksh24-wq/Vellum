@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, Request
 from fastapi.responses import StreamingResponse
 from agent.contracts.automation_notifications import AutomationNotifications as AutomationNotificationSnapshot
 from agent.contracts.automation_notifications import NotificationChangeEvent
-from agent.contracts.scheduled_tasks import ScheduledTasks
+from agent.contracts.scheduled_tasks import ScheduledTasks, ScheduledTaskSuggestions
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent.automations.store import AutomationStore
@@ -254,6 +254,16 @@ async def automation_create_prompt() -> dict[str, Any]:
     from agent.automations.prompts import CREATE_AUTOMATION_PROMPT
 
     return {"prompt": CREATE_AUTOMATION_PROMPT}
+
+
+@router.get("/suggestions", response_model=ScheduledTaskSuggestions)
+async def automation_suggestions(response: Response, refresh: bool = False) -> ScheduledTaskSuggestions:
+    """Task ideas grounded in what Vellum has learned; refreshed in the background."""
+    from agent.automations.suggestions import get_suggestions_service
+
+    response.headers["Cache-Control"] = "no-store"
+    snapshot = await asyncio.to_thread(get_suggestions_service().snapshot, refresh=refresh)
+    return ScheduledTaskSuggestions(**snapshot)
 
 
 @router.post("")

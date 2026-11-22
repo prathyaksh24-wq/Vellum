@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 962,
-      "sha256": "521fa6821882c6905a16e18edc660c1d90966b42bd9d54e9284f888f06aef9ab"
+      "count": 963,
+      "sha256": "6ee92defe0a2661798a47fe7d9db4497a5beaa50c0d099209a6139d8e47a732d"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -2751,6 +2751,10 @@
     {
       "scope": "Responses settings for thinking and work steps, and opening the live Thinking / Thought process panel",
       "reason": "The new switches (Think before every answer, Show memory steps, Show work steps) save through the existing settings.device.update App Action like the other Responses preferences. Opening the thinking panel is presentation only."
+    },
+    {
+      "scope": "Scheduled page Refresh ideas",
+      "reason": "Re-reads task ideas from GET /api/automations/suggestions?refresh=true. It regenerates a machine-owned suggestion cache and changes no user-owned state; choosing an idea starts an ordinary chat."
     }
   ],
   "deferred": [

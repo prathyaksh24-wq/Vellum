@@ -1,12 +1,20 @@
 """AutomationScheduler — turns store automations into APScheduler jobs.
 
-Each active automation with unattended access registers one job (``max_instances=1``, ``coalesce``,
+Each active automation registers one job (``max_instances=1``, ``coalesce``,
 misfire grace matching the existing jobs). When a job fires, the run gates:
-paused automations do nothing, non-full-access automations do not run
-unattended (recorded as a failed run with a clear error), and a fire whose
-automation already has a run in flight is skipped. One-shot schedules
-(relative / ISO) whose moment has already passed are not registered again on
-startup, so a restart cannot re-fire an expired one-shot.
+paused automations do nothing and a fire whose automation already has a run in
+flight is skipped. Automations without the full-access opt-in still run on
+schedule, but as ask-first runs: the runner tells the agent nobody is watching,
+so anything needing the user's approval is reported instead of done (and
+approval-gated App Actions cannot complete without a person anyway).
+
+Vellum is a desktop app, so it is often closed when a schedule comes due. On
+startup, each active automation whose most recent due time passed while Vellum
+was closed (within ``CATCH_UP_LOOKBACK``) and has not run since gets one
+catch-up run shortly after launch. Schedules that fire more often than hourly
+are left alone: their next regular fire is soon anyway. One-shot schedules
+(relative / ISO) whose moment passed are not registered again, so a restart
+cannot re-fire one that already ran; one that never ran is caught up once.
 """
 
 from __future__ import annotations
@@ -28,7 +36,14 @@ from agent.automations.store import AutomationStore
 logger = logging.getLogger(__name__)
 
 JOB_PREFIX = "automation-"
+CATCH_UP_PREFIX = "catchup-automation-"
 MISFIRE_GRACE_SECONDS = 3600
+# How far back a missed fire still deserves a catch-up run after a restart.
+CATCH_UP_LOOKBACK = timedelta(days=8)
+# Schedules firing more often than this are not caught up; the next fire is near.
+CATCH_UP_MIN_PERIOD = timedelta(hours=1)
+CATCH_UP_DELAY_SECONDS = 45
+CATCH_UP_STAGGER_SECONDS = 30
 # No automation run should take longer than this; one that claims to is stuck.
 STUCK_RUN_SECONDS = 2 * 3600
 
@@ -47,13 +62,70 @@ class AutomationScheduler:
         for automation in self.store.list():
             if automation.get("state") == "active" and self.install(automation):
                 registered.append(automation["id"])
+        self.schedule_catch_up()
         return registered
+
+    def schedule_catch_up(self, now: datetime | None = None) -> list[str]:
+        """Queue one run for each automation whose due time passed while Vellum was closed."""
+        now = now or datetime.now(timezone.utc)
+        queued: list[str] = []
+        for automation in self.store.list():
+            if automation.get("state") != "active":
+                continue
+            try:
+                missed = self.missed_fire_at(automation, now)
+            except (ValueError, KeyError, OverflowError, TypeError) as exc:
+                logger.warning("[AUTOMATIONS] Could not check missed runs for %s: %s", automation.get("id"), exc)
+                continue
+            if missed is None:
+                continue
+            delay = CATCH_UP_DELAY_SECONDS + CATCH_UP_STAGGER_SECONDS * len(queued)
+            self.scheduler.add_job(
+                self._fire,
+                trigger=DateTrigger(run_date=now + timedelta(seconds=delay), timezone=timezone.utc),
+                args=[automation["id"]],
+                id=f"{CATCH_UP_PREFIX}{automation['id']}",
+                replace_existing=True,
+                max_instances=1,
+                misfire_grace_time=MISFIRE_GRACE_SECONDS,
+            )
+            queued.append(automation["id"])
+            logger.info("[AUTOMATIONS] %s missed its %s run; catching up", automation["id"], missed.isoformat())
+        return queued
+
+    def missed_fire_at(self, automation: dict[str, Any], now: datetime) -> datetime | None:
+        """The latest due time that passed without a run, or None when nothing was missed."""
+        baseline = max(
+            value for value in (
+                _date(automation.get("created_at")),
+                _date(automation.get("updated_at")),
+                *(_date(run.get("started_at")) for run in automation.get("run_history", [])),
+                now - CATCH_UP_LOOKBACK,
+            ) if value is not None
+        )
+        schedule = automation.get("schedule") or {}
+        if schedule.get("kind") in ("relative", "iso"):
+            if automation.get("run_history"):
+                return None
+            run_at = one_shot_run_at(automation)
+            return run_at if run_at is not None and baseline < run_at <= now else None
+        trigger = self._trigger(automation)
+        if trigger is None:
+            return None
+        first = trigger.get_next_fire_time(None, baseline + timedelta(microseconds=1))
+        if first is None or first > now:
+            return None
+        following = trigger.get_next_fire_time(first, first + timedelta(microseconds=1))
+        if following is not None and following - first < CATCH_UP_MIN_PERIOD:
+            return None
+        latest = first
+        while following is not None and following <= now:
+            latest = following
+            following = trigger.get_next_fire_time(following, following + timedelta(microseconds=1))
+        return latest
 
     def install(self, automation: dict[str, Any]) -> bool:
         job_id = self._job_id(automation["id"])
-        if not (automation.get("permission") or {}).get("full_access"):
-            self.uninstall(automation["id"])
-            return False
         try:
             trigger = self._trigger(automation)
         except (ValueError, KeyError, OverflowError) as exc:
@@ -79,10 +151,11 @@ class AutomationScheduler:
         return getattr(job, "next_run_time", None)
 
     def uninstall(self, automation_id: str) -> None:
-        try:
-            self.scheduler.remove_job(self._job_id(automation_id))
-        except Exception:  # noqa: BLE001 — JobLookupError on a missing job
-            pass
+        for job_id in (self._job_id(automation_id), f"{CATCH_UP_PREFIX}{automation_id}"):
+            try:
+                self.scheduler.remove_job(job_id)
+            except Exception:  # noqa: BLE001 — JobLookupError on a missing job
+                pass
 
     def sync(self, automation_ids: list[str]) -> None:
         known = set(automation_ids)
@@ -112,15 +185,11 @@ class AutomationScheduler:
             return
         if automation.get("state") != "active":
             return
-        permission = automation.get("permission") or {}
-        if not permission.get("full_access"):
-            self._record_skipped(self.store, automation_id, "unattended runs require the full-access opt-in")
-            return
         if self._busy(automation):
             logger.info("[AUTOMATIONS] Skip fire for %s: a run is already in flight", automation_id)
             return
         try:
-            await self.executor(automation, self.store)
+            await self.executor({**automation, "_unattended": True}, self.store)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[AUTOMATIONS] Run %s failed: %s", automation_id, exc)
             self._record_skipped(self.store, automation_id, str(exc))

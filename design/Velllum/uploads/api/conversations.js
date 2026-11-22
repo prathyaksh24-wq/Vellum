@@ -12,6 +12,9 @@
       });
       return client.request("/api/conversations/search?" + params.toString());
     },
+    suggestTitle: function (message, reply) {
+      return client.request("/api/conversations/title-suggestion", client.jsonOptions("POST", { message: message, reply: reply || "" }));
+    },
     get: function (id) { return client.request("/api/conversations/" + encodeURIComponent(id)); },
     save: function (conversation) {
       return client.request("/api/conversations/" + encodeURIComponent(conversation.id), client.jsonOptions("PUT", conversation));
