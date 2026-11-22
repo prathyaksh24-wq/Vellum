@@ -13,7 +13,8 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain("<ScheduledView");
     expect(html).toContain("Scheduled");
     expect(html).toContain("Create with Vellum");
-    expect(html).toContain("On-device voice AI research");
+    expect(html).toContain("API.automations.suggestions(refresh)");
+    expect(html).not.toContain("On-device voice AI research");
     expect(html).toContain("sendMessage(idea.request");
   });
 
@@ -52,7 +53,7 @@ describe("Vellum default automations surface", () => {
 
   test("full-access opt-in is a deliberate confirmation with warning copy", () => {
     expect(html).toContain('role="switch" aria-checked={fullAccess}');
-    expect(html).toContain("Run unattended");
+    expect(html).toContain("Act without asking");
     expect(html).toContain("Unattended runs can perform actions without asking first");
     expect(html).toContain("Enable this only for tasks you trust");
   });

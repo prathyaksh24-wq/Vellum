@@ -17,5 +17,6 @@
     runs: function (id) { return client.request(withId(id) + "/runs"); },
     openConversation: function (id) { return client.request(withId(id) + "/conversation", client.jsonOptions("POST")); },
     createPrompt: function () { return client.request("/api/automations/create-prompt"); },
+    suggestions: function (refresh) { return client.request("/api/automations/suggestions" + (refresh ? "?refresh=true" : ""), {cache:"no-store"}); },
   };
 })();

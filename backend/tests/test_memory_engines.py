@@ -483,3 +483,49 @@ def test_postgres_server_pid_comes_from_postmaster_pid(tmp_path: Path):
     (pg.data_dir / "postmaster.pid").write_text(chr(10).join(["4321", "C:/data", "1795007453"]))
     assert pg.server_pid() == 4321
 
+
+
+def test_a_missing_local_model_heals_to_an_installed_one():
+    from agent.memory.engines.llm_routing import memory_engine_llm
+
+    registry = _registry("ollama/qwen3.5:9b", "ollama")
+    installed = ["embeddinggemma-2:270m-q8_0-text", "gemma4:12b", "nomic-embed-text:latest"]
+    assert memory_engine_llm(_settings(), registry, installed=installed).model == "gemma4:12b"
+    assert memory_engine_llm(_settings(), registry, installed=["qwen3.5:9b", "gemma4:12b"]).model == "qwen3.5:9b"
+    only_other = memory_engine_llm(_settings(), registry, installed=["llama3.1:8b", "nomic-embed-text:latest"])
+    assert only_other.model == "llama3.1:8b"
+    none = memory_engine_llm(_settings(), registry, installed=["nomic-embed-text:latest"])
+    assert none.model == "" and not none.ready
+    assert memory_engine_llm(_settings(), registry, installed=None).model == "qwen3.5:9b"  # Ollama down: unchanged
+
+
+def test_an_engine_that_failed_to_start_is_retried_until_it_starts(monkeypatch):
+    from agent.memory.engines import supervisor as sup
+
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(sup.time, "monotonic", lambda: clock["now"])
+    attempts = []
+
+    def factory():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise RuntimeError("setup step timed out")
+        return EngineSpec(name="honcho", argv=["x"], env={}, health_url="http://127.0.0.1:1/health")
+
+    supervisor = EngineSupervisor(health_check=lambda url: True, popen=FakeProcess, sleep=lambda s: None,
+                                  container=lambda pid: None)
+    supervisor.add_engine("honcho", factory)
+    supervisor._launch("honcho", factory)
+    assert supervisor.status()["honcho"]["state"] == "error"
+
+    ticks = iter(range(30))
+
+    def tick(_seconds):
+        clock["now"] += 15
+        if next(ticks, None) is None or supervisor.status()["honcho"]["state"] == "ready":
+            supervisor._stop.set()
+
+    supervisor._sleep = tick
+    supervisor._watch()
+    assert supervisor.status()["honcho"]["state"] == "ready"
+    assert len(attempts) == 3 and supervisor.status()["honcho"]["restarts"] == 2

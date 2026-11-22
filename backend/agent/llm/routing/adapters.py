@@ -119,6 +119,32 @@ def classify_provider_exception(exc: BaseException) -> ProviderFailure:
     )
 
 
+def _reasoning_chat_openai(**kwargs: Any):
+    """ChatOpenAI that keeps a provider's streamed thinking.
+
+    OpenAI-compatible providers (OpenRouter, Groq, DeepSeek, Gemini's
+    compatible endpoint...) send thinking as ``delta.reasoning`` or
+    ``delta.reasoning_content``. The stock client drops those fields; this one
+    puts them in ``additional_kwargs["reasoning_content"]``, where the chat
+    stream picks thinking up for every provider (as it already did for Ollama).
+    """
+    from langchain_openai import ChatOpenAI
+
+    class ReasoningChatOpenAI(ChatOpenAI):
+        def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
+            generation = super()._convert_chunk_to_generation_chunk(chunk, default_chunk_class, base_generation_info)
+            if generation is None:
+                return None
+            choices = chunk.get("choices") or chunk.get("chunk", {}).get("choices") or []
+            delta = (choices[0].get("delta") or {}) if choices else {}
+            thinking = delta.get("reasoning_content") or delta.get("reasoning")
+            if isinstance(thinking, str) and thinking:
+                generation.message.additional_kwargs["reasoning_content"] = thinking
+            return generation
+
+    return ReasoningChatOpenAI(**kwargs)
+
+
 class OpenRouterAdapter:
     provider = "openrouter"
 
@@ -144,10 +170,9 @@ class OpenRouterAdapter:
         reasoning_mode: Any = None,
         **kwargs: Any,
     ):
-        from langchain_openai import ChatOpenAI
+        from agent.llm.reasoning import effective_reasoning_mode, reasoning_extra_body
 
-        from agent.llm.reasoning import reasoning_extra_body
-
+        reasoning_mode = effective_reasoning_mode(reasoning_mode)
         effective = enforce_provider_allowlist(
             policy
             or ProviderRoutingPolicy(
@@ -158,7 +183,7 @@ class OpenRouterAdapter:
         )
         extra: dict[str, Any] = {"provider": effective.to_openrouter_body()}
         extra.update(reasoning_extra_body(reasoning_mode))
-        return ChatOpenAI(
+        return _reasoning_chat_openai(
             model=target.model,
             api_key=secret,
             base_url=self.base_url,
@@ -214,10 +239,13 @@ class OllamaAdapter:
         from langchain_ollama import ChatOllama
         import json
 
-        from agent.llm.reasoning import reasoning_profile
+        from agent.llm.reasoning import effective_reasoning_mode, reasoning_profile
 
         model_id = target.model.removeprefix("ollama/")
-        profile = reasoning_profile(reasoning_mode)
+        # An explicit reasoning mode always asks for thinking; "think before every
+        # answer" only does for models that can think (others would error).
+        profile = reasoning_profile(reasoning_mode if reasoning_mode is not None
+                                    else effective_reasoning_mode(None) if thinking_capable else None)
         class LocalChatOllama(ChatOllama):
             num_batch: int = 1024
 
@@ -287,12 +315,11 @@ class OpenAIAdapter:
         reasoning_mode: Any = None,
         **kwargs: Any,
     ):
-        from langchain_openai import ChatOpenAI
+        from agent.llm.reasoning import effective_reasoning_mode, reasoning_extra_body
 
-        from agent.llm.reasoning import reasoning_extra_body
-
+        reasoning_mode = effective_reasoning_mode(reasoning_mode)
         model_id = target.model.removeprefix("openai/")
-        return ChatOpenAI(
+        return _reasoning_chat_openai(
             model=model_id,
             api_key=secret,
             base_url=self.base_url,

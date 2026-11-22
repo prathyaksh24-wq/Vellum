@@ -49,7 +49,42 @@ class EngineLLM:
         return bool(self.model) and (self.provider == "ollama" or bool(self.api_key))
 
 
-def memory_engine_llm(settings: Any = None, registry: Any = None) -> EngineLLM:
+_EMBEDDING_ONLY = ("embed", "nomic", "bge", "e5-", "minilm")
+_MODELS_CACHE: dict[str, tuple[float, list[str] | None]] = {}
+
+
+def _ollama_models(root: str) -> list[str] | None:
+    """Installed Ollama models (cached briefly); None when Ollama can't be asked."""
+    import time
+    import urllib.request
+
+    cached = _MODELS_CACHE.get(root)
+    if cached and time.monotonic() - cached[0] < 60:
+        return cached[1]
+    try:
+        with urllib.request.urlopen(f"{root}/api/tags", timeout=2) as response:  # noqa: S310 - loopback Ollama
+            models: list[str] | None = [str(m.get("name") or "") for m in json.loads(response.read()).get("models", [])]
+    except Exception:  # noqa: BLE001 - Ollama down: keep the configured choice
+        models = None
+    _MODELS_CACHE[root] = (time.monotonic(), models)
+    return models
+
+
+def _installed_local_model(wanted: str, configured: str, installed: list[str] | None) -> str:
+    """Heal a local model choice that points at a model Ollama doesn't have."""
+    if installed is None or not wanted:
+        return wanted
+    names = {name for name in installed if name}
+    with_latest = lambda name: name if ":" in name else f"{name}:latest"  # noqa: E731
+    for candidate in (wanted, configured):
+        if candidate and (candidate in names or with_latest(candidate) in names):
+            return candidate
+    chat_models = [name for name in installed if name and not any(tag in name.lower() for tag in _EMBEDDING_ONLY)]
+    return chat_models[0] if chat_models else ""
+
+
+def memory_engine_llm(settings: Any = None, registry: Any = None, *,
+                      installed: list[str] | None = None) -> EngineLLM:
     """Resolve the memory engines' LLM from settings and the active model."""
     if settings is None:
         from agent.config import get_settings
@@ -70,7 +105,11 @@ def memory_engine_llm(settings: Any = None, registry: Any = None) -> EngineLLM:
         active = str(getattr(registry.current_model(), "id", "") or "")
         model = model_override or (active.split("/", 1)[1] if active.startswith("ollama/") else "")
         model = model or str(getattr(settings, "memory_llm_model", "") or "")
-        base = str(getattr(settings, "ollama_base_url", "") or "http://127.0.0.1:11434").rstrip("/") + "/v1"
+        root = str(getattr(settings, "ollama_base_url", "") or "http://127.0.0.1:11434").rstrip("/").removesuffix("/v1")
+        base = root + "/v1"
+        if not model_override:
+            model = _installed_local_model(model, str(getattr(settings, "memory_llm_model", "") or ""),
+                                           installed if installed is not None else _ollama_models(root))
         return EngineLLM(provider="ollama", model=model, base_url=base,
                          reason="" if model else "No local model is installed yet")
 

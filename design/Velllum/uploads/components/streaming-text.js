@@ -1,6 +1,6 @@
 /* Presentation over actual received text; never generates answer or reasoning content. */
 (function(){
-  const DEFAULT={style:'ink',loading:'cascade',speed:12,pencil:true,thinking:true,citations:'auto'};
+  const DEFAULT={style:'ink',loading:'cascade',speed:12,pencil:true,thinking:true,think_always:false,memory_steps:true,work_steps:true,citations:'auto'};
   let context;
   const h=(...args)=>window.React.createElement(...args);
   const getContext=()=>context || (context=window.React.createContext(DEFAULT));
@@ -72,7 +72,10 @@
       row('Streaming speed','Approximate words per second. Does not delay requests to the model.',h('label',{className:'streaming-speed'},h('input',{type:'range',min:2,max:24,step:1,value:draftSpeed,disabled:busy,'aria-label':'Streaming speed',
         onChange:event=>setDraftSpeed(Number(event.target.value)),onPointerUp:()=>save({speed:draftSpeed}),onKeyUp:event=>{if(['ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(event.key))save({speed:Number(event.currentTarget.value)});}}),h('output',null,draftSpeed+' words/s'))),
       row('Show inferred text in pencil','Marks interpretations explicitly identified in book responses.',h('input',{type:'checkbox',checked:prefs.pencil,disabled:busy,'aria-label':'Show inferred text in pencil',onChange:event=>save({pencil:event.target.checked})})),
-      row('Show thought process','Show the thinking text or reasoning summary supplied by the model.',h('input',{type:'checkbox',checked:prefs.thinking,disabled:busy,'aria-label':'Show thought process',onChange:event=>save({thinking:event.target.checked})})),
+      row('Show thought process','While the model thinks you see “Thinking”; open it to watch the thinking stream. Afterwards it folds into the thought process.',h('input',{type:'checkbox',checked:prefs.thinking,disabled:busy,'aria-label':'Show thought process',onChange:event=>save({thinking:event.target.checked})})),
+      row('Think before every answer','Models that can think (Gemma 4, Qwen 3, DeepSeek, Claude, Gemini and others) think on every reply, not only in reasoning modes. Answers take longer. OpenAI models share only a summary of their thinking.',h('input',{type:'checkbox',checked:prefs.think_always,disabled:busy,'aria-label':'Think before every answer',onChange:event=>save({think_always:event.target.checked})})),
+      row('Show memory steps','Show when Vellum recalls or saves memories while answering.',h('input',{type:'checkbox',checked:prefs.memory_steps,disabled:busy,'aria-label':'Show memory steps',onChange:event=>save({memory_steps:event.target.checked})})),
+      row('Show work steps','Show searches, tools, and other steps Vellum takes while working.',h('input',{type:'checkbox',checked:prefs.work_steps,disabled:busy,'aria-label':'Show work steps',onChange:event=>save({work_steps:event.target.checked})})),
       row('Citations','Automatic shows evidence linked to the answer. Ordinary replies and calculations stay clear.',select('Citations',[['auto','When relevant'],['always','All available sources'],['hidden','Hide source list']],prefs.citations,value=>save({citations:value}))),
       h('div',{className:'streaming-preview'},h('div',{className:'agent-detail-label'},'Presentation preview'),h('span',{className:'streaming-orb-preview'},h(window.VellumUI.ThinkingOrb,{state:'working',size:22}),'Preparing a response'),
         h('button',{type:'button',className:'btn',onClick:()=>setPreview({id:Date.now(),text:'Words arrive steadily, then settle into the page. Your real response uses the same presentation.',streaming:true,suppressActivity:true})},'Replay text preview'),

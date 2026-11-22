@@ -10,6 +10,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 import json
 import re
+from typing import Any
 
 from agent.app_actions.models import DevicePersonalizationSettings, DeviceSettingsSnapshot
 
@@ -29,6 +30,31 @@ _CURRENT: ContextVar[PersonalizationContext | None] = ContextVar('vellum_persona
 
 def current_personalization() -> PersonalizationContext | None:
     return _CURRENT.get()
+
+
+# Responses setting "Think before every answer": thinking models think on every
+# reply (and stream it), not only in the explicit reasoning modes.
+_THINK_ALWAYS: ContextVar[bool] = ContextVar('vellum_think_always', default=False)
+
+
+def think_always_enabled() -> bool:
+    return _THINK_ALWAYS.get()
+
+
+@contextmanager
+def thinking_scope(action_context: Any = None):
+    enabled = False
+    try:
+        settings = getattr(action_context, 'device_settings', None)
+        if settings:
+            enabled = bool(DeviceSettingsSnapshot.model_validate(settings).values.streaming.think_always)
+    except Exception:  # noqa: BLE001 - a malformed snapshot keeps the default
+        enabled = False
+    token = _THINK_ALWAYS.set(enabled)
+    try:
+        yield enabled
+    finally:
+        _THINK_ALWAYS.reset(token)
 
 
 @contextmanager

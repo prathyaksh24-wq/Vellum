@@ -813,8 +813,8 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 /* reusable vertical preview rail - shared by chats and sub-agent chats */
 .conversation-preview-anchor{position:absolute;inset:56px 0 24px;z-index:24;pointer-events:none;container-type:inline-size}
 .preview-rail{position:absolute;inset-block:0;left:4px;width:52px;display:flex;align-items:center;overflow:visible;isolation:isolate;pointer-events:none}
-.thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:56px}
-[data-preview-rail-position=right] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:24px;padding-right:56px}
+.thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:80px}
+[data-preview-rail-position=right] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-left:24px;padding-right:80px}
 [data-preview-rail-visibility=hidden] .conversation-preview-anchor{display:none}
 [data-preview-rail-visibility=hidden] .thread-col:has(> .conversation-preview-anchor) > .msgs{padding-inline:24px}
 [data-preview-rail-position=right] .preview-rail{left:auto;right:4px;justify-content:flex-end}
@@ -1739,6 +1739,9 @@ body{font-size:14px;font-family:var(--font-ui)}
 .au-idea-copy{min-width:0;display:grid;gap:5px}
 .au-idea-copy strong{font-size:14px;font-weight:600}
 .au-idea-copy>span{color:var(--dim);font-size:13px;line-height:1.5}
+.au-idea-copy>small{color:var(--dim);font-size:12px;line-height:1.4;opacity:.8}
+.au-ideas-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:40px;color:var(--dim);font-size:13px;text-align:left}
+.au-ideas-head+.au-ideas{margin-top:12px}
 @container(max-width:500px){.au-ideas{grid-template-columns:minmax(0,1fr);margin-top:24px}}
 .au-dialog{position:fixed;inset:0;margin:auto;padding:0;width:min(620px,calc(100vw - 24px));height:fit-content;max-width:unset;max-height:min(790px,calc(100dvh - 40px));border:1px solid var(--line2);border-radius:16px;background:var(--menu-solid);color:var(--txt);box-shadow:0 18px 68px rgba(0,0,0,.4);overflow:hidden}
 .au-dialog::backdrop{background:rgba(0,0,0,.48)}
@@ -3417,7 +3420,6 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><window.VellumUI.AppIcon name="Music"/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
-      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Analytics" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
         <div className="chat-row" onClick={onNewProject}>
@@ -5300,7 +5302,7 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, onEditMessage, sideChat=false}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode, onEditVoiceTranscript, onEditMessage, sideChat=false, hidePreviewRail=false}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -5335,7 +5337,8 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
       <div className="thread-col">
       {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
 
-      <ConversationPreviewRail messages={msgs}/>
+      {/* The rail steps aside while a workspace tab (browser, files…) shares the screen. */}
+      {!hidePreviewRail && <ConversationPreviewRail messages={msgs}/>}
       <div className="msgs">
         {sideChat && !msgs.length && <div className="side-chat-identity"><IcChat size={30}/><h1>Side chat</h1></div>}
         <div className="msgs-inner">
@@ -6650,7 +6653,7 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
 const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onOpenMemory, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
-  const selectSettingsTab = next => { setTab(next); if(next==='Analytics' && onAnalyticsAction)onAnalyticsAction('observability.open',{}); };
+  const selectSettingsTab = next => setTab(next);
   const [settingsQuery, setSettingsQuery] = useState('');
   const settingsPageRef = useRef(null);
   useEffect(() => {
@@ -6761,8 +6764,8 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
         </div>
         <div className="set-body">
           <div className="settings-content">
+          {tab === 'Analytics' && window.VellumUI.AnalyticsPage && <window.VellumUI.AnalyticsPage control={analyticsControl} onAction={onAnalyticsAction} embedded/>}
           {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat} onDeleteAll={onDeleteArchivedChats}/>}
-          {tab === 'Analytics' && <div className="set-row">Analytics has its own page: runs, traces, context and usage.<span className="sr-end"><button type="button" className="btn" onClick={() => onAnalyticsAction && onAnalyticsAction('observability.open',{})}>Open Analytics</button></span></div>}
           {tab === 'Profile' && <window.VellumUI.Profile.Page key={profile.accountId} profile={profile} onSave={onProfileSave}/>}
           {tab === 'Account' && <window.VellumUI.Accounts.Settings details={<window.VellumUI.Profile.AccountDetails key={profile.accountId} profile={profile} onSave={onProfileSave}/>}/>}
 
@@ -7224,8 +7227,8 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
           {!model && <div className="au-form-row"><span>Model tier</span><AutomationSelect ariaLabel="Automation model tier" value={tier} onValueChange={setTier} options={AUTOMATION_TIERS}/></div>}
           <div className="au-form-row"><span>Reasoning</span><AutomationSelect ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/></div>
           <div className="au-form-row"><span>Notifications</span><AutomationSelect ariaLabel="Automation notifications" value={notification} onValueChange={setNotification} options={AUTOMATION_NOTIFICATIONS}/></div>
-          <div className="au-form-row"><span>Run unattended</span><button type="button" className={'sw'+(fullAccess?' on':'')} role="switch" aria-checked={fullAccess} aria-label="Run unattended (full access)" onClick={()=>setFullAccess(!fullAccess)}/></div>
-          <p className={fullAccess?'au-warn':'au-form-hint'}>{fullAccess ? 'Unattended runs can perform actions without asking first. Enable this only for tasks you trust.' : 'With unattended access off, start runs yourself with Run now.'}</p>
+          <div className="au-form-row"><span>Act without asking</span><button type="button" className={'sw'+(fullAccess?' on':'')} role="switch" aria-checked={fullAccess} aria-label="Act without asking (full access)" onClick={()=>setFullAccess(!fullAccess)}/></div>
+          <p className={fullAccess?'au-warn':'au-form-hint'}>{fullAccess ? 'Unattended runs can perform actions without asking first. Enable this only for tasks you trust.' : 'Runs on schedule and asks first: anything that needs your approval is listed in the result instead of done.'}</p>
         </fieldset>
       </div>
       <footer className="au-form-actions">{error && <p className="au-form-error" role="alert">{error}</p>}<button type="button" className="btn" disabled={saving} onClick={requestDiscard}>Discard</button><button type="submit" className="btn primary" disabled={saving}>{saving ? 'Saving…' : isNew ? 'Create task' : 'Save changes'}</button></footer>
@@ -7234,16 +7237,15 @@ const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], mo
 };
 
 const AUTOMATION_GROUPS = [['active','Active'], ['paused','Paused'], ['ended','Completed']];
+// Shown only until the backend answers; the page asks /api/automations/suggestions for ideas
+// learned from the user's memories and recent chats.
 const AUTOMATION_IDEAS = [
-  {name:'On-device voice AI research', icon:'microscope', request:'Every Friday, brief me on voice AI research worth testing in Vellum.'},
-  {name:'Music playback integrations', icon:'music', request:'Let me know when music platforms change APIs or policies that could affect playback in Vellum.'},
-  {name:'Vellum pull request alerts', icon:'computer', request:'Alert me when Vellum pull request checks, reviews, or merges reveal issues that need my attention.'},
-  {name:'Find weekend reads', icon:'book', request:'Send me a great article to read every Saturday.'},
-  {name:'Price alerts', icon:'shopping', request:'Check prices daily and alert me when my item costs less.'},
-  {name:'Find concerts', icon:'music', request:'Check weekly for new concerts that match my taste.'},
-  {name:'Plan my weekend', icon:'pin', request:'Send me local weekend ideas every Thursday.'},
+  {name:'Morning brief', icon:'news', request:'Every weekday at 8am, brief me on the news and topics I care about.'},
+  {name:'Weekend reads', icon:'book', request:'Every Saturday morning, send me one great long read that matches my interests.'},
+  {name:'Weekly review', icon:'calendar', request:'Every Sunday evening, summarize what I worked on and talked about this week and suggest priorities for next week.'},
+  {name:'Price watch', icon:'shopping', request:'Check daily whether an item I name drops in price and tell me when it does.'},
 ];
-const AUTOMATION_IDEA_ICONS = {microscope:'\u{1f52c}', music:'\u{1f3b5}', computer:'\u{1f4bb}', book:'\u{1f4d6}', shopping:'\u{1f6cd}\ufe0f', pin:'\u{1f4cd}'};
+const AUTOMATION_IDEA_ICONS = {research:'\u{1f52c}', microscope:'\u{1f52c}', news:'\u{1f4f0}', music:'\u{1f3b5}', book:'\u{1f4d6}', shopping:'\u{1f6cd}️', calendar:'\u{1f4c5}', code:'\u{1f4bb}', computer:'\u{1f4bb}', sports:'\u{1f3c0}', travel:'\u{2708}️', health:'\u{1f33f}', money:'\u{1f4b0}', work:'\u{1f4bc}', learning:'\u{1f393}', home:'\u{1f3e0}', pin:'\u{1f4cd}'};
 const automationGroup = task => task.schedule_ended ? 'ended' : task.state === 'paused' ? 'paused' : 'active';
 const automationRunning = task => (task.run_history || []).some(run=>run.status === 'running');
 const automationUnread = run => run.status !== 'running' && Object.hasOwn(run,'read_at') && !run.read_at && !run.archived_at;
@@ -7289,6 +7291,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [starting, setStarting] = useState('');
+  const [ideas, setIdeas] = useState({suggestions:AUTOMATION_IDEAS, source:'starter', status:'loading'});
   const menuBody = useRef(null);
   const searchButton = useRef(null);
   const searchInput = useRef(null);
@@ -7329,6 +7332,26 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
       document.removeEventListener('visibilitychange',refreshVisible);
     };
   },[]);
+  const ideaPoll = useRef({timer:null, tries:0, alive:true});
+  const loadIdeas = async (refresh=false) => {
+    clearTimeout(ideaPoll.current.timer);
+    if(refresh)ideaPoll.current.tries=0;
+    try{
+      const data = await API.automations.suggestions(refresh);
+      if(!ideaPoll.current.alive)return;
+      if(Array.isArray(data?.suggestions) && data.suggestions.length)setIdeas(data);
+      else setIdeas(current=>({...current, status:data?.status || 'ready'}));
+      // Suggestions are generated in the background; check back until they land.
+      if(data?.status === 'refreshing' && ideaPoll.current.tries++ < 40)ideaPoll.current.timer=setTimeout(()=>loadIdeas(),4000);
+    }catch(_){
+      if(ideaPoll.current.alive)setIdeas(current=>({...current, status:'ready'}));
+    }
+  };
+  useEffect(()=>{
+    ideaPoll.current.alive=true;
+    if(showPage)loadIdeas();
+    return ()=>{ideaPoll.current.alive=false;clearTimeout(ideaPoll.current.timer);};
+  },[showPage]);
   useEffect(()=>{if(searchOpen && sidebarVisible)searchInput.current?.focus();},[searchOpen,sidebarVisible]);
   useEffect(()=>{if(!sidebarVisible){setMenu(null);setFilterOpen(false);}},[sidebarVisible]);
   useLayoutEffect(()=>{if(menu)menuBody.current?.querySelector('button:not(:disabled)')?.focus();},[menu]);
@@ -7471,10 +7494,14 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
         <div className="au-start">
           <div className="au-start-icon" aria-hidden="true">{'\u{1f553}'}</div>
           <h1>Schedule a task</h1><p>Have Vellum handle recurring tasks and bring you the results.</p>
-          <section className="au-ideas" aria-label="Task ideas">
-            {AUTOMATION_IDEAS.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
-              <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon]}</span>
-              <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span></span>
+          <div className="au-ideas-head">
+            <span>{ideas.source==='learned' ? 'Suggested for you' : 'Ideas to start with'}{ideas.status==='refreshing' || ideas.status==='loading' ? ' · Updating…' : ''}</span>
+            <button type="button" className="btn" disabled={ideas.status==='refreshing' || ideas.status==='loading'} onClick={()=>loadIdeas(true)}>Refresh ideas</button>
+          </div>
+          <section className="au-ideas" aria-label="Task ideas" aria-busy={ideas.status==='refreshing' || ideas.status==='loading'}>
+            {ideas.suggestions.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
+              <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon] || AUTOMATION_IDEA_ICONS.research}</span>
+              <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span>{idea.reason && <small>{idea.reason}</small>}</span>
             </button>)}
           </section>
         </div>
@@ -8654,19 +8681,17 @@ const [slashSkills, setSlashSkills] = useState([]);
   const nav = v => {
     setScheduledChatId(null);
     // Keep older shortcuts, links, and action receipts on their new Settings home.
-    if (['skills','archive'].includes(v)) {
+    if (['skills','ledger','archive'].includes(v)) {
       if (v === 'skills') setSettingsPluginTarget({v:'settings',tab:'skills'});
-      setSettingsTab(v === 'archive' ? 'Archive' : 'Plugins');
+      setSettingsTab(v === 'ledger' ? 'Analytics' : v === 'archive' ? 'Archive' : 'Plugins');
       dispatchSurfacePresentation('settings', {visible:true}, {notify:false});
-      setView(current => ['skills','archive'].includes(current) ? 'chat' : current);
+      setView(current => ['skills','ledger','archive'].includes(current) ? 'chat' : current);
       setMenu(null);
       setActivityMsg(null);
       return;
     }
     const next = APP_VIEW_IDS.has(v) ? v : '404';
     if (next === 'music') navigationEpochRef.current += 1;
-    // Analytics is a full page; leave Settings when it is opened from there.
-    if (next === 'ledger' && settingsOpen) dispatchSurfacePresentation('settings', {visible:false}, {notify:false});
     if (next === '404') {
       try {
         const url = new URL(window.location.href);
@@ -8678,7 +8703,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     setMenu(null);
     setActivityMsg(null);
   };
-  useEffect(() => { if(['skills','archive'].includes(view))nav(view); }, [view]);
+  useEffect(() => { if(['skills','ledger','archive'].includes(view))nav(view); }, [view]);
   const applyAgentSelection = id => {
     if (id === 'vellum') { setView('chat'); setActiveAgentId(null); }
     else { setView('agent'); setActiveAgentId(id); }
@@ -8935,6 +8960,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const renameChat = (id, title) => {
     setRenamingId(null);
     if (title && title.trim()) {
+      autoTitleChats.current.delete(id);
       if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.rename', {conversation_id:id, title:title.trim()});
       else setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
     }
@@ -9275,6 +9301,20 @@ const [slashSkills, setSlashSkills] = useState([]);
     turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
 
+  // New chats get a short title that says what they are about once their first reply lands.
+  const autoTitleChats = useRef(new Set());
+  const autoTitleChat = async (chatId, message, reply) => {
+    try {
+      const result = await API.conversations.suggestTitle(String(message || '').slice(0, 4000), String(reply || '').slice(0, 4000));
+      const title = String(result?.title || '').trim();
+      // A rename by the user while this was running wins.
+      if (!title || !autoTitleChats.current.delete(chatId)) return;
+      setChats(cs => cs.map(c => c.id === chatId ? {...c, title} : c));
+      if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.rename', {conversation_id:chatId, title}, {applyNavigation:false, notify:false});
+    } catch (_) {
+      autoTitleChats.current.delete(chatId);
+    }
+  };
   const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}, modelId = selModel) => {
     const completedSpotifyTools = new Set();
     const task = automations.find(item=>scheduledTaskConversationId(item.id)===chatId);
@@ -9382,6 +9422,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           },
           done: final => {
             finishTurn(assistantId);
+            if (autoTitleChats.current.has(chatId) && final.text) autoTitleChat(chatId, opts.submittedText || message, final.text);
             const liveSources = normalizeSources(final.sources || []);
             updateChat(chatId, c => ({
               ...c,
@@ -9437,7 +9478,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
     if (!chatId) {
       chatId = uid();
-      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
+      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
+      autoTitleChats.current.add(chatId);
       const record = {id: chatId, thread_id: chatId, model: turnModel, reasoning_mode:turnReasoningMode, title, pinned: false, archived: false, projectId: opts.projectId === undefined ? draftProjectId : opts.projectId, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
       if (FEATURE_FLAGS.realConversations) saveConversation({...record, messages:[userMsg]});
@@ -9462,6 +9504,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
+    return chatId;
   };
 
   const sendInProject = projId => (text, attach, opts = {}) => {
@@ -10257,6 +10300,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   const workspaceMode=workspaceLayout.surfaces['right-panel'].properties.layout==='full'?'full':'split';
   const featureOwnsSidebar=['apps','music'].includes(view);
   const activeScheduledTask = automations.find(task=>scheduledTaskConversationId(task.id)===activeChatId);
+  // Chats opened from Scheduled (task chats, run results, setup chats from ideas) stay in the
+  // Scheduled page: the chat shows with the Scheduled sidebar, like any chat otherwise.
   const scheduledContext=view==='scheduled' || view==='chat' && (Boolean(activeScheduledTask) || Boolean(scheduledChatId) && scheduledChatId===activeChatId);
   const mainSidebarContext=sidebarPeeking&&['chat','library','scheduled'].includes(railPreview)?railPreview:scheduledContext?'scheduled':view==='library'?'library':'chat';
   const shellSidebarPinned=!featureOwnsSidebar&&(scheduledContext?scheduledSidebarOpen:sidebarPinned);
@@ -10609,7 +10654,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})} onDismiss={workspaceController.hide}>
           <div className="main" data-variant="inset" data-main-sidebar={sidebarPinned?'open':'closed'}>
 
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
+            {view === 'chat' && <ChatView hidePreviewRail={workspacePanelVisible} chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
               onEditVoiceTranscript={(messageId, value) => updateTurn(activeChatId, messageId, m => ({...m, text:value, transcriptEdited:true}), true)}
               onEditMessage={(messageId,value) => editUserMessage(activeChatId,messageId,value)}
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
@@ -10639,7 +10684,6 @@ const [slashSkills, setSlashSkills] = useState([]);
               onOpenChat={openScheduledRunChat} onOpenTask={openScheduledTask} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={pluginSidebarVisible} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
-            {view === 'ledger' && <window.VellumUI.AnalyticsPage control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'memory' && <window.VellumUI.MemoryPage onMemoryAction={dispatchMemoryAction} onOpenChat={prompt => sendMessage(prompt, [], {forceNew:true, projectId:null})} onOpenSettings={() => {setSettingsTab('Personalization');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>

@@ -182,6 +182,16 @@ def snapshot_growth(store: Any, *, now: datetime | None = None) -> dict[str, Any
     if counts["by_kind"].get("correction", 0) and not before.get("by_kind", {}).get("correction", 0):
         milestones.append({"kind": "correction", "text": "Took your first correction on board"})
     since = (previous["day"] if previous else "0000")
+    # What the learner did since the last snapshot: learning and self-correction, day by day.
+    learning = {"learned": 0, "corrected": 0, "retired": 0}
+    for entry in store.audit_log(limit=5000):
+        if entry.get("event") in learning and str(entry.get("created_at") or "")[:10] > since:
+            learning[entry["event"]] += 1
+    counts["learning"] = learning
+    if learning["corrected"] or learning["retired"]:
+        fixes = learning["corrected"] + learning["retired"]
+        milestones.append({"kind": "correction",
+                           "text": f"Corrected itself {fixes} time{'s' if fixes != 1 else ''}"})
     for item in store.list_saved():
         if (str(item.get("created_at") or "")[:10] > since and item.get("origin") == "stated"
                 and item.get("kind") in {"preference", "correction"}):
@@ -206,6 +216,10 @@ LEDGER_EVENTS = {
     "unsuppressed": ("Using again", "Not used", "In use"),
     "deleted": ("Deleted", "", ""),
     "retention_deleted": ("Removed after 90 days", "Archived", ""),
+    # The conversation learner (agent/memory/learner.py).
+    "learned": ("Learned from a conversation", "", "Saved"),
+    "corrected": ("Corrected itself", "", ""),
+    "retired": ("Retired an outdated memory", "Saved", "Archived"),
 }
 # Cleanup events describe things that were never real memories: a reason, never the text.
 FILTER_EVENTS = {"noise_archived", "quality_archived", "quality_cleanup_archived"}

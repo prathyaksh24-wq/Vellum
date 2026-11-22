@@ -23,6 +23,7 @@ def test_seed_builtins_creates_records(tmp_path):
     expected_keys = {
         "youtube_creator_tracking",
         "memory_dreaming",
+        "memory_learning",
         "memory_provider_sync",
         "memory_retention",
         "youtube_browser_history",

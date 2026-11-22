@@ -84,17 +84,53 @@ async def _execute_reasoning_turn(automation: dict[str, Any]) -> str:
         from agent.config import get_settings
 
         model = get_settings().fast_model
+    if not model:
+        # Use the model chat uses (the picker's active, available model) rather than the
+        # configured primary, which may name a model that is not installed.
+        import asyncio
+
+        model = await asyncio.to_thread(active_chat_model)
     reasoning_mode = _resolve_reasoning_mode(model_profile.get("reasoning_mode"))
     thread_id = automation.get("_execution_thread_id") or _fresh_thread_id(automation)
 
     result = await api.agent.ainvoke(
-        {"messages": [{"role": "user", "content": automation["instructions"]}]},
+        {"messages": [{"role": "user", "content": run_message(automation)}]},
         config=api._thread_config(thread_id),
         model=model,
         reasoning_mode=reasoning_mode,
     )
     messages = result.get("messages", []) if isinstance(result, dict) else []
     return api._message_content(messages[-1] if messages else None) or "No response."
+
+
+ASK_FIRST_NOTE = (
+    "[Scheduled run of the task \"{name}\". Nobody is watching this run. Do the research, reading and "
+    "drafting the task asks for and write the result for the user. Do not send, post, buy, book, delete, "
+    "or change settings or accounts, and do not take any other step that needs the user's approval: "
+    "list those as suggested next steps in your result instead.]\n\n"
+)
+
+
+def active_chat_model() -> str | None:
+    """The active model the chat picker shows, when it is available right now."""
+    try:
+        from agent.llm.providers import get_provider_registry
+
+        active = get_provider_registry().current_available_model()
+    except Exception as exc:  # noqa: BLE001 — fall back to the agent's default route
+        logger.warning("[AUTOMATIONS] could not resolve the active chat model: %s", exc)
+        return None
+    return active.id if active is not None else None
+
+
+def run_message(automation: dict[str, Any]) -> str:
+    """The user turn a run executes; unattended runs without the opt-in are ask-first."""
+    instructions = str(automation.get("instructions") or "")
+    unattended = bool(automation.get("_unattended"))
+    full_access = bool((automation.get("permission") or {}).get("full_access"))
+    if unattended and not full_access:
+        return ASK_FIRST_NOTE.format(name=automation.get("name") or "Scheduled task") + instructions
+    return instructions
 
 
 def _deliver_creator_upload(automation, delivery_id, text, store):

@@ -289,3 +289,93 @@ def test_honcho_recall_excludes_temporary_chats_and_uses_canonical_session_allow
     path.write_text('{"conversations":[]}')
     assert memory.chat(session_id="deleted", query="Recall") == ""
     assert len(calls) == 1
+
+
+def test_small_talk_skips_memory_recall_and_shows_no_step(monkeypatch):
+    from types import SimpleNamespace
+    from agent.memory import memory_context
+
+    calls, events = [], []
+
+    class Orchestrator:
+        store = SimpleNamespace(get_settings=lambda: {'memory_enabled': True})
+
+        def build_memory_packet(self, **kwargs):
+            calls.append(kwargs["query"])
+            return {"saved_memories": [{"id": 1, "text": "User prefers concise answers."}]}
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", Orchestrator())
+    monkeypatch.setattr("agent.observability.activity.emit_activity", lambda *a, **k: events.append(k.get("label")))
+
+    for greeting in ("hi", "Hey!", "thanks", "ok cool", "good morning", "how are you"):
+        assert memory_context.build_memory_block("thread-small", query=greeting) == ""
+    assert calls == [] and events == []
+
+    block = memory_context.build_memory_block("thread-small", query="How should you format answers for me?")
+    assert "User prefers concise answers." in block
+    assert events == ["Recalled 1 memory"]  # shown only once memories were actually used
+
+
+def test_recall_with_no_memories_used_shows_no_step(monkeypatch):
+    from types import SimpleNamespace
+    from agent.memory import memory_context
+
+    events = []
+
+    class Orchestrator:
+        store = SimpleNamespace(get_settings=lambda: {'memory_enabled': True})
+
+        def build_memory_packet(self, **kwargs):
+            return {"saved_memories": []}
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", Orchestrator())
+    monkeypatch.setattr("agent.observability.activity.emit_activity", lambda *a, **k: events.append(k.get("label")))
+
+    memory_context.build_memory_block("thread-none", query="Explain how a transistor works")
+    assert events == []
+
+
+def test_needs_recall_keeps_real_requests():
+    from agent.memory.memory_context import needs_recall
+
+    for small_talk in ("", "hello there", "thank you", "ok"):
+        assert not needs_recall(small_talk)
+    for request in ("hi, what was the name of my project?", "remember I'm vegan", "plan my week"):
+        assert needs_recall(request)
+
+
+def test_standing_preferences_are_used_but_not_shown_as_recalled(monkeypatch):
+    from types import SimpleNamespace
+    from agent.memory import memory_context
+
+    events = []
+
+    class Orchestrator:
+        store = SimpleNamespace(get_settings=lambda: {'memory_enabled': True})
+
+        def build_memory_packet(self, **kwargs):
+            return {"saved_memories": [{"id": 1, "text": "Prefers concise answers.", "standing": True}],
+                    "external_providers": [{"provider": "hindsight", "context": "nearest matches"}]}
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", Orchestrator())
+    monkeypatch.setattr("agent.observability.activity.emit_activity", lambda *a, **k: events.append(k.get("label")))
+
+    block = memory_context.build_memory_block("thread-pr", query="what is my latest PR on github")
+    assert "Prefers concise answers." in block  # still shapes the answer
+    assert events == []  # but no "Recalled" step for an unrelated request
+
+
+def test_keyword_fallback_needs_more_than_one_shared_word():
+    from agent.memory.recall import keyword_rank
+
+    memories = [{"id": 1, "title": "Uses GitHub for Vellum", "text": "Hosts Vellum on GitHub."},
+                {"id": 2, "title": "GitHub username", "text": "GitHub username is samrivera; reviews PRs daily."}]
+    assert [m["id"] for m in keyword_rank("latest github issues", memories, limit=5)] == []
+    assert [m["id"] for m in keyword_rank("github", memories, limit=5)] == [1, 2] or \
+        sorted(m["id"] for m in keyword_rank("github", memories, limit=5)) == [1, 2]

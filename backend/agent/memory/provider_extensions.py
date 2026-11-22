@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -162,6 +163,7 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         self.client = client
         self._injected_client = client is not None
         self._client_url = ""
+        self._local = threading.local()
         self.settings = settings
         self._healthy = False
         self._health_checked_at = -_HEALTH_TTL_SECONDS
@@ -285,32 +287,47 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         _delete_hindsight_document(client, self.bank_id, doc_id)
 
     def shutdown(self) -> None:
-        client, self.client = self.client, None
-        close = getattr(client, "close", None)
-        if callable(close):
-            close()
+        # Close this thread's client; other threads' clients belong to their own
+        # event loops and are released with them.
+        client = self.client if self._injected_client else getattr(self._local, "client", None)
+        self.client = None
+        self._local = threading.local()
+        try:
+            _close_client(client)
+        except Exception:  # noqa: BLE001 - shutting down
+            pass
 
     def _client(self) -> Any | None:
-        if self.client is not None and (self._injected_client or self._client_url == self.base_url):
+        """One Hindsight client per thread.
+
+        The client's HTTP session belongs to the event loop of the thread that
+        first used it. Memory sync runs on whichever pool thread is free, and
+        reusing another thread's client failed every call with "Timeout context
+        manager should be used inside a task".
+        """
+        if self._injected_client:
             return self.client
-        if self.client is not None:  # the embedded engine restarted on a new port
-            _close_client(self.client)
-            self.client = None
+        local = self._local
+        base_url = self.base_url
+        if getattr(local, "client", None) is not None and getattr(local, "url", "") == base_url:
+            return local.client
+        if getattr(local, "client", None) is not None:  # the embedded engine restarted on a new port
+            _close_client(local.client)
+            local.client = None
         try:
             from hindsight_client import Hindsight
         except Exception:
             return None
-        base_url = self.base_url
         kwargs: dict[str, Any] = {"base_url": base_url, "timeout": 30.0}
         api_key = (self.settings.hindsight_api_key.get_secret_value() if self.settings else os.environ.get("HINDSIGHT_API_KEY", "")).strip()
         if api_key:
             kwargs["api_key"] = api_key
         try:
-            self.client = Hindsight(**kwargs)
-            self._client_url = base_url
+            local.client, local.url = Hindsight(**kwargs), base_url
         except Exception:
-            self.client = None
-        return self.client
+            local.client = None
+        self.client, self._client_url = local.client, base_url
+        return local.client
 
     def shutdown(self) -> None:
         _close_client(self.client)

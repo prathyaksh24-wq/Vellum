@@ -230,3 +230,32 @@ def test_forget_document_uses_the_clients_own_loop_runner(monkeypatch):
     monkeypatch.setattr(client_module, "_run_async", lambda coro: calls.append(("ran", coro)))
     module._delete_hindsight_document(type("Client", (), {"documents": Documents()})(), "vellum", "vellum-memory-7")
     assert calls == [("vellum", "vellum-memory-7"), ("ran", "coroutine")]
+
+
+def test_hindsight_uses_one_client_per_thread(monkeypatch):
+    """A client's HTTP session belongs to one thread's event loop; sharing it broke memory sync."""
+    import sys
+    import threading
+    import types
+
+    made = []
+
+    class FakeHindsight:
+        def __init__(self, **kwargs):
+            made.append(threading.get_ident())
+
+        def close(self):
+            return None
+
+    monkeypatch.setitem(sys.modules, "hindsight_client", types.SimpleNamespace(Hindsight=FakeHindsight))
+    monkeypatch.setenv("HINDSIGHT_API_URL", "http://127.0.0.1:8888")
+    provider = HindsightProviderExtension()
+    first = provider._client()
+    assert provider._client() is first  # reused within a thread
+
+    seen = []
+    worker = threading.Thread(target=lambda: seen.append(provider._client()))
+    worker.start()
+    worker.join()
+    assert seen[0] is not first and len(made) == 2
+    provider.shutdown()

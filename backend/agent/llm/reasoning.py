@@ -78,6 +78,19 @@ def reasoning_profile(mode: ReasoningMode | None) -> ReasoningProfile | None:
     return REASONING_PROFILES[mode] if mode is not None else None
 
 
+def effective_reasoning_mode(mode: ReasoningMode | None) -> ReasoningMode | None:
+    """The request's mode, or light thinking when "Think before every answer" is on.
+
+    Applies to every provider the same way: thinking models then think (and
+    stream their thinking) on ordinary replies too.
+    """
+    if mode is not None:
+        return mode
+    from agent.personalization import think_always_enabled
+
+    return ReasoningMode.light if think_always_enabled() else None
+
+
 def reasoning_extra_body(mode: ReasoningMode | None) -> dict[str, Any]:
     """Extra request-body keys to send for a reasoning mode (best-effort).
 
