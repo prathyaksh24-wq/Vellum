@@ -47,6 +47,21 @@ def status(response: Response):
         raise HTTPException(503, "Browser status is unavailable. Retry shortly.") from None
 
 
+@router.get("/step-previews/{name}")
+def step_preview(name: str):
+    """Pictures of pages after agent browser steps, shown on chat steps."""
+    import re
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    from agent.config import _resolve_against_repo
+    if not re.fullmatch(r"[a-f0-9]{32}\.jpg", name):
+        raise HTTPException(404, "Preview not found.")
+    path = _resolve_against_repo(Path("data/browser-session/step-previews")) / name
+    if not path.is_file():
+        raise HTTPException(404, "Preview not found.")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
 @router.get("/frame", response_model=BrowserFrame)
 def frame(response: Response):
     response.headers["Cache-Control"] = "no-store"
