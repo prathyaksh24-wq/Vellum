@@ -630,6 +630,45 @@ class DedicatedBrowser(BrowserSettingsMixin):
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
+    STEP_PREVIEW_LIMIT = 400
+
+    async def step_preview(self) -> dict | None:
+        """Save a small picture of the active web page after an agent step.
+
+        The chat shows it on the step; it is never sent to a model. Returns None
+        when there is no web page to show or the capture fails.
+        """
+        page = self.active_page
+        if page is None or page.is_closed() or not str(page.url).startswith(("http://", "https://")):
+            return None
+        url = str(page.url)
+        try:
+            title = await asyncio.wait_for(page.title(), 1)
+        except Exception:
+            title = ""
+        raw = b""
+        try:
+            if self._native is not None:
+                result = await self._native.call("preview", target_id=self.context.target_for_page(page))
+                data_url = str(result.get("preview") or "")
+                if data_url.startswith("data:image/jpeg;base64,"):
+                    raw = base64.b64decode(data_url.split(",", 1)[1])
+            else:
+                raw = await page.screenshot(type="jpeg", quality=60, timeout=4000)
+        except Exception:
+            return None
+        if not raw:
+            return None
+        identity = uuid4().hex
+        directory = self._storage_path(Path("data/browser-session/step-previews"))
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{identity}.jpg").write_bytes(raw)
+        # Keep the newest previews; older chat steps fall back to text.
+        files = sorted(directory.glob("*.jpg"), key=lambda item: item.stat().st_mtime)
+        for stale in files[:-self.STEP_PREVIEW_LIMIT]:
+            stale.unlink(missing_ok=True)
+        return {"id": identity, "url": url[:4096], "title": str(title)[:300], "image": f"/api/browser/step-previews/{identity}.jpg"}
+
     async def status(self) -> BrowserStatus:
         ready, reason = browser_readiness()
         native_target = ''

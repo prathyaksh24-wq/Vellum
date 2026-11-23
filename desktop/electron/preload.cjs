@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('VellumDesktop', Object.freeze({
   }) : null,
   browser: Object.freeze({
     mount(data) { return ipcRenderer.invoke('vellum:browser-mount', data); },
+    signIn(data = {}) { return ipcRenderer.invoke('vellum:browser-signin', data); },
     subscribe(callback) {
       const handler=(_event,data)=>callback(data);
       ipcRenderer.on('vellum:browser-event',handler);

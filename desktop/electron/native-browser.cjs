@@ -3,10 +3,18 @@ const CommandRegistry = require('./commands.cjs');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const {randomBytes, randomUUID, timingSafeEqual} = require('node:crypto');
+const {needsBrowserSignIn, findSignInBrowser, runBrowserSignIn} = require('./browser-signin.cjs');
 
 function profilePath(root, identity) {
   if (!/^(default|[a-f0-9]{32})$/.test(identity)) throw new Error('Unknown browser profile.');
   return path.join(root, 'data/browser-session', ...(identity === 'default' ? [] : ['profiles', identity]), 'electron');
+}
+
+// Google sign-in rejects embedded browsers that announce themselves. Drop every
+// product token except the ones a stock Chrome user agent carries (removes the
+// app name and Electron/x.y), so pages and request headers see plain Chrome.
+function browserUserAgent(value) {
+  return String(value).replace(/\s(?!(?:Mozilla|AppleWebKit|Chrome|Safari)\/)[^\s/()]+\/[^\s()]+/g, '');
 }
 
 function webURL(value) {
@@ -20,7 +28,7 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
   const {WebContentsView, session, ipcMain, Menu, screen, dialog} = electron;
   const token = randomBytes(32).toString('hex');
   const tabs = new Map(), downloads = new Map();
-  let preferences, profile, active = '', mount = null, humanInput = false, agentAction = false, control = 'closed', still = '';
+  let preferences, profile, active = '', mount = null, humanInput = false, agentAction = false, control = 'closed', still = '', signInRun = null, signInQuietUntil = 0;
   const activeSession = () => session.fromPath(profilePath(root, profile.id));
   const owned = contents => [...tabs.values()].find(tab => tab.view.webContents === contents);
   async function applyCursor(tab) {
@@ -115,6 +123,16 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
     contents.on('will-navigate', navigate);
     contents.on('will-redirect', (event, url, _inPlace, main) => { if (main) navigate(event, url); });
     contents.on('did-navigate', present);
+    contents.on('did-navigate', (_event, url) => {
+      if (!needsBrowserSignIn(url) || !mount || mount.window.isDestroyed()) return;
+      // Hand the person straight to their real browser; the agent's own visits
+      // and a recently finished or cancelled hand-off only offer it.
+      if (control !== 'agent' && !signInRun && Date.now() > signInQuietUntil && target === active) {
+        signIn(mount.window).catch(() => {});
+        return;
+      }
+      mount.window.webContents.send('vellum:browser-event', {type:'signin_needed', target_id:target, browser:findSignInBrowser()?.name || ''});
+    });
     contents.on('did-finish-load',()=>{tab.cursorSignature='';applyCursor(tab).catch(()=>{});});
     contents.on('destroyed', () => { tabs.delete(target); if (active === target) active = [...tabs.keys()][0] || ''; present(); });
     contents.on('enter-html-full-screen', () => {
@@ -160,6 +178,7 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
   }
   function configureSession() {
     const browserSession = activeSession();
+    browserSession.setUserAgent(browserUserAgent(browserSession.getUserAgent()));
     browserSession.setPermissionCheckHandler((contents, permission) => {
       const tab = owned(contents);
       if (!tab) return false;
@@ -220,6 +239,59 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
     }
     tabs.clear(); active=''; control='closed'; humanInput=false;
   }
+  // Sign in with the person's real browser, then copy that session in here.
+  function signInProfileDir(browser) {
+    const base = path.dirname(profilePath(root, profile.id));
+    const dir = path.join(base, 'signin-' + browser.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+    // Earlier builds kept one Brave helper profile at signin-browser.
+    const legacy = path.join(base, 'signin-browser');
+    if (browser.name === 'Brave' && !require('node:fs').existsSync(dir) && require('node:fs').existsSync(legacy)) {
+      try { require('node:fs').renameSync(legacy, dir); } catch {}
+    }
+    return dir;
+  }
+  function bringToFront(window) {
+    if (!window || window.isDestroyed()) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    // Windows only lets a background app take focus while it is topmost.
+    window.setAlwaysOnTop(true);
+    window.focus();
+    setTimeout(() => { if (!window.isDestroyed()) window.setAlwaysOnTop(false); }, 400);
+  }
+  async function signIn(window, data = {}) {
+    if (data.cancel === true) { signInQuietUntil = Date.now() + 60000; signInRun?.controller.abort(); return {status:'cancelled'}; }
+    if (data.check === true) return {browser:findSignInBrowser()?.name || ''};
+    if (!profile) throw new Error('Open the browser first.');
+    if (signInRun) return {status:'waiting', browser:signInRun.browser.name};
+    const browser = findSignInBrowser();
+    if (!browser) throw new Error('Install Chrome, Edge or Brave to sign in to Google.');
+    const page = tabs.get(active)?.view.webContents;
+    const current = page && !page.isDestroyed() ? page.getURL() : '';
+    const url = webURL(needsBrowserSignIn(current) ? current : 'https://accounts.google.com/ServiceLogin?continue=' + encodeURIComponent(current && current !== 'about:blank' ? current : 'https://www.youtube.com/'));
+    const notify = update => { if (!window.isDestroyed()) window.webContents.send('vellum:browser-event', {type:'signin', ...update}); };
+    const controller = new AbortController();
+    signInRun = {browser, controller};
+    try {
+      const result = await runBrowserSignIn({browser, url, signal:controller.signal, targetSession:activeSession(),
+        profileDir:signInProfileDir(browser), onStatus:notify});
+      // If Google still asks to sign in after this, offer rather than loop.
+      signInQuietUntil = Date.now() + 60000;
+      if (page && !page.isDestroyed()) {
+        let next = '';
+        try { next = needsBrowserSignIn(page.getURL()) ? webURL(new URL(page.getURL()).searchParams.get('continue') || '') : ''; } catch {}
+        if (next) page.loadURL(next).catch(() => {}); else page.reload();
+      }
+      bringToFront(window);
+      notify({status:'done', browser:browser.name, imported:result.imported});
+      return {status:'done', browser:browser.name, imported:result.imported};
+    } catch (failure) {
+      signInQuietUntil = Date.now() + 60000;
+      bringToFront(window);
+      notify({status:controller.signal.aborted ? 'cancelled' : 'error', browser:browser.name, message:failure.message});
+      throw failure;
+    } finally { signInRun = null; }
+  }
   const commands = {
     async open(data) {
       if (!Array.isArray(data.preferences?.profiles)) throw new Error('Invalid browser preferences.');
@@ -250,6 +322,8 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       humanInput=false; return result;
     },
     async activity(data) { agentAction=data.active === true; return {}; },
+    // A small JPEG of a tab for the chat's step previews; never brings it forward.
+    async preview(data) { return {preview:await captureTabPreview(tabs.get(data.target_id))}; },
     async pointer(data) {
       const tab=tabs.get(data.target_id);
       if (!tab) throw new Error('The embedded tab changed.');
@@ -327,14 +401,18 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
         return {preview:await captureTabPreview(tabs.get(data.target_id))};
       }
       if (data.focus_chrome === true) { window.webContents.focus(); return; }
+      // The still is cosmetic. Chromium cannot capture a hidden or unpainted view
+      // (UnknownVizError); that must never stop the view being hidden or moved.
+      const captureStill=async page=>{
+        if (!page || page.isDestroyed() || still) return;
+        try { const image=await page.capturePage(undefined,{stayHidden:true}); if (!image.isEmpty()) still=image.toDataURL(); } catch {}
+      };
       if (data.prepare_only === true) {
-        const page=tabs.get(active)?.view.webContents;
-        if (page && !still) still=(await page.capturePage()).toDataURL();
+        await captureStill(tabs.get(active)?.view.webContents);
         return {still};
       }
       if (data.visible === false) {
-        const page=tabs.get(active)?.view.webContents;
-        if (data.snapshot && page && !still) still=(await page.capturePage()).toDataURL();
+        if (data.snapshot) await captureStill(tabs.get(active)?.view.webContents);
         mount={window,visible:false};present();return {still:data.snapshot ? still : ''};
       }
       if (!tabs.has(data.target_id)) throw new Error('This embedded tab is closed.');
@@ -347,9 +425,15 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       active=data.target_id;still='';present();
     },
     unmount(window) { if(mount?.window===window) {mount=null;present();} },
+    signIn,
     async stop() {
       await close();server.close();
       try { const value=JSON.parse(await fs.readFile(descriptorPath,'utf8')); if (value.token===token) await fs.unlink(descriptorPath); } catch {}
+    },
+    // Close every tab, e.g. when the backend that owned them is replaced.
+    async closeTabs() {
+      await close();
+      if (mount && !mount.window.isDestroyed()) mount.window.webContents.send('vellum:browser-event', {type:'closed'});
     },
     descriptor,
   };
@@ -366,4 +450,4 @@ async function readDebuggerEndpoint(app) {
   }
   throw new Error('Vellum embedded browser debugging transport did not start.');
 }
-module.exports={createNativeBrowser,readDebuggerEndpoint,profilePath,webURL};
+module.exports={createNativeBrowser,readDebuggerEndpoint,profilePath,webURL,browserUserAgent};
