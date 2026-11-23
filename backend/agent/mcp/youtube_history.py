@@ -1,4 +1,5 @@
 """Fixed DOM-only reader used inside the existing dedicated browser owner."""
+import asyncio
 import hashlib
 import re
 import time
@@ -36,6 +37,24 @@ HISTORY_DOM = r"""() => {
 }"""
 
 
+
+# Every page call is bounded: a page that stops drawing (for example a hidden
+# background tab) must fail this read quickly, not hang the browser worker.
+PAGE_CALL_SECONDS = 10
+
+
+async def _bounded(awaitable):
+    try:
+        return await asyncio.wait_for(awaitable, PAGE_CALL_SECONDS)
+    except asyncio.TimeoutError:
+        raise ValueError("The YouTube History page stopped responding.") from None
+
+
+async def _scroll(page):
+    # Script scrolling needs no input acknowledgement from the compositor,
+    # unlike mouse.wheel, so it works in background tabs too.
+    await _bounded(page.evaluate("() => window.scrollBy(0, 1200)"))
+
 async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, can_continue=lambda:True, day_label='', now=None):
     from agent.contracts.youtube_history import BrowserHistoryReadRequest, YouTubeHistoryConfig
     from agent.plugins.youtube_browser_history import history_day
@@ -54,10 +73,10 @@ async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, ca
             raise ValueError('The browser was paused or taken over during the history read.')
         if not allowed():
             return {"status":"page_unreadable"}
-        first = await page.evaluate(HISTORY_DOM)
+        first = await _bounded(page.evaluate(HISTORY_DOM))
         if first.get('signed_in') and (first.get('items') or first.get('empty')):
             break
-        await page.wait_for_timeout(250)
+        await _bounded(page.wait_for_timeout(250))
     if not first.get('signed_in'):
         return {"status":"signed_out"}
     identity = first.get('identity')
@@ -97,16 +116,16 @@ async def read_history_page(page, *, history_url=HISTORY_URL, scroll_limit=6, ca
         stable = stable + 1 if len(seen) == before else 0
         if step == scroll_limit or len(rows) >= 100 or stable >= 2 or reached_older or time.monotonic() >= deadline:
             break
-        await page.mouse.wheel(0, 1200)
-        await page.wait_for_timeout(500)
+        await _scroll(page)
+        await _bounded(page.wait_for_timeout(500))
         if not allowed():
             return {"status":"page_unreadable"}
-        current = await page.evaluate(HISTORY_DOM)
+        current = await _bounded(page.evaluate(HISTORY_DOM))
     if not can_continue():
         raise ValueError('The browser was paused or taken over during the history read.')
     if not allowed():
         return {"status":"page_unreadable"}
-    final = await page.evaluate(HISTORY_DOM)
+    final = await _bounded(page.evaluate(HISTORY_DOM))
     if not final.get('signed_in') or final.get('identity') != identity:
         return {"status":"account_changed"}
     if not rows and not final.get('empty') and not (requested_day and seen):

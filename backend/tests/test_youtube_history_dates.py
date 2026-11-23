@@ -89,14 +89,32 @@ def test_targeted_reader_scrolls_past_newer_entries_without_filling_the_100_row_
     class Page:
         url = 'https://www.youtube.com/feed/history'
         step = 0
-        async def evaluate(self, _script):
+        async def evaluate(self, script):
+            if 'scrollBy' in script:
+                self.step = min(self.step + 1, 3)
+                return None
             day = ['Today', 'Yesterday', 'Monday', 'Sunday'][self.step]
             return {'signed_in':True, 'identity':'fixture-account', 'timezone':'Asia/Kolkata',
                 'items':[{'video_id':f'video{i:06d}', 'title':f'Video {i}', 'day_label':day} for i in range(100)], 'empty':False}
         async def wait_for_timeout(self, _time): pass
-        async def wheel(self, *_): self.step = min(self.step + 1, 3)
         @property
-        def mouse(self): return self
+        def mouse(self): raise AssertionError('Wheel input hangs in background tabs; scroll by script.')
     result = asyncio.run(read_history_page(Page(), day_label='Monday', now=datetime(2026,10,8,tzinfo=UTC)))
     assert result['requested_day'] == '2026-10-05'
     assert len(result['items']) == 100 and all(item['day_label'] == 'Monday' for item in result['items'])
+
+
+def test_reader_fails_fast_when_the_history_page_stops_responding(monkeypatch):
+    # Regression: a hidden background tab never drew a frame, so the read hung
+    # until the 300 s browser timeout and was reported as a generic failure.
+    from agent.mcp import youtube_history
+    monkeypatch.setattr(youtube_history, 'PAGE_CALL_SECONDS', 0.05)
+    class Page:
+        url = 'https://www.youtube.com/feed/history'
+        async def evaluate(self, _script):
+            await asyncio.sleep(5)
+        async def wait_for_timeout(self, _time): pass
+    started = datetime.now(UTC)
+    with pytest.raises(ValueError, match='stopped responding'):
+        asyncio.run(youtube_history.read_history_page(Page()))
+    assert (datetime.now(UTC) - started).total_seconds() < 2

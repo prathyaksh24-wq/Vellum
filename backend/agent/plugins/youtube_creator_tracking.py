@@ -54,6 +54,10 @@ def _literal(value):
     return re.sub(r"([\\`*_{}\[\]<>])", r"\\\1", str(value))
 
 
+# Delivered-but-never-watched notifications before an automatic channel is demoted.
+NOTIFICATION_IGNORED_MIN = 6
+
+
 class AtomFeedReader:
     """Fixed host, no redirects, bounded response and parsing; no credentials."""
     def fetch(self, channel_id, state):
@@ -89,7 +93,11 @@ class AtomFeedReader:
         if b"\x00" in raw or len(raw) > 262144 or b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
             raise ValueError("Unsupported YouTube feed XML.")
         root = ET.fromstring(raw)
-        if root.tag != ATOM + "feed" or root.findtext(YT + "channelId") != channel_id:
+        # YouTube's feed-level channelId may omit the "UC" prefix (seen since
+        # Nov 2026: "_x5XG..." for "UC_x5XG..."). Entries still carry the full
+        # ID and remain checked exactly below.
+        feed_channel = root.findtext(YT + "channelId")
+        if root.tag != ATOM + "feed" or feed_channel not in {channel_id, channel_id.removeprefix("UC")}:
             raise ValueError("YouTube feed channel identity does not match.")
         entries = []
         for node in root.findall(ATOM + "entry")[:50]:
@@ -272,6 +280,10 @@ class YouTubeCreatorTracking:
                 support=topic_profile['channels'].get(channel,{}).get(topic,0)
                 if support>=3 and (not rule or not rule.topic_terms or any(TOPIC_PATTERNS[topic].search(term) for term in rule.topic_terms)):
                     related_candidates[topic].append((channel,support,row['last_day']))
+        # Learn from notifications: watched pings raise a channel, consistently
+        # ignored pings lower an automatic one. Explicit relationships win.
+        feedback, _ = self.store.youtube_tracking_notification_feedback(config.account_id,
+            config.history_accounts, since=(reference_day - timedelta(days=60)).isoformat())
         related_candidates={topic:{item[0] for item in sorted(items,key=lambda item:(-item[1],-date.fromisoformat(item[2]).toordinal(),item[0]))[:config.related_channels_per_topic]}
                             for topic,items in related_candidates.items()}
         for channel, row in stats.items():
@@ -305,6 +317,14 @@ class YouTubeCreatorTracking:
             if config.related_discovery and promoted and relationship not in {"excluded","former"} and state in {"quiet","seasonal_quiet"}:
                 state,reason = "monitoring", "Related to your current " + ', '.join(promoted) + " interest; supported by prior watches on at least three days."
                 score += 1.5 + sum(min(topic_profile['channels'][channel][topic],12)/12 for topic in promoted)
+            sent, watched = feedback.get(channel, (0, 0))
+            if sent and relationship not in {"excluded", "former"} and state != "inactive":
+                if watched:
+                    score += min(watched, 4) * 0.5
+                    reason += f" You watched {watched} of {sent} recent upload notifications."
+                elif sent >= NOTIFICATION_IGNORED_MIN and relationship == "auto":
+                    score *= 0.5
+                    reason += f" None of the last {sent} upload notifications were watched, so it ranks lower."
             terms = rule.topic_terms if rule else []
             if config.related_discovery and related and not terms and (not rule or relationship=="seasonal"):
                 # Broad related channels are limited to the activated topics.
@@ -312,7 +332,7 @@ class YouTubeCreatorTracking:
             creators.append({"channel_id": channel, "name": rule.name if rule else row["name"], "relationship": relationship,
                 "state": state, "score": round(score, 3), "recent_video_days": count, "recent_days": days,
                 "total_video_days": row["total"], "last_watched": row["last_day"], "reason": reason,
-                "topic_terms": terms})
+                "topic_terms": terms, "notifications_sent": sent, "notifications_watched": watched})
         frequencies = self._notification_preferences(config, creators, messages=messages)
         pacing=(self.store.get_sync_cursor('youtube_notification_frequency',config.account_id) or {}).get('state') or {}
         weekly_open=not _time(pacing.get('last_rediscovery_at')) or _time(pacing['last_rediscovery_at'])<=now-timedelta(days=7)
