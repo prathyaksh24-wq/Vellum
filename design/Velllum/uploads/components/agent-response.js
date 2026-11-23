@@ -161,6 +161,15 @@
           h('span',null,event.label || event.type || 'Activity'),h('span',null,event.status || ''),
           time(event.at) !== null && h('time',null,new Date(time(event.at)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})))))));
   }
+  // Work grouped by where it happened in the answer text: each run is the work
+  // done after a stretch of text and before the next one.
+  function workRuns(msg) {
+    const items=window.VellumUI.workItems(msg);
+    if(!items.some(item=>(item.textOffset || 0)>0))return [];
+    const runs=new Map();
+    for(const item of items){const offset=item.textOffset || 0;if(!runs.has(offset))runs.set(offset,[]);runs.get(offset).push(item);}
+    return [...runs.entries()].sort((a,b)=>a[0]-b[0]).map(([offset,runItems])=>({offset,ids:new Set(runItems.map(item=>item.id)),items:runItems}));
+  }
   // --- Browser step previews ---------------------------------------------------
   // The backend saves a picture of the page after each agent browser step.
   function stepPreview(item) {
@@ -216,10 +225,13 @@
         preview.url && h('button',{type:'button',className:'agent-browser-card-open',onClick:()=>openPage(preview.url)},'Open')));
   }
 
-  function ResponseProgress({msg,previews=[],onPreview}) {
-    const progress=window.VellumUI.responseProgress(msg),identity=window.VellumUI.responseModel(msg);
+  function ResponseProgress({msg,run,latest=true,previews=[],onPreview}) {
+    const whole=window.VellumUI.responseProgress(msg),identity=window.VellumUI.responseModel(msg);
+    // An earlier run is finished even while the turn keeps working.
+    const progress=latest?whole:{...whole,active:false};
     const prefs=window.VellumUI.useResponsePreferences();
-    const items=window.VellumUI.workItems(msg),steps=visibleSteps(items.filter(item=>!['model_reasoning','reasoning_summary'].includes(item.type)),prefs);
+    const allItems=window.VellumUI.workItems(msg),items=run?allItems.filter(item=>run.ids.has(item.id)):allItems;
+    const steps=visibleSteps(items.filter(item=>!['model_reasoning','reasoning_summary'].includes(item.type)),prefs);
     const hasReasoning=items.some(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim());
     const hasDetails=steps.length>0 || hasReasoning;
     const [expanded,setExpanded]=window.React.useState(null);
@@ -236,9 +248,13 @@
       if(open && progress.active && following.current && viewport.current)viewport.current.scrollTop=viewport.current.scrollHeight;
     },[open,progress.active,msg.activity,msg.trace]);
     if((!progress.active && !hasDetails) || msg.voice)return null;
-    const started=time(msg.trace?.startedAt),finished=time(msg.trace?.completedAt),elapsed=started===null?0:((finished || now)-started)/1000;
-    const stopped=['cancelled','interrupted'].includes(msg.responseStatus || msg.trace?.status);
-    const label=progress.active?progress.label:stopped?'Stopped':msg.responseStatus==='error'?'Response interrupted':elapsed>=1?'Worked for '+duration(elapsed):'Work details';
+    const runStart=run?Math.min(...items.map(item=>time(item.at) ?? Infinity)):null;
+    const runEnd=run?Math.max(...items.map(item=>time(item.updatedAt ?? item.at) ?? 0)):null;
+    const started=run && Number.isFinite(runStart)?runStart:time(msg.trace?.startedAt);
+    const finished=run && !latest?runEnd:time(msg.trace?.completedAt);
+    const elapsed=started===null?0:((finished || now)-started)/1000;
+    const stopped=latest && ['cancelled','interrupted'].includes(msg.responseStatus || msg.trace?.status);
+    const label=progress.active?progress.label:stopped?'Stopped':latest && msg.responseStatus==='error'?'Response interrupted':elapsed>=1?'Worked for '+duration(elapsed):'Work details';
     const heading=[
       progress.active && !progress.failed ? h(window.VellumUI.ThinkingOrb,{key:'orb',state:progress.state,size:24,className:'agent-thinking-orb'}) : h('span',{key:'status',className:'agent-work-status'},h(Icon,{kind:progress.failed || msg.responseStatus==='error'?'error':stopped?'step':'step',size:16})),
       h('span',{key:'label',className:'agent-progress-label',role:'status','aria-live':'polite'},label),
@@ -248,7 +264,9 @@
     return h('section',{className:'agent-work','data-state':open?'open':'closed','data-vendor':identity.vendor,'data-model':identity.id,'data-provider':identity.provider,'data-orb-state':progress.state},
       hasDetails?h('button',{type:'button',className:'agent-progress agent-work-heading','aria-expanded':open,'aria-controls':region,onClick:()=>setExpanded(!open)},...heading):h('div',{className:'agent-progress'},...heading),
       open && hasDetails && h('div',{id:region,className:'agent-work-viewport',ref:viewport,onScroll:event=>{const el=event.currentTarget;following.current=el.scrollHeight-el.scrollTop-el.clientHeight<24;}},
-        h('ol',{className:'agent-work-steps','aria-label':'Work steps'},steps.map((item,index)=>{
+        h('ol',{className:'agent-work-steps','aria-label':'Work steps'},workTimeline(steps,items,prefs).map((entry,index)=>{
+          if(entry.kind==='thought')return h('li',{key:'thought-'+entry.items[0].id,className:'agent-work-step agent-work-thought'},h(ThoughtProcess,{msg,items:entry.items}));
+          const item=entry.item;
           const failed=['failed','error','blocked'].includes(item.status),running=progress.active && !terminal(item.status);
           const status=failed?'failed':running?'running':terminal(item.status)?item.status:'interrupted';
           const input=item.metadata?.input;
@@ -261,7 +279,22 @@
               typeof query==='string' && h('span',{className:'agent-work-query'},query)),
             h('span',{className:'agent-work-step-status'},failed?'Failed':status==='cancelled'?'Stopped':status==='interrupted'?'Interrupted':''),
             (()=>{const at=previews.findIndex(preview=>preview.id===item.id);return at>=0 && onPreview ? h(StepThumb,{previews,index:at,onOpen:onPreview}) : null;})());
-        })),h(ThoughtProcess,{msg})));
+        }))));
+  }
+  // Tool steps and thinking in the order they happened. Thinking that happens
+  // between two tool calls stays between them instead of collecting at the end.
+  function workTimeline(steps,items,prefs) {
+    const reasoning=prefs.thinking?items.filter(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim()):[];
+    const timeline=[...steps.map((item,order)=>({kind:'step',item,at:time(item.at) ?? 0,order})),
+      ...reasoning.map((item,order)=>({kind:'thought',item,at:time(item.at) ?? 0,order:steps.length+order}))]
+      .sort((a,b)=>a.at-b.at || a.order-b.order);
+    const entries=[];
+    for(const entry of timeline) {
+      const previous=entries.at(-1);
+      if(entry.kind==='thought' && previous?.kind==='thought')previous.items.push(entry.item);
+      else entries.push(entry.kind==='thought'?{kind:'thought',items:[entry.item]}:entry);
+    }
+    return entries;
   }
   function AgentActivity({msg,defaultOpen=false}) {
     const prefs=window.VellumUI.useResponsePreferences();
@@ -315,13 +348,14 @@
       evidence.id && h('p',{className:'agent-evidence-state'},evidence.validated ? 'Validated source span' : 'Source span has not been validated'),
       safeUrl(source.url) && h('a',{href:source.url,target:'_blank',rel:'noopener noreferrer'},'Open source',h(Icon,{kind:'external',size:12})));
   }
-  function ThoughtProcess({msg}) {
+  function ThoughtProcess({msg,items:segment}) {
     const prefs=window.VellumUI.useResponsePreferences();
     const [open,setOpen]=window.React.useState(false);
     const [now,setNow]=window.React.useState(Date.now());
     const region='thought-'+window.React.useId().replace(/:/g,'');
     const textRef=window.React.useRef(null);
-    const items=activityItems(msg).filter(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim());
+    // One segment of thinking when the work list interleaves it with tool steps.
+    const items=segment || activityItems(msg).filter(item=>['model_reasoning','reasoning_summary'].includes(item.type) && String(item.detail || '').trim());
     const thinking=!!msg.streaming && items.some(item=>item.status!=='completed');
     const first=items.reduce((min,item)=>Math.min(min,time(item.at) ?? Infinity),Infinity);
     const last=items.reduce((max,item)=>Math.max(max,time(item.completedAt ?? item.at) ?? 0),0);
@@ -387,14 +421,31 @@
     const generatedId=window.React.useId();
     const prefix='response-'+String(msg.id || generatedId).replace(/[^\w-]/g,'-');
     const status=msg.responseStatus || msg.trace?.status || (msg.streaming ? 'answering':'done');
+    const textBlock=(text,key,animate)=>text.trim() && h('div',{key,className:'agent-response-content agent-text-'+prefs.style,'aria-busy':!!msg.streaming || reveal.pending},
+      h(window.VellumUI.AnswerMarkdown,{text,sources,idPrefix:prefix+'-'+key,onCitation:id=>setActiveId(id),animate,pencil:prefs.pencil}));
+    // Text and work in the order they happened: narration, then the work it led
+    // to, then more text. Older replies without positions keep work on top.
     const previews=responsePreviews(msg);
     const [viewer,setViewer]=window.React.useState(null);
+    const runs=workRuns(msg);
+    const body=[];
+    if(!runs.length || (runs.length===1 && runs[0].offset===0)) {
+      body.push(h(ResponseProgress,{key:'work',msg,previews,onPreview:setViewer}));
+      if(msg.text)body.push(textBlock(reveal.text,'text',reveal.animated));
+    } else {
+      let position=0;
+      runs.forEach((run,index)=>{
+        const latest=index===runs.length-1;
+        if(run.offset>position)body.push(textBlock(reveal.text.slice(position,run.offset),'text-'+index,false));
+        if(reveal.text.length>=run.offset || !msg.streaming)body.push(h(ResponseProgress,{key:'work-'+index,msg,run,latest,previews,onPreview:setViewer}));
+        position=Math.max(position,run.offset);
+      });
+      body.push(textBlock(reveal.text.slice(position),'text-end',reveal.animated));
+    }
+    body.push(h(BrowserPreviewCard,{key:'browser-card',previews,onOpen:setViewer}));
+    if(viewer!==null)body.push(h(PreviewViewer,{key:'viewer',previews,index:Math.min(viewer,previews.length-1),onIndex:setViewer,onClose:()=>setViewer(null)}));
     return h('div',{className:'agent-response',ref:responseRef,'data-status':status},
-      h(ResponseProgress,{msg,previews,onPreview:setViewer}),
-      h(BrowserPreviewCard,{previews,onOpen:setViewer}),
-      viewer!==null && h(PreviewViewer,{previews,index:Math.min(viewer,previews.length-1),onIndex:setViewer,onClose:()=>setViewer(null)}),
-      msg.text && h('div',{className:'agent-response-content agent-text-'+prefs.style,'aria-busy':!!msg.streaming || reveal.pending},
-        h(window.VellumUI.AnswerMarkdown,{text:reveal.text,sources,idPrefix:prefix,onCitation:id=>setActiveId(id),animate:reveal.animated,pencil:prefs.pencil})),
+      ...body,
       prefs.style==='ink' && shownSources.filter(source=>isLinked(source) && source.evidence?.quote).map(source=>h('aside',{key:source.id || source.source_index,className:'agent-provenance-note'},
         h('span',{className:'agent-detail-label'},'From '+(source.title || 'the book')),h('blockquote',null,source.evidence.quote))),
       !msg.streaming && reveal.pending && h('button',{type:'button',className:'agent-show-full',onClick:reveal.finish},'Show full response'),

@@ -111,6 +111,31 @@ class YouTubeTrackingStoreMixin:
             rows = connection.execute("SELECT * FROM youtube_creator_stats WHERE account_id=? ORDER BY last_day DESC LIMIT 5000", (account,)).fetchall()
         return [dict(row) | {"days": json.loads(row["days_json"])} for row in rows]
 
+    def youtube_tracking_notification_feedback(self, account, history_accounts, *, since):
+        """Per channel: delivered upload notifications and how many of those videos
+        were later watched. Only notifications inside saved watch-history coverage
+        count (with two days to watch), so a history outage never reads as disinterest."""
+        accounts = [str(item) for item in history_accounts if item] or [account]
+        marks = ','.join('?' for _ in accounts)
+        with closing(self._connect()) as connection:
+            end = connection.execute(f"SELECT MAX(day) FROM youtube_creator_activity WHERE account_id IN ({marks})",
+                                     accounts).fetchone()[0]
+            if not end:
+                return {}, ''
+            through = (date.fromisoformat(end) - timedelta(days=2)).isoformat()
+            rows = connection.execute(
+                f"SELECT o.channel_id, COUNT(*) AS sent, SUM(EXISTS(SELECT 1 FROM youtube_creator_activity a "
+                f"WHERE a.account_id IN ({marks}) AND a.video_id=o.video_id)) AS watched "
+                "FROM youtube_upload_outbox o WHERE o.account_id=? AND o.status='delivered' "
+                "AND substr(o.discovered_at,1,10)>=? AND substr(o.discovered_at,1,10)<=? "
+                # Watch history must have been saved in the days after the
+                # notification; gaps in history are not evidence of ignoring it.
+                f"AND EXISTS(SELECT 1 FROM youtube_creator_activity c WHERE c.account_id IN ({marks}) "
+                "AND c.day BETWEEN substr(o.discovered_at,1,10) AND date(substr(o.discovered_at,1,10),'+2 day')) "
+                "GROUP BY o.channel_id",
+                [*accounts, account, since, through, *accounts]).fetchall()
+        return {row['channel_id']: (int(row['sent']), int(row['watched'] or 0)) for row in rows}, through
+
     def youtube_tracking_topic_rows(self, account, *, since, before):
         """Bounded derived watch evidence; no traversal of complete lifetime history."""
         with closing(self._connect()) as connection:

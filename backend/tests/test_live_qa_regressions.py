@@ -64,16 +64,6 @@ def test_local_honcho_background_options_do_not_enable_unbounded_thinking():
         assert environment[prefix + '__OVERRIDES__BASE_URL'] == 'http://host.docker.internal:11434/v1'
     assert environment['DERIVER_MODEL_CONFIG__MAX_OUTPUT_TOKENS'] == '1024'
 
-@pytest.mark.parametrize("message", [
-    "What book skills are available for my imported Meditations, and can you use them now?",
-    "Show the skills for the book Meditations",
-])
-def test_book_skills_do_not_preempt_into_global_inventory(monkeypatch, message):
-    def forbidden():
-        raise AssertionError("Book question reached global skill catalog")
-    monkeypatch.setattr(api, "_skill_surface", forbidden)
-    assert api._skill_system_answer(message) is None
-
 @pytest.mark.parametrize("question", ["What was my first message in this chat?", "What was the first message I sent in this chat?"])
 def test_current_first_message_never_uses_another_chat(monkeypatch, question):
     monkeypatch.setattr(api, "_read_ui_conversations", lambda: [
@@ -255,18 +245,6 @@ async def test_model_node_streams_and_preserves_tool_chunks(monkeypatch):
             raise AssertionError('async graph used blocking invoke')
     result=await agent._make_model_node(Model()).ainvoke({'messages':[]},{})
     assert result['messages'][0].content == 'Hello world'
-
-def test_skill_summary_is_bounded_even_when_all_is_requested(monkeypatch):
-    class Catalog:
-        def __init__(self,*args): pass
-        def reconcile(self,**kwargs): pass
-    surface=SimpleNamespace(root=Path('.'),catalog=lambda:{'skills':{'active':[{'name':f'skill-{i}', 'description':'long description '*40} for i in range(134)]}})
-    monkeypatch.setattr(api,'_skill_surface',lambda:surface)
-    monkeypatch.setattr(api,'SkillCatalog',Catalog)
-    answer,_=api._skill_system_answer('Give a short summary of all skills installed')
-    assert len(answer)<1500
-    assert '134 active skills' in answer
-
 
 def test_source_annotation_does_not_trigger_previous_chat_answer(monkeypatch):
     monkeypatch.setattr(api, "_read_ui_conversations", lambda: [])

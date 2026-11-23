@@ -36,16 +36,17 @@
     const cloudOptions = [{value: 'full', label: 'Full model limit'},
       ...state.cloud_choices.map(value => ({value: String(value), label: 'Up to ' + tokens(value)}))];
     const pick = (key, value) => save({[key]: value === 'auto' || value === 'full' ? value : Number(value)});
-    return <section className="cfg-current cfg-context-window" aria-label="Context window" aria-busy={busy}>
-      <div className="cfg-current-identity"><div><span className="settings-small-label">Context window</span>
-        <strong>{state.active_window ? tokens(state.active_window) + ' tokens for ' + state.model.replace(/^[^/]+\//, '') : 'Per model'}</strong></div></div>
-      <div className="cfg-current-model"><span>Local models</span>
-        <window.VellumUI.VSelect ariaLabel="Local model context window" value={String(state.preferences.local)} options={localOptions}
-          disabled={busy || state.local_source === 'environment'} onValueChange={value => pick('local', value)}/></div>
-      <div className="cfg-current-model"><span>Hosted models</span>
-        <window.VellumUI.VSelect ariaLabel="Hosted model context cap" value={String(state.preferences.cloud)} options={cloudOptions}
-          disabled={busy || state.cloud_source === 'environment' && !!state.cloud_cap} onValueChange={value => pick('cloud', value)}/></div>
-      <p className="cfg-key-help">{SOURCES[state.local_source] || ''}. Larger windows keep more of the chat in view; earlier parts are summarized and stay searchable either way. Hosted models charge for every token sent, so a cap keeps long chats affordable. You can also ask Vellum in chat, for example “set the context to 64k”.</p>
+    const model = state.model.replace(/^[^/]+\//, '');
+    return <section className="cfg-context" aria-label="Context window" aria-busy={busy}>
+      <div className="cfg-provider-heading"><div><h2>Context window</h2><p>How much of a chat the model keeps in view</p></div>
+        {state.active_window ? <span>{tokens(state.active_window)} · {model}</span> : null}</div>
+      <div className="set-row"><div>Local models<span className="sr-sub">{state.local_source === 'environment' ? SOURCES.environment : 'Automatic sizes each model to your GPU'}</span></div>
+        <span className="sr-end"><window.VellumUI.VSelect ariaLabel="Local model context window" value={String(state.preferences.local)} options={localOptions}
+          disabled={busy || state.local_source === 'environment'} onValueChange={value => pick('local', value)}/></span></div>
+      <div className="set-row"><div>Hosted models<span className="sr-sub">A cap keeps long chats affordable</span></div>
+        <span className="sr-end"><window.VellumUI.VSelect ariaLabel="Hosted model context cap" value={String(state.preferences.cloud)} options={cloudOptions}
+          disabled={busy || state.cloud_source === 'environment' && !!state.cloud_cap} onValueChange={value => pick('cloud', value)}/></span></div>
+      <p className="cfg-key-help">Earlier parts of a chat are summarized and stay searchable. You can also ask in chat: “set the context to 64k”.</p>
       {notice && <p className="cfg-key-help" role="status">{notice}</p>}
       {error && <p role="alert" className="plugins-error">{error}</p>}
     </section>;

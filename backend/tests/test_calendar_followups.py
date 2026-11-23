@@ -23,6 +23,16 @@ def harness(tmp_path):
     return agent,dispatcher,state,calls
 
 
+def delegate(dispatcher,state,thread,task):
+    """What the model's delegate_to_agent tool does: run the specialist and keep
+    any action it prepares as the thread's pending action."""
+    from agent.master.runtime import DelegationRequest
+    run=dispatcher.delegation_runtime.delegate(DelegationRequest(agent_id='CalendarAgent',task=task,parent_thread_id=thread))
+    if run.response.action_request:
+        state.set_pending_action(thread,{'agent':run.response.agent,**run.response.action_request})
+    return run.response
+
+
 def test_synced_f1_is_in_tomorrow_calendar(tmp_path):
     agent,_,_,_=harness(tmp_path)
     response=agent.answer('What is on my calendar tomorrow?')
@@ -32,10 +42,10 @@ def test_synced_f1_is_in_tomorrow_calendar(tmp_path):
 
 def test_delete_that_uses_real_event_from_previous_read_and_confirms_once(tmp_path):
     _,dispatcher,state,calls=harness(tmp_path)
-    read=dispatcher.maybe_handle('Find "New Appointment" on my calendar tomorrow','chat')
-    assert read is not None
-    prepared=dispatcher.maybe_handle('delete that','chat')
-    assert prepared is not None and state.get_pending_action('chat') is not None
+    read=delegate(dispatcher,state,'chat','Find "New Appointment" on my calendar tomorrow')
+    assert read.status=='answered'
+    delegate(dispatcher,state,'chat','delete that')
+    assert state.get_pending_action('chat') is not None
     assert state.get_pending_action('chat')['payload']['event_id']=='real-event'
     result=dispatcher.maybe_handle('yes delete it','chat')
     assert result is not None and 'Deleted' in result.answer
@@ -53,7 +63,7 @@ def test_pending_delete_repetition_is_confirmation_not_new_preview(tmp_path):
 
 def test_context_is_persistent_and_thread_scoped(tmp_path):
     _,dispatcher,state,calls=harness(tmp_path)
-    dispatcher.maybe_handle('Find "New Appointment" on my calendar tomorrow','chat')
+    delegate(dispatcher,state,'chat','Find "New Appointment" on my calendar tomorrow')
     restored=MasterThreadStateStore(sessions_db=state.sessions_db)
     assert restored.get_specialist_context('chat','CalendarAgent')['events'][0]['id']=='real-event'
     assert restored.get_specialist_context('other-chat','CalendarAgent')=={}

@@ -375,6 +375,43 @@
     </div>)}</div>;
   }
 
+  // What Vellum learned about your channels from watch history and from which
+  // upload notifications you went on to watch. Read-only; hidden if YouTube isn't set up.
+  function YouTubeLearning({revision}) {
+    const [data, setData] = useState(null);
+    useEffect(() => {
+      const plugins = window.VellumApi && window.VellumApi.plugins;
+      if (!plugins || !plugins.youtubeCreatorTracking) return undefined;
+      let live = true;
+      Promise.all([plugins.youtubeCreatorTracking(100),
+        plugins.youtubeHistoryStatus ? plugins.youtubeHistoryStatus().catch(() => null) : null])
+        .then(([creators, history]) => { if (live) setData({creators, history}); })
+        .catch(() => { if (live) setData(null); });
+      return () => { live = false; };
+    }, [revision]);
+    if (!data || !data.creators || !data.creators.configured) return null;
+    const {creators, history} = data;
+    const ranked = (creators.creators || []).filter(item => item.state === 'monitoring' || item.recent_days > 0)
+      .sort((a, b) => b.score - a.score).slice(0, 8);
+    const max = Math.max(1, ...ranked.map(item => item.score));
+    const sent = (creators.creators || []).reduce((sum, item) => sum + (item.notifications_sent || 0), 0);
+    const watched = (creators.creators || []).reduce((sum, item) => sum + (item.notifications_watched || 0), 0);
+    return <section className="mp-growth-card mp-youtube">
+      <h3>Learned from YouTube <span className="mp-muted">{history && history.last_success_at
+        ? `watch history saved ${relativeTime(history.last_success_at)}` : 'watch history not saved yet'}</span></h3>
+      {history && history.status && !['ready', 'empty'].includes(history.status) && <p className="mp-notice" role="status">{history.message}</p>}
+      {ranked.length ? <div className="av-layers">{ranked.map((item, index) => <div className="av-layer-row mp-yt-row" key={item.channel_id} title={item.reason}>
+        <span>{item.name}</span>
+        <span className="av-layer-bar"><i className="av-fill" style={{width: (item.score / max * 100) + '%', background: TOPIC_TONES[index % TOPIC_TONES.length], '--slot': index}}/></span>
+        <span className="av-layer-v">{item.recent_days}d{item.notifications_sent ? ` · ${item.notifications_watched}/${item.notifications_sent} pings watched` : ''}</span>
+      </div>)}</div>
+        : <p className="mp-muted">No channel watched on several recent days yet.</p>}
+      <p className="mp-footnote">Ranked by days you watched each channel in the last 3 weeks. {sent
+        ? `You watched ${watched} of ${sent} upload notifications; channels whose notifications you watch rank higher.`
+        : 'Notification feedback starts once watch history covers the days after notifications.'}</p>
+    </section>;
+  }
+
   function MostRecalled({recall}) {
     const top = (recall && recall.top) || [];
     if (!top.length) return <p className="mp-muted">Nothing has been recalled in a reply yet.</p>;
@@ -418,6 +455,7 @@
         <section className="mp-growth-card"><h3>What it knows</h3>{topics.length ? <TopicBars topics={topics}/> : <p className="mp-muted">No topics yet.</p>}</section>
         <section className="mp-growth-card"><h3>Most recalled</h3><MostRecalled recall={recall}/></section>
       </div>
+      <YouTubeLearning revision={revision}/>
       {Analytics && growth.ledger && <Analytics.ChangeLedger rows={growth.ledger} title="Ledger" subtitle="What changed in memory"/>}
       <section>
         <h3>Milestones</h3>

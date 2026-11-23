@@ -22,6 +22,10 @@ class _PendingActions:
     def __init__(self):
         self.actions = []
 
+    def get_pending_action(self, thread_id):
+        current = [action for owner, action, _ in self.actions if owner == thread_id]
+        return current[-1] if current else None
+
     def set_pending_action(self, thread_id, action, *, replace=True):
         self.actions.append((thread_id, action, replace))
         return True

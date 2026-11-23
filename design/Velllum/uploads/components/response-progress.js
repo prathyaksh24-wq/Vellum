@@ -77,7 +77,11 @@
       }
       return {active:true,state:'working',label:workLabel(active)};
     }
-    if(answering || answerStart)return {active:true,state:'working',label:'Writing answer'};
+    // In a multi-step turn, narration between tool calls is answer text too.
+    // Say "Writing answer" only while answer text is the newest thing happening.
+    const lastAnswer=Math.max(0,...(msg.trace?.steps || []).filter(item=>/^final_answer/.test(item.type || '')).map(stamp));
+    const lastWork=Math.max(0,...all.map(stamp));
+    if((answering || answerStart) && lastAnswer>=lastWork)return {active:true,state:'working',label:'Writing answer'};
     return {active:true,state:'working',label:'Working'};
   }
   function responseModel(msg) {

@@ -140,6 +140,7 @@ def test_analysis_accumulates_only_the_freshly_verified_account(tmp_path, monkey
 
 
 def test_activity_followups_route_through_the_existing_dispatcher(tmp_path):
+    from delegation_turns import turn
     from agent.agents.live_dispatcher import LiveAgentDispatcher
     from agent.master.state import MasterThreadStateStore
     from agent.profiles import AgentCatalog
@@ -147,9 +148,9 @@ def test_activity_followups_route_through_the_existing_dispatcher(tmp_path):
     catalog = AgentCatalog(profile_dir=tmp_path/'profiles', executors={'YoutubeAgent':agent})
     state = MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    first = dispatcher.maybe_handle('what is the trend u are seeing from my yt watch history', 'activity')
+    first = turn(dispatcher, 'YoutubeAgent', 'what is the trend u are seeing from my yt watch history', 'activity')
     assert first.agent_name == 'YoutubeAgent' and first.status == 'answered'
-    followup = dispatcher.maybe_handle('what is ur analysis based on that', 'activity')
+    followup = turn(dispatcher, 'YoutubeAgent', 'what is ur analysis based on that', 'activity')
     assert followup.agent_name == 'YoutubeAgent' and followup.status == 'answered'
     assert 'Chess Creator' in followup.answer and len(reads) == 2
 

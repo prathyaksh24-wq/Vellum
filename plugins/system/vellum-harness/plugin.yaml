@@ -1,0 +1,15 @@
+id: vellum-harness
+name: Vellum Harness
+type: bundle
+category: Developer Tools
+version: 1.0.0
+description: How Vellum's own harness works and how to change it with plugin bundles
+  (UI, layout, background, model provider, tools), through runtime inspection and the
+  plugin manager.
+default_enabled: true
+required: true
+capabilities:
+- Skills
+provides_tools: [harness_inspect, plugin_manager, workspace_files]
+provenance:
+  source_id: https://github.com/deepseek-ai/deepseek-harness/tree/main/packages/preset/agent-preset/skills/dsh-doc

@@ -244,3 +244,20 @@ def test_worker_configured_refresh_skips_busy_and_forwards_history_url(monkeypat
         return snapshot()
     worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot, _browser_preferences=lambda:BrowserPreferences())
     assert asyncio.run(worker.session('youtube_history', arguments))['status'] == 'ready'
+
+
+@pytest.mark.parametrize('error, code', [
+    (RuntimeError('Target page, context or browser has been closed'), 'unavailable'),
+    (ValueError('BrowserAgent is paused or the user has control. Resume it in Vellum.'), 'browser_busy'),
+])
+def test_failed_browser_read_is_logged_with_type_and_bounded_message(tmp_path, caplog, error, code):
+    from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+    def browser(operation, arguments):
+        raise error
+    service = YouTubeBrowserHistory(store=KnowledgeStore(tmp_path/'core.db', tmp_path/'blobs'), browser=browser)
+    with caplog.at_level('WARNING', logger='agent.plugins.youtube_browser_history'):
+        status = service.refresh(automatic=True)
+    assert status['status'] == code
+    record = next(r for r in caplog.records if 'YouTube history refresh failed' in r.getMessage())
+    assert type(error).__name__ in record.getMessage() and code in record.getMessage()
+    assert len(record.getMessage()) < 400

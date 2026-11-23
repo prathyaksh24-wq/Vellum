@@ -20,12 +20,14 @@ def _runtime() -> PluginMcpRuntime:
 
 @tool
 def plugins_list(query: str = "") -> str:
-    """List Vellum's actual installed plugins, enablement and locally saved connection state. Optional query filters by name or ID. Does not probe providers or load remote tool schemas. Use before claiming an integration is missing."""
+    """List Vellum's integration plugins (connectors such as Gmail, Notion or GitHub), their enablement and saved connection state. Optional query filters by name or ID. Does not probe providers or load remote tool schemas. Use before claiming an integration is missing. For Vellum's own interface and harness (its UI, sidebar, background, model provider and harness plugins) use harness_inspect and plugin_manager instead."""
     registry = get_plugin_registry()
     with registry.read_snapshot():
         records = registry.catalog()
-        if query.strip():
-            words = query.casefold().split()
+        # Generic words ("list all plugins") are not a filter.
+        generic = {'list', 'all', 'show', 'my', 'the', 'plugin', 'plugins', 'installed', 'integrations', 'connectors', 'every', 'any'}
+        words = [word for word in query.casefold().split() if word not in generic]
+        if words:
             records = [item for item in records if all(word in (item['id'] + ' ' + item['name']).casefold() for word in words)]
         records = [item for item in records if item.get('installed') is not False]
         from agent.plugins.catalog import runtime_statuses
@@ -92,14 +94,32 @@ def current_references(messages) -> list[dict]:
     return []
 
 
-def plugin_route_names(query: str, messages, available: set[str]) -> tuple[list[dict], list[str]]:
+# A named plugin's own tools that best match the request are shown directly, so a
+# small local model calls them instead of walking catalog -> describe -> read.
+NAMED_PLUGIN_DIRECT_TOOLS = 6
+
+
+def plugin_route_names(query: str, messages, available) -> tuple[list[dict], list[str]]:
+    """Plugins the user named or selected, and the tool names to show for them.
+
+    ``available`` is the set of tool names that can be shown, or a mapping of
+    those names to their descriptions; with descriptions, the plugin's own
+    tools that best match the request are included too.
+    """
+    from agent.mcp.catalog_search import search_catalog
     requested = requested_plugins(query, references=current_references(messages))
+    descriptions = available if isinstance(available, dict) else {}
     names = []
     for item in requested:
         if not item['enabled'] or item.get('installed') is False:
             continue
         prefix = item['id'].replace('-', '_')
         bridge = [prefix + '_mcp_' + suffix for suffix in ('catalog', 'describe', 'read')]
+        own = [{'name': name, 'description': descriptions[name]} for name in item.get('tools', [])
+               if name in descriptions and name not in bridge and name != prefix + '_mcp_execute']
+        direct = [row['name'] for row in search_catalog(own, query, ignore=(item['id'], item['name']))
+                  ][:NAMED_PLUGIN_DIRECT_TOOLS]
+        names.extend(direct)
         chosen = [name for name in bridge if name in available]
         if not chosen:
             chosen = [name for name in item.get('tools', []) if name in available and name not in {'plugin_mcp'}][:2]

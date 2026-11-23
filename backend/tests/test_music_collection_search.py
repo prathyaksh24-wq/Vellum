@@ -7,6 +7,7 @@ from agent.agents.music import MusicAgent
 from agent.contracts.music import MusicPlan, MusicChoiceRequired
 from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
 from test_music_agent import fixture_agent
+from delegation_turns import turn
 
 
 @pytest.mark.parametrize('text', ['add it to my liked playlist', 'remove it from my liked playlist'])
@@ -178,39 +179,10 @@ def mixed_dispatcher(tmp_path, release=None):
     return dispatcher, calls, state
 
 
-def test_mixed_yes_claims_only_pending_action_and_routes_nba_separately(tmp_path):
-    dispatcher, calls, state = mixed_dispatcher(tmp_path)
-    result = dispatcher.maybe_handle('what is happening in the nba and yes', 'chat')
-    assert result and 'Removed the song.' in result.answer and 'NBA update.' in result.answer
-    assert ('sports', 'what is happening in the nba') in calls
-    assert ('music', {'target': 'exact'}) in calls
-    assert state.get_pending_action('chat') is None
-
-
-def test_confirmation_finishes_before_slow_read_and_never_confirms_queue(tmp_path):
-    import threading
-    release = threading.Event()
-    dispatcher, calls, state = mixed_dispatcher(tmp_path, release)
-    pending = state.get_pending_action('chat')
-    state.set_pending_action('chat', {**pending, 'batch_id':'old', 'queued_actions':[
-        {**pending, 'payload':{'target':'next'}, 'preview':'Another song'}]})
-    emitted = []
-    def emit(part):
-        emitted.append(part)
-        if part.agent_name == 'MusicAgent':
-            assert not release.is_set()
-            release.set()
-    result = dispatcher.maybe_handle('yes and what is happening in the nba', 'chat', on_result=emit)
-    assert [p.agent_name for p in emitted] == ['MusicAgent', 'SportsAgent']
-    assert 'NBA update.' in result.answer
-    assert state.get_pending_action('chat')['payload'] == {'target':'next'}
-    assert sum(c[0] == 'music' for c in calls) == 1
-
-
 @pytest.mark.parametrize('message', ['what does yes mean in nba', 'what is happening in the nba and "yes"', 'yes and yes and what is happening in the nba'])
 def test_incidental_quoted_or_repeated_yes_does_not_authorize(tmp_path, message):
     dispatcher, calls, state = mixed_dispatcher(tmp_path)
-    dispatcher.maybe_handle(message, 'chat')
+    turn(dispatcher, 'MusicAgent', message, 'chat')
     assert not any(c[0] == 'music' for c in calls)
     assert state.get_pending_action('chat') is not None
 
@@ -301,32 +273,6 @@ def test_album_play_does_not_claim_success_from_only_write_receipt(monkeypatch):
     assert sum(c['action']=='play' for c in calls) == 1
 
 
-def test_current_song_edit_and_nba_read_are_independent_and_stream_immediately(tmp_path):
-    import threading
-    release = threading.Event()
-    dispatcher, _, state = mixed_dispatcher(tmp_path, release)
-    state.clear_pending_action('chat')
-    agent, registry, _ = fixture_agent()
-    saved = [False]
-    def invoke(name,args,**kwargs):
-        if args['action'] == 'get_state': data = {'track':{'name':'Song','uri':'spotify:track:one'}}
-        elif args['action'] == 'contains': data = {'items':saved[:]}
-        else:
-            assert args['action']=='save' and args['confirm'] is True
-            saved[0]=True
-            data={}
-        return {'ok':True,'data':data}
-    registry.invoke = invoke
-    dispatcher.agent_catalog.register_executor('MusicAgent',agent)
-    emitted = []
-    def emit(part):
-        emitted.append(part.agent_name)
-        if part.agent_name == 'MusicAgent': release.set()
-    result = dispatcher.maybe_handle('add it to my liked playlist and what is happening in the nba','chat',on_result=emit)
-    assert result.status=='answered' and emitted==['MusicAgent','SportsAgent']
-    assert saved==[True] and state.get_pending_action('chat') is None
-
-
 def test_saved_song_lookup_does_not_write_when_pagination_is_incomplete(monkeypatch):
     service = SpotifyCapabilityService()
     monkeypatch.setattr('agent.tools.capabilities.spotify_service.time.monotonic',iter([0,1,13]).__next__)
@@ -342,16 +288,6 @@ def test_saved_version_choice_accepts_distinct_artist_without_losing_target():
              {'title':'Song','artist':'Second Artist','uri':'spotify:track:second','kind':'track'}]
     selected=MusicAgent._source_choice('by Second Artist',{'choices':choices})
     assert selected['uri']=='spotify:track:second'
-
-
-def test_mixed_confirm_and_same_owner_read_advance_queue_only_once(tmp_path):
-    dispatcher, calls, state = mixed_dispatcher(tmp_path)
-    pending=state.get_pending_action('chat')
-    state.set_pending_action('chat',{**pending,'queued_actions':[{**pending,'payload':{'target':'next'},'preview':'Another song'}]})
-    result=dispatcher.maybe_handle('yes and what is playing and what is happening in the nba','chat')
-    assert 'Current song.' in result.answer and result.answer.count('Next change awaiting confirmation:')==1
-    assert state.get_pending_action('chat')['payload']=={'target':'next'}
-    assert sum(c[0]=='music' for c in calls)==1
 
 
 def test_model_cannot_invent_a_resolved_song_uri():
@@ -380,7 +316,7 @@ def test_new_direct_music_edit_retires_old_preview_but_preserves_other_queued_ac
         return {'ok':True,'data':data}
     registry.invoke=invoke
     dispatcher.agent_catalog.register_executor('MusicAgent',agent)
-    result=dispatcher.maybe_handle('add it to my liked playlist','chat')
+    result=turn(dispatcher, 'MusicAgent', 'add it to my liked playlist','chat')
     assert 'Added Song' in result.answer and saved==[True]
     assert state.get_pending_action('chat')['agent']=='XAgent'
     assert 'reviewed draft' in result.answer

@@ -19,6 +19,7 @@ data/skills/*.db-*
 data/automations.json
 data/automation-suggestions.json
 data/privacy/
+data/harness/
 data/apify-budget.json
 data/oauth-flows/
 data/computer-use/events.jsonl

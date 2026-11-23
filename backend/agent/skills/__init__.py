@@ -61,6 +61,7 @@ from agent.skills.runtime import (
     build_skill_activation_block,
     build_skill_index_block,
     get_skill_registry,
+    skills_named_in,
 )
 from agent.skills.security import (
     SkillSecurityFinding,
@@ -143,6 +144,7 @@ __all__ = [
     "WellKnownSkillSource",
     "build_learn_prompt",
     "build_skill_activation_block",
+    "skills_named_in",
     "build_skill_index_block",
     "get_skill_registry",
     "allow_skill_install",

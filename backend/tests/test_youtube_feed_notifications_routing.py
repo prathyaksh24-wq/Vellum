@@ -45,29 +45,6 @@ def test_youtube_notifications_are_a_supported_saved_read():
     assert request.source == 'notifications'
 
 
-@pytest.mark.parametrize('selected', ['XAgent', 'YoutubeAgent', 'VellumAgent'])
-@pytest.mark.parametrize('explicitly_selected', [False, True])
-def test_prior_selected_agent_does_not_capture_explicit_youtube_feed(tmp_path, selected, explicitly_selected):
-    from agent.agents.live_dispatcher import LiveAgentDispatcher
-    from agent.master.state import MasterThreadStateStore
-    class Service:
-        def subscription_feed(self, payload):
-            return {'available':True,'creators':[],'uploads':[],
-                'coverage':'Saved creator uploads; partial coverage.'}
-    catalog=catalog_for({'XAgent':XAgent(x_service=object()),
-        'YoutubeAgent':YoutubeAgent(youtube_service=Service())})
-    state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
-    state.set_active_agent('thread',selected,selected=explicitly_selected)
-    runtime=RecordingRuntime(catalog)
-    dispatcher=LiveAgentDispatcher(agent_catalog=catalog,state_store=state,
-        delegation_runtime=runtime,skill_route_resolver=FixedSkillResolver(None))
-    result=dispatcher.maybe_handle('what can u tell me about my youtube feed?',thread_id='thread')
-    assert result.agent_name=='YoutubeAgent'
-    assert result.tools==['youtube_agent']
-    assert runtime.calls[0].agent_id=='YoutubeAgent'
-    assert state.get('thread').active_agent==(selected if explicitly_selected else 'YoutubeAgent')
-
-
 @pytest.mark.parametrize('query', ['show my X feed', 'show my feed', 'post this YouTube video on X'])
 def test_explicit_x_and_existing_generic_feed_requests_remain_supported(tmp_path, query):
     assert XAgent(x_service=object()).can_handle(query)

@@ -498,3 +498,30 @@ def test_stream_never_falls_back_after_visible_output(tmp_path) -> None:
         assert attempts[-1].failure_kind == "server"
 
     asyncio.run(scenario())
+
+
+def test_stream_retries_an_empty_reply_and_says_what_is_missing(tmp_path) -> None:
+    from agent.llm.routing.engine import EMPTY_REPLY_HINT
+
+    async def scenario() -> None:
+        store, engine, adapter, _ = build_engine(tmp_path, openrouter_outcomes=[])
+        add_credential(store, "openrouter", "or-key")
+        seen = []
+        replies = [[], [AIMessageChunk(content="done")]]
+
+        class Model:
+            def bind_tools(self, tools):
+                return self
+
+            async def astream(self, messages, **kwargs):
+                seen.append([getattr(message, "content", "") for message in messages])
+                for chunk in replies.pop(0):
+                    yield chunk
+
+        adapter.build_model = lambda **kwargs: Model()
+        chunks = [chunk async for chunk in engine.astream(
+            messages=[HumanMessage(content="hello")], primary_model="google/primary")]
+        assert "".join(str(chunk.content) for chunk in chunks) == "done"
+        assert EMPTY_REPLY_HINT not in seen[0] and seen[1][-1] == EMPTY_REPLY_HINT
+
+    asyncio.run(scenario())

@@ -97,6 +97,13 @@ def start_scheduler(
             "discord_intelligence_sync": bool(getattr(settings, "discord_intelligence_sync_enabled", True)),
         },
     )
+    # YouTube push: pull hosted upload events and deliver creator notifications
+    # (every 5s) and keep the hosted channel list registered (every 30s).
+    # Lost once in the 2026-11-15 branch switch; without it no push
+    # notifications arrive. The tick itself no-ops when push is not configured.
+    from agent.plugins.youtube_push import install_push_jobs
+
+    install_push_jobs(scheduler)
     scheduler.start()
     logger.info("[SCHEDULER] Dreaming/digest scheduler started.")
     return scheduler
