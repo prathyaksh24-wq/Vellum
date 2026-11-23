@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 import logging
 from typing import Any, TypeVar
@@ -13,12 +14,26 @@ T = TypeVar("T")
 
 
 def content_text(result: Any) -> str:
+    """The text of an MCP tool result.
+
+    A tool with an output schema returns its data in ``structuredContent``; its
+    text part may be empty or only a status line. The structured data is used
+    then, so the model sees what the provider returned.
+    """
     content = getattr(result, "content", None) or []
-    return "\n".join(
-        str(text)
+    text = "\n".join(
+        str(value)
         for item in content
-        if (text := getattr(item, "text", None)) is not None
+        if (value := getattr(item, "text", None)) is not None
     ).strip()
+    structured = getattr(result, "structuredContent", None)
+    if structured in (None, {}, []):
+        return text
+    try:
+        data = json.dumps(structured, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return text
+    return data if len(data) > len(text) else text
 
 
 def tool_names(tools_result: Any) -> set[str]:

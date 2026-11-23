@@ -785,14 +785,30 @@ class _StreamRestorer:
         self.prepared = prepared
         self.pending = ""
         self.last_chunk: Any | None = None
+        # Tool-call arguments stream as JSON fragments, so an alias can be split
+        # across chunks. Hold them back and restore the complete arguments once.
+        self.tool_args: dict[int, str] = {}
         aliases = (item.token for item in prepared.replacements)
         self.tokens = tuple(
             dict.fromkeys((*aliases, *_privacy_tag_markers(prepared.messages)))
         )
 
+    def _hold_tool_args(self, chunk: Any, restored: Any) -> Any:
+        raw_chunks = getattr(chunk, "tool_call_chunks", None)
+        if not raw_chunks or not self.prepared.replacements:
+            return restored
+        held = []
+        for position, item in enumerate(raw_chunks):
+            index = item.get("index")
+            index = position if index is None else index
+            self.tool_args[index] = self.tool_args.get(index, "") + str(item.get("args") or "")
+            restored_item = restored.tool_call_chunks[position] if position < len(restored.tool_call_chunks) else item
+            held.append({**restored_item, "args": ""})
+        return restored.model_copy(update={"tool_call_chunks": held}, deep=True)
+
     def restore(self, chunk: Any) -> Any:
         self.last_chunk = chunk
-        restored = self.prepared.restore_message(chunk)
+        restored = self._hold_tool_args(chunk, self.prepared.restore_message(chunk))
         content = getattr(chunk, "content", None)
         if not isinstance(content, str) or not self.tokens:
             return restored
@@ -811,16 +827,28 @@ class _StreamRestorer:
         )
 
     def flush(self) -> Any | None:
-        if not self.pending or self.last_chunk is None:
+        if (not self.pending and not self.tool_args) or self.last_chunk is None:
             return None
-        content = _restore_value(self.pending, self.prepared.replacements)
+        content = _restore_value(self.pending, self.prepared.replacements) if self.pending else ""
         self.pending = ""
         update: dict[str, Any] = {"content": content}
         fields = getattr(self.last_chunk.__class__, "model_fields", {})
         for field_name in ("tool_calls", "tool_call_chunks"):
             if field_name in fields:
                 update[field_name] = []
-        return self.last_chunk.model_copy(update=update, deep=True)
+        if self.tool_args and "tool_call_chunks" in fields:
+            # Merged by index into the held calls: names and ids came earlier.
+            update["tool_call_chunks"] = [
+                {"name": None, "args": _restore_value(args, self.prepared.replacements),
+                 "id": None, "index": index, "type": "tool_call_chunk"}
+                for index, args in sorted(self.tool_args.items())
+            ]
+            self.tool_args = {}
+        flushed = self.last_chunk.model_copy(update=update, deep=True)
+        if "response_metadata" in fields:
+            # Metadata such as finish_reason was already carried by the last chunk.
+            flushed = flushed.model_copy(update={"response_metadata": {}})
+        return flushed
 
     def _partial_token_suffix_length(self, value: str) -> int:
         longest = 0

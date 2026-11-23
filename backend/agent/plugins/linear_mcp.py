@@ -4,6 +4,8 @@ import asyncio
 from functools import lru_cache
 import hashlib
 import json
+
+from agent.mcp.schema_errors import schema_mismatch
 from pathlib import Path
 import secrets
 import re
@@ -36,7 +38,15 @@ def _digest(value):
 def _run(operation):
     try:return _run_async(asyncio.wait_for(operation,timeout=45))
     except Exception as exc:
-        raise connection_failure(exc) from None
+        failure = connection_failure(exc)
+        if getattr(failure, "status", "") == "authorization_required":
+            # The grant expired and could not be refreshed. Say so in Plugins too,
+            # instead of continuing to show an old "verified" state.
+            try:
+                linear_service().update_connection(status="authorization_required", mcp_status="authorization_required")
+            except Exception:  # noqa: BLE001 - reporting must not hide the original failure
+                pass
+        raise failure from None
 
 
 def _validate(tool, arguments):
@@ -44,8 +54,8 @@ def _validate(tool, arguments):
         raise LinearError("Linear MCP arguments exceed 128 KB. Use smaller batches.")
     try:
         Draft202012Validator(tool["input_schema"]).validate(arguments)
-    except ValidationError:
-        raise LinearError("Arguments do not match this Linear MCP tool's published schema. Inspect its required fields and types.") from None
+    except ValidationError as exc:
+        raise LinearError(schema_mismatch("Linear", tool["input_schema"], exc)) from None
     # The official save tool supports both create and update, so its JSON schema
     # cannot make these fields globally required. Enforce its documented create
     # preconditions before showing a confirmation for an invalid provider call.

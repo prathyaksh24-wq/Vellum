@@ -32,8 +32,9 @@ def test_prompt_keeps_learning_context_below_kernel_and_preserves_correction(mon
     system = messages[0].content
     from agent.memory.memory_context import load_instruction_doc
     contract, soul, personality = (load_instruction_doc(name) for name in ("main.md", "SOUL.md", "PERSONALITY.md"))
-    # The runtime contract leads; Vellum specifics follow; identity and style sit beneath them.
-    assert contract and system.startswith(contract)
+    # The harness identity opens the prompt (as DeepSeek Harness' does), then the
+    # runtime contract leads; Vellum specifics follow; identity and style sit beneath them.
+    assert contract and system.startswith(agent_graph.HARNESS_IDENTITY + "\n\n" + contract)
     assert system.index(contract) < system.index(agent_graph.VELLUM_SYSTEM_PROMPT) < system.index(soul) < system.index(personality)
     evidence = messages[1]
     assert evidence.additional_kwargs['vellum_context_layer'] == 'personal_memory'
@@ -210,7 +211,8 @@ def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog
 
     seen = {}
 
-    def activate(query, registry, *, excluded_skills, selected_skills):
+    def activate(query, registry, *, excluded_skills, selected_skills, match_query=True):
+        seen["match_query"] = match_query
         seen["query"] = query
         seen["registry"] = registry
         seen["excluded_skills"] = excluded_skills
@@ -228,6 +230,7 @@ def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog
         "registry": agent_graph._prompt_skill_registry,
         "excluded_skills": frozenset({"book-to-skill"}),
         "selected_skills": {},
+        "match_query": False,
     }
     assert "## Specialist directory" in messages[0].content
     assert "BooksAgent" in messages[0].content
@@ -236,7 +239,7 @@ def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog
     assert "Inspect the current diff." in messages[0].content
 
 
-def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path, monkeypatch):
+def test_vellum_prompt_includes_selected_skills_only(tmp_path: Path, monkeypatch):
     class FakeRegistry:
         def list_skills(self):
             return []
@@ -248,7 +251,8 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
     registry = FakeRegistry()
     seen = {}
 
-    def activate(query, active_registry, *, excluded_skills, selected_skills):
+    def activate(query, active_registry, *, excluded_skills, selected_skills, match_query=True):
+        seen["match_query"] = match_query
         seen["query"] = query
         seen["registry"] = active_registry
         seen["excluded_skills"] = excluded_skills
@@ -269,6 +273,7 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
         "registry": registry,
         "excluded_skills": frozenset(),
         "selected_skills": {},
+        "match_query": False,
     }
     assert "### code-review" in messages[0].content
     assert "Inspect the diff first." in messages[0].content

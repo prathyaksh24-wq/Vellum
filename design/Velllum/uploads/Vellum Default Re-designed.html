@@ -9,6 +9,7 @@
 <script type="text/babel" data-presets="react" src="components/vellum-face.jsx"></script>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="components/harness-client.js?v=20261123-harness2"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script src="components/app-icons.js"></script>
 <script src="components/app-theme-presets.js"></script>
@@ -35,7 +36,7 @@
 <script type="text/babel" data-presets="react" src="components/accounts.jsx"></script>
 <link rel="stylesheet" href="components/onboarding.css"/>
 <script type="text/babel" data-presets="react" src="components/onboarding.jsx"></script>
-<script src="api/chat.js?v=20261030-orbs"></script>
+<script src="api/chat.js?v=20261123-harness2"></script>
 <script src="api/voice.js"></script>
 <script src="api/app-actions.js"></script>
 <script src="api/setup.js"></script>
@@ -100,8 +101,8 @@
 <script src="components/morphic-ui.js?v=20261030-morphic-3"></script>
 <script src="components/streaming-text.js?v=20261030-orbs"></script>
 <script type="text/babel" data-presets="react" src="components/thinking-orbs.jsx"></script>
-<script src="components/response-progress.js?v=20261117-mem1"></script>
-<script src="components/agent-response.js?v=20261117-mem1"></script>
+<script src="components/response-progress.js?v=20261123-harness1"></script>
+<script src="components/agent-response.js?v=20261123-harness2"></script>
 <script src="components/app-action-runtime.js?v=20261021-streaming-v5"></script>
 <script src="components/observability-action-runtime.js"></script>
 <script src="components/petdex-action-runtime.js"></script>
@@ -1528,6 +1529,15 @@ body{font-size:14px;font-family:var(--font-ui)}
 /* reusable application backgrounds */
 .app-background{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
 .app-background-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.harness-approval{position:fixed;right:20px;bottom:20px;z-index:200;width:min(420px,calc(100vw - 32px));max-height:min(70vh,560px);display:flex;flex-direction:column;padding:16px 16px 14px;border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--glass) 94%,transparent);backdrop-filter:blur(18px);color:var(--txt);box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.harness-approval-kicker{color:var(--dim);font:10px var(--font-m)}
+.harness-approval h2{margin:4px 0 8px;font-size:14px;font-weight:600;color:var(--txt)}
+.harness-approval-body{overflow:auto;min-height:0;color:var(--txt2);font-size:12px;line-height:1.45}
+.harness-approval-body p{margin:0 0 8px}
+.harness-approval-body pre{margin:0 0 8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:10.5px/1.45 var(--font-m);white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto}
+.harness-approval-files,.harness-approval-note{color:var(--dim);font:10px/1.5 var(--font-m)}
+.harness-approval-warn{color:var(--danger)}
+.harness-approval-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .galaxy-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;opacity:1;mix-blend-mode:normal}
 .galaxy-container canvas{display:block;width:100%;height:100%;pointer-events:none}
 .shader-canvas-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;background:#080a10}
@@ -1853,7 +1863,7 @@ body{font-size:14px;font-family:var(--font-ui)}
 <link rel="stylesheet" href="components/agent-composer.css?v=20261030-morphic-3"/>
 <link rel="stylesheet" href="components/sidebar-inset.css?v=20261030-clean-music"/>
 <link rel="stylesheet" href="components/navigation-shell.css"/>
-<script type="text/babel" data-presets="react" src="components/navigation-shell.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/navigation-shell.jsx?v=20261123-harness1"></script>
 <link rel="preload" href="assets/fonts/SNPro-VariableRegular.woff2" as="font" type="font/woff2" crossorigin/>
 <link rel="stylesheet" href="components/typography.css"/>
 </head>
@@ -2936,12 +2946,74 @@ const BackgroundRenderer = ({entry, preview=false, paused=false}) => {
   const Component = entry.component;
   return <Component preview={preview} {...(entry.props || {})} {...(preview ? (entry.previewProps || {}) : {})} paused={paused}/>;
 };
-const AppBackground = () => {
-  const {background,paused,themeProfile,droplets} = useBackground();
+// Vellum's own background, contributed to the shell.background slot by the
+// @vellum/ui-background plugin. A plugin with a lower priority replaces it.
+const VellumBackgroundScene = ({paused}) => {
+  const {background,themeProfile,droplets} = useBackground();
   if (themeProfile && !droplets) return null;
-  const scene=themeProfile ? <div style={{position:'absolute',inset:0,background:'var(--bg)'}}/> : <BackgroundRenderer entry={background} paused={paused}/>;
-  return <div className="app-background" aria-hidden="true"><div className="app-background-layer">{scene}</div></div>;
+  return themeProfile ? <div style={{position:'absolute',inset:0,background:'var(--bg)'}}/> : <BackgroundRenderer entry={background} paused={paused}/>;
 };
+window.__VellumModuleLoader__.load({id:'@vellum/ui-background', factory(){ return {apply(ctx){
+  ctx.slots.inject('shell.background', () => ctx.slots.register({name:'shell.background', id:'vellum-background', priority:100}, VellumBackgroundScene));
+}}; }});
+const AppBackground = () => {
+  const {paused} = useBackground();
+  const theme = document.documentElement.dataset.theme || 'dark';
+  return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><window.VellumHarness.VellumSlot name="shell.background" props={{paused, theme}} fallback={<VellumBackgroundScene paused={paused}/>}/></div></div>;
+};
+// @vellum/ui-analytics: Analytics is a plugin. Its placement config decides
+// whether it is a Settings section, a sidebar entry with a full page, or both.
+const AnalyticsRailEntry = ({app, buttonClass='rail-btn', iconSize=17}) => <button type="button" className={buttonClass + (app.view === 'ledger' && buttonClass === 'rail-btn' ? ' active' : '')} title="Analytics" data-tip="Analytics" aria-label="Analytics" aria-current={app.view === 'ledger' ? 'page' : undefined} onClick={() => app.nav('ledger')}><window.VellumUI.AppIcon name="Analytics" size={iconSize}/></button>;
+const AnalyticsSettingsSection = ({app}) => window.VellumUI.AnalyticsPage ? <window.VellumUI.AnalyticsPage control={app.analyticsControl} onAction={app.onAnalyticsAction} embedded/> : null;
+const AnalyticsFullPage = ({app}) => window.VellumUI.AnalyticsPage ? <window.VellumUI.AnalyticsPage control={app.analyticsControl} onAction={app.onAnalyticsAction}/> : null;
+window.__VellumModuleLoader__.load({id:'@vellum/ui-analytics', factory(){ return {apply(ctx){
+  const placement = (ctx.config && ctx.config.placement) || 'settings';
+  if (placement !== 'sidebar') ctx.slots.inject('settings.sections', () => ctx.slots.register({name:'settings.sections', id:'analytics', label:'Analytics', group:'Workspace', icon:'Analytics', order:40}, AnalyticsSettingsSection));
+  if (placement !== 'settings') {
+    ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({name:'sidebar.panellist', id:'analytics', label:'Analytics', order:10}, AnalyticsRailEntry));
+    ctx.slots.inject('shell.view', () => ctx.slots.register({name:'shell.view', id:'analytics', key:'ledger'}, AnalyticsFullPage));
+  }
+}}; }});
+// The user's approval for one plugin_manager call. The agent's tool call waits on it.
+const HarnessApprovals = () => {
+  const approvals = window.VellumHarness.useApprovals();
+  const [busy, setBusy] = useState('');
+  if (!approvals.length) return null;
+  const item = approvals[0];
+  const details = item.details || {};
+  const decide = approved => { setBusy(item.id); window.VellumHarness.decide(item.id, approved).catch(() => {}).finally(() => setBusy('')); };
+  return <div className="harness-approval" role="alertdialog" aria-labelledby={'harness-approval-'+item.id} aria-describedby={'harness-approval-body-'+item.id}>
+    <div className="harness-approval-kicker">Vellum wants to change itself</div>
+    <h2 id={'harness-approval-'+item.id}>{item.title}</h2>
+    <div id={'harness-approval-body-'+item.id} className="harness-approval-body">
+      {details.description && <p>{details.description}</p>}
+      {details.runsHostCode && <p className="harness-approval-warn">This plugin includes code that runs in Vellum's backend with full access.</p>}
+      {details.patch && <pre>{details.patch}</pre>}
+      {Array.isArray(details.files) && details.files.length > 0 && <p className="harness-approval-files">{details.files.join(' · ')}</p>}
+      <p className="harness-approval-note">Applies to every chat and stays after restart. You can turn it off later in Plugins or by asking Vellum.</p>
+    </div>
+    <div className="harness-approval-actions">
+      <button type="button" className="btn" disabled={busy === item.id} onClick={() => decide(false)}>Deny</button>
+      <button type="button" className="btn" disabled={busy === item.id} title="Approve this and let Vellum change itself without asking. Turn it off in Settings › Self-changes." onClick={() => { setBusy(item.id); window.VellumHarness.setFullAccess(true).then(() => decide(true)).catch(() => setBusy('')); }}>Always allow</button>
+      <button type="button" className="btn primary" disabled={busy === item.id} onClick={() => decide(true)}>Approve</button>
+    </div>
+  </div>;
+};
+// @vellum/ui-self-changes: the user-only switch for full access.
+const SelfChangesSettings = () => {
+  const full = window.VellumHarness.useFullAccess();
+  const [saving, setSaving] = useState(false);
+  const toggle = () => { setSaving(true); window.VellumHarness.setFullAccess(!full).finally(() => setSaving(false)); };
+  return <div className="set-group">
+    <div className="set-row">Let Vellum change itself without asking
+      <span className="sr-end"><div className={'sw' + (full ? ' on' : '')} role="switch" aria-checked={full} aria-disabled={saving} tabIndex={0} onClick={saving ? undefined : toggle} onKeyDown={event => { if (!saving && (event.key === ' ' || event.key === 'Enter')) { event.preventDefault(); toggle(); } }}/></span>
+    </div>
+    <p style={{margin:'6px 0 0',color:'var(--dim)',fontSize:12,lineHeight:1.5}}>When on, Vellum installs, turns on or off, and removes its own plugins as soon as you ask, without an approval card. Every change can still be turned off or removed. Only you can change this switch.</p>
+  </div>;
+};
+window.__VellumModuleLoader__.load({id:'@vellum/ui-self-changes', factory(){ return {apply(ctx){
+  ctx.slots.inject('settings.sections', () => ctx.slots.register({name:'settings.sections', id:'self-changes', label:'Self-changes', group:'Integrations', icon:'ConnectApps', order:50}, SelfChangesSettings));
+}}; }});
 const BackgroundChoiceCard = ({entry, selected, onSelect}) => {
   const [previewing,setPreviewing]=useState(false);
   const animate=()=>{if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)setPreviewing(true);};
@@ -3420,6 +3492,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><window.VellumUI.AppIcon name="Music"/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
+      <window.VellumHarness.VellumSlot name="sidebar.panellist" props={{app:{view, nav:onNav}, compact:true}}/>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
         <div className="chat-row" onClick={onNewProject}>
@@ -6732,6 +6805,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
       if (!receipt || receipt.status !== 'confirmation_required') setSavingKey('');
     } catch (_) { setSavingKey(''); }
   };
+  const pluginSections = window.VellumHarness.useSlot('settings.sections');
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
     {k: 'Profile', ic: <IcUser size={14}/>},
@@ -6744,7 +6818,8 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
     {k: 'Plugins', ic: <IcPlugins size={14}/>},
     {k: 'Automations', ic: <IcSparkle size={14}/>},
     {k: 'Archive', ic: <IcArchive size={14}/>},
-    {k: 'Analytics', ic: <IcLedger size={14}/>},
+    // Plugin sections (settings.sections), for example Analytics from @vellum/ui-analytics.
+    ...pluginSections.map(record => ({k: record.options.label, ic: <window.VellumUI.AppIcon name={record.options.icon || 'Plugins'} size={14}/>, group: record.options.group || 'Workspace', record})),
     {k: 'Petdex', ic: <I d="M12 20s-7-4.6-9.2-8.6C1.2 8.6 3.2 5 6.6 5c2 0 3.6 1.1 4.6 2.7C12.2 6.1 13.8 5 15.8 5c3.4 0 5.4 3.6 3.6 6.4C19 15.4 12 20 12 20z" size={14}/>},
     {k: 'Browser', ic: <IcGlobe size={14}/>},
     {k: 'Computer use', ic: <IcTerminal size={14}/>},
@@ -6757,14 +6832,15 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
           <button className="settings-back" onClick={onClose}><IcChevR size={15}/>Back to Vellum<span>Esc</span></button>
           <div className="sn-title">Settings</div>
           <label className="settings-search"><IcSearch size={15}/><input type="search" aria-label="Search settings" placeholder="Search settings" value={settingsQuery} onChange={event=>setSettingsQuery(event.target.value)}/></label>
-          <nav aria-label="Settings sections">{[['Personal',['General','Profile','Appearance','Account','Responses','Personalization','Voice','Shortcuts','Petdex']],['Workspace',['Configuration','Automations','Archive','Analytics']],['Integrations',['Plugins','Browser','Computer use']]].map(([label,keys])=>{
-            const sections=keys.map(key=>SECTIONS.find(section=>section.k===key)).filter(section=>section.k.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
+          <nav aria-label="Settings sections">{[['Personal',['General','Profile','Appearance','Account','Responses','Personalization','Voice','Shortcuts','Petdex']],['Workspace',['Configuration','Automations','Archive']],['Integrations',['Plugins','Browser','Computer use']]].map(([label,keys])=>{
+            const groupKeys=[...keys,...SECTIONS.filter(section=>section.record&&section.group===label).map(section=>section.k)];
+            const sections=groupKeys.map(key=>SECTIONS.find(section=>section.k===key)).filter(Boolean).filter(section=>section.k.toLowerCase().includes(settingsQuery.trim().toLowerCase()));
             return sections.length>0 && <div className="settings-nav-group" key={label}><h2>{label}</h2>{sections.map(s=><button key={s.k} className={'set-item'+(tab===s.k?' on':'')} aria-current={tab===s.k?'page':undefined} onClick={()=>selectSettingsTab(s.k)}><span className="sb-ic">{s.ic}</span>{s.k}</button>)}</div>;
           })}{settingsQuery && !SECTIONS.some(section=>section.k.toLowerCase().includes(settingsQuery.trim().toLowerCase())) && <p className="settings-search-empty" role="status">No settings found.</p>}</nav>
         </div>
         <div className="set-body">
           <div className="settings-content">
-          {tab === 'Analytics' && window.VellumUI.AnalyticsPage && <window.VellumUI.AnalyticsPage control={analyticsControl} onAction={onAnalyticsAction} embedded/>}
+          {SECTIONS.filter(section=>section.record&&section.k===tab).map(section=><section.record.component key={section.k} app={{analyticsControl, onAnalyticsAction}} slotOptions={section.record.options}/>)}
           {tab === 'Archive' && <ArchiveView chats={chats} onRestore={onRestoreChat} onDelete={onDeleteChat} onDeleteAll={onDeleteArchivedChats}/>}
           {tab === 'Profile' && <window.VellumUI.Profile.Page key={profile.accountId} profile={profile} onSave={onProfileSave}/>}
           {tab === 'Account' && <window.VellumUI.Accounts.Settings details={<window.VellumUI.Profile.AccountDetails key={profile.accountId} profile={profile} onSave={onProfileSave}/>}/>}
@@ -8674,19 +8750,26 @@ const [slashSkills, setSlashSkills] = useState([]);
     setPluginNavigation({v:'detail', p:first, nonce:Date.now()});
     nav('apps');
   }, [setupHandoff]);
+  // A view a plugin contributes to shell.view is a full page; Analytics is one
+  // when @vellum/ui-analytics is placed in the sidebar.
+  const harnessSlotVersion = React.useSyncExternalStore(window.VellumHarness.Slots.subscribe, window.VellumHarness.Slots.version);
+  const pluginPage = id => window.VellumHarness.Slots.resolve('shell.view', id).length > 0;
+  const settingsHome = id => ['skills','archive'].includes(id) || (id === 'ledger' && !pluginPage('ledger'));
   const nav = v => {
     setScheduledChatId(null);
-    // Keep older shortcuts, links, and action receipts on their new Settings home.
-    if (['skills','ledger','archive'].includes(v)) {
+    // Keep older shortcuts, links, and action receipts on their Settings home.
+    if (settingsHome(v)) {
       if (v === 'skills') setSettingsPluginTarget({v:'settings',tab:'skills'});
       setSettingsTab(v === 'ledger' ? 'Analytics' : v === 'archive' ? 'Archive' : 'Plugins');
       dispatchSurfacePresentation('settings', {visible:true}, {notify:false});
-      setView(current => ['skills','ledger','archive'].includes(current) ? 'chat' : current);
+      setView(current => settingsHome(current) ? 'chat' : current);
       setMenu(null);
       setActivityMsg(null);
       return;
     }
-    const next = APP_VIEW_IDS.has(v) ? v : '404';
+    const next = APP_VIEW_IDS.has(v) || pluginPage(v) ? v : '404';
+    // A plugin page is a full page; leave Settings when it is opened from there.
+    if (pluginPage(next) && settingsOpen) dispatchSurfacePresentation('settings', {visible:false}, {notify:false});
     if (next === 'music') navigationEpochRef.current += 1;
     if (next === '404') {
       try {
@@ -8699,7 +8782,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     setMenu(null);
     setActivityMsg(null);
   };
-  useEffect(() => { if(['skills','ledger','archive'].includes(view))nav(view); }, [view]);
+  useEffect(() => { if(settingsHome(view))nav(view); }, [view, harnessSlotVersion]);
+  useEffect(() => { window.VellumHarness.start(); }, []);
   const applyAgentSelection = id => {
     if (id === 'vellum') { setView('chat'); setActiveAgentId(null); }
     else { setView('agent'); setActiveAgentId(id); }
@@ -10603,6 +10687,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       <window.VellumUI.Droplets enabled={deviceSettings.values.appearance?.droplets===true}>
       <div className="win">
         <AppBackground/>
+        <HarnessApprovals/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} data-rail-preview={railPreview||''} className={'body app-shell' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
@@ -10670,6 +10755,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onOpenChat={openScheduledRunChat} onOpenTask={openScheduledTask} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'apps' && <BackendConnectorsView onCreatePlugin={createPlugin} sidebarPeeking={railPreview==='apps'} onPreviewEnter={revealSidebar} onPreviewLeave={hideSidebarPeek} navigationTarget={pluginNavigation} sidebarVisible={pluginSidebarVisible} onSidebarVisibility={visible=>dispatchSurfacePresentation('plugin-sidebar',{visible},{notify:false})} key={pluginDirectoryRevision} onSkillAction={dispatchSkillAction} onTry={tryPlugin} onAdd={dispatchKnowledgeAction} onConfirmAdd={confirmAppAction} onCancelAdd={cancelAppAction} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={dispatchSkillAction}/>} mode="directory" onManage={target=>{setSettingsPluginTarget(target);setSettingsTab('Plugins');dispatchSurfacePresentation('settings',{visible:true});}} apps={pluginCatalog.loaded?apps:[]} catalogState={pluginCatalog} onRetry={refreshPlugins} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
+            {pluginPage(view) && <window.VellumHarness.VellumSlot name="shell.view" entryKey={view} props={{app:{view, nav, analyticsControl:observabilityControl, onAnalyticsAction:dispatchObservabilityAction}}}/>}
             {view === 'memory' && <window.VellumUI.MemoryPage onMemoryAction={dispatchMemoryAction} onOpenChat={prompt => sendMessage(prompt, [], {forceNew:true, projectId:null})} onOpenSettings={() => {setSettingsTab('Personalization');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); configureChatDetails( {visible:true}, {notify:false,persistence:'session'}); }} activity={null} onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
           </div>

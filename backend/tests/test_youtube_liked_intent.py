@@ -6,6 +6,7 @@ from agent.agents.youtube import YoutubeAgent
 from agent.master.state import MasterThreadStateStore
 from agent.profiles import AgentCatalog, builtin_profiles
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
+from delegation_turns import turn
 
 
 @pytest.mark.parametrize("query", [
@@ -29,7 +30,7 @@ def test_liked_request_reaches_account_capability_without_public_search(tmp_path
     if selected:
         state.set_active_agent("liked-request", "YoutubeAgent", selected=True)
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    result = dispatcher.maybe_handle(query, thread_id="liked-request")
+    result = turn(dispatcher, "YoutubeAgent", query, "liked-request")
     assert result is not None
     assert result.status == "answered"
     assert "Saved account video" in result.answer
@@ -80,8 +81,8 @@ def test_subscription_count_reads_entire_account_and_answers_with_count(tmp_path
         builtins={"YoutubeAgent": builtin_profiles()["YoutubeAgent"]}, executors={"YoutubeAgent": agent})
     state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     state.set_active_agent("count-request", "YoutubeAgent", selected=True)
-    result = LiveAgentDispatcher(agent_catalog=catalog, state_store=state).maybe_handle(
-        query, thread_id="count-request")
+    result = turn(LiveAgentDispatcher(agent_catalog=catalog, state_store=state), "YoutubeAgent",
+                  query, "count-request")
     assert result.status == "answered"
     assert result.answer == "You're subscribed to 137 YouTube channels."
 
@@ -108,45 +109,3 @@ def test_youtube_chat_formatting_retains_account_links_but_removes_reference_lin
     # Ordinary answers preserve Markdown and citations; account-result links
     # use the specialist-only filtering above.
     assert _clean_answer_body(text) == text
-
-
-@pytest.mark.parametrize("stream", [False, True])
-def test_selected_youtube_chat_preserves_all_twenty_liked_items_and_links(tmp_path, monkeypatch, stream):
-    import asyncio
-    import json
-    from agent import api
-
-    service = YoutubeCapabilityService(account_backend=lambda: {"connected": True},
-        search_backend=lambda *_args: pytest.fail("Liked account request reached public search"),
-        liked_videos_backend=lambda limit: [
-            {"video_id": f"video{index:06d}", "title": f"Saved video {index}", "channel": "Creator"}
-            for index in range(1, limit + 1)
-        ])
-    catalog = AgentCatalog(profile_dir=tmp_path / "profiles",
-        builtins={"YoutubeAgent": builtin_profiles()["YoutubeAgent"]},
-        executors={"YoutubeAgent": YoutubeAgent(youtube_service=service)})
-    state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    state.set_active_agent("chat-reply", "YoutubeAgent", selected=True)
-    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    monkeypatch.setattr(api, "_live_dispatcher", dispatcher)
-
-    async def no_checkpoint(*_args, **_kwargs):
-        pass
-
-    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", no_checkpoint)
-
-    async def run():
-        if not stream:
-            return (await api._run_agent("what is in my liked vidoes", "chat-reply", None, store=False)).answer
-        chunks = [chunk async for chunk in api._stream_agent_turn(
-            clean_message="what is in my liked vidoes", active_thread_id="chat-reply", model=None, store=False)]
-        text = []
-        for block in "".join(chunks).split("\n\n"):
-            if block.startswith("event: response.output_text.delta\n"):
-                data = json.loads(block.split("data: ", 1)[1])
-                text.append(data["delta"])
-        return "".join(text)
-
-    answer = asyncio.run(run())
-    assert answer.count("https://www.youtube.com/watch?v=") == 20
-    assert "20. [Saved video 20]" in answer

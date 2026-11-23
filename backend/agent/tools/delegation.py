@@ -107,23 +107,58 @@ def delegate_to_agent(
             memory_from=tuple(memory_from or ()),
         )
     )
-    response = run.response
-    if response.action_request and runtime.pending_action_store is not None:
-        stored = runtime.pending_action_store.set_pending_action(
-            _thread_id(config),
-            {"agent": response.agent, **response.action_request},
-            replace=False,
-        )
-        if not stored:
-            response = response.model_copy(
-                update={
-                    "status": "blocked",
-                    "summary": "Resolve the existing pending action before preparing another change.",
-                    "action_request": {},
-                }
-            )
-
+    response = record_specialist_outcome(runtime.pending_action_store, _thread_id(config), run.response)
     return json.dumps(_response_payload(binding.profile, response), ensure_ascii=False, indent=2)
+
+
+_DIRECT_COLLECTION_EDITS = {"save_current", "remove_current"}
+
+
+def _music_operations(response) -> set[str]:
+    payload = response.structured_payload or {}
+    plans = [payload.get("music_plan")] + [
+        (item.get("structured_payload") or {}).get("music_plan") for item in payload.get("music_results") or []
+        if isinstance(item, dict)]
+    return {str(plan.get("operation")) for plan in plans if isinstance(plan, dict) and plan.get("operation")}
+
+
+def record_specialist_outcome(store, thread_id: str, response):
+    """Keep the thread's pending actions consistent with what a specialist just did.
+
+    - A prepared change becomes the thread's pending action, replacing the same
+      specialist's older preview, unless another specialist's change is still
+      waiting for the user's answer.
+    - A direct like or unlike of the current song retires an older pending
+      collection preview, so a later "yes" cannot confirm a stale song. Other
+      queued actions are kept and the next one is surfaced.
+    """
+    if store is None:
+        return response
+    if response.action_request:
+        # A newer request to the same specialist supersedes its own older preview;
+        # another specialist's waiting change is never overwritten.
+        current = store.get_pending_action(thread_id)
+        same_owner = bool(current) and current.get("agent") == response.agent
+        if not store.set_pending_action(thread_id, {"agent": response.agent, **response.action_request}, replace=same_owner):
+            return response.model_copy(update={
+                "status": "blocked",
+                "summary": "Resolve the existing pending action before preparing another change.",
+                "action_request": {},
+            })
+        return response
+    pending = store.get_pending_action(thread_id)
+    if (response.agent == "MusicAgent" and response.status == "answered" and pending
+            and pending.get("agent") == "MusicAgent" and pending.get("action") == "music.change_collection"
+            and _music_operations(response) & _DIRECT_COLLECTION_EDITS):
+        retained = [item for item in pending.get("queued_actions", []) if item.get("action") != "music.change_collection"]
+        if retained:
+            store.set_pending_action(thread_id, {**retained[0], "batch_id": pending.get("batch_id"),
+                                                 "queued_actions": retained[1:]})
+            next_preview = str(retained[0].get("preview") or "the next proposed action")
+            return response.model_copy(update={
+                "summary": response.summary + "\n\nNext change awaiting confirmation: " + next_preview})
+        store.clear_pending_action(thread_id)
+    return response
 
 
 def available_delegation_tool(catalog=None):

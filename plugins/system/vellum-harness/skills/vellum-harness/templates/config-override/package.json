@@ -1,0 +1,8 @@
+{
+  "name": "@local/my-config-change",
+  "version": "1.0.0",
+  "description": "Replace with one line saying which setting this bundle changes.",
+  "vellum": {
+    "bundle": { "patch": "./harness.patch.yml" }
+  }
+}

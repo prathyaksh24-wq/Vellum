@@ -210,7 +210,11 @@ class ToolRegistry:
                 continue
 
             def make_invoker(capability_name: str):
-                def invoke(config: RunnableConfig = None, **payload):
+                def invoke(config: RunnableConfig = None, callbacks=None, **payload):
+                    # Run the underlying tool as a child of this wrapper's run, so the
+                    # stream sees one execution instead of two sibling tool calls.
+                    if callbacks is not None:
+                        config = {**(config or {}), 'callbacks': callbacks}
                     return self.invoke(
                         capability_name,
                         payload,

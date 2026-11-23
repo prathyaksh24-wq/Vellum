@@ -3,6 +3,8 @@ import asyncio
 from copy import deepcopy
 import hashlib
 import json
+
+from agent.mcp.catalog_search import search_catalog
 import secrets
 
 from jsonschema import Draft202012Validator, ValidationError
@@ -53,8 +55,13 @@ class WebMcpAdapter:
             raise self.service.error_type('Arguments exceed 128 KB. Use a smaller operation.')
         try:
             Draft202012Validator(tool['input_schema']).validate(operation.arguments)
-        except ValidationError:
-            raise self.service.error_type('Arguments do not match the published tool schema. Describe the tool and preserve its required fields.') from None
+        except ValidationError as exc:
+            schema = tool['input_schema'] or {}
+            raise self.service.error_type(
+                'Arguments do not match the published tool schema: ' + str(exc.message)[:200]
+                + '. Required fields: ' + json.dumps(schema.get('required', []))
+                + '; accepted fields: ' + json.dumps(sorted((schema.get('properties') or {}))[:30])
+                + '. Put them inside arguments and retry.') from None
         if _privacy_safe_arguments(operation.arguments) != operation.arguments:
             raise self.service.error_type('Arguments contain protected data. Use the owning credential controls.')
         return {**tool, 'read_only': operation_read_only(self.provider.plugin_id, tool, operation.arguments)}
@@ -62,12 +69,16 @@ class WebMcpAdapter:
     def run(self, awaitable):
         try:
             return _run_async(asyncio.wait_for(awaitable, timeout=55))
-        except Exception:
-            raise self.service.error_type(f'{self.provider.name} did not complete the request. Check its run or job status before retrying; no change was automatically replayed.') from None
+        except Exception as exc:
+            reason = ' '.join(str(exc).split())[:240]
+            raise self.service.error_type(f'{self.provider.name} did not complete the request'
+                + (f' ({reason})' if reason else '')
+                + '. Check its run or job status before retrying; no change was automatically replayed.') from None
 
     def read(self, operation):
         if not self.tool(operation)['read_only']:
-            raise self.service.error_type('This operation requires an exact-input review. Use the provider change tool.')
+            raise self.service.error_type(f'This {self.provider.name} tool changes data. Call {self.provider.plugin_id}_mcp_execute '
+                                          'with the same tool_name and arguments; Vellum shows the user a review to confirm before it runs.')
         data = self.service.require()
         connector, name = self.route(operation)
         result = self.run(self.runtime.call_tool(self.provider.plugin_id, connector,
@@ -138,7 +149,7 @@ def deferred_tools(service_factory, operation_model, name_for_tool, *, adapter_f
 
     def catalog(query: str = '', offset: int = 0, limit: int = 15):
         try:
-            values = [item for item in service_factory().catalog() if query.casefold() in (item['name'] + ' ' + item['description']).casefold()]
+            values = search_catalog(service_factory().catalog(), query)
             offset, limit = max(0, offset), max(1, min(limit, 50))
             return json.dumps({'tools': [{'name':item['name'], 'description':item['description'][:240],
                 'read_only':item['read_only'], 'required':item['input_schema'].get('required', [])}
@@ -148,8 +159,16 @@ def deferred_tools(service_factory, operation_model, name_for_tool, *, adapter_f
         except (ValueError, RuntimeError) as exc:
             return json.dumps({'ok': False, 'error': str(exc)})
 
+    def published_name(tool_name):
+        """The catalog name for ``tool_name``, also when given as Vellum's tool
+        name for it ("vercel_tool_list_projects" for "list_projects")."""
+        from agent.mcp.catalog_search import resolve_tool_name
+        return resolve_tool_name([item['name'] for item in service_factory().catalog()], tool_name,
+                                 provider.plugin_id, name_for_tool)
+
     def describe(tool_name: str):
         try:
+            tool_name = published_name(tool_name)
             item = next((item for item in service_factory().catalog() if item['name'] == tool_name), None)
             return json.dumps(item or {'ok': False, 'error': 'Search the provider catalog for the exact tool name.'})
         except (ValueError, RuntimeError) as exc:
@@ -157,11 +176,21 @@ def deferred_tools(service_factory, operation_model, name_for_tool, *, adapter_f
 
     def invoke(name, arguments, write=False):
         try:
+            name = published_name(name)
             operation = operation_model(tool_name=name, arguments=arguments)
-            if write and provider.plugin_id == 'exa' and name == 'agent_run':
+            # The tool's own annotation decides read or change, not which of the
+            # two meta tools the model picked: a read runs, a change becomes a
+            # review the user confirms. Neither path can skip that confirmation.
+            listed = next((item for item in service_factory().catalog() if item['name'] == name), None)
+            if listed is not None:
                 adapter = adapter_factory(service_factory())
-                if adapter.tool(operation)['read_only']:
+                try:
+                    read_only = adapter.tool(operation)['read_only']
+                except (ValueError, RuntimeError):
+                    read_only = bool(listed.get('read_only'))
+                if write and read_only:
                     return adapter.read(operation)
+                write = write or not read_only
             if write:
                 from agent.tools.app_actions import app_action
                 return app_action.invoke({'operation': 'execute', 'action_id': provider.plugin_id + '.mcp.execute', 'arguments': operation.model_dump()})
@@ -175,7 +204,10 @@ def deferred_tools(service_factory, operation_model, name_for_tool, *, adapter_f
         description=f'Load one exact {provider.name} schema after finding the tool.', metadata={'read_only': True})]
     for write, suffix in [(False, 'read'), (True, 'execute')]:
         def bind_operation(changes):
-            return lambda tool_name, arguments: invoke(tool_name, arguments, write=changes)
+            # A model sometimes puts the provider's fields beside tool_name
+            # instead of inside arguments; keep them rather than failing.
+            return lambda tool_name, arguments=None, **extra: invoke(
+                tool_name, {**extra, **(arguments or {})}, write=changes)
         result.append(StructuredTool.from_function(bind_operation(write), name=provider.plugin_id + '_mcp_' + suffix,
             args_schema=operation_model.model_json_schema(), metadata={'read_only': not write},
             description=f'Prepare an exact-input {provider.name} review. This is not a completed operation; never confirm it yourself.' if write else f'Read {provider.name} with a published tool. Paginate and retrieve run results using the exact schema.'))

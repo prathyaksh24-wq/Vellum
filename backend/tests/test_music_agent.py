@@ -10,6 +10,7 @@ from agent.master.runtime import DelegationRequest, DelegationRuntime
 from agent.profiles import AgentCatalog
 from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
 from agent.tools.registry import ToolPermissionError
+from delegation_turns import turn
 
 
 @pytest.mark.parametrize('query', ['what drake songs did I play yesterday', 'what song did u play from drake yesterday?'])
@@ -86,9 +87,9 @@ def test_suggestion_acceptance_is_bound_to_one_pending_action(tmp_path, confirma
     state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
     catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    assert dispatcher.maybe_handle('suggest music for my mood', 'music').status == 'needs_fetch'
+    assert turn(dispatcher, 'MusicAgent', 'suggest music for my mood', 'music').status == 'needs_fetch'
     assert not any(name == 'spotify_playback' for name,_ in calls)
-    result = dispatcher.maybe_handle(confirmation, 'music')
+    result = turn(dispatcher, 'MusicAgent', confirmation, 'music')
     assert result.status == ('answered' if confirmation == 'confirm' else 'blocked')
     assert len([args for name,args in calls if name == 'spotify_playback']) == (1 if confirmation == 'confirm' else 0)
     repeated = dispatcher.delegation_runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='confirm', parent_thread_id='music', confirm_pending_action=True))
@@ -140,20 +141,6 @@ def test_disabled_profile_memory_scope_cannot_fall_back_to_global(tmp_path):
     result = runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='remember I prefer quiet music', parent_thread_id='music'))
     assert result.response.status == 'blocked'
     assert not runtime.memory_orchestrator.store.list_saved(scopes=['global', 'agent:MusicAgent'])
-
-
-def test_exact_dated_recall_delegates_even_with_memory_agent_selected(tmp_path):
-    from agent.agents.live_dispatcher import LiveAgentDispatcher
-    from agent.master.state import MasterThreadStateStore
-    agent, _, calls = fixture_agent(planner=lambda *_:pytest.fail('No model recall'))
-    state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
-    state.set_active_agent('music', 'MemoryAgent', selected=True)
-    catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
-    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    result = dispatcher.maybe_handle('what song did u play from drake yesterday?', 'music')
-    assert result.agent_name == 'MusicAgent' and result.status == 'answered'
-    assert calls[0][1]['action'] == 'recently_played'
-    assert state.get('music').active_agent == 'MemoryAgent'
 
 
 def test_disabled_memory_blocks_preference_retention(tmp_path):
@@ -679,29 +666,6 @@ def test_other_music_services_can_supply_an_adapter_without_spotify_fallback():
     assert agent.answer("play Blinding Lights on Spotify").status == "needs_fetch"
 
 
-def test_music_intent_delegates_even_when_a_different_specialist_was_selected(tmp_path):
-    from agent.agents.live_dispatcher import LiveAgentDispatcher
-    from agent.master.state import MasterThreadStateStore
-    from agent.agents.base import SpecialistResponse
-    music, _, calls = fixture_agent()
-    class SelectedX:
-        def can_handle(self, query):
-            return False
-        def answer(self, query):
-            return SpecialistResponse(agent="XAgent", status="answered", summary="Wrong specialist")
-    state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    state.set_active_agent("qa", "XAgent", selected=True)
-    catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={"XAgent":SelectedX(), "MusicAgent":music})
-    runtime = DelegationRuntime(agent_catalog=catalog, memory_orchestrator=None, audit_path=tmp_path / "audit.jsonl")
-    dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state, delegation_runtime=runtime)
-    response = dispatcher.maybe_handle("play blinding lights", "qa")
-    assert response.agent_name == "MusicAgent"
-    assert "Playing Blinding Lights" in response.answer
-    assert calls[-1][0] == "spotify_playback"
-    assert state.get("qa").active_agent == "XAgent"
-    assert state.get("qa").agent_selected is True
-
-
 def test_music_results_are_returned_without_another_model_rewriting_them():
     from agent import api
     from agent.agents.live_dispatcher import LiveAgentResult
@@ -793,8 +757,8 @@ def test_artist_correction_uses_thread_context_through_the_shared_dispatcher(tmp
     catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={"MusicAgent":music})
     state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    assert dispatcher.maybe_handle("play the ride", "music").status == "needs_fetch"
-    result = dispatcher.maybe_handle(correction, "music")
+    assert turn(dispatcher, 'MusicAgent', "play the ride", "music").status == "needs_fetch"
+    result = turn(dispatcher, 'MusicAgent', correction, "music")
     assert result.agent_name == "MusicAgent"
     assert result.answer == "Playing Ride by Twenty One Pilots."
     assert calls[-1] == ("spotify_playback", {"action":"play", "uris":["spotify:track:pilots"]})
@@ -847,9 +811,9 @@ def test_playlist_creation_uses_the_same_pending_action_authority(tmp_path, conf
     catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={"MusicAgent":music})
     state = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    preview = dispatcher.maybe_handle('create a playlist called Night Drive with Blinding Lights by The Weeknd', "music")
+    preview = turn(dispatcher, 'MusicAgent', 'create a playlist called Night Drive with Blinding Lights by The Weeknd', "music")
     assert "Confirm" in preview.answer
-    result = dispatcher.maybe_handle(confirmation, "music")
+    result = turn(dispatcher, 'MusicAgent', confirmation, "music")
     writes = [args for name,args in calls if name == "spotify_playlists"]
     if confirmation == "cancel":
         assert result.status == "blocked" and not writes

@@ -94,6 +94,32 @@ class PluginMcpTransport(Protocol):
     ) -> str: ...
 
 
+_CREDENTIAL_TEXT = re.compile(
+    r"(?i)(bearer\s+)[\w.~+/=\-]+|\bsk-[\w-]+|"
+    r"((?:token|password|authorization|cookie|api[_-]?key|secret)\s*[:=]\s*)[^&\s,;]+")
+
+
+def _redacted_reason(text: str, connector: "PluginMcpConnector") -> str:
+    """A server's rejection text, shortened, without credentials: the connector's
+    own secret values and anything shaped like a credential are removed."""
+    reason = " ".join(str(text or "").split())
+    # Providers often wrap the useful sentence in JSON (sometimes JSON inside a
+    # JSON string); the innermost "message" is what explains the rejection.
+    messages = re.findall(r'"message\\*"\s*:\s*\\*"((?:[^"\\]|\\.)*?)\\*"', reason)
+    if messages:
+        reason = max(messages, key=len).replace('\\"', '"').replace("\\\\", "\\")
+    env = getattr(connector, "env", None) or {}
+    headers = getattr(connector, "headers", None) or {}
+    secrets_known = [value for value in (*env.values(), *headers.values())
+                     if isinstance(value, str) and len(value) >= 6]
+    for value in sorted(secrets_known, key=len, reverse=True):
+        reason = reason.replace(value, "[redacted]")
+        if value.lower().startswith("bearer "):
+            reason = reason.replace(value[7:], "[redacted]")
+    reason = _CREDENTIAL_TEXT.sub(lambda match: (match.group(1) or match.group(2) or "") + "[redacted]", reason)
+    return reason[:300]
+
+
 class SdkPluginMcpTransport:
     @asynccontextmanager
     async def _session(self, connector: PluginMcpConnector) -> AsyncIterator[ClientSession]:
@@ -144,7 +170,11 @@ class SdkPluginMcpTransport:
         async with self._session(connector) as session:
             result = await session.call_tool(tool_name, arguments)
         if getattr(result, "isError", False):
-            raise PluginMcpRuntimeError("The MCP server rejected this operation. Check the tool arguments and account permissions before retrying.")
+            # The server's own reason (a wrong field, a missing permission) lets
+            # the model correct the call; it is shortened and kept as provider text.
+            detail = _redacted_reason(content_text(result), connector)
+            raise PluginMcpRuntimeError("The MCP server rejected this operation" + (f": {detail}" if detail else "") +
+                                        ". Check the tool arguments and account permissions before retrying.")
         return content_text(result) or f"{tool_name} completed."
 
 

@@ -284,6 +284,9 @@ class Settings(BaseSettings):
     cloud_escalation_enabled: bool = Field(default=True, alias="CLOUD_ESCALATION_ENABLED")
     llm_request_timeout_seconds: float = Field(default=30.0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
     llm_stream_timeout_seconds: float = Field(default=90.0, alias="LLM_STREAM_TIMEOUT_SECONDS")
+    # A local model emits a tool call only once it is fully written, so a long
+    # argument (a whole SKILL.md or plugin file) is silent for minutes.
+    llm_local_stream_timeout_seconds: float = Field(default=600.0, alias="LLM_LOCAL_STREAM_TIMEOUT_SECONDS")
     honcho_base_url: str = Field(default="http://localhost:8001", alias="HONCHO_BASE_URL")
     honcho_app_id: str = Field(default="vellum", alias="HONCHO_APP_ID")
     honcho_user_id: str = Field(default="default", alias="HONCHO_USER_ID")

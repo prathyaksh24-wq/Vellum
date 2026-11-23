@@ -1,0 +1,9 @@
+{
+  "name": "@local/my-decoration",
+  "version": "1.0.0",
+  "description": "Replace with one line saying what this plugin adds to Vellum.",
+  "vellum": {
+    "bundle": { "patch": "./harness.patch.yml" },
+    "client": { "entry": "./client.js" }
+  }
+}

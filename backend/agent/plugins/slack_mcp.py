@@ -3,6 +3,10 @@ import asyncio
 from copy import deepcopy
 import hashlib
 import json
+
+from agent.mcp.schema_errors import schema_mismatch
+
+from agent.mcp.catalog_search import resolve_tool_name, search_catalog
 import secrets
 
 from jsonschema import Draft202012Validator, ValidationError
@@ -24,8 +28,9 @@ def digest(value):
 def run(awaitable):
     try:
         return _run_async(asyncio.wait_for(awaitable, timeout=45))
-    except Exception:
-        raise SlackError("Slack did not complete this request. Check Slack before retrying a change; it was not automatically replayed.") from None
+    except Exception as exc:
+        reason = " ".join(str(exc).split())[:400]
+        raise SlackError("Slack did not complete this request" + (f" ({reason})" if reason else "") + ". Check Slack before retrying a change; it was not automatically replayed.") from None
 
 
 def verified_result(result):
@@ -56,15 +61,19 @@ class SlackMcpAdapter:
             raise SlackError("Slack arguments exceed 128 KB. Use a smaller operation.")
         try:
             Draft202012Validator(value["input_schema"]).validate(operation.arguments)
-        except ValidationError:
-            raise SlackError("Arguments do not match Slack's published schema. Describe this tool and preserve its required fields.") from None
+        except ValidationError as exc:
+            raise SlackError(schema_mismatch("Slack", value["input_schema"], exc)) from None
         if _privacy_safe_arguments(operation.arguments) != operation.arguments:
             raise SlackError("Slack arguments contain protected data. Use the owning credential controls.")
         return value
 
     def read(self, operation):
-        if not self.tool(operation)["read_only"]:
-            raise SlackError("This Slack tool changes data. Prepare its exact change for review instead.")
+        # A change sent to the read tool is redirected before its arguments are
+        # checked, so the model learns which tool to use, not a schema error.
+        listed = next((item for item in self.service.catalog() if item["name"] == operation.tool_name), None)
+        if (listed and not listed.get("read_only")) or not self.tool(operation)["read_only"]:
+            raise SlackError("This Slack tool changes data. Call slack_mcp_execute with the same tool_name and arguments; "
+                        "Vellum shows the user a review to confirm before it runs.")
         data = self.service.require()
         return verified_result(run(self.runtime.call_tool("slack", "slack", operation.tool_name, operation.arguments,
             credential_digest=data["revision"], structured=True)))
@@ -72,7 +81,7 @@ class SlackMcpAdapter:
     def prepare(self, operation):
         tool = self.tool(operation)
         if tool["read_only"]:
-            raise SlackError("Use Slack's read tool for this operation.")
+            raise SlackError("This Slack tool only reads. Call slack_mcp_read with the same tool_name and arguments.")
         data = self.service.require()
         approval = self.runtime.approval_store.request(PluginMcpOperation.from_arguments(
             plugin_id="slack", connector="slack", tool_name=operation.tool_name, arguments=operation.arguments))
@@ -109,7 +118,7 @@ def agent_tools():
     def catalog(query: str = "", offset: int = 0, limit: int = 15):
         """Find Slack tools for messages, channels, threads, search, reactions, canvases, files and lists. Returns summaries, not every schema."""
         try:
-            values = [item for item in slack_service().catalog() if query.casefold() in (item["name"] + " " + item["description"]).casefold()]
+            values = search_catalog(slack_service().catalog(), query)
             offset, limit = max(0, offset), max(1, min(limit, 50))
             return json.dumps({"tools": [{key: item[key] for key in ("name", "description", "read_only")} for item in values[offset:offset + limit]],
                 "total": len(values), "next_offset": offset + limit if offset + limit < len(values) else None})
@@ -119,6 +128,8 @@ def agent_tools():
     def describe(tool_name: str):
         """Load one Slack tool's exact published schema after finding it in the catalog."""
         try:
+            names = [item["name"] for item in slack_service().catalog()]
+            tool_name = resolve_tool_name(names, tool_name, "slack")
             value = next((item for item in slack_service().catalog() if item["name"] == tool_name), None)
             return json.dumps(value or {"ok": False, "error": "Search the live Slack catalog for the correct tool name."})
         except (ValueError, RuntimeError) as exc:
@@ -126,7 +137,18 @@ def agent_tools():
 
     def invoke(name, arguments, write=False):
         try:
+            try:
+                name = resolve_tool_name([item["name"] for item in slack_service().catalog()], name, "slack")
+            except (ValueError, RuntimeError):
+                pass
             operation = SlackMcpOperation(tool_name=name, arguments=arguments)
+            # The tool's annotation decides read or change, not which meta tool the
+            # model picked; a change still becomes a review the user confirms.
+            listed = next((item for item in slack_service().catalog() if item["name"] == name), None)
+            if listed is not None:
+                if write and listed.get("read_only"):
+                    return SlackMcpAdapter().read(operation)
+                write = write or not listed.get("read_only")
             if write:
                 from agent.tools.app_actions import app_action
                 return app_action.invoke({"operation": "execute", "action_id": "slack.mcp.execute", "arguments": operation.model_dump()})
@@ -137,9 +159,9 @@ def agent_tools():
     result = [StructuredTool.from_function(catalog, name="slack_mcp_catalog", metadata={"read_only": True}),
         StructuredTool.from_function(describe, name="slack_mcp_describe", metadata={"read_only": True})]
     schema = SlackMcpOperation.model_json_schema()
-    result += [StructuredTool.from_function(lambda tool_name, arguments: invoke(tool_name, arguments), name="slack_mcp_read", args_schema=schema,
+    result += [StructuredTool.from_function(lambda tool_name, arguments=None, **extra: invoke(tool_name, {**extra, **(arguments or {})}), name="slack_mcp_read", args_schema=schema,
         description="Read Slack with an exact published tool and arguments. Search the catalog and describe the tool first; paginate according to its schema.", metadata={"read_only": True}),
-        StructuredTool.from_function(lambda tool_name, arguments: invoke(tool_name, arguments, write=True), name="slack_mcp_execute", args_schema=schema,
+        StructuredTool.from_function(lambda tool_name, arguments=None, **extra: invoke(tool_name, {**extra, **(arguments or {})}, write=True), name="slack_mcp_execute", args_schema=schema,
         description="Prepare a readable confirmation for a published Slack change: messages, schedules, reactions, channels, canvases, lists or file operations. This stages review, not a completed write; never confirm your own request.", metadata={"read_only": False})]
     try:
         published = slack_service().cached_tools()

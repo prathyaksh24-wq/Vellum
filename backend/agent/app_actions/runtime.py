@@ -161,6 +161,13 @@ SESSION_CONTROL_ACTION_IDS = frozenset({
 _UNDO_TTL = timedelta(minutes=15)
 
 
+def _prepare_reason(exc: BaseException) -> str:
+    """The adapter's reason a change could not be prepared, so the model can fix
+    its call (wrong tool name, missing fields) instead of repeating it."""
+    reason = " ".join(str(exc).split())[:400]
+    return reason or "Verify the connection and published tool arguments."
+
+
 @dataclass(frozen=True)
 class _UndoRecord:
     token: str
@@ -1893,10 +1900,10 @@ class AppActionRuntime:
                     from agent.plugins.serpapi_mcp import SerpApiMcpAdapter
                     try:
                         binding = SerpApiMcpAdapter().prepare(SerpApiMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='SERPAPI_REVIEW_FAILED',
-                            message='SerpApi could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='SerpApi could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='serpapi_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1907,10 +1914,10 @@ class AppActionRuntime:
                     from agent.plugins.asana_mcp import AsanaMcpAdapter
                     try:
                         binding = AsanaMcpAdapter().prepare(AsanaMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='ASANA_REVIEW_FAILED',
-                            message='Asana could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Asana could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='asana_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1921,10 +1928,10 @@ class AppActionRuntime:
                     from agent.plugins.hubspot_mcp import HubSpotMcpAdapter
                     try:
                         binding = HubSpotMcpAdapter().prepare(HubSpotMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='HUBSPOT_REVIEW_FAILED',
-                            message='HubSpot could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='HubSpot could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='hubspot_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1935,10 +1942,10 @@ class AppActionRuntime:
                     from agent.plugins.clickup_mcp import ClickUpMcpAdapter
                     try:
                         binding = ClickUpMcpAdapter().prepare(ClickUpMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='CLICKUP_REVIEW_FAILED',
-                            message='ClickUp could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='ClickUp could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='clickup_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1949,10 +1956,10 @@ class AppActionRuntime:
                     from agent.plugins.swiggy_mcp import SwiggyMcpAdapter
                     try:
                         binding = SwiggyMcpAdapter().prepare(SwiggyMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='SWIGGY_REVIEW_FAILED',
-                            message='Swiggy could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Swiggy could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='swiggy_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1963,10 +1970,10 @@ class AppActionRuntime:
                     from agent.plugins.zomato_mcp import ZomatoMcpAdapter
                     try:
                         binding = ZomatoMcpAdapter().prepare(ZomatoMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='ZOMATO_REVIEW_FAILED',
-                            message='Zomato could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Zomato could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='zomato_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1977,10 +1984,10 @@ class AppActionRuntime:
                     from agent.plugins.district_mcp import DistrictMcpAdapter
                     try:
                         binding = DistrictMcpAdapter().prepare(DistrictMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='DISTRICT_REVIEW_FAILED',
-                            message='District could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='District could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='district_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -1991,10 +1998,10 @@ class AppActionRuntime:
                     from agent.plugins.vercel_mcp import VercelMcpAdapter
                     try:
                         binding = VercelMcpAdapter().prepare(VercelMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='VERCEL_REVIEW_FAILED',
-                            message='Vercel could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Vercel could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='vercel_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2005,10 +2012,10 @@ class AppActionRuntime:
                     from agent.plugins.supabase_mcp import SupabaseMcpAdapter
                     try:
                         binding = SupabaseMcpAdapter().prepare(SupabaseMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='SUPABASE_REVIEW_FAILED',
-                            message='Supabase could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Supabase could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='supabase_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2019,10 +2026,10 @@ class AppActionRuntime:
                     from agent.plugins.exa_mcp import ExaMcpAdapter
                     try:
                         binding = ExaMcpAdapter().prepare(ExaMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='EXA_REVIEW_FAILED',
-                            message='Exa could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Exa could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='exa_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2033,10 +2040,10 @@ class AppActionRuntime:
                     from agent.plugins.tavily_mcp import TavilyMcpAdapter
                     try:
                         binding = TavilyMcpAdapter().prepare(TavilyMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='TAVILY_REVIEW_FAILED',
-                            message='Tavily could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Tavily could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='tavily_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2047,10 +2054,10 @@ class AppActionRuntime:
                     from agent.plugins.firecrawl_mcp import FirecrawlMcpAdapter
                     try:
                         binding = FirecrawlMcpAdapter().prepare(FirecrawlMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='FIRECRAWL_REVIEW_FAILED',
-                            message='Firecrawl could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Firecrawl could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='firecrawl_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2061,10 +2068,10 @@ class AppActionRuntime:
                     from agent.plugins.apify_mcp import ApifyMcpAdapter
                     try:
                         binding = ApifyMcpAdapter().prepare(ApifyMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='APIFY_REVIEW_FAILED',
-                            message='Apify could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Apify could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='apify_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2075,10 +2082,10 @@ class AppActionRuntime:
                     from agent.plugins.notion_mcp import NotionMcpAdapter
                     try:
                         binding = NotionMcpAdapter().prepare(NotionMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='NOTION_REVIEW_FAILED',
-                            message='Notion could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Notion could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='notion_operation', target_reference=binding['workspace_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2089,10 +2096,10 @@ class AppActionRuntime:
                     from agent.plugins.airtable_mcp import AirtableMcpAdapter
                     try:
                         binding = AirtableMcpAdapter().prepare(AirtableMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='AIRTABLE_REVIEW_FAILED',
-                            message='Airtable could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Airtable could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='airtable_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2103,10 +2110,10 @@ class AppActionRuntime:
                     from agent.plugins.slack_mcp import SlackMcpAdapter
                     try:
                         binding = SlackMcpAdapter().prepare(SlackMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='SLACK_REVIEW_FAILED',
-                            message='Slack could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='Slack could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='slack_operation', target_reference=binding['workspace_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)
@@ -2117,10 +2124,10 @@ class AppActionRuntime:
                     from agent.plugins.github_mcp import GitHubMcpAdapter
                     try:
                         binding = GitHubMcpAdapter().prepare(GitHubMcpOperation.model_validate(request.arguments))
-                    except (ValueError, RuntimeError):
+                    except (ValueError, RuntimeError) as exc:
                         return self._error_receipt(request=request, context=context, status='failed',
                             access_class=definition.access_class, error_code='GITHUB_REVIEW_FAILED',
-                            message='GitHub could not prepare this change. Verify the connection and published tool arguments.', authorized=True)
+                            message='GitHub could not prepare this change: ' + _prepare_reason(exc), authorized=True)
                     receipt = self._domain_confirmation_receipt(request, context, definition,
                         target_kind='github_operation', target_reference=binding['account_id'] + ':' + request.arguments['tool_name'],
                         message=binding['message'], binding=binding)

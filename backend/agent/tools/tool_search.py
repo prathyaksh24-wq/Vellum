@@ -12,7 +12,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import AliasChoices, BaseModel, Field as PydanticField
 
 from agent.config import REPO_ROOT
 
@@ -463,12 +463,16 @@ class ToolSearchArgs(BaseModel):
     limit: int = PydanticField(default=DEFAULT_SEARCH_LIMIT, ge=1, le=MAX_SEARCH_LIMIT)
 
 
+# Small models also write tool_name or tool; all mean the same field.
+_NAME_ALIASES = AliasChoices("name", "tool_name", "tool")
+
+
 class ToolDescribeArgs(BaseModel):
-    name: str = PydanticField(description="Exact deferred tool name.")
+    name: str = PydanticField(description="Exact deferred tool name.", validation_alias=_NAME_ALIASES)
 
 
 class ToolCallArgs(BaseModel):
-    name: str = PydanticField(description="Exact deferred tool name.")
+    name: str = PydanticField(description="Exact deferred tool name.", validation_alias=_NAME_ALIASES)
     arguments: dict[str, Any] = PydanticField(default_factory=dict)
 
 

@@ -147,6 +147,22 @@ def summarize_mcp_text(
     return "\n".join(lines)
 
 
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def _without_unsafe_sentences(text: str) -> str:
+    """Drop only the sentences that read as instructions to the model.
+
+    Web pages about AI tools often contain such phrases; dropping the whole
+    result left the model with nothing to answer from.
+    """
+    parts = [part for part in _SENTENCE_BREAK.split(text) if part.strip()]
+    kept = [part for part in parts if not _UNSAFE_INSTRUCTION.search(part)]
+    if not kept:
+        return "[unsafe instruction text omitted]"
+    return " ".join(kept) + (" [unsafe instruction text omitted]" if len(kept) < len(parts) else "")
+
+
 def structured_mcp_text(value: object, *, max_chars: int = MAX_MCP_RESULT_CHARS) -> str:
     """Bound task data as valid JSON while retaining IDs, titles, text and paging.
 
@@ -183,7 +199,7 @@ def structured_mcp_text(value: object, *, max_chars: int = MAX_MCP_RESULT_CHARS)
             return result
         if isinstance(item,str):
             text=_CONTROL_CHARS.sub("",item)
-            if _UNSAFE_INSTRUCTION.search(text):return "[unsafe instruction text omitted]"
+            if _UNSAFE_INSTRUCTION.search(text):text=_without_unsafe_sentences(text)
             limit=min(4000,max(0,budget-80))
             if len(json.dumps(text))>limit:
                 truncated=True

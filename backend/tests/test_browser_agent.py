@@ -150,7 +150,8 @@ def test_browser_interaction_uses_main_pending_action_authority(tmp_path, confir
     catalog = AgentCatalog(profile_dir=tmp_path/'profiles', executors={'BrowserAgent':agent})
     state = MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    pending = dispatcher.maybe_handle('Open the selected browser tab link', 'browser-thread')
+    from delegation_turns import turn
+    pending = turn(dispatcher, 'BrowserAgent', 'Open the selected browser tab link', 'browser-thread')
     assert 'Confirm' in pending.answer
     assert state.get_pending_action('browser-thread')['payload']['snapshot_id'] == 'snapshot-1'
     result = dispatcher.maybe_handle(confirmation, 'browser-thread')

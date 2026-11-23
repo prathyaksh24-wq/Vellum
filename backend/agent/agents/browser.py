@@ -64,7 +64,12 @@ class BrowserAgent:
         from agent.conversations.recall import is_conversation_recall
         if is_conversation_recall(clean):
             return False
-        return self._engine_request(clean) is not None or self.is_page_request(clean) or bool(re.search(r"\b(?:browser|brave|chrome|website|webpage|tabs?|download)\b", clean, re.I))
+        # A bare "tab" is not a browser request: "the Analytics tab" names a part of
+        # Vellum's own interface, which the main agent changes through its harness.
+        browser_tab = (r"(?:browser|open|new|other|current|active|all) tabs?|(?:close|switch|reload|refresh) "
+                       r"(?:to )?(?:the |this |that |a |my |all )?(?:\w+ )?tabs?\b(?! (?:in|of) (?:vellum|settings))")
+        return self._engine_request(clean) is not None or self.is_page_request(clean) or bool(
+            re.search(r"\b(?:browser|brave|chrome|website|webpage|download|" + browser_tab + r")\b", clean, re.I))
 
     @staticmethod
     def _engine_request(query: str):
