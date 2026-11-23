@@ -106,7 +106,38 @@ def build_skill_index_block(
     ]
     for entry in entries:
         description = " ".join(entry.description.split())
-        lines.append(f"- {entry.name} [{entry.category}]: {description[:200]}")
+        # DeepSeek Harness' catalog limit: long enough to carry when-to-use guidance.
+        lines.append(f"- {entry.name} [{entry.category}]: {description[:500]}")
+    return "\n".join(lines)
+
+
+def build_skill_catalog_reminder(
+    registry: SkillRegistry | None = None, *,
+    excluded_skills: set[str] | frozenset[str] = frozenset(),
+) -> str:
+    """The session skill catalog as DeepSeek Harness publishes it: a user-role
+    system reminder naming each skill with its when-to-use description, and the
+    rule to load a matching skill before taking task actions."""
+    active_registry = registry or get_skill_registry()
+    entries = [entry for entry in active_registry.list_skills() if entry.name not in excluded_skills]
+    if not entries:
+        return ""
+    lines = [
+        "<system-reminder>",
+        "A skill is a reusable set of task-specific instructions. The following skills are available in this session:",
+        "",
+        "<available_skills>",
+        *(f"- `{entry.name}`: {' '.join(entry.description.split())[:500]}" for entry in entries),
+        "</available_skills>",
+        "",
+        "If the user names a skill, or the task clearly matches a skill's description, call the `skill_view` tool with "
+        "the exact skill name before taking task actions. Load all applicable skills, then follow their full "
+        "instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it "
+        "has been loaded.",
+        "A user may also invoke a skill directly; its instructions then appear in this conversation. Follow them, and "
+        "do not call the `skill_view` tool again for that skill.",
+        "</system-reminder>",
+    ]
     return "\n".join(lines)
 
 
@@ -118,7 +149,13 @@ def build_skill_activation_block(
     selected_skills: dict[str, str] | None = None,
     max_skills: int = 3,
     max_chars: int = 12_000,
+    match_query: bool = True,
 ) -> str:
+    """Skill bodies to place in the prompt for this turn.
+
+    With ``match_query=False`` only the skills the user selected are included;
+    the model loads any other skill itself with ``skill_view`` (ADR 0009).
+    """
     normalized_query = " ".join(_WORD.findall(query.casefold()))
     query_tokens = set(normalized_query.split()) - _STOP_WORDS
     if not query_tokens and not selected_skills:
@@ -132,6 +169,8 @@ def build_skill_activation_block(
             continue
         if selected_skills is not None and selected_skills.get(name) == (package.owner_plugin or ""):
             ranked.append((1000, name, package.body.strip()))
+            continue
+        if not match_query:
             continue
         vellum = package.metadata.metadata.vellum
         negative = [_normalize_phrase(value) for value in vellum.negative_trigger]
@@ -174,6 +213,36 @@ def build_skill_activation_block(
         from agent.skills.usage_intelligence import record_current_activation
         record_current_activation(name, source="prompt_activation")
     return "\n\n".join(sections) if len(sections) > 1 else ""
+
+
+def skills_named_in(
+    query: str,
+    registry: SkillRegistry | None = None,
+    *,
+    excluded_skills: set[str] | frozenset[str] = frozenset(),
+) -> dict[str, str]:
+    """Installed skills the user picked by name in their message.
+
+    Naming a skill as a skill ("my naval-almanack skill", "the skill
+    research", "/research", "`research`") is the user's own choice, like a slash
+    invocation, so the skill is loaded for them. A bare word that happens to
+    equal a skill name is not a choice; the model decides from the catalog.
+    """
+    text = str(query or "")
+    if not text.strip():
+        return {}
+    chosen: dict[str, str] = {}
+    for entry in (registry or get_skill_registry()).list_skills():
+        name = entry.name
+        if name in excluded_skills:
+            continue
+        escaped = re.escape(name)
+        named = re.search(
+            rf"(?<![\w-])(?:{escaped}\s+skill\b|skills?\s+(?:named\s+|called\s+)?[`'\"]?{escaped}(?![\w-])|/{escaped}(?![\w-])|`{escaped}`)",
+            text, re.IGNORECASE)
+        if named:
+            chosen[name] = entry.owner_plugin or ""
+    return chosen
 
 
 def _normalize_phrase(value: str) -> str:

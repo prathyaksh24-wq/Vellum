@@ -161,6 +161,9 @@
       if (old.label && !step.label) next.label = old.label;
       if (old.detail && !step.detail) next.detail = old.detail;
       next.at = old.at || step.at || Date.now(); next.updatedAt = step.at || Date.now();
+      // Where in the answer text this step began, so the page can show text and
+      // work in the order they happened.
+      if (index < 0 && !/^final_answer/.test(step.type || '')) next.textOffset = text.length;
       if (!old.input && step.detail && !ended(step.status)) next.input = step.detail;
       next.events = [...(old.events || [])];
       const event = {type:step.type,status:step.status,label:step.label,detail:step.detail,at:step.at || Date.now()};

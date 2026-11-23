@@ -32,6 +32,8 @@
 .agent-work-source{display:inline-flex;align-items:baseline;gap:5px;color:inherit;text-decoration:none}
 .agent-work-step-status{font-size:11px;flex-shrink:0;padding:2px 0 0 8px;color:var(--txt,var(--agent-muted))}
 .agent-work .agent-thought-process{margin:8px 0 0 25px}
+.agent-work-steps .agent-work-thought{display:block;min-height:0;padding:2px 0}
+.agent-work .agent-work-thought .agent-thought-process{margin:0}
 .agent-work[data-vendor=anthropic] .agent-thinking-orb{color:#d88b6b}
 .agent-work:is([data-vendor=google],[data-vendor=meta],[data-vendor=meta-llama]) .agent-thinking-orb{color:#79adf2}
 .agent-work:is([data-vendor=qwen],[data-vendor=qwen3]) .agent-thinking-orb{color:#b5a2ef}

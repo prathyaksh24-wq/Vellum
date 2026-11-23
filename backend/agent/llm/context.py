@@ -170,7 +170,7 @@ def context_layers(messages: Sequence[Any], tools: Sequence[Any] = ()) -> dict[s
     groups = {name: [] for name in ('instructions', 'personal_memory', 'compacted_history', 'retrieved_history', 'recent_conversation')}
     for message in messages:
         metadata = getattr(message, 'additional_kwargs', {})
-        name = ('instructions' if _role(message) == 'system' else
+        name = ('instructions' if _role(message) == 'system' or metadata.get('vellum_context_layer') == 'skill_catalog' else
                 'compacted_history' if metadata.get('vellum_context_digest') else
                 metadata.get('vellum_context_layer', 'recent_conversation'))
         groups.get(name, groups['recent_conversation']).append(message)
@@ -277,7 +277,8 @@ def _project_context(messages: Sequence[Any], tools: Sequence[Any], budget: Cont
             systems.append(message)
         elif getattr(message, 'additional_kwargs', {}).get('vellum_context_layer') == 'personal_memory':
             memory_layers.append(message)
-        elif getattr(message, 'additional_kwargs', {}).get('vellum_context_layer') == 'retrieved_history':
+        elif getattr(message, 'additional_kwargs', {}).get('vellum_context_layer') in {'retrieved_history', 'skill_catalog'}:
+            # The skill catalog is session context, never compacted away.
             retrieval_layers.append(message)
         else:
             history.append(message)

@@ -4,6 +4,7 @@ import pytest
 from agent.contracts.music import MusicChoiceRequired, MusicPlan
 from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
 from test_music_agent import fixture_agent
+from delegation_turns import turn
 
 
 @pytest.mark.parametrize('query,operation', [('mute','mute'),('unmute','unmute'),('go back to the beginning  of the song','restart'),('go back to the beginnign of the song','restart'),('what is the artist name of this song','current')])
@@ -39,20 +40,6 @@ def test_mute_restores_measured_volume_restart_seeks_zero_and_artist_is_live():
     assert agent.can_handle_with_context('undo it',context)
     undone=agent.answer_with_context('undo it',context)
     assert undone.status=='answered' and repeat[0]=='context'
-
-
-def test_monthly_listeners_routes_to_main_web_search_even_when_music_is_selected(tmp_path):
-    from agent.agents.live_dispatcher import LiveAgentDispatcher
-    from agent.master.state import MasterThreadStateStore
-    from agent.profiles import AgentCatalog
-    music,_,_=fixture_agent(planner=lambda *_:pytest.fail('Artist statistics must use public web search'))
-    state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
-    state.set_active_agent('music','MusicAgent',selected=True)
-    dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':music}),state_store=state)
-    assert dispatcher.maybe_handle('how many monthly listener does davide guttea have?','music') is None
-    from agent import api
-    assert api._requests_fresh_public_data('how many monthly listeners does David Guetta have?')
-    assert 'web_search' in api._with_forced_web_search_context('how many monthly listeners does David Guetta have?')
 
 
 def test_failed_repeat_cannot_authorize_undo_and_unmute_cannot_cross_device():
@@ -326,13 +313,13 @@ def test_shared_dispatcher_preserves_seek_distance_and_routes_playlist_inventory
     registry.invoke=invoke
     dispatcher=LiveAgentDispatcher(agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
-    assert dispatcher.maybe_handle('skip 45 secs','music').status=='answered'
-    assert dispatcher.maybe_handle('what si playing?','music').status=='answered'
-    result=dispatcher.maybe_handle('go back the same amount','music')
+    assert turn(dispatcher, 'MusicAgent', 'skip 45 secs','music').status=='answered'
+    assert turn(dispatcher, 'MusicAgent', 'what si playing?','music').status=='answered'
+    result=turn(dispatcher, 'MusicAgent', 'go back the same amount','music')
     assert result.agent_name=='MusicAgent' and 'Moved back 45 seconds' in result.answer
     assert writes==[90000,45000]
     assert not agent.can_handle_with_context('go back the same amount',{})
-    result=dispatcher.maybe_handle('reduce the volume to 10%','music')
+    result=turn(dispatcher, 'MusicAgent', 'reduce the volume to 10%','music')
     assert result.agent_name=='MusicAgent' and '38% to 10%' in result.answer and volume[0]==10
-    result=dispatcher.maybe_handle('how many playlsit do i have?','music')
+    result=turn(dispatcher, 'MusicAgent', 'how many playlsit do i have?','music')
     assert result.agent_name=='MusicAgent' and '1 saved playlists' in result.answer

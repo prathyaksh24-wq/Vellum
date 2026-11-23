@@ -120,33 +120,6 @@ def build_parallel_dispatcher(tmp_path, barrier=None, release=None):
     return LiveAgentDispatcher(agent_catalog=catalog,state_store=state,delegation_runtime=runtime)
 
 
-def test_independent_specialists_run_concurrently_and_emit_fast_result(tmp_path):
-    release=threading.Event()
-    dispatcher=build_parallel_dispatcher(tmp_path,threading.Barrier(2),release)
-    seen=[]
-    def emit(part):
-        seen.append(part.agent_name)
-        if part.agent_name=='YoutubeAgent':
-            assert not release.is_set()
-            release.set()
-    result=dispatcher.maybe_handle('what videos have I watched and show my calendar', 'parallel', on_result=emit)
-    assert seen==['YoutubeAgent','CalendarAgent']
-    assert result.answer == 'YoutubeAgent result\n\nCalendarAgent result'
-
-
-def test_dependent_tasks_do_not_start_concurrently(tmp_path):
-    dispatcher=build_parallel_dispatcher(tmp_path)
-    assert dispatcher._independent_tasks('what videos have I watched then add that to my calendar','dependent') == []
-
-
-def test_natural_other_agent_request_preserves_explicit_agent_selection(tmp_path):
-    dispatcher=build_parallel_dispatcher(tmp_path)
-    dispatcher.state_store.set_active_agent('selected','CalendarAgent',selected=True)
-    result=dispatcher.maybe_handle('what videos have I watched','selected')
-    assert result.agent_name=='YoutubeAgent'
-    assert dispatcher.state_store.get('selected').active_agent=='CalendarAgent'
-
-
 def test_combined_watch_history_and_skip_uses_existing_action_boundary(monkeypatch):
     from agent.app_actions.runtime import AppActionRuntime
     from agent.plugins import spotify_controls
@@ -189,29 +162,6 @@ async def test_combined_action_answer_contains_real_receipt_once(monkeypatch):
     final=next(data['response']['output_text'] for name,data in events if name=='response.completed')
     assert tokens==final=='Skipped to the next track.\n\nYour watched videos.'
     assert len(calls)==1
-
-
-@pytest.mark.asyncio
-async def test_stream_shows_finished_specialist_before_slow_specialist_finishes(tmp_path, monkeypatch):
-    from agent import api
-    release=threading.Event()
-    dispatcher=build_parallel_dispatcher(tmp_path,threading.Barrier(2),release)
-    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
-    monkeypatch.setattr(api,'_continuity_request',lambda message,thread:message)
-    monkeypatch.setattr(api,'_is_memory_recall_request',lambda *a:False)
-    monkeypatch.setattr(api,'_is_explanation_followup',lambda *a:False)
-    async def noop(*a,**k): pass
-    monkeypatch.setattr(api,'_checkpoint_specialist_exchange',noop)
-    chunks=[]
-    async for chunk in api._stream_agent_turn(clean_message='what videos have I watched and show my calendar',
-            active_thread_id='qa-parallel',model=None,store=False):
-        chunks.append(chunk)
-        if chunk.startswith('event: token') and 'YoutubeAgent result' in chunk:
-            assert not release.is_set()
-            release.set()
-    assert release.is_set()
-    tokens=[json.loads(chunk.split('data: ',1)[1])['text'] for chunk in chunks if chunk.startswith('event: token')]
-    assert ''.join(tokens)=='YoutubeAgent result\n\nCalendarAgent result'
 
 
 def test_creator_filter_reads_beyond_first_page_and_preserves_renames():

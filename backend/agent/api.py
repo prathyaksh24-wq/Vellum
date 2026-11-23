@@ -1673,6 +1673,9 @@ async def lifespan(app: FastAPI):
     scheduler = start_scheduler()
     app.state.scheduler = scheduler
     startup_mark("scheduler started")
+    # Compose the harness (every plugin entry) once, off the event loop.
+    from agent.harness import get_harness
+    asyncio.get_running_loop().run_in_executor(None, get_harness)
     if serving():
         # Embedded memory engines (Hindsight, Honcho): background start, never blocks chat.
         from agent.memory.engines.runtime import start_engines
@@ -2733,11 +2736,6 @@ async def _run_agent_scoped(
         )
     clean_message = str(skill_command.get("expanded") or clean_message)
 
-    skill_system_result = _skill_system_answer(clean_message)
-    if skill_system_result is not None:
-        answer, tools = skill_system_result
-        return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools)
-
     memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id)
     explanatory_followup = _is_explanation_followup(clean_message)
     main_plugin_route = _main_plugin_request(effective_message, attachments)
@@ -3491,130 +3489,6 @@ def _skill_cursor_decode(cursor: str, view: str, query: str) -> str:
     if loaded.get("view") != view or loaded.get("query") != query:
         raise HTTPException(status_code=400, detail={"code": "cursor_scope_mismatch", "message": "Cursor does not match this search."})
     return str(loaded.get("after") or "")
-
-
-_SKILL_INVENTORY_RE = re.compile(
-    r"\b(?:show|list|tell me)\b.*\bskills?\b|"
-    r"\b(?:what|which)\s+skills?\s+(?:do i have|are (?:installed|active|available|current)|have i got)\b|"
-    r"\bdo i have\b.*\bskills?\b|\bskills?\b.*\b(?:installed|active|available|current)\b",
-    re.IGNORECASE,
-)
-_SKILL_HISTORY_RE = re.compile(
-    r"\b(?:skills?\b.*\b(?:install(?:ed)?|download(?:ed)?|add(?:ed)?|archive(?:d)?|delete(?:d)?|remove(?:d)?|restore(?:d)?|uninstall(?:ed)?|update(?:d)?)|(?:install(?:ed)?|download(?:ed)?|add(?:ed)?|archive(?:d)?|delete(?:d)?|remove(?:d)?|restore(?:d)?|uninstall(?:ed)?|update(?:d)?)\b.*\bskills?)\b",
-    re.IGNORECASE,
-)
-
-
-def _skill_history_window(message: str) -> tuple[str, str, str]:
-    local_tz = ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))
-    now = datetime.now(local_tz)
-    lowered = message.casefold()
-    if "yesterday" in lowered:
-        start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
-        label = "yesterday"
-    elif "today" in lowered:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
-        label = "today"
-    elif "last week" in lowered:
-        this_week = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        start = this_week - timedelta(days=7)
-        end = this_week
-        label = "last week"
-    elif "this week" in lowered:
-        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = now + timedelta(seconds=1)
-        label = "this week"
-    else:
-        start = now - timedelta(days=30)
-        end = now + timedelta(seconds=1)
-        label = "the last 30 days"
-    return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat(), label
-
-
-def _skill_system_answer(message: str) -> tuple[str, list[str]] | None:
-    """Answer operational skill inventory/history questions from canonical state."""
-    clean = " ".join(message.split())
-    # A Book skill belongs to the Book specialist, not the global tool catalog.
-    if re.search(r"\b(?:book|books|epub|chapter|author)\b", clean, re.I):
-        return None
-    history_match = bool(_SKILL_HISTORY_RE.search(clean))
-    inventory_match = bool(_SKILL_INVENTORY_RE.search(clean))
-    if inventory_match and not re.search(r"\b(?:today|yesterday|last|when|recently|changes?|added|removed|archived|updated|downloaded|did)\b", clean, re.I):
-        history_match = False
-    if not history_match and not inventory_match:
-        return None
-
-    surface = _skill_surface()
-    if history_match:
-        catalog = SkillCatalog(surface.root)
-        catalog.reconcile(embed_semantics=False)
-        catalog.backfill_events()
-        since, until, label = _skill_history_window(clean)
-        events = catalog.events(since=since, until=until, limit=200)
-        lowered = clean.casefold()
-        wanted: set[str] = set()
-        if any(term in lowered for term in ("install", "download", "add")):
-            wanted.update({"install", "create", "approve_proposed"})
-        if any(term in lowered for term in ("archive", "retire")):
-            wanted.update({"archive", "retire"})
-        if "restore" in lowered:
-            wanted.add("restore")
-        if any(term in lowered for term in ("delete", "remove", "uninstall")):
-            wanted.update({"delete", "uninstall"})
-        if "update" in lowered:
-            wanted.add("update")
-        if wanted:
-            events = [item for item in events if item.get("event") in wanted]
-        if not events:
-            return f"I found no matching skill changes {label} in Vellum's skill ledger.", ["skills_history"]
-        lines = [f"Here are the skill changes I found {label}:"]
-        for item in events[:30]:
-            details = item.get("details") or {}
-            source = details.get("source") or details.get("origin") or "local"
-            stamp = str(item.get("created_at") or "")
-            try:
-                stamp = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))).strftime("%d %b %Y, %I:%M %p")
-            except ValueError:
-                pass
-            lines.append(f"- **{item.get('skill_name') or 'Unknown skill'}**: {str(item.get('event') or 'changed').replace('_', ' ')} on {stamp} ({source})")
-        return "\n".join(lines), ["skills_history"]
-
-    state = surface.catalog()["skills"]
-    active = list(state.get("active") or [])
-    if not active:
-        return "Vellum currently has no active skills installed.", ["skills_list"]
-    lines = [f"Vellum currently has **{len(active)} active skills**:"]
-    full_list = bool(re.search(r"\b(?:all|every|complete|full)\s+(?:the\s+)?(?:installed\s+|active\s+)?skills?\b|\b(?:complete|full)\s+list\b", clean, re.I))
-    if re.search(r"\b(?:brief|short|summari[sz]e|summary|concise)\b", clean, re.I):
-        full_list = False
-    shown = sorted(active, key=lambda value: str(value.get("name") or "").casefold())
-    for item in (shown if full_list else shown[:8]):
-        description = " ".join(str(item.get("description") or item.get("summary") or "").split())
-        description = description[:160] if full_list else description[:90]
-        suffix = f" — {description}" if description else ""
-        lines.append(f"- **{item.get('name')}**{suffix}")
-    if not full_list and len(active) > 8:
-        lines.append(f"\nShowing 8 examples. Open Skills to browse the {len(active)} installed packages, or ask for the full list.")
-    return "\n".join(lines), ["skills_list"]
-
-
-def _skill_system_stream(answer: str, tools: list[str], thread_id: str):
-    async def events():
-        activity_id = f"skill-{uuid4().hex[:10]}"
-        label = "Checking skill history..." if "skills_history" in tools else "Reading current skills..."
-        yield _sse("meta", {"thread_id": thread_id})
-        yield _sse("activity_start", {"id": activity_id, "kind": "tool", "label": label})
-        yield _sse("tool_call_started", {"id": activity_id, "tool_name": tools[0], "label": label})
-        yield _sse("tool_call_completed", {"id": activity_id, "tool_name": tools[0], "label": label})
-        yield _sse("activity_complete", {"id": activity_id, "kind": "tool", "label": label})
-        yield _sse("final_answer_started", {"id": activity_id})
-        yield _sse("token", {"text": answer})
-        response = ChatResponse(answer=answer, thread_id=thread_id, tools=tools)
-        yield _sse("final", json.loads(response.model_dump_json()))
-
-    return events()
 
 
 def _direct_answer_stream(answer: str, thread_id: str):
@@ -4447,9 +4321,31 @@ def _decorate_source_list(records: list[dict[str, Any]]) -> list[dict[str, Any]]
     return [_decorate_source_record(record, source_index=index) for index, record in enumerate(records, start=1)]
 
 
+def _inspect_detail(tool_input: dict) -> str:
+    query = tool_input.get("query")
+    if query is None:
+        return "harness directory"
+    get = (lambda key: getattr(query, key, None)) if not isinstance(query, dict) else query.get
+    target = get("input")
+    if isinstance(target, dict):
+        target = target.get("id") or target.get("name") or ""
+    return " ".join(str(part) for part in (f"{get('provider')}.{get('method')}", target or "") if part)
+
+
+# Each read names what it read, so several reads in a row are not mistaken for repeats.
+_HARNESS_ACTIVITY_DETAIL = {
+    "skill_view": lambda i: f"{i.get('name') or ''} · {i.get('path') or 'SKILL.md'}",
+    "harness_inspect": _inspect_detail,
+    "plugin_manager": lambda i: " ".join(str(i.get(k)) for k in ("action", "target") if i.get(k)),
+    "workspace_files": lambda i: " ".join(str(i.get(k)) for k in ("action", "path") if i.get(k)),
+}
+
+
 def _activity_for(name: str, tool_input: Any) -> tuple[str, str]:
     label = _ACTIVITY_LABELS.get(name, f"Used {name}")
     detail = ""
+    if isinstance(tool_input, dict) and name in _HARNESS_ACTIVITY_DETAIL:
+        return label, _HARNESS_ACTIVITY_DETAIL[name](tool_input)[:200]
     if isinstance(tool_input, dict):
         for key in ("query", "q", "path", "url", "league", "action", "text"):
             value = tool_input.get(key)
@@ -4827,6 +4723,20 @@ def _is_specialist_deferral(text: str) -> bool:
     )
 
 
+def _stream_idle_timeout(model: str | None) -> float:
+    """Seconds to wait for the next stream event before giving up on the model."""
+    settings = get_settings()
+    timeout = float(settings.llm_stream_timeout_seconds)
+    try:
+        from agent.llm.providers import get_provider_registry
+        entry = get_provider_registry().resolve(model) if model else None
+    except Exception:  # noqa: BLE001 - an unknown model keeps the default window
+        entry = None
+    if entry is not None and entry.provider == "ollama":
+        timeout = max(timeout, float(settings.llm_local_stream_timeout_seconds))
+    return timeout
+
+
 async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> dict[str, Any]:
     try:
         return await asyncio.wait_for(anext(stream_iterator), timeout=timeout_seconds)
@@ -4999,40 +4909,9 @@ async def _stream_agent_turn_scoped(
     live_result = None
     main_plugin_route = _main_plugin_request(effective_message, attachments)
     if not memory_recall_intent and not explanatory_followup and not main_plugin_route:
-        planner = getattr(_live_dispatcher, "_independent_tasks", None)
-        if callable(planner) and planner(effective_message, active_thread_id):
-            queue = asyncio.Queue()
-            loop = asyncio.get_running_loop()
-            def deliver(part):
-                loop.call_soon_threadsafe(queue.put_nowait, part)
-            dispatch = asyncio.create_task(asyncio.to_thread(_live_dispatcher.maybe_handle,
-                effective_message, active_thread_id, on_result=deliver))
-            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id,
-                item={"id":message_item_id,"type":"message","role":"assistant","status":"in_progress"})
-            while not dispatch.done() or not queue.empty():
-                if dispatch.done():
-                    part = queue.get_nowait()
-                else:
-                    take = asyncio.create_task(queue.get())
-                    done, _ = await asyncio.wait({take, dispatch}, return_when=asyncio.FIRST_COMPLETED)
-                    if take not in done:
-                        take.cancel()
-                        await asyncio.gather(take, return_exceptions=True)
-                        continue
-                    part = take.result()
-                text = _clean_answer_body(part.answer, preserve_youtube_links=part.agent_name == "YoutubeAgent")
-                delta = ("\n\n" if early_parts else "") + text
-                early_parts.append(text)
-                yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
-                    activity_type="sub_agent_completed", label=f"{part.agent_name} finished",
-                    name=part.agent_name, status="failed" if part.status == "error" else "completed")
-                yield _response_output_text_delta(response_id=response_id, thread_id=active_thread_id,
-                    item_id=message_item_id, delta=delta)
-                yield _sse("token", {"text":delta})
-            live_result = await dispatch
-            live_result.answer = "\n\n".join(early_parts)
-        else:
-            live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
+        # Only explicit routes remain: a pending specialist confirmation or a
+        # specialist the user selected. Everything else is the model's decision.
+        live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
 
     live_sources: list[dict[str, Any]] = []
     delegated_tools: list[str] = []
@@ -5251,7 +5130,7 @@ async def _stream_agent_turn_scoped(
                 reasoning_mode=resolved_reasoning,
             )
             stream_iterator = stream.__aiter__()
-            timeout_seconds = float(get_settings().llm_stream_timeout_seconds)
+            timeout_seconds = _stream_idle_timeout(resolved_model)
             while True:
                 stop_after_specialist = False
                 try:
@@ -6353,10 +6232,6 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
             return stream_response(skill_event())
         clean_message = str(skill_command.get("expanded") or clean_message)
-        skill_system_result = _skill_system_answer(clean_message)
-        if skill_system_result is not None:
-            answer, tools = skill_system_result
-            return stream_response(_skill_system_stream(answer, tools, active_thread_id))
         from agent.agents.music import MusicAgent
         if request.force_web_search or MusicAgent.public_research_request(clean_message):
             clean_message = _with_forced_web_search_context(clean_message)
@@ -7764,6 +7639,8 @@ router.include_router(firecrawl_router)
 router.include_router(firecrawl_oauth_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
+from agent.harness.api import router as _harness_router  # noqa: E402
+router.include_router(_harness_router)
 
 # --- Petdex gallery proxy -------------------------------------------------
 # Browsers on this machine cannot reach petdex.dev directly: the site

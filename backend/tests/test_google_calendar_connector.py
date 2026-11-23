@@ -275,25 +275,3 @@ def test_main_model_calendar_envelope_withholds_event_content_and_action_payload
     assert "private-event-id" not in payload
 
 
-def test_live_dispatcher_routes_natural_calendar_intent_through_the_catalog(tmp_path: Path) -> None:
-    service = build_service(events_backend=lambda **_kwargs: [{
-        "id": "event-123",
-        "summary": "Project review",
-        "start": {"dateTime": "2026-09-10T10:00:00+05:30"},
-        "end": {"dateTime": "2026-09-10T11:00:00+05:30"},
-    }])
-    calendar = CalendarAgent(
-        tool_registry=service.build_registry(),
-        now=lambda tz: datetime(2026, 9, 10, tzinfo=tz),
-    )
-    catalog = AgentCatalog(profile_dir=tmp_path / "profiles", executors={calendar.name: calendar})
-    dispatcher = LiveAgentDispatcher(
-        agent_catalog=catalog,
-        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
-    )
-
-    result = dispatcher.maybe_handle("what is on my calendar today?", thread_id="calendar-thread")
-
-    assert result is not None
-    assert result.agent_name == "CalendarAgent"
-    assert "Project review" in result.answer

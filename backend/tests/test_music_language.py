@@ -4,30 +4,7 @@ import pytest
 from agent.agents.music import MusicAgent
 from agent.contracts.music import MusicPlan
 from test_music_agent import fixture_agent
-
-
-@pytest.mark.parametrize('text',[
-    'Okay play a song from my liked song playlist',
-    "I'm checking if you're able to hear my voice and then you know just you know play a song from my I don't just play a random song from my like to play this song. I'm just checking if this dictation work or not So well, I just pause there by mistake",
-])
-def test_dictated_music_reaches_music_owner_before_unrelated_specialists(tmp_path, text):
-    from agent.agents.live_dispatcher import LiveAgentDispatcher
-    from agent.master.state import MasterThreadStateStore
-    from agent.profiles import AgentCatalog
-    agent,_,calls=fixture_agent(planner=lambda *_:{'operation':'play_liked','shuffle':True},
-        library={'items':[{'track':{'uri':'spotify:track:liked'}}],'total':1})
-    assert agent.can_handle(text)
-    state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
-    state.set_active_agent('dictated-music','YoutubeAgent')
-    catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':agent})
-    dispatcher=LiveAgentDispatcher(agent_catalog=catalog,state_store=state,
-        skill_route_resolver=type('NoSkillRoute',(),{'resolve_all':lambda self,_:[]})())
-    result=dispatcher.maybe_handle(text,'dictated-music')
-    assert result.agent_name=='MusicAgent'
-    assert result.route_source=='music_intent'
-    assert result.status=='answered'
-    assert 'music_agent' in result.tools
-    assert any(name=='spotify_playback' and args.get('action')=='play' for name,args in calls)
+from delegation_turns import turn
 
 
 @pytest.mark.parametrize('title',['Okay','Yeah Yeah Yeah','So What','Well Well Well'])

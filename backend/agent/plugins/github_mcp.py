@@ -3,6 +3,10 @@ import asyncio
 from copy import deepcopy
 import hashlib
 import json
+
+from agent.mcp.schema_errors import schema_mismatch
+
+from agent.mcp.catalog_search import search_catalog
 import secrets
 
 from jsonschema import Draft202012Validator, ValidationError
@@ -25,8 +29,9 @@ def _digest(value):
 def _run(awaitable):
     try:
         return _run_async(asyncio.wait_for(awaitable, timeout=45))
-    except Exception:
-        raise GitHubConnectionError("GitHub did not complete the request. Check GitHub before retrying a change; it was not automatically replayed.") from None
+    except Exception as exc:
+        reason = " ".join(str(exc).split())[:400]
+        raise GitHubConnectionError("GitHub did not complete the request" + (f" ({reason})" if reason else "") + ". Check GitHub before retrying a change; it was not automatically replayed.") from None
 
 
 def _verified_result(result):
@@ -108,8 +113,8 @@ class GitHubMcpAdapter:
             raise GitHubConnectionError("This tool is not exposed by the connected GitHub MCP server. Refresh or search its catalog.")
         try:
             Draft202012Validator(tool["input_schema"]).validate(operation.arguments)
-        except ValidationError:
-            raise GitHubConnectionError("Arguments do not match this GitHub tool's published schema. Describe the tool and preserve its required fields.") from None
+        except ValidationError as exc:
+            raise GitHubConnectionError(schema_mismatch("GitHub", tool["input_schema"], exc)) from None
         return tool
 
     def read(self, operation):
@@ -194,8 +199,7 @@ def agent_tools():
         """Search every tool exposed by the connected GitHub MCP server. Returns names and summaries; describe a selected tool for its exact schema. Covers repositories, issues, PRs, Actions, releases, projects, security and other available toolsets."""
         try:
             values = github_service().catalog()
-            terms = query.casefold().split()
-            values = [item for item in values if all(term in (item["name"] + " " + item["description"]).casefold() for term in terms)]
+            values = search_catalog(values, query)
             start, count = max(0, offset), max(1, min(20, limit))
             return json.dumps({"tools": [{key: item[key] for key in ("name", "description", "read_only")} for item in values[start:start+count]],
                 "total": len(values), "next_offset": start+count if start+count < len(values) else None})
@@ -222,9 +226,9 @@ def agent_tools():
     result = [StructuredTool.from_function(catalog, name="github_mcp_catalog", metadata={"read_only": True}),
         StructuredTool.from_function(describe, name="github_mcp_describe", metadata={"read_only": True})]
     schema = GitHubMcpOperation.model_json_schema()
-    result += [StructuredTool.from_function(lambda tool_name, arguments: invoke(tool_name, arguments), name="github_mcp_read",
+    result += [StructuredTool.from_function(lambda tool_name, arguments=None, **extra: invoke(tool_name, {**extra, **(arguments or {})}), name="github_mcp_read",
         description="Read GitHub with an exact published tool and arguments. Search the GitHub catalog and describe the tool first. Compatible operations prefer CLI; failures can fall back to official MCP.", args_schema=schema, metadata={"read_only": True}),
-        StructuredTool.from_function(lambda tool_name, arguments: invoke(tool_name, arguments, write=True), name="github_mcp_execute",
+        StructuredTool.from_function(lambda tool_name, arguments=None, **extra: invoke(tool_name, {**extra, **(arguments or {})}, write=True), name="github_mcp_execute",
         description="Prepare a readable confirmation for any published GitHub change, including issues, PRs, comments, files, workflows and releases. Describe its schema first. This stages a review; it does not complete a write or confirm itself.", args_schema=schema, metadata={"read_only": False})]
     try:
         published = github_service().cached_tools()

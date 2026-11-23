@@ -145,6 +145,9 @@ def get_routing_runtime() -> RoutingRuntime:
     return build_routing_runtime()
 
 
+MAIN_AGENT_MAX_OUTPUT_TOKENS = 8192
+
+
 def get_routed_chat_model(model: str | None = None, reasoning_mode: Any = None, *, context_role: str = "specialist") -> RoutedChatModel:
     from agent.profiles.execution import get_profile_execution
     execution = get_profile_execution()
@@ -153,6 +156,10 @@ def get_routed_chat_model(model: str | None = None, reasoning_mode: Any = None, 
         reasoning_mode = execution.reasoning_mode or reasoning_mode
     routed = get_routing_runtime().chat_model
     updates: dict[str, Any] = {"context_role": context_role}
+    if context_role == "main":
+        # One reply carries whole tool arguments, such as a plugin file the agent
+        # writes. The 2048-token default cut those off mid-file.
+        updates["max_tokens"] = MAIN_AGENT_MAX_OUTPUT_TOKENS
     if model is not None:
         updates["primary_model_resolver"] = lambda: model
     if reasoning_mode is not None:

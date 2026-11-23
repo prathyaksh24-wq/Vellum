@@ -1,0 +1,19 @@
+# Vellum's shipped composition (bundle @vellum/app). Installed bundles patch these
+# rows by id; the profile's harness.patch.yml applies last.
+- insert:
+    - id: ui-background
+      name: '@vellum/ui-background'
+    - id: ui-analytics
+      name: '@vellum/ui-analytics'
+      config:
+        placement: settings
+    - id: ui-self-changes
+      name: '@vellum/ui-self-changes'
+    - id: llm-provider
+      name: '@vellum/llm-provider'
+    - id: app-actions
+      name: '@vellum/app-actions'
+    - id: tool-harness-inspect
+      name: '@vellum/tool-harness-inspect'
+    - id: tool-plugin-manager
+      name: '@vellum/tool-plugin-manager'

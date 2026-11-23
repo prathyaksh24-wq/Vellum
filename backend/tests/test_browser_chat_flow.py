@@ -72,15 +72,9 @@ def test_factual_queries_do_not_force_a_browser_from_a_site_keyword(message):
     assert not BrowserAgent(tool_registry=ToolRegistry()).can_handle(message)
 
 
-def test_search_followups_stay_with_an_established_browser_task():
-    from agent.agents.live_dispatcher import LiveAgentDispatcher
-    dispatcher=LiveAgentDispatcher.__new__(LiveAgentDispatcher)
-    assert dispatcher._is_contextual_followup('now search for NBA','BrowserAgent')
-    assert dispatcher._is_contextual_followup('click the first result','BrowserAgent')
-    assert not dispatcher._is_contextual_followup('what is Jailer 2 about?','BrowserAgent')
-
-
-def test_browser_search_followup_precedes_topic_match_but_facts_can_change_agent(tmp_path):
+def test_dispatcher_never_routes_by_keyword_or_previous_agent(tmp_path):
+    """Like DeepSeek Harness, the model decides which specialist handles a message.
+    A previous specialist turn no longer captures later, unrelated messages."""
     from agent.agents.base import SpecialistResponse
     from agent.agents.live_dispatcher import LiveAgentDispatcher
     from agent.master.state import MasterThreadStateStore
@@ -88,22 +82,21 @@ def test_browser_search_followup_precedes_topic_match_but_facts_can_change_agent
 
     class Browser:
         name = 'BrowserAgent'
-        def can_handle(self, query): return False
+        def can_handle(self, query): return True
         def answer(self, query):
             return SpecialistResponse(agent=self.name, status='answered', summary='Searched the current page.')
 
     class Sports(Browser):
         name = 'SportsAgent'
-        def can_handle(self, query): return 'NBA' in query
 
     state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
     catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'BrowserAgent': Browser(), 'SportsAgent': Sports()})
     dispatcher = LiveAgentDispatcher(agent_catalog=catalog, state_store=state)
-    state.set_active_agent('browser-followup', 'BrowserAgent')
-    result = dispatcher.maybe_handle('now search for NBA', 'browser-followup')
-    assert result.agent_name == 'BrowserAgent' and result.route_source == 'contextual'
-    result = dispatcher.maybe_handle('Who won the NBA game?', 'browser-followup')
-    assert result.agent_name == 'SportsAgent'
+    state.set_active_agent('browser-followup', 'BrowserAgent', selected=True)
+    assert dispatcher.maybe_handle('now search for NBA', 'browser-followup') is None
+    assert dispatcher.maybe_handle('Who won the NBA game?', 'browser-followup') is None
+    # A stale specialist pin resets to Vellum instead of capturing the thread.
+    assert state.get('browser-followup').active_agent == 'VellumAgent'
 
 
 @pytest.mark.parametrize('message', [

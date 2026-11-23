@@ -1,0 +1,5 @@
+# Target an existing row by id. config is replaced wholesale: restate every field.
+# Read the row's schema first with harness_inspect Config.getConfig.
+- id: ui-analytics
+  config:
+    placement: sidebar

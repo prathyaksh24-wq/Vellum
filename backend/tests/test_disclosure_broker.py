@@ -526,3 +526,35 @@ async def test_model_failure_records_metadata_without_prompt_content(tmp_path) -
     assert external.calls == 1
     assert "Jane Doe" not in external.seen_messages[0].content
     assert "Jane Doe" not in receipt_text
+
+
+class FakeToolCallingModel(FakeExternalModel):
+    """Streams a tool call whose arguments carry the alias split across chunks."""
+
+    async def astream(self, messages, **kwargs):
+        self.calls += 1
+        self.seen_messages = messages
+        # The alias the broker substituted for "Jane Doe" is the query line.
+        text = messages[0].content.split("<QUERY>\n", 1)[1].split("\n</QUERY>", 1)[0]
+        args = json.dumps({"description": f"Move {text} to the sidebar"})
+        middle = args.index(text) + len(text) // 2
+        yield AIMessageChunk(content="", tool_call_chunks=[
+            {"name": "workspace_files", "args": args[:middle], "id": "call-1", "index": 0, "type": "tool_call_chunk"}])
+        yield AIMessageChunk(content="", tool_call_chunks=[
+            {"name": None, "args": args[middle:], "id": None, "index": 0, "type": "tool_call_chunk"}])
+
+
+@pytest.mark.asyncio
+async def test_model_adapter_restores_aliases_split_across_tool_call_chunks(tmp_path) -> None:
+    external = FakeToolCallingModel()
+    adapter = DisclosureModelAdapter(adapter=FakeExternalAdapter(external), broker=_broker(tmp_path))
+    model = adapter.build_model(target=SimpleNamespace(model="google/test"), thread_id="thread-1")
+
+    combined = None
+    async for chunk in model.astream([HumanMessage(content="Jane Doe")]):
+        combined = chunk if combined is None else combined + chunk
+
+    assert "Jane Doe" not in external.seen_messages[0].content
+    call = combined.tool_calls[0]
+    assert call["name"] == "workspace_files"
+    assert call["args"] == {"description": "Move Jane Doe to the sidebar"}

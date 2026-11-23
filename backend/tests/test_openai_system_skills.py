@@ -73,3 +73,27 @@ def test_image_tool_prepares_review_instead_of_calling_provider(monkeypatch):
     assert image_generate.invoke({'action': 'generate', 'prompt': 'An ink drawing of a mountain'}) == 'review pending'
     assert calls[0]['action_id'] == 'image.generate'
     assert 'confirm' not in calls[0]['arguments']
+
+
+def test_main_agent_mode_never_preloads_a_skill_from_keywords(tmp_path):
+    """The model chooses skills itself (ADR 0009); only a user's selection is preloaded."""
+    owner = 'openai-system-skills'
+    registry = SkillRegistry(local_root=tmp_path, owned_external_dirs={BUNDLE / 'skills': owner})
+    query = 'Create and install a skill that summarizes articles'
+    assert build_skill_activation_block(query, registry, selected_skills={}, match_query=False) == ''
+    body = build_skill_activation_block(query, registry, selected_skills={'skill-creator': owner}, match_query=False)
+    assert '### skill-creator' in body and '### skill-installer' not in body
+
+
+def test_a_skill_the_user_names_as_a_skill_is_selected(tmp_path):
+    from agent.skills.runtime import skills_named_in
+    owner = 'openai-system-skills'
+    registry = SkillRegistry(local_root=tmp_path, owned_external_dirs={BUNDLE / 'skills': owner})
+    assert skills_named_in('Use my skill-creator skill to draft one', registry) == {'skill-creator': owner}
+    assert skills_named_in('run /imagegen for a logo', registry) == {'imagegen': owner}
+    assert skills_named_in('use the skill `plugin-creator`', registry) == {'plugin-creator': owner}
+    # A bare word that equals a skill name is not a choice; nor is a longer name.
+    assert skills_named_in('generate an imagegen-style logo', registry) == {}
+    assert skills_named_in('Create a skill that summarizes articles', registry) == {}
+    assert skills_named_in('use my skill-creator', registry) == {}
+    assert skills_named_in('the skill-creator skill', registry, excluded_skills={'skill-creator'}) == {}

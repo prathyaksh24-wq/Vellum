@@ -39,6 +39,11 @@ class AttemptPlan:
     targets: tuple[FallbackTarget, ...]
 
 
+EMPTY_REPLY_RETRIES = 2
+EMPTY_REPLY_HINT = ("Your previous reply was empty. Continue now: call the next tool the task needs, "
+                    "or answer the user in plain text.")
+
+
 class RoutingEngine:
     def __init__(
         self,
@@ -399,6 +404,7 @@ class RoutingEngine:
 
             preferred_id: str | None = None
             transient_retries = 0
+            empty_retries = 0
             retry_without_tools = False
             retry_relaxed_policy = False
             while True:
@@ -453,7 +459,12 @@ class RoutingEngine:
                     if attempt_tools:
                         model = model.bind_tools(list(tools))
                     options = adapter.invocation_kwargs(kwargs) if callable(getattr(adapter, "invocation_kwargs", None)) else kwargs
-                    async for chunk in model.astream(projection.messages, **options):
+                    attempt_messages = list(projection.messages)
+                    if empty_retries:
+                        # The same prompt tends to give the same empty reply; say what is missing.
+                        from langchain_core.messages import SystemMessage
+                        attempt_messages.append(SystemMessage(content=EMPTY_REPLY_HINT))
+                    async for chunk in model.astream(attempt_messages, **options):
                         last_chunk = chunk
                         if not visible and not self._visible_chunk(chunk):
                             buffered.append(chunk)
@@ -465,6 +476,12 @@ class RoutingEngine:
                             buffered.clear()
                         yield chunk
                     if not visible:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "empty model reply from %s: chunks=%d metadata=%s invalid_tool_calls=%s",
+                            target.model, len(buffered),
+                            str(getattr(last_chunk, "response_metadata", {}))[:300],
+                            str(getattr(last_chunk, "invalid_tool_calls", None))[:300])
                         failure = ProviderFailure(
                             kind=FailureKind.malformed_response,
                             summary="provider returned an invalid response",
@@ -485,6 +502,13 @@ class RoutingEngine:
                                 latency_ms=(self.monotonic() - started) * 1000,
                             )
                         )
+                        # Local models sometimes return an empty reply (only hidden
+                        # thinking). Retry it before failing the user's turn.
+                        if empty_retries < EMPTY_REPLY_RETRIES:
+                            empty_retries += 1
+                            failures.pop()
+                            preferred_id = credential.id
+                            continue
                         break
                     await self.pool.mark_success(lease)
                     self._record_attempt(

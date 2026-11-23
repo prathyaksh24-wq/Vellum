@@ -94,8 +94,15 @@ def keep_evidence(messages, thread_id):
         return messages
 
 
+def _tool_error_message(exc: Exception) -> str:
+    return json.dumps({"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:500]}",
+                       "next_step": "Check the tool's argument schema, correct the call and retry, or explain the failure."})
+
+
 def reuse_tool_node(tools, *, before_call=None):
-    node = ToolNode(tools)
+    # A failing tool becomes an error result the model can correct (wrong or
+    # missing arguments, a provider error) instead of ending the whole turn.
+    node = ToolNode(tools, handle_tool_errors=_tool_error_message)
     by_name = {tool.name: tool for tool in tools}
 
     def key(call):

@@ -385,24 +385,6 @@ def test_skip_turn_is_checkpointed_with_its_own_acknowledgement(service, monkeyp
     assert len(requests) == 1
 
 
-def test_app_action_skip_retains_navigation_for_short_music_followup(service,monkeypatch,tmp_path):
-    from test_music_compound_actions import compound_dispatcher
-    dispatcher,calls,_,state=compound_dispatcher(tmp_path)
-    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
-    client,requests=service
-    owner=str(uuid4());client.claim_web_player(owner);client.update_web_player(owner,'vellum-device')
-    with TestClient(api.app,base_url='http://127.0.0.1:8000',client=('127.0.0.1',50000)) as web:
-        result=web.post('/api/chat/stream',json={'message':'skip','thread_id':'compound','store':False})
-        assert result.status_code==200
-        context=state.get_specialist_context('compound','MusicAgent')
-        assert context.get('last_plan',{}).get('operation')=='next'
-        result=web.post('/api/chat/stream',json={'message':'go back','thread_id':'compound','store':False})
-        assert 'Previous track requested' in result.text
-        assert any(name=='spotify_playback' and args['action']=='previous' for name,args in calls)
-        assert not any(args.get('action')=='seek' for _,args in calls)
-        result=web.post('/api/chat/stream',json={'message':'go back to the previous song','thread_id':'compound','store':False})
-        assert 'Previous track requested' in result.text
-        assert requests[-1].url.path.endswith('/player/previous')
 
 
 def test_playback_health_is_bounded_and_cannot_accept_arbitrary_diagnostic_content(service):
