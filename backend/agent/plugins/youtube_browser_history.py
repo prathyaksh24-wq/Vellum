@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 import json
+import logging
 import re
 from threading import Lock
 from urllib.parse import parse_qs, urlsplit
@@ -19,6 +20,8 @@ from agent.knowledge.runtime import get_knowledge_core
 from agent.mcp.playwright_tools import browser_session
 
 
+
+logger = logging.getLogger(__name__)
 
 ORIGIN = "youtube_browser_history"
 ACTION = "youtube.history_presence"
@@ -196,6 +199,9 @@ class YouTubeBrowserHistory:
             except Exception as exc:
                 reason = str(exc).casefold()
                 code = "browser_busy" if any(word in reason for word in ("paused", "takeover", "taken over", "user has control")) else "unavailable"
+                # Type and a bounded message only: page content and history stay out of logs.
+                logger.warning("YouTube history refresh failed (%s): %s -> %s",
+                               type(exc).__name__, str(exc)[:300], code)
             state.update(status=code, message=MESSAGES.get(code, MESSAGES["unavailable"]))
             self._save(state)
             return self.status(), snapshot

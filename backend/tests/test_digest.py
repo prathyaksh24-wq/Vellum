@@ -169,3 +169,27 @@ def test_seed_builtins_removes_retired_vault_retention(tmp_path):
     seed_builtins(store)
 
     assert "vault_retention" not in {record.get("builtin_key") for record in store.list()}
+
+
+def test_start_scheduler_registers_youtube_push_jobs(tmp_path):
+    """Without these jobs hosted upload events are never pulled and creator
+    notifications silently stop (regression: lost in the 2026-11-15 switch)."""
+    from agent.automations import api as automations_api
+    from agent.automations.store import AutomationStore
+
+    automations_api.set_store(AutomationStore(tmp_path / "automations"))
+
+    class FakeScheduler:
+        def __init__(self):
+            self.jobs = {}
+
+        def add_job(self, func, trigger, **kwargs):
+            self.jobs[kwargs.get("id")] = kwargs
+
+        def start(self):
+            pass
+
+    scheduler = FakeScheduler()
+    digest.start_scheduler(scheduler=scheduler)
+    assert scheduler.jobs["youtube-push-delivery"]["seconds"] == 5
+    assert scheduler.jobs["youtube-push-registration"]["seconds"] == 30

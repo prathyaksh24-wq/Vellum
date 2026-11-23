@@ -434,6 +434,23 @@ def test_atom_identity_entity_and_size_boundaries():
             AtomFeedReader.parse(raw, channel)
 
 
+def test_atom_feed_accepts_feed_channel_id_without_uc_prefix():
+    # Since Nov 2026 YouTube writes the feed-level channelId without "UC";
+    # entries keep the full ID. Rejecting this sent every poll to API fallback.
+    def feed(feed_id, entry_id):
+        return (f'<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">'
+                f'<yt:channelId>{feed_id}</yt:channelId><entry><yt:channelId>{entry_id}</yt:channelId>'
+                f'<yt:videoId>00000000001</yt:videoId><title>New upload</title>'
+                f'<published>2026-11-22T12:00:00Z</published></entry></feed>').encode()
+    assert [e["video_id"] for e in AtomFeedReader.parse(feed(C1[2:], C1), C1)] == ["00000000001"]
+    # Another channel's feed, stripped or not, is still rejected.
+    for feed_id in (C2[2:], C2):
+        with pytest.raises(ValueError):
+            AtomFeedReader.parse(feed(feed_id, C1), C1)
+    # Entries must still carry this channel's full ID.
+    assert AtomFeedReader.parse(feed(C1[2:], C1[2:]), C1) == []
+
+
 def test_invalid_config_rejects_unverified_monitoring_ids():
     with pytest.raises(ValueError):
         CreatorTrackingConfig(account_id="me", history_accounts=["me"], rules=[{"name": "Creator", "relationship": "current"}])
@@ -614,3 +631,50 @@ def test_twenty_year_history_has_bounded_stats_and_fast_steady_read(setup):
     assert service.project()["scanned"] == 0
     assert service.snapshot()["creators"][0]["total_video_days"] == 7300
     assert time.perf_counter() - start < 2
+
+
+def test_notification_feedback_raises_watched_and_lowers_ignored_channels(setup):
+    store, source, _, _, service = setup
+    configure(service)
+    # Both channels are watched on three recent days, so both are monitored.
+    store.record_observations([watch(store, source, video=f"{channel[-1]}{n:010d}", channel=channel,
+                                     name=channel[-1], day=NOW - timedelta(days=n))
+                               for channel in (C1, C2) for n in (1, 2, 3)])
+    sent_at = (NOW - timedelta(days=5)).isoformat()
+    ignored = [upload(f"i{n:010d}", status="delivered") for n in range(6)]
+    liked = [upload(f"l{n:010d}", status="delivered") for n in range(2)]
+    store.youtube_tracking_save_feed("me", C1, ignored, {}, sent_at)
+    store.youtube_tracking_save_feed("me", C2, liked, {}, sent_at)
+    # The C2 notifications were opened and watched.
+    store.record_observations([watch(store, source, video=item["video_id"], channel=C2, name="b",
+                                     day=NOW - timedelta(days=4)) for item in liked])
+    service.project()
+    creators = {item["channel_id"]: item for item in service.snapshot()["creators"]}
+    assert (creators[C1]["notifications_sent"], creators[C1]["notifications_watched"]) == (6, 0)
+    assert (creators[C2]["notifications_sent"], creators[C2]["notifications_watched"]) == (2, 2)
+    assert "ranks lower" in creators[C1]["reason"] and "watched 2 of 2" in creators[C2]["reason"]
+    assert creators[C2]["score"] > creators[C1]["score"]
+
+
+def test_notifications_outside_watch_history_coverage_are_not_counted_as_ignored(setup):
+    # A history-refresh outage must not look like disinterest.
+    store, source, _, _, service = setup
+    configure(service)
+    store.record_observations([watch(store, source, video=f"a{n:010d}", day=NOW - timedelta(days=20 + n))
+                               for n in (1, 2, 3)])
+    store.youtube_tracking_save_feed("me", C1, [upload(f"i{n:010d}", status="delivered") for n in range(8)],
+                                     {}, (NOW - timedelta(days=5)).isoformat())
+    service.project()
+    creator = service.snapshot()["creators"][0]
+    assert creator["notifications_sent"] == 0 and "ranks lower" not in creator["reason"]
+
+
+def test_notifications_during_a_history_gap_are_not_counted(setup):
+    # History saved before and after, but not in the days after the notification.
+    store, source, _, _, service = setup
+    configure(service)
+    store.record_observations([watch(store, source, video=f"a{n:010d}", day=NOW - timedelta(days=n)) for n in (0, 1, 30)])
+    store.youtube_tracking_save_feed("me", C1, [upload(f"i{n:010d}", status="delivered") for n in range(8)],
+                                     {}, (NOW - timedelta(days=15)).isoformat())
+    service.project()
+    assert service.snapshot()["creators"][0]["notifications_sent"] == 0

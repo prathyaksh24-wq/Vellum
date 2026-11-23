@@ -95,6 +95,10 @@ class CreatorAssessment(BaseModel):
     notification_frequency: Literal['adaptive', 'reduced', 'muted'] = 'adaptive'
     rediscovery: bool = False
     topic_terms: list[str] = Field(default_factory=list)
+    # Upload notifications sent in the last 60 days (within watch-history
+    # coverage) and how many of those videos were then watched.
+    notifications_sent: int = 0
+    notifications_watched: int = 0
 
 
 class CreatorTrackingSnapshot(BaseModel):

@@ -232,3 +232,31 @@ test('a chat turn shows "Recalled from memory" with feedback, and saved memories
   expect(api.memoryUndoSave).toHaveBeenCalledWith('I use metric units.','t1');
   expect(host.textContent).toContain('Removed from memory');
 });
+
+test('Growth shows channels learned from YouTube watch history and notification feedback',async()=>{
+  const creator=(id,name,score,days,sent,watched)=>({channel_id:'UC'+id.repeat(22),name,relationship:'auto',state:'monitoring',score,
+    recent_video_days:days,recent_days:days,total_video_days:days,last_watched:'2026-11-22',reason:'Repeated watches.',
+    notifications_sent:sent,notifications_watched:watched});
+  window.VellumApi.plugins={
+    youtubeCreatorTracking:vi.fn(async()=>({configured:true,creators:[creator('a','Low',1,3,6,0),creator('b','High',4,9,2,2)]})),
+    youtubeHistoryStatus:vi.fn(async()=>({status:'sign_in_required',message:'Sign into YouTube manually in Vellum\'s browser, then refresh.',last_success_at:''})),
+  };
+  api.memoryGrowth.mockResolvedValue({day_number:2,first_day:'2026-11-21',counts:{known:1},series:[],milestones:[]});
+  await render(page());
+  await click(button('Growth'));
+  const card=host.querySelector('.mp-youtube');
+  expect(card.textContent).toContain('watch history not saved yet');
+  expect(card.textContent).toContain('Sign into YouTube');
+  const rows=[...card.querySelectorAll('.mp-yt-row')].map(node=>node.textContent);
+  expect(rows[0]).toContain('High');expect(rows[0]).toContain('2/2 pings watched');
+  expect(rows[1]).toContain('Low');expect(rows[1]).toContain('0/6 pings watched');
+  expect(card.textContent).toContain('You watched 2 of 8 upload notifications');
+});
+
+test('Growth hides the YouTube card when YouTube is not set up',async()=>{
+  window.VellumApi.plugins={youtubeCreatorTracking:vi.fn(async()=>({configured:false,creators:[]}))};
+  api.memoryGrowth.mockResolvedValue({day_number:2,first_day:'2026-11-21',counts:{known:1},series:[],milestones:[]});
+  await render(page());
+  await click(button('Growth'));
+  expect(host.querySelector('.mp-youtube')).toBeNull();
+});

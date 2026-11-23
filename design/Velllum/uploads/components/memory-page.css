@@ -164,3 +164,7 @@
 .mp-stats div:nth-child(4){animation-delay:.51s}
 .mp-growth-card,.mp-growth .av-ledger{animation:av-fade-in .3s linear backwards;animation-delay:.3s}
 @media (prefers-reduced-motion:reduce){.mp-stats div,.mp-growth-card,.mp-growth .av-ledger{animation:none}}
+.mp-youtube{margin-top:16px}
+.mp-youtube .mp-yt-row{grid-template-columns:150px minmax(0,1fr) auto}
+.mp-youtube .mp-yt-row>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-youtube .mp-footnote{margin:12px 0 0}

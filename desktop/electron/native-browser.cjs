@@ -110,6 +110,10 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       webSecurity:true, preload:path.join(__dirname, 'browser-preload.cjs'),
       // Site script policy is enforced with CSP below; keep the isolated cursor preload available.
       javascript:true,
+      // Background tabs are never attached to a window, so Chromium would never
+      // draw them: pages that render on animation frames (YouTube History) stay
+      // blank. Offscreen rendering keeps them drawing without being shown.
+      ...(background ? {offscreen:true} : {}),
     }});
     const contents = view.webContents;
     // Navigation and planning may begin before the workspace has mounted the pane.
