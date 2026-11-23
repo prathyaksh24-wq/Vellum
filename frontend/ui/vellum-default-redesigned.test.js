@@ -255,8 +255,10 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("ObservabilityActions.applyReceipt(current, receipt)");
     expect(html).toContain("navigation.view === 'ledger'");
     expect(analyticsPage).not.toContain("onClick={() => setPaused");
-    // Analytics lives inside Settings (with the Settings sidebar), not as a separate page.
-    expect(html).toContain("{tab === 'Analytics' && window.VellumUI.AnalyticsPage && <window.VellumUI.AnalyticsPage control={analyticsControl} onAction={onAnalyticsAction} embedded/>}");
+    // Analytics is the @vellum/ui-analytics harness plugin: by default a Settings
+    // section (with the Settings sidebar), and the harness can move it (ADR 0009).
+    expect(html).toContain("<window.VellumUI.AnalyticsPage control={app.analyticsControl} onAction={app.onAnalyticsAction} embedded/>");
+    expect(html).toContain("if (placement !== 'sidebar') ctx.slots.inject('settings.sections'");
     expect(html).toContain("setSettingsTab(v === 'ledger' ? 'Analytics'");
     expect(html).toContain("{!hidePreviewRail && <ConversationPreviewRail messages={msgs}/>}");
     expect(html).not.toContain("CB_DATA");
