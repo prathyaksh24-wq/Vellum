@@ -995,6 +995,9 @@ class _PlaywrightMcpClient:
             if cached is not None:
                 return cached
         async with self._lock_for_current_loop():
+            if operation == "step_preview":
+                # A picture of the page after an agent browser step, for the chat.
+                return None if self._dedicated is None else await self._dedicated.step_preview()
             if operation == "youtube_history" and self._busy:
                 return {"status": "browser_busy"}
             if self._dedicated is None and (operation == "status" or

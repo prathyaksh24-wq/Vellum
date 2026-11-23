@@ -170,7 +170,62 @@
     for(const item of items){const offset=item.textOffset || 0;if(!runs.has(offset))runs.set(offset,[]);runs.get(offset).push(item);}
     return [...runs.entries()].sort((a,b)=>a[0]-b[0]).map(([offset,runItems])=>({offset,ids:new Set(runItems.map(item=>item.id)),items:runItems}));
   }
-  function ResponseProgress({msg,run,latest=true}) {
+  // --- Browser step previews ---------------------------------------------------
+  // The backend saves a picture of the page after each agent browser step.
+  function stepPreview(item) {
+    const preview=item?.metadata?.preview;
+    if(!preview || !/^\/api\/browser\/step-previews\/[a-f0-9]{32}\.jpg$/.test(String(preview.image || '')))return null;
+    let base='';try{base=window.VellumApi?.client?.backendBase?.() || '';}catch{}
+    let host='';try{host=new URL(preview.url).hostname.replace(/^www\./,'');}catch{}
+    return {id:item.id,src:base+preview.image,url:safeUrl(preview.url) || '',title:String(preview.title || host || 'Web page'),host,label:window.VellumUI.workLabel?.(item) || item.label || 'Browser step'};
+  }
+  function responsePreviews(msg) {
+    return (window.VellumUI.workItems?.(msg) || activityItems(msg)).map(stepPreview).filter(Boolean);
+  }
+  const openPage=url=>{if(url)window.dispatchEvent(new CustomEvent('vellum:open-browser-page',{detail:{url}}));};
+  const portal=node=>window.ReactDOM?.createPortal ? window.ReactDOM.createPortal(node,document.body) : node;
+  function PreviewViewer({previews,index,onIndex,onClose}) {
+    const preview=previews[index];
+    window.React.useEffect(()=>{
+      const key=event=>{
+        if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}
+        else if(event.key==='ArrowLeft' && index>0){event.preventDefault();onIndex(index-1);}
+        else if(event.key==='ArrowRight' && index<previews.length-1){event.preventDefault();onIndex(index+1);}
+      };
+      document.addEventListener('keydown',key,true);return()=>document.removeEventListener('keydown',key,true);
+    },[index,previews.length,onClose,onIndex]);
+    if(!preview)return null;
+    return portal(h('div',{className:'agent-preview-viewer',role:'dialog','aria-modal':true,'aria-label':'Page preview',onClick:event=>{if(event.target===event.currentTarget)onClose();}},
+      h('button',{type:'button',className:'agent-preview-viewer-close','aria-label':'Close preview',onClick:onClose},'×'),
+      h('figure',null,h('img',{src:preview.src,alt:preview.title,draggable:false}),
+        h('figcaption',null,h('span',null,preview.label),
+          previews.length>1 && h('span',{className:'agent-preview-nav'},
+            h('button',{type:'button','aria-label':'Previous preview',disabled:index===0,onClick:()=>onIndex(index-1)},'‹'),
+            h('span',null,`${index+1} of ${previews.length}`),
+            h('button',{type:'button','aria-label':'Next preview',disabled:index===previews.length-1,onClick:()=>onIndex(index+1)},'›'))))));
+  }
+  function StepThumb({previews,index,onOpen}) {
+    const [peek,setPeek]=window.React.useState(null);
+    const preview=previews[index];
+    const show=event=>{const rect=event.currentTarget.getBoundingClientRect();setPeek({left:Math.max(8,Math.min(rect.right-320,window.innerWidth-328)),top:rect.top>220?rect.top-206:rect.bottom+8});};
+    return h(window.React.Fragment,null,
+      h('button',{type:'button',className:'agent-step-thumb','aria-label':'View page after: '+preview.label,onMouseEnter:show,onMouseLeave:()=>setPeek(null),onFocus:show,onBlur:()=>setPeek(null),
+        onClick:event=>{event.stopPropagation();setPeek(null);onOpen(index);}},h('img',{src:preview.src,alt:'',loading:'lazy',draggable:false})),
+      peek && portal(h('div',{className:'agent-step-peek',role:'tooltip',style:{left:peek.left,top:peek.top}},
+        h('img',{src:preview.src,alt:'',draggable:false}),
+        h('div',null,h('span',null,preview.label),previews.length>1 && h('span',null,`${index+1} of ${previews.length}`)))));
+  }
+  function BrowserPreviewCard({previews,onOpen}) {
+    const preview=previews.at(-1);
+    if(!preview)return null;
+    return h('div',{className:'agent-browser-card'},
+      h('button',{type:'button',className:'agent-browser-card-image','aria-label':'View page preview',onClick:()=>onOpen(previews.length-1)},h('img',{src:preview.src,alt:'',loading:'lazy',draggable:false})),
+      h('div',{className:'agent-browser-card-body'},
+        h('div',{className:'agent-browser-card-copy'},h('strong',null,preview.title),h('span',null,(preview.host ? preview.host+', ' : '')+'opened in Browser')),
+        preview.url && h('button',{type:'button',className:'agent-browser-card-open',onClick:()=>openPage(preview.url)},'Open')));
+  }
+
+  function ResponseProgress({msg,run,latest=true,previews=[],onPreview}) {
     const whole=window.VellumUI.responseProgress(msg),identity=window.VellumUI.responseModel(msg);
     // An earlier run is finished even while the turn keeps working.
     const progress=latest?whole:{...whole,active:false};
@@ -222,7 +277,8 @@
             h('span',{className:'agent-work-marker','aria-hidden':true},h(Icon,{kind:failed?'error':itemKind(item),size:14})),
             h('div',{className:'agent-work-copy'},link?h('a',{href:link,target:'_blank',rel:'noopener noreferrer',className:'agent-work-source'},window.VellumUI.workLabel(item),h(Icon,{kind:'external',size:11})):h('span',null,window.VellumUI.workLabel(item)),
               typeof query==='string' && h('span',{className:'agent-work-query'},query)),
-            h('span',{className:'agent-work-step-status'},failed?'Failed':status==='cancelled'?'Stopped':status==='interrupted'?'Interrupted':''));
+            h('span',{className:'agent-work-step-status'},failed?'Failed':status==='cancelled'?'Stopped':status==='interrupted'?'Interrupted':''),
+            (()=>{const at=previews.findIndex(preview=>preview.id===item.id);return at>=0 && onPreview ? h(StepThumb,{previews,index:at,onOpen:onPreview}) : null;})());
         }))));
   }
   // Tool steps and thinking in the order they happened. Thinking that happens
@@ -369,21 +425,25 @@
       h(window.VellumUI.AnswerMarkdown,{text,sources,idPrefix:prefix+'-'+key,onCitation:id=>setActiveId(id),animate,pencil:prefs.pencil}));
     // Text and work in the order they happened: narration, then the work it led
     // to, then more text. Older replies without positions keep work on top.
+    const previews=responsePreviews(msg);
+    const [viewer,setViewer]=window.React.useState(null);
     const runs=workRuns(msg);
     const body=[];
     if(!runs.length || (runs.length===1 && runs[0].offset===0)) {
-      body.push(h(ResponseProgress,{key:'work',msg}));
+      body.push(h(ResponseProgress,{key:'work',msg,previews,onPreview:setViewer}));
       if(msg.text)body.push(textBlock(reveal.text,'text',reveal.animated));
     } else {
       let position=0;
       runs.forEach((run,index)=>{
         const latest=index===runs.length-1;
         if(run.offset>position)body.push(textBlock(reveal.text.slice(position,run.offset),'text-'+index,false));
-        if(reveal.text.length>=run.offset || !msg.streaming)body.push(h(ResponseProgress,{key:'work-'+index,msg,run,latest}));
+        if(reveal.text.length>=run.offset || !msg.streaming)body.push(h(ResponseProgress,{key:'work-'+index,msg,run,latest,previews,onPreview:setViewer}));
         position=Math.max(position,run.offset);
       });
       body.push(textBlock(reveal.text.slice(position),'text-end',reveal.animated));
     }
+    body.push(h(BrowserPreviewCard,{key:'browser-card',previews,onOpen:setViewer}));
+    if(viewer!==null)body.push(h(PreviewViewer,{key:'viewer',previews,index:Math.min(viewer,previews.length-1),onIndex:setViewer,onClose:()=>setViewer(null)}));
     return h('div',{className:'agent-response',ref:responseRef,'data-status':status},
       ...body,
       prefs.style==='ink' && shownSources.filter(source=>isLinked(source) && source.evidence?.quote).map(source=>h('aside',{key:source.id || source.source_index,className:'agent-provenance-note'},
@@ -400,5 +460,5 @@
     return h('div',{className:'agent-response'},h(AgentActivity,{msg,defaultOpen:true}),
       h(Citations,{sources:msg.sources || msg.trace?.sources || [],idPrefix:prefix,activeId,onActivate:setActiveId}));
   }
-  window.VellumUI={...window.VellumUI,AgentActivity,StreamingResponse,Citations,ActivityInspector,MemoryRecall,activityItems,responseSources,recalledMemories};
+  window.VellumUI={...window.VellumUI,AgentActivity,StreamingResponse,Citations,ActivityInspector,MemoryRecall,activityItems,responseSources,recalledMemories,responsePreviews};
 })();

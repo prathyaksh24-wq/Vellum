@@ -7947,10 +7947,14 @@ const App = ({setupHandoff = null} = {}) => {
   const [musicPageTarget, setMusicPageTarget] = useState(null);
   const navigationEpochRef = useRef(0);
   const browserLinkHandler = useRef(null);
+  const browserPageHandler = useRef(null);
   useEffect(() => {
     const handle = event => browserLinkHandler.current?.(event);
+    const page = event => browserPageHandler.current?.(event);
     document.addEventListener('click', handle, true);
-    return () => document.removeEventListener('click', handle, true);
+    // Chat step previews ask to show the page they captured.
+    window.addEventListener('vellum:open-browser-page', page);
+    return () => { document.removeEventListener('click', handle, true); window.removeEventListener('vellum:open-browser-page', page); };
   }, []);
   const [browserFeature, setBrowserFeature] = useState(false);
   const [workspaceTerminalAvailable,setWorkspaceTerminalAvailable]=useState(false);
@@ -10165,6 +10169,16 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (destination !== 'vellum') return;
     event.preventDefault(); event.stopPropagation();
     openBrowser().then(status => status?.running ? API.browser.control({operation:'new_tab',url:link.href}) : null).then(refreshBrowser).catch(error => pushToast(error.message));
+  };
+  // Show a page from a chat preview: its tab when still open, else a new tab.
+  browserPageHandler.current = event => {
+    const url = String(event.detail?.url || '');
+    if (!/^https?:\/\//i.test(url)) return;
+    openBrowser().then(async status => {
+      if (!status?.running) return null;
+      const tab = (status.tabs || []).find(item => item.url === url);
+      return API.browser.control(tab ? {operation:'select_tab',tab_id:tab.id} : {operation:'new_tab',url});
+    }).then(refreshBrowser).catch(error => pushToast(error.message));
   };
   const hideBrowserPanel = () => {
     browserPanelRef.current?.prepareHide();

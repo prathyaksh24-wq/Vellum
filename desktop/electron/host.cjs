@@ -207,6 +207,13 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
     const window = BrowserWindow.fromWebContents(event.sender);
     return nativeBrowser.mount(window,input);
   });
+  ipcMain.handle('vellum:browser-signin', async (event, input) => {
+    if (!nativeBrowser || !known(event.sender) || event.senderFrame !== event.sender.mainFrame || !trustedWorkspace(event.senderFrame.url,workspace)) {
+      throw new Error('The embedded browser is unavailable to this page.');
+    }
+    const data = input && typeof input === 'object' ? input : {};
+    return nativeBrowser.signIn(BrowserWindow.fromWebContents(event.sender), {cancel:data.cancel === true, check:data.check === true});
+  });
 
   function configurePermissions(session) {
     const granted = new Set();
