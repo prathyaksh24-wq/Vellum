@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +14,11 @@ from .client import SpotifyClient
 from .errors import SpotifyError, SpotifyNoActiveDevice, SpotifyRateLimited
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# Connection data belongs to the workspace, not the code. In the installed app the
+# code lives in a versioned folder that each update replaces, so deriving this from
+# __file__ lost the Spotify sign-in on every update.
+_WORKSPACE = os.environ.get("VELLUM_WORKSPACE_ROOT")
+REPO_ROOT = Path(_WORKSPACE).resolve() if _WORKSPACE and Path(_WORKSPACE).is_absolute() else Path(__file__).resolve().parents[3]
 
 
 @lru_cache(maxsize=1)

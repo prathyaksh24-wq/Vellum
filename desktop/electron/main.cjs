@@ -1,5 +1,6 @@
 const {app, BrowserWindow, Menu, session, dialog, Tray, shell} = require('electron');
-const {workspaceURL} = require('./policy.cjs');
+const {workspaceURL, trustedWorkspace} = require('./policy.cjs');
+const {createUpdater} = require('./updater.cjs');
 const {createDesktopHost} = require('./host.cjs');
 const {serveUI} = require('./ui-server.cjs');
 const path = require('node:path');
@@ -12,6 +13,16 @@ const {claimDesktopWorkspace} = require('./workspace-lock.cjs');
 const {createDevBundle, watchDevelopment} = require('./dev-reload.cjs');
 
 app.setName('Vellum');
+// Self-heal: an installed Vellum started through the `current` junction (an old
+// shortcut or pin) restarts from its real folder first. Through a junction the
+// DRM platform check fails and Spotify refuses audio licenses for many tracks.
+if (app.isPackaged && process.platform === 'win32') {
+  const real = require('./install-core.cjs').realExecutable(process.execPath);
+  if (real.toLowerCase() !== process.execPath.toLowerCase()) {
+    app.relaunch({execPath: real, args: process.argv.slice(1)});
+    app.exit(0);
+  }
+}
 // Review the prepared desktop UI without installing or replacing an app.
 const bundledWorkspace=app.isPackaged || process.env.VELLUM_DESKTOP_BUNDLED_UI==='1';
 const devNode = app.isPackaged ? null : process.env.VELLUM_DESKTOP_DEV_NODE;
@@ -29,6 +40,7 @@ if (!app.requestSingleInstanceLock()) {
   let backend;
   let workspaceLock;
   let tray;
+  let updater;
   let startup;
   let devBundle;
   let initialBuild;
@@ -180,9 +192,37 @@ if (!app.requestSingleInstanceLock()) {
       cdpEndpoint:await readDebuggerEndpoint(app), ownerWindow:()=>host?.openWorkspace(),
     });
     if(quitting){await nativeBrowser.stop();return;}
-    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
+    const workspaceAddress = workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined);
+    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceAddress, nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
       onWorkspaceClose:()=>{if(!quitting&&!booting)app.quit();}});
     host.configurePermissions(session.fromPartition('persist:vellum-workspace'));
+    // In-app updates: the installed app notices a newer published build and
+    // shows "Update available" in the rail; one click installs and relaunches.
+    updater = createUpdater({app, broadcast: state => {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed() && trustedWorkspace(win.webContents.getURL(), workspaceAddress)) win.webContents.send('vellum:update-state', state);
+    }});
+    require('electron').ipcMain.handle('vellum:updates', async (event, action) => {
+      if (event.senderFrame !== event.sender.mainFrame || !trustedWorkspace(event.senderFrame.url, workspaceAddress)) throw new Error('Updates are unavailable to this page.');
+      if (action === 'install') { updater.install().catch(error => console.error('[Vellum] Update failed:', error.message)); return updater.snapshot(); }
+      if (action === 'check') return updater.check();
+      return updater.snapshot();
+    });
+    updater.start();
+    if (updater.enabled) {
+      // Point every Vellum shortcut (Start menu, desktop, taskbar pins) at this build's
+      // real executable, tagged with Vellum's app ID so pins and notifications group.
+      // Never the `current` junction: DRM licenses fail through it.
+      const core = require('./install-core.cjs'), fs = require('node:fs');
+      const target = core.realExecutable(process.execPath);
+      for (const link of core.shortcutPaths()) {
+        try {
+          const exists = fs.existsSync(link);
+          if (!exists && !/Start Menu/i.test(link)) continue;
+          if (exists) { const current = shell.readShortcutLink(link); if (current.target && !current.target.toLowerCase().startsWith(core.installRoot().toLowerCase())) continue; }
+          shell.writeShortcutLink(link, exists?'replace':'create', {target, cwd:path.dirname(target), icon:target, iconIndex:0, appUserModelId:'local.vellum.desktop', description:'Vellum'});
+        } catch {}
+      }
+    }
     const commandItem=id=>({id:'command-'+id,label:CommandRegistry.definition(id).label,click:()=>{const win=BrowserWindow.getFocusedWindow();if(win&&!win.isDestroyed())win.webContents.send('vellum:app-command',id);}});
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       {id:'vellum', label: 'Vellum', submenu: [
@@ -267,6 +307,7 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting) return;
     event.preventDefault();quitting=true;
     clearInterval(supervisor);
+    updater?.stop();
     Promise.all([initialBuild?.catch(()=>{}), stopWatching?.()]).then(()=>nativeBrowser?.stop()).then(()=>backend?.stop()).then(()=>{
       uiServer?.close();workspaceLock?.close();tray?.destroy();
       devBundle?.close();

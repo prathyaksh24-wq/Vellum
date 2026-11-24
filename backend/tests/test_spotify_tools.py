@@ -319,3 +319,19 @@ def test_remember_playlist_links_requires_explicit_confirmation_before_write():
     result=json.loads(spotify_playlists({'action':'remember_links','uris':['spotify:playlist:Mix']},service=service))
     assert not result['ok']
     service.remember_playlist_links.assert_not_called()
+
+
+
+def test_installed_app_keeps_spotify_sign_in_in_the_workspace(tmp_path, monkeypatch):
+    """The installed app's code folder is replaced on every update; the sign-in must not live there."""
+    import importlib
+    from plugins.connectors.spotify import tools as spotify_tools
+
+    monkeypatch.setenv("VELLUM_WORKSPACE_ROOT", str(tmp_path))
+    try:
+        reloaded = importlib.reload(spotify_tools)
+        reloaded.get_spotify_service.cache_clear()
+        assert reloaded.get_spotify_service().auth_store.auth_path == tmp_path.resolve() / "data" / "plugins" / "spotify" / "auth.json"
+    finally:
+        monkeypatch.delenv("VELLUM_WORKSPACE_ROOT")
+        importlib.reload(spotify_tools).get_spotify_service.cache_clear()

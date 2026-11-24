@@ -311,7 +311,7 @@
       clearTimeout(retryTimer); retryTimer = null; clearInterval(heartbeat);
       if (player) player.disconnect();
       await updates.catch(() => {});
-      await session('disable'); emit('available');
+      await session('disable'); try { localStorage.removeItem('vellum-spotify-playback-enabled'); } catch (_) {} emit('available');
     }
     const wake = () => { if (enabled && !fatal && !ready) retry(); };
     window.addEventListener('online', wake);

@@ -127,6 +127,26 @@ Before declaring completion:
 - generated files and secrets are absent from the diff; and
 - documentation and `[Unreleased]` are current where behavior changed.
 
+## Ship to the installed desktop app
+
+The user runs Vellum as an installed app (`%LOCALAPPDATA%\Programs\Vellum`) that
+updates itself: publishing a build makes "Update available" appear in its rail.
+After finishing a change to `backend/`, `frontend/`, `design/Velllum/uploads/` or
+`desktop/` that the user should see in the app, publish it without being asked:
+
+```powershell
+cd desktop; npm run release              # UI + backend
+cd desktop; npm run release -- --ui-only # UI-only change; reuses the built backend
+```
+
+- Run it from the main checkout (`C:\Users\Pratyakksh\Documents\ChatGPT\Vellum\Vellum`)
+  on the branch the user is using. Never publish from a worktree or an unfinished
+  branch: the newest publish replaces the app, whatever branch it came from.
+- Publish only after the change's checks pass. Releasing packages and EVS-signs
+  (a ~235 MB upload); run it in the background and report when it is published.
+- Do not repackage by hand or copy files into the install folder; the release
+  feed is `~\.vellum\updates` and the app picks it up within seconds.
+
 ## GitHub and workflow
 
 - GitHub Issues are the task and specification system. Follow

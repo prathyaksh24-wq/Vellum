@@ -501,6 +501,9 @@
       command('new_tab').finally(() => setPendingTabs(count => Math.max(0,count - 1)));
     };
     useEffect(()=>{setFindOpen(false);findQuery.current='';},[state.active_tab_id]);
+    // Shared tab strips (the workspace header) show the new tab the moment it is asked for.
+    useEffect(()=>{window.dispatchEvent(new CustomEvent('vellum:browser-pending-tabs',{detail:pendingTabs}));},[pendingTabs]);
+    const reloading = Boolean(active?.loading && !home);
     const shortcut = event => window.VellumCommands?.runtime?.dispatch(event,{browser:true,native:!home&&!!event.target?.closest?.('.browser-screen')});
     useEffect(() => {
       if (!editingAddress.current) setAddress(displayAddress(active?.url));
@@ -689,10 +692,13 @@
           if (input && targetTab !== current.current.state.active_tab_id) throw new Error('The active tab changed. Click the current page before typing.');
           let payload = {operation, ...arguments_};
           if (!current.current.state.running && ['navigate','new_tab','reopen_tab'].includes(operation)) {
-            const opened = await api.control({operation:'open'}, current.current.context);
+            // Open straight to the address so the search homepage never flashes first.
+            const direct = operation !== 'reopen_tab' && arguments_.url;
+            const opened = await api.control(direct ? {operation:'open', url:arguments_.url} : {operation:'open'}, current.current.context);
             onReceipt?.(opened);
             const status = await onRefresh();
             if (status) current.current.state = status;
+            if (direct) { setError(''); return true; }
           }
           if (closing.current && operation !== 'close') return false;
           const takeControl = operation === 'click' && current.current.state.control !== 'user';
@@ -756,7 +762,7 @@
       if (!input) return;
       editingAddress.current = false;
       setAddressOpen(false);
-      try { const url = api.addressUrl(input, preferences); command('navigate', {url}); }
+      try { const url = api.addressUrl(input, preferences); if (url) command('navigate', {url}); else setError('Set a SearXNG instance in Browser settings first.'); }
       catch (failure) { setError(failure.message); }
     };
     const chooseSuggestion = item => {
@@ -766,13 +772,16 @@
       if (item.kind === 'tab') command('select_tab', {tab_id:item.tab_id});
       else command('navigate', {url:item.url});
     };
+    // Never autocomplete into a different search engine's homepage: with Brave
+    // chosen, typing "google" must search Brave, not jump to google.com.
+    const otherEngineHome = url => Object.entries(api.engineHomes||{}).some(([id,home]) => id !== engine.id && url.replace(/^https?:\/\/(?:www\.)?/i,'').startsWith(home.replace(/^https?:\/\/(?:www\.)?/i,'')));
     const changeAddress = event => {
       const value = event.target.value;
       setAddressQuery(value); setAddressOpen(Boolean(value.trim())); setSelectedSuggestion(-1);
       const matches = api.addressSuggestions?.(value, state.tabs, preferences.shortcuts, history, preferences) || [];
       const deletion = event.nativeEvent.inputType?.startsWith('delete');
       const match = !deletion && !event.nativeEvent.isComposing && value && !/\s/.test(value) && event.target.selectionStart === value.length
-        ? matches.find(item => !['search','query'].includes(item.kind) && (item.url.toLowerCase().startsWith(value.toLowerCase()) || item.url.replace(/^https?:\/\/(?:www\.)?/i,'').toLowerCase().startsWith(value.toLowerCase()))) : null;
+        ? matches.find(item => !['search','query','engine'].includes(item.kind) && !otherEngineHome(item.url) && (item.url.toLowerCase().startsWith(value.toLowerCase()) || item.url.replace(/^https?:\/\/(?:www\.)?/i,'').toLowerCase().startsWith(value.toLowerCase()))) : null;
       const completed = match ? (match.url.toLowerCase().startsWith(value.toLowerCase()) ? match.url : match.url.replace(/^https?:\/\/(?:www\.)?/i,'')) : value;
       setAddress(completed);
       if (match && completed.length > value.length) {
@@ -823,7 +832,8 @@
     };
     const transfers=state.downloads||[],activeTransfers=transfers.filter(file=>file.state==='downloading'),known=activeTransfers.length>0&&activeTransfers.every(file=>file.total_bytes>0),totalBytes=activeTransfers.reduce((sum,file)=>sum+(file.total_bytes||0),0),received=activeTransfers.reduce((sum,file)=>sum+(file.received_bytes||0),0),percent=known?Math.min(100,Math.round(received/totalBytes*100)):null;
     const allPaused=activeTransfers.length>0&&activeTransfers.every(file=>file.paused),attention=transfers.filter(file=>!file.acknowledged&&['failed','saved'].includes(file.state)).sort((a,b)=>Number(b.state==='failed')-Number(a.state==='failed'))[0];
-    const toggleDownloads=()=>{setDownloadsOpen(!downloadsOpen);setMoreOpen(false);if(!downloadsOpen)command('ack_downloads');};
+    // Downloads live in Settings > Browser > History & downloads, not a popup.
+    const toggleDownloads=()=>{setMoreOpen(false);setDownloadsOpen(false);command('ack_downloads');onSettings?.('History & downloads');};
     const downloadLabel=activeTransfers.length?(allPaused?'Downloads paused':known?'Downloading · '+percent+'%':'Downloads in progress'):attention?.state==='failed'?'Download failed':attention?'Download complete':'Downloads';
     return <aside hidden={hidden} inert={hidden?'':undefined} className={'browser-panel' + (expanded ? ' browser-expanded' : '')} aria-label="Vellum browser" data-ui-reference="browser-panel" data-shared-tabs={sharedTabs}
       onKeyDownCapture={shortcut} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDownloadsOpen(false); setMoreOpen(false); } }}>
@@ -834,7 +844,7 @@
             <button role="tab" aria-selected={tab.active && !pendingTabs} aria-busy={tab.loading || undefined} onClick={() => command('select_tab', {tab_id:tab.id})} title={tab.url}>{tab.url === 'about:blank' ? <BrandIcon engine={engine} size={15}/> : <Icon name="globe" size={15}/>}<span>{tab.title}</span></button>
             <button className="browser-icon" aria-label={'Close ' + tab.title} aria-keyshortcuts={tab.active ? 'Alt+W' : undefined} onClick={() => closeTab(tab.id)}><Icon name="close" size={12}/></button>
           </div>)}
-          {(!state.tabs.length || pendingTabs > 0) && <div className="browser-tab active"><button role="tab" aria-selected="true" aria-busy={pendingTabs > 0 || undefined}><BrandIcon engine={engine} size={15}/><span>New tab{pendingTabs > 1 ? ' · ' + pendingTabs : ''}</span></button>{!pendingTabs && <button className="browser-icon" aria-label="Close New tab" onClick={closeWindow}><Icon name="close" size={12}/></button>}</div>}
+          {(!state.tabs.length || pendingTabs > 0) && <div className="browser-tab active" data-pending={pendingTabs > 0 || undefined}><button role="tab" aria-selected="true" aria-busy={pendingTabs > 0 || undefined}><BrandIcon engine={engine} size={15}/><span>New tab{pendingTabs > 1 ? ' · ' + pendingTabs : ''}</span></button>{!pendingTabs && <button className="browser-icon" aria-label="Close New tab" onClick={closeWindow}><Icon name="close" size={12}/></button>}</div>}
           <button className="browser-icon" title="New tab" aria-keyshortcuts="Alt+T" onClick={newTab}><Icon name="plus"/></button>
         </div>
         <div className="browser-heading-actions">
@@ -850,7 +860,7 @@
         <form className="browser-address-row" onSubmit={navigate}>
           <button type="button" className="browser-icon" title="Back" onClick={() => command('back')} disabled={!active || busy}><Icon name="back"/></button>
           <button type="button" className="browser-icon" title="Forward" onClick={() => command('forward')} disabled={!active || busy}><Icon name="forward"/></button>
-          <button type="button" className="browser-icon" title="Reload" onClick={() => command('reload')} disabled={!active || busy}><Icon name="reload"/></button>
+          <button type="button" className="browser-icon browser-reload" title="Reload" data-loading={reloading || undefined} onClick={() => command('reload')} disabled={!active || busy}><Icon name="reload"/></button>
           <button type="button" className="browser-icon" title="Home" onClick={() => command('navigate', {url:'about:blank'})}><Icon name="home"/></button>
           <div className="browser-omnibox-wrap">
             <label className="browser-omnibox"><BrandIcon engine={engine} size={16}/><input ref={addressRef} aria-label="Browser address" aria-keyshortcuts="Alt+L" role="combobox" aria-autocomplete="both" aria-expanded={addressOpen && suggestions.length > 0} aria-controls="browser-address-suggestions" aria-activedescendant={addressOpen && selectedSuggestion >= 0 ? 'browser-suggestion-' + selectedSuggestion : undefined} autoComplete="off" placeholder={'Search ' + engine.name + ' or enter address'} value={address} onFocus={() => { editingAddress.current = true; if (!focusingBlankAddress.current && address === displayAddress(active?.url)) setAddress(active?.url === 'about:blank' ? '' : active?.url || ''); setAddressQuery(addressRef.current?.value || ''); setAddressOpen(false); setSelectedSuggestion(-1); addressRef.current?.select(); }} onBlur={() => { editingAddress.current = false; setAddressOpen(false); if (!address.trim() || address === active?.url) setAddress(displayAddress(active?.url)); }} onChange={changeAddress} onKeyDown={addressKeyDown} spellCheck={false}/></label>
@@ -858,7 +868,7 @@
               {suggestions.map((item,index) => <button type="button" className="browser-suggestion" id={'browser-suggestion-' + index} key={item.kind + ':' + item.url} role="option" aria-selected={index === selectedSuggestion} onPointerDown={event => event.preventDefault()} onClick={() => chooseSuggestion(item)}>
                 {['search','query'].includes(item.kind) ? <Icon name="search" size={16}/> : <ShortcutIcon url={item.url}/>}
                 <span className="browser-suggestion-copy"><span>{item.title}</span>{!['search','query'].includes(item.kind) && <small>{item.url.replace(/^https?:\/\//i,'')}</small>}</span>
-                <span className="browser-suggestion-hint">{item.kind === 'tab' ? 'Switch to tab' : item.kind === 'search' ? 'Search ' + engine.name : item.kind === 'query' ? engine.name : item.kind === 'history' ? 'History' : item.kind === 'website' ? 'Website' : 'Shortcut'}</span>
+                <span className="browser-suggestion-hint">{item.kind === 'tab' ? 'Switch to tab' : item.kind === 'search' ? 'Search ' + engine.name : item.kind === 'query' ? engine.name : item.kind === 'history' ? 'History' : item.kind === 'website' ? 'Website' : item.kind === 'engine' ? 'Search engine' : 'Shortcut'}</span>
               </button>)}
               {completions.query === addressQuery && completions.engine === engine.id && completions.status === 'unavailable' && <small className="browser-suggestions-status" role="status">{engine.name} suggestions unavailable</small>}
             </div>}
@@ -870,7 +880,7 @@
         {state.features?.zoom&&<div className="browser-zoom-controls"><span>Zoom</span><button type="button" aria-label="Zoom out" disabled={state.zoom_factor<=0.25} onClick={()=>command('zoom',{zoom_factor:Math.max(0.25,(state.zoom_factor||1)-0.1)})}><window.VellumUI.WorkspaceIcon name="Minus" size={14}/></button><button type="button" aria-label="Reset zoom" onClick={()=>command('zoom',{zoom_factor:1})}>{Math.round((state.zoom_factor||1)*100)}%</button><button type="button" aria-label="Zoom in" disabled={state.zoom_factor>=3} onClick={()=>command('zoom',{zoom_factor:Math.min(3,(state.zoom_factor||1)+0.1)})}><window.VellumUI.AppIcon name="Plus" size={14}/></button></div>}
         {state.features?.print&&<button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);command('print');}}>Print…</button>}
         {native&&nativeBridge?.signIn&&signinBrowser&&<button type="button" className="browser-menu-row" onClick={startSignIn}><Icon name="globe"/>Sign in to Google with {signinBrowser}</button>}
-        <button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);setDownloadsOpen(true);command('ack_downloads');}}><Icon name="download"/>Downloads</button>
+        <button type="button" className="browser-menu-row" onClick={toggleDownloads}><Icon name="download"/>Downloads</button>
         <button type="button" className="browser-menu-row" onClick={()=>{setMoreOpen(false);onSettings?.();}}><Icon name="settings"/>History and browser settings</button>
         <label className="browser-menu-row"><input type="checkbox" checked={preferences.suggestions_enabled !== false} onChange={event => command('preferences', {suggestions_enabled:event.target.checked})}/>Search suggestions</label><p>Suggestions use {engine.name}.</p>
         <button type="button" className="browser-menu-row" onClick={closeWindow}><Icon name="close"/>Close session</button>

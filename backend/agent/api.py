@@ -2267,10 +2267,15 @@ async def spotify_player(details: bool = False) -> dict:
         if hasattr(service, "web_playback_status"):
             player["web_playback"] = service.web_playback_status()
         if details:
-            devices_result, queue_result = await asyncio.gather(
-                asyncio.to_thread(service.get_devices),
-                asyncio.to_thread(service.get_queue),
-            )
+            # Devices and queue are extras: a slow queue must not fail the whole player view.
+            async def optional(read):
+                try:
+                    return await asyncio.to_thread(read)
+                except SpotifyAuthError:
+                    raise
+                except SpotifyError:
+                    return {}
+            devices_result, queue_result = await asyncio.gather(optional(service.get_devices), optional(service.get_queue))
             player = {
                 **player,
                 "devices": devices_result.get("devices", []),

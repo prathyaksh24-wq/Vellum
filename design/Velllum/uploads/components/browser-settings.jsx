@@ -16,7 +16,15 @@
   }
   function BrowserSettings({onAction, onConfirm, onCancel, onRefresh}) {
     const api = window.VellumApi.browser;
-    const [view,setView] = useState(null), [section,setSection] = useState('Sessions');
+    const [view,setView] = useState(null), [section,setSection] = useState(() => {
+      // Another surface (the browser's Downloads button) can open a section directly.
+      const requested = window.VellumUI.browserSettingsSection; window.VellumUI.browserSettingsSection = null; return requested || 'Sessions';
+    });
+    useEffect(() => {
+      const open = event => { if (event.detail) { setSection(event.detail); window.VellumUI.browserSettingsSection = null; } };
+      window.addEventListener('vellum:browser-settings-section', open);
+      return () => window.removeEventListener('vellum:browser-settings-section', open);
+    }, []);
     const [busy,setBusy] = useState(false), [error,setError] = useState(''), [note,setNote] = useState('');
     const [pending,setPending] = useState(null), [name,setName] = useState(''), [rename,setRename] = useState(null);
     const [folder,setFolder] = useState(null), [instance,setInstance] = useState(null), [query,setQuery] = useState(''), [limit,setLimit] = useState(50);

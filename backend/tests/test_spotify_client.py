@@ -158,7 +158,9 @@ def test_uncertain_skip_timeout_is_not_replayed(auth_store):
         calls.append(request.url.path)
         raise httpx.ReadTimeout("response lost", request=request)
 
-    with pytest.raises(httpx.ReadTimeout):
+    from plugins.connectors.spotify.errors import SpotifyAPIError
+    # The timeout is reported as a Spotify error, but the uncertain skip is never resent.
+    with pytest.raises(SpotifyAPIError, match="did not respond in time"):
         SpotifyClient(auth_store, transport=httpx.MockTransport(handler)).request("POST", "/me/player/next")
     assert calls == ["/v1/me/player/next"]
 
@@ -326,3 +328,12 @@ def test_unexposed_resource_404_has_distinct_safe_code(auth_store):
     client=SpotifyClient(auth_store,transport=httpx.MockTransport(lambda request:httpx.Response(404,json={'error':{'message':'hidden provider detail'}})))
     with pytest.raises(SpotifyResourceUnavailable) as exc:client.request('GET','/playlists/Mix/items')
     assert exc.value.code=='resource_unavailable' and 'hidden provider detail' not in str(exc.value)
+
+
+def test_a_slow_spotify_connection_is_a_reportable_error_not_a_crash(auth_store):
+    from plugins.connectors.spotify.errors import SpotifyAPIError
+    def slow(request):
+        raise httpx.ReadTimeout('The read operation timed out', request=request)
+    client = SpotifyClient(auth_store=auth_store, transport=httpx.MockTransport(slow))
+    with pytest.raises(SpotifyAPIError, match='did not respond in time'):
+        client.request('GET', '/me/player/queue')

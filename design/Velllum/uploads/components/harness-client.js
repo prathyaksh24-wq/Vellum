@@ -3,7 +3,9 @@
 // hot-reloads it when the backend recomposes. A port of DeepSeek Harness' Client
 // Slots and module loader.
 (function () {
-  var React = window.React;
+  // Resolve React on use, not at load: the packaged desktop build defines
+  // window.React from its bundled module after this classic script has run.
+  var React = new Proxy({}, { get: function (_target, key) { return window.React[key]; } });
   var api = function () { return window.VellumApi && window.VellumApi.client; };
 
   // ------------------------------------------------------------------ slots
@@ -130,11 +132,15 @@
   };
 
   // A crashed contribution blanks only itself.
-  class SlotEntryBoundary extends React.Component {
-    constructor(props) { super(props); this.state = { failed: false }; }
-    static getDerivedStateFromError() { return { failed: true }; }
-    componentDidCatch(error) { console.error("slot entry crashed in '" + this.props.slot + "'", error); }
-    render() { return this.state.failed ? null : this.props.children; }
+  var SlotEntryBoundaryClass = null;
+  function SlotEntryBoundary() {
+    if (!SlotEntryBoundaryClass) SlotEntryBoundaryClass = class extends window.React.Component {
+      constructor(props) { super(props); this.state = { failed: false }; }
+      static getDerivedStateFromError() { return { failed: true }; }
+      componentDidCatch(error) { console.error("slot entry crashed in '" + this.props.slot + "'", error); }
+      render() { return this.state.failed ? null : this.props.children; }
+    };
+    return SlotEntryBoundaryClass;
   }
 
   function useSlot(name, entryKey) {
@@ -148,7 +154,7 @@
     var records = useSlot(props.name, props.entryKey);
     if (!records.length) return ready ? null : (props.fallback || null);
     return React.createElement(React.Fragment, null, records.map(function (record) {
-      return React.createElement(SlotEntryBoundary, { key: (record.options.id || '') + ':' + record.seq, slot: props.name },
+      return React.createElement(SlotEntryBoundary(), { key: (record.options.id || '') + ':' + record.seq, slot: props.name },
         React.createElement(record.component, Object.assign({}, props.props || {}, { slotOptions: record.options })));
     }));
   }

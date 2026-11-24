@@ -840,6 +840,11 @@ class DedicatedBrowser(BrowserSettingsMixin):
                 self._invalidate()
             elif self.active_page is None:
                 self.active_page = await self.context.new_page()
+            # Opening straight to an address (e.g. "reddit" typed in the launcher)
+            # loads it in the first tab, so the search homepage never flashes first.
+            if request.url and self.active_page is not None and self.active_page.url == "about:blank":
+                self._start_tab_load(self.active_page, navigation_url(request.url))
+                self._invalidate()
         elif operation == "reopen_tab":
             identity = self._profile().id
             index = next((index for index in range(len(self._closed_tabs)-1, -1, -1) if self._closed_tabs[index][0] == identity), None)

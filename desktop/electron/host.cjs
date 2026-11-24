@@ -82,7 +82,10 @@ function createDesktopHost(electron, {workspace, workspaceRoot, root = path.reso
         contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,
         // Canvas UI refraction needs live pixels from the decorative scene.
         // Opt in only trusted Vellum UI windows, never native browser guests.
-        ...((key==='workspace'||key.startsWith('conversation-'))?{enableBlinkFeatures:'CanvasDrawElement'}:{}),
+        ...((key==='workspace'||key.startsWith('conversation-'))?{enableBlinkFeatures:'CanvasDrawElement',
+          // Vellum's own windows may start audio without a click, so in-app Spotify
+          // playback reconnects on launch. Browser guests keep the normal autoplay rule.
+          autoplayPolicy:'no-user-gesture-required'}:{}),
         partition: 'persist:vellum-workspace',
         additionalArguments:customChrome?['--vellum-workspace-chrome']:[],
       },

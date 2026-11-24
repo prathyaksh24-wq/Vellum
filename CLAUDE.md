@@ -12,6 +12,24 @@
 > that describe vault behavior are historical; follow `AGENTS.md`, `docs/ARCHITECTURE.md`
 > and `docs/memory-knowledge-architecture.md` for current behavior.
 
+## 0. Ship finished changes to the installed app
+
+The user runs Vellum as an installed desktop app that updates itself. After finishing
+a change to `backend/`, `frontend/`, `design/Velllum/uploads/` or `desktop/` that the
+user should see in the app, publish it without being asked, once its checks pass:
+
+```powershell
+cd desktop; npm run release              # UI + backend
+cd desktop; npm run release -- --ui-only # UI-only change; reuses the built backend
+```
+
+The installed app then shows "Update available" in its rail; the user clicks it to
+install and relaunch. Run it from the main checkout on the user's branch, never from a
+worktree or an unfinished branch (the newest publish replaces the app). It packages and
+EVS-signs (~235 MB upload), so run it in the background. Never repackage by hand or
+copy files into `%LOCALAPPDATA%\Programs\Vellum`. Full rules: `AGENTS.md`,
+"Ship to the installed desktop app".
+
 ---
 
 ## 1. Privacy & Scrubbing Protocol (CRITICAL — READ FIRST)

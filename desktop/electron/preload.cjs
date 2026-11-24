@@ -22,6 +22,16 @@ contextBridge.exposeInMainWorld('VellumDesktop', Object.freeze({
       return ()=>ipcRenderer.removeListener('vellum:browser-event',handler);
     },
   }),
+  // Installed-app updates: state is {status:'unavailable'|'idle'|'ready'|'installing'|'failed', progress, available, error}.
+  updates: Object.freeze({
+    get() { return ipcRenderer.invoke('vellum:updates', 'get'); },
+    install() { return ipcRenderer.invoke('vellum:updates', 'install'); },
+    subscribe(callback) {
+      const handler=(_event,state)=>callback(state);
+      ipcRenderer.on('vellum:update-state',handler);
+      return ()=>ipcRenderer.removeListener('vellum:update-state',handler);
+    },
+  }),
   invoke(command, args = {}) {
     if (!commands.has(command)) return Promise.reject(new Error('Unknown desktop command.'));
     return ipcRenderer.invoke('vellum:desktop', command, args);
