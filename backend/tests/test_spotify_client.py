@@ -158,7 +158,9 @@ def test_uncertain_skip_timeout_is_not_replayed(auth_store):
         calls.append(request.url.path)
         raise httpx.ReadTimeout("response lost", request=request)
 
-    with pytest.raises(httpx.ReadTimeout):
+    from plugins.connectors.spotify.errors import SpotifyAPIError
+    # The timeout is reported as a Spotify error, but the uncertain skip is never resent.
+    with pytest.raises(SpotifyAPIError, match="did not respond in time"):
         SpotifyClient(auth_store, transport=httpx.MockTransport(handler)).request("POST", "/me/player/next")
     assert calls == ["/v1/me/player/next"]
 

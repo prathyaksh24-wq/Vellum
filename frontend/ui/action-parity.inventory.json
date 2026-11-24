@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 963,
-      "sha256": "6ee92defe0a2661798a47fe7d9db4497a5beaa50c0d099209a6139d8e47a732d"
+      "count": 971,
+      "sha256": "f405f199547d594e0df0800bfb77326f2114b7d89894052c5b00a92f96664b2b"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -34,8 +34,8 @@
       "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
-      "count": 76,
-      "sha256": "78c61157baed3db7beb0baabd8bf814856dc3837726f75e47c5c8d3dd7282a74"
+      "count": 81,
+      "sha256": "dd6aae8b4cb9bae8fefe412178d3e6f212071e7e630c8dc88773c4bcf46b7c3f"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
@@ -271,7 +271,7 @@
     },
     "design/Velllum/uploads/components/workspace-controller.jsx": {
       "count": 27,
-      "sha256": "41ce891d39deabce7073169fec3b2db6e3de0b59f3465d27e267fbf2c3c34666"
+      "sha256": "e81297a0ead2165bfd37c65aa8086fb54a07825eb0bd7fb45dc304eb3dee4b5a"
     },
     "design/Velllum/uploads/components/workspace-content.jsx": {
       "count": 14,
@@ -298,8 +298,8 @@
       "sha256": "f22e86949597afa18b5545553aa344e136f9fda91573b5288161f96028b07263"
     },
     "design/Velllum/uploads/components/navigation-shell.jsx": {
-      "count": 72,
-      "sha256": "179c5b636eb11724c455013bcb9a5a57738422a8ba2fbd573bf1a1616ab29852"
+      "count": 74,
+      "sha256": "3e7b2755172eefa8eab1db13f148b1200356192c108bc27721c6e076d2a9ffa5"
     },
     "design/Velllum/uploads/commands-entry.js": {
       "count": 0,
@@ -2755,6 +2755,10 @@
     {
       "scope": "Scheduled page Refresh ideas",
       "reason": "Re-reads task ideas from GET /api/automations/suggestions?refresh=true. It regenerates a machine-owned suggestion cache and changes no user-owned state; choosing an idea starts an ordinary chat."
+    },
+    {
+      "scope": "Installed-app update button and install dialog, browser Downloads routing to Settings › Browser, reload spin, pending new-tab chip, live tab hover preview, and the render-error recovery reload",
+      "reason": "Installing an update relaunches the desktop app and is user-only maintenance, never an agent action. Downloads opens the existing Browser settings section (reachable through the existing settings actions); the reload spin, pending chip and hover preview are presentation of existing browser state; the recovery button only reloads the window after a render failure."
     }
   ],
   "deferred": [
