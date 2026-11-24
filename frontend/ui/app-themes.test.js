@@ -103,15 +103,19 @@ test('one saved theme uses matching light and dark variants after reload',()=>{
 
 test('named themes unmount the background and release its animation lifecycle',async()=>{
   const html=readFileSync('../design/Velllum/uploads/Vellum Default Re-designed.html','utf8');
-  const source=html.slice(html.indexOf('const AppBackground ='),html.indexOf('const BackgroundChoiceCard ='));
+  // The background is contributed through the harness shell.background slot;
+  // with no plugin overriding it, the slot renders Vellum's own scene.
+  const source=html.slice(html.indexOf('const VellumBackgroundScene ='),html.indexOf('// @vellum/ui-analytics'));
   const Context=React.createContext(null),unmounted=vi.fn(),mounted=vi.fn();
   function Renderer(){React.useEffect(()=>{mounted();return unmounted;},[]);return React.createElement('canvas');}
+  window.__VellumModuleLoader__={load:vi.fn()};
+  window.VellumHarness={VellumSlot:({fallback})=>fallback};
   const AppBackground=Function('React','useBackground','BackgroundRenderer',compile(source+'\nwindow.TestAppBackground=AppBackground;')+'\nreturn window.TestAppBackground;')(React,()=>React.useContext(Context),Renderer);
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
   const render=async(profile)=>act(async()=>root.render(React.createElement(Context.Provider,{value:{background:{id:'ember-clouds'},backgroundVisibility:0,themeProfile:profile}},React.createElement(AppBackground))));
   await render(null);expect(host.querySelector('canvas')).not.toBeNull();
   await render(themes.resolve({dark_theme:'catppuccin'},'dark'));
-  expect(host.querySelector('.app-background')).toBeNull();expect(unmounted).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('canvas')).toBeNull();expect(unmounted).toHaveBeenCalledTimes(1);
   await render(themes.resolve({dark_theme:'catppuccin'},'light'));
   expect(host.querySelector('canvas')).toBeNull();expect(mounted).toHaveBeenCalledTimes(1);
   await render(null);expect(host.querySelector('canvas')).not.toBeNull();expect(mounted).toHaveBeenCalledTimes(2);

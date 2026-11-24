@@ -88,6 +88,7 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
         "youtube_browser_history",
         "youtube_creator_tracking",
         "memory_dreaming",
+        "memory_learning",
         "memory_provider_sync",
         "memory_retention",
         "nightly_digest",

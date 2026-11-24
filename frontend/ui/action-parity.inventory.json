@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 963,
-      "sha256": "6ee92defe0a2661798a47fe7d9db4497a5beaa50c0d099209a6139d8e47a732d"
+      "count": 970,
+      "sha256": "15df9707fe86ad19c285f297bc5863b9fe142ce0daa9d29ffa8a73a0324f13fb"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -34,8 +34,8 @@
       "sha256": "1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"
     },
     "design/Velllum/uploads/components/browser-panel.jsx": {
-      "count": 76,
-      "sha256": "78c61157baed3db7beb0baabd8bf814856dc3837726f75e47c5c8d3dd7282a74"
+      "count": 81,
+      "sha256": "112f1adfe7d53a73838154f3f8b3917b4e917ac3787494f7438e62988d2f49a2"
     },
     "design/Velllum/uploads/components/browser-settings.jsx": {
       "count": 68,
@@ -234,8 +234,8 @@
       "sha256": "77ff8ad08ad3efc28dffe6c68a606617204c8e98896dd000a1d9b91a8a89a17b"
     },
     "design/Velllum/uploads/components/agent-response.js": {
-      "count": 19,
-      "sha256": "425e2db7dbeb616b78e742b164457fe7af916f58744d28cb43c17ba82023e0a7"
+      "count": 41,
+      "sha256": "4f6e1ae344fba9e53f9b8cb1af19c9bce9698a18c7997435b8735cbd7a6182a3"
     },
     "design/Velllum/uploads/components/streaming-text.js": {
       "count": 11,
@@ -2755,6 +2755,22 @@
     {
       "scope": "Scheduled page Refresh ideas",
       "reason": "Re-reads task ideas from GET /api/automations/suggestions?refresh=true. It regenerates a machine-owned suggestion cache and changes no user-owned state; choosing an idea starts an ordinary chat."
+    },
+    {
+      "scope": "Harness self-change approval card (Approve, Deny, Approve and allow all) and the Settings › Self-changes full-access switch",
+      "reason": "Deliberately user-only. These grant or refuse Vellum permission to change its own harness; exposing them as App Actions would let the agent approve its own changes. They call window.VellumHarness directly from the user's click."
+    },
+    {
+      "scope": "Analytics rendered through the ui-analytics harness slot (rail entry, Settings section, full page)",
+      "reason": "Re-hosts the existing Analytics page through the harness plugin slot. onAction forwards to the same dispatcher as before and opening it uses the already-covered 'open ledger' navigation; no new state is introduced."
+    },
+    {
+      "scope": "Browser sign-in hand-off dialog (Sign in, Cancel, Close)",
+      "reason": "Opens a real browser window for the user to sign in themselves and cancels it. Sign-in must be performed by the user, so it is not an agent action."
+    },
+    {
+      "scope": "Browser step page previews in chat (thumbnail hover peek, open viewer, previous/next, close, open page)",
+      "reason": "Presentation only: previewing screenshots of steps the agent already took. Opening the page URL reuses the existing browser open path. No user-owned state changes."
     }
   ],
   "deferred": [
