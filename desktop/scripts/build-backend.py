@@ -42,9 +42,16 @@ def validate_environment() -> None:
         raise RuntimeError("The build environment needs these backend dependencies: " + ", ".join(missing))
 
 
+# Package .pth files set up import paths the bundled runtime needs (pywin32.pth
+# adds win32/ and win32/lib/, without which `import pywintypes` fails and the
+# backend never starts). Only checkout-bound or setuptools-shim .pth files stay out.
+DROPPED_PTH = {"distutils-precedence.pth"}
+
+
 def ignored(_directory, names):
     return {name for name in names if name in {"__pycache__", ".git", ".env", "tests", "test", "fixtures"}
-            or name.endswith((".pyc", ".pyo", ".pth"))
+            or name.endswith((".pyc", ".pyo"))
+            or name in DROPPED_PTH
             or name.startswith("__editable__")}
 
 

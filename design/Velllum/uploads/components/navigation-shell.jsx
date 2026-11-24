@@ -25,6 +25,44 @@
       </div>,document.body)}
     </div>;
   }
+  // Installed-app updates (desktop only). Mirrors the ChatGPT desktop flow: a red
+  // download button above the profile when a newer build is ready; clicking it
+  // shows "Installing update" with progress, then Vellum restarts into the new build.
+  function useAppUpdate(){
+    const updates=window.VellumDesktop?.updates;
+    const [state,setState]=useState(null);
+    useEffect(()=>{
+      if(!updates)return;
+      let live=true;
+      updates.get().then(next=>{if(live)setState(next);}).catch(()=>{});
+      const stop=updates.subscribe(next=>setState(next));
+      return()=>{live=false;stop?.();};
+    },[updates]);
+    return [state,()=>updates?.install().then(setState).catch(()=>{})];
+  }
+  function UpdateInstallDialog({progress}){
+    const percent=Number.isFinite(progress)?Math.min(100,Math.max(0,Math.round(progress))):0;
+    return ReactDOM.createPortal(<div className="app-update-scrim" data-shell-overlay="true">
+      <div className="app-update-dialog" role="dialog" aria-modal="true" aria-labelledby="app-update-title" onKeyDown={event=>{if(event.key==='Escape')event.preventDefault();}}>
+        <h2 id="app-update-title">Installing update</h2>
+        <p>Vellum will restart when installation finishes.</p>
+        <div className="app-update-progress">
+          <div className="app-update-track" role="progressbar" aria-label="Update progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{width:Math.max(percent,4)+'%'}}/></div>
+          <span className="app-update-label">{percent===0?'Preparing…':percent>=100?'Restarting…':percent+'%'}</span>
+        </div>
+      </div>
+    </div>,document.body);
+  }
+  function UpdateRailButton(){
+    const [update,install]=useAppUpdate();
+    const status=update?.status;
+    if(!['ready','installing','failed'].includes(status))return null;
+    const label=status==='installing'?'Installing update':status==='failed'?'Update failed. Click to try again':'Update available';
+    return <>
+      <button type="button" className="app-rail-button app-rail-update" title={label} data-tip={label} aria-label={label} disabled={status==='installing'} onClick={install}><span className="app-rail-update-badge"><Icon name="Download" size={15}/></span></button>
+      {status==='installing'&&<UpdateInstallDialog progress={update.progress}/>}
+    </>;
+  }
   function NavigationRail({view,contextualView=view,profile,onHome,onNav,onProfile,onSettings,onSearch,onNotifications,unread=0,notificationsOpen=false,onToggleSidebar,sidebarVisible,onPreviewSidebar,onLeaveSidebar,onDismissPreview}){
     const [more,setMore]=useState(false),[position,setPosition]=useState({}),ref=useRef(null),trigger=useRef(null),popup=useRef(null);
     useShellOverlay(more);
@@ -52,6 +90,7 @@
         <button type="button" className="app-rail-button" title="Search chats" data-command="commands.open" aria-label="Search chats" onClick={onSearch}><Icon name="Search"/></button>
         <button type="button" className="app-rail-button" title="Notifications" data-tip="Notifications" data-notification-trigger="" aria-controls="notification-panel" aria-expanded={notificationsOpen} aria-label={unread?`Notifications, ${unread} unread`:'Notifications'} onClick={onNotifications}><Icon name="Bell"/>{unread>0&&<span className="app-rail-unread"/>}</button>
         <button type="button" className="app-rail-button" title="Settings" data-command="settings.open" aria-label="Settings" onClick={onSettings}><Icon name="SettingsCog"/></button>
+        <UpdateRailButton/>
         <button type="button" className="app-rail-avatar" title={profile.displayName||'Account'} data-tip={profile.displayName||'Account'} aria-label="Open account menu" onClick={onProfile}><window.VellumUI.Profile.Avatar profile={profile}/></button>
       </div>
     </nav>;
@@ -269,5 +308,5 @@
       }}><section className="library-preview-panel" role="dialog" aria-modal="true" aria-label={'Preview '+preview.name} onClick={event=>event.stopPropagation()}><header><h2>{preview.name}</h2><button ref={previewClose} type="button" aria-label="Close preview" onClick={()=>setPreview(null)}><Icon name="X"/></button></header><div className="library-preview-content">{preview.kind==='image'&&fileUrl(preview)?<img src={fileUrl(preview)} alt={preview.name}/>:preview.attachment?.text_content?<pre>{preview.attachment.text_content}</pre>:<div className="library-empty"><KindIcon kind={preview.kind}/><p>No inline preview is available for this file.</p></div>}</div><footer><span>{preview.size} · {preview.source==='chat'?'Chat attachment':'This session'}</span>{preview.chatId&&<button type="button" className="btn" onClick={()=>{onOpenChat(preview.chatId);setPreview(null);}}>Open chat</button>}<button type="button" className="btn" disabled={!fileUrl(preview)} onClick={()=>download(preview)}>Download</button></footer></section></div>,document.body)}
     </section>;
   }
-  window.VellumUI=Object.assign(window.VellumUI||{}, {ModeSwitcher,NavigationRail,SidebarHoverProvider,useSidebarHover,SidebarSectionMenu,ProjectHoverCard,RailContextPreview,chatStatus,ChatStatus,ChatHoverCard,LibrarySidebar,LibraryWorkspace,libraryItems});
+  window.VellumUI=Object.assign(window.VellumUI||{}, {ModeSwitcher,NavigationRail,UpdateRailButton,SidebarHoverProvider,useSidebarHover,SidebarSectionMenu,ProjectHoverCard,RailContextPreview,chatStatus,ChatStatus,ChatHoverCard,LibrarySidebar,LibraryWorkspace,libraryItems});
 })();

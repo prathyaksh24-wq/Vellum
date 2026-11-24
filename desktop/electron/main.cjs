@@ -1,5 +1,6 @@
 const {app, BrowserWindow, Menu, session, dialog, Tray, shell} = require('electron');
-const {workspaceURL} = require('./policy.cjs');
+const {workspaceURL, trustedWorkspace} = require('./policy.cjs');
+const {createUpdater} = require('./updater.cjs');
 const {createDesktopHost} = require('./host.cjs');
 const {serveUI} = require('./ui-server.cjs');
 const path = require('node:path');
@@ -29,6 +30,7 @@ if (!app.requestSingleInstanceLock()) {
   let backend;
   let workspaceLock;
   let tray;
+  let updater;
   let startup;
   let devBundle;
   let initialBuild;
@@ -180,9 +182,31 @@ if (!app.requestSingleInstanceLock()) {
       cdpEndpoint:await readDebuggerEndpoint(app), ownerWindow:()=>host?.openWorkspace(),
     });
     if(quitting){await nativeBrowser.stop();return;}
-    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined), nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
+    const workspaceAddress = workspaceURL(bundledWorkspace?'http://127.0.0.1:'+UI_PORT:undefined);
+    host = createDesktopHost(require('electron'), {workspaceRoot,workspace: workspaceAddress, nativeBrowser,workspaceReady:()=>workspaceReady,protectedAudioReady,
       onWorkspaceClose:()=>{if(!quitting&&!booting)app.quit();}});
     host.configurePermissions(session.fromPartition('persist:vellum-workspace'));
+    // In-app updates: the installed app notices a newer published build and
+    // shows "Update available" in the rail; one click installs and relaunches.
+    updater = createUpdater({app, broadcast: state => {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed() && trustedWorkspace(win.webContents.getURL(), workspaceAddress)) win.webContents.send('vellum:update-state', state);
+    }});
+    require('electron').ipcMain.handle('vellum:updates', async (event, action) => {
+      if (event.senderFrame !== event.sender.mainFrame || !trustedWorkspace(event.senderFrame.url, workspaceAddress)) throw new Error('Updates are unavailable to this page.');
+      if (action === 'install') { updater.install().catch(error => console.error('[Vellum] Update failed:', error.message)); return updater.snapshot(); }
+      if (action === 'check') return updater.check();
+      return updater.snapshot();
+    });
+    updater.start();
+    if (updater.enabled) {
+      // Keep the Start menu entry on the stable path, tagged with Vellum's app ID
+      // so pins, notifications and the taskbar group stay together across updates.
+      try {
+        const link = path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','Vellum.lnk');
+        const target = path.join(require('./install-core.cjs').installRoot(),'current','Vellum.exe');
+        shell.writeShortcutLink(link, require('node:fs').existsSync(link)?'replace':'create', {target, cwd:path.dirname(target), icon:target, iconIndex:0, appUserModelId:'local.vellum.desktop', description:'Vellum'});
+      } catch {}
+    }
     const commandItem=id=>({id:'command-'+id,label:CommandRegistry.definition(id).label,click:()=>{const win=BrowserWindow.getFocusedWindow();if(win&&!win.isDestroyed())win.webContents.send('vellum:app-command',id);}});
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       {id:'vellum', label: 'Vellum', submenu: [
@@ -267,6 +291,7 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting) return;
     event.preventDefault();quitting=true;
     clearInterval(supervisor);
+    updater?.stop();
     Promise.all([initialBuild?.catch(()=>{}), stopWatching?.()]).then(()=>nativeBrowser?.stop()).then(()=>backend?.stop()).then(()=>{
       uiServer?.close();workspaceLock?.close();tray?.destroy();
       devBundle?.close();

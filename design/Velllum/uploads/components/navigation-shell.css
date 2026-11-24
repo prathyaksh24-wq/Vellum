@@ -7,6 +7,19 @@
 .app-rail-button:hover,.app-rail-button[aria-current=page],.app-rail-button[aria-expanded=true]{background:var(--hover);color:var(--txt2)}
 .app-rail-avatar{width:31px;height:31px;margin-top:8px;border-radius:50%;font-size:11px;font-weight:600;background:var(--ember);color:var(--bg)}
 .app-rail-unread,.shell-attention-dot{position:absolute;right:7px;top:6px;width:6px;height:6px;border-radius:50%;background:var(--ember)}
+.app-rail-update{color:var(--txt2)}
+.app-rail-update-badge{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--hover);color:var(--txt);box-shadow:inset 0 0 0 1px var(--line2)}
+.app-rail-update:hover .app-rail-update-badge{background:var(--line2)}
+.app-rail-update:disabled{cursor:default;opacity:.85}
+.app-update-scrim{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28)}
+.app-update-dialog{width:min(520px,calc(100vw - 48px));padding:22px 24px 24px;border:1px solid var(--line2);border-radius:18px;background:var(--shell-surface,var(--bg));color:var(--txt);box-shadow:0 18px 48px rgba(0,0,0,.32)}
+.app-update-dialog h2{margin:0 0 6px;font-size:20px;font-weight:600;letter-spacing:-.01em}
+.app-update-dialog p{margin:0 0 18px;font-size:13px;color:var(--dim)}
+.app-update-progress{display:flex;align-items:center;gap:14px}
+.app-update-track{flex:1;height:8px;border-radius:999px;background:var(--hover);overflow:hidden}
+.app-update-track span{display:block;height:100%;border-radius:inherit;background:var(--txt2);transition:width .25s ease}
+.app-update-label{min-width:76px;text-align:right;font-size:13px;color:var(--txt2)}
+@media (prefers-reduced-motion:reduce){.app-update-track span{transition:none}}
 .app-rail-more{position:relative}
 .app-rail-menu{position:absolute;left:calc(100% + 8px);top:0;width:220px;padding:6px;background:var(--shell-surface);border:1px solid var(--line2);border-radius:14px;z-index:150;box-shadow:0 12px 30px rgba(0,0,0,.18)}
 .app-rail-menu button{width:100%;display:flex;align-items:center;gap:11px;padding:11px 10px;border:0;border-radius:9px;background:transparent;color:var(--txt2);font:inherit;font-size:13px;text-align:left;cursor:pointer}

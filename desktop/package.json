@@ -15,6 +15,8 @@
     "build:engines": "node scripts/build-engines.cjs",
     "package": "node scripts/build-ui.cjs && node scripts/build-backend.cjs && node scripts/build-engines.cjs && electron-forge package",
     "make": "node scripts/build-ui.cjs && node scripts/build-backend.cjs && node scripts/build-engines.cjs && electron-forge make",
+    "release": "node scripts/release.cjs",
+    "install-app": "node scripts/install-app.cjs",
     "test": "node --test test/*.test.cjs",
     "smoke": "node scripts/smoke.cjs",
     "smoke:browser": "node scripts/native-smoke.cjs"
