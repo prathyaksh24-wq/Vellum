@@ -13,6 +13,16 @@ const {claimDesktopWorkspace} = require('./workspace-lock.cjs');
 const {createDevBundle, watchDevelopment} = require('./dev-reload.cjs');
 
 app.setName('Vellum');
+// Self-heal: an installed Vellum started through the `current` junction (an old
+// shortcut or pin) restarts from its real folder first. Through a junction the
+// DRM platform check fails and Spotify refuses audio licenses for many tracks.
+if (app.isPackaged && process.platform === 'win32') {
+  const real = require('./install-core.cjs').realExecutable(process.execPath);
+  if (real.toLowerCase() !== process.execPath.toLowerCase()) {
+    app.relaunch({execPath: real, args: process.argv.slice(1)});
+    app.exit(0);
+  }
+}
 // Review the prepared desktop UI without installing or replacing an app.
 const bundledWorkspace=app.isPackaged || process.env.VELLUM_DESKTOP_BUNDLED_UI==='1';
 const devNode = app.isPackaged ? null : process.env.VELLUM_DESKTOP_DEV_NODE;
@@ -199,13 +209,19 @@ if (!app.requestSingleInstanceLock()) {
     });
     updater.start();
     if (updater.enabled) {
-      // Keep the Start menu entry on the stable path, tagged with Vellum's app ID
-      // so pins, notifications and the taskbar group stay together across updates.
-      try {
-        const link = path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','Vellum.lnk');
-        const target = path.join(require('./install-core.cjs').installRoot(),'current','Vellum.exe');
-        shell.writeShortcutLink(link, require('node:fs').existsSync(link)?'replace':'create', {target, cwd:path.dirname(target), icon:target, iconIndex:0, appUserModelId:'local.vellum.desktop', description:'Vellum'});
-      } catch {}
+      // Point every Vellum shortcut (Start menu, desktop, taskbar pins) at this build's
+      // real executable, tagged with Vellum's app ID so pins and notifications group.
+      // Never the `current` junction: DRM licenses fail through it.
+      const core = require('./install-core.cjs'), fs = require('node:fs');
+      const target = core.realExecutable(process.execPath);
+      for (const link of core.shortcutPaths()) {
+        try {
+          const exists = fs.existsSync(link);
+          if (!exists && !/Start Menu/i.test(link)) continue;
+          if (exists) { const current = shell.readShortcutLink(link); if (current.target && !current.target.toLowerCase().startsWith(core.installRoot().toLowerCase())) continue; }
+          shell.writeShortcutLink(link, exists?'replace':'create', {target, cwd:path.dirname(target), icon:target, iconIndex:0, appUserModelId:'local.vellum.desktop', description:'Vellum'});
+        } catch {}
+      }
     }
     const commandItem=id=>({id:'command-'+id,label:CommandRegistry.definition(id).label,click:()=>{const win=BrowserWindow.getFocusedWindow();if(win&&!win.isDestroyed())win.webContents.send('vellum:app-command',id);}});
     Menu.setApplicationMenu(Menu.buildFromTemplate([

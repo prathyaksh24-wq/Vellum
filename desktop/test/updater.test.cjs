@@ -24,7 +24,9 @@ test('installing a release makes it current behind a stable junction',async t=>{
   const {feed,install}=sandbox(t);
   publish(feed,'r1',1,'one');
   const exe=await core.installRelease(core.readLatest(feed),{root:install});
-  assert.equal(exe,path.join(install,'current','Vellum.exe'));
+  // Launch the real build folder, never the junction (DRM licenses fail through it).
+  assert.equal(exe,path.join(install,'app-r1','Vellum.exe'));
+  assert.equal(core.realExecutable(path.join(install,'current','Vellum.exe')).toLowerCase(),fs.realpathSync.native(exe).toLowerCase());
   assert.equal(fs.readFileSync(exe,'utf8'),'exe-one');
   assert.equal(path.basename(fs.realpathSync(path.join(install,'current'))),'app-r1');
   assert.equal(core.readJSON(path.join(install,'current','resources',core.BUILD_FILE)).id,'r1');
@@ -45,7 +47,7 @@ test('a newer published build shows as ready, installs, and relaunches into it',
   await updater.install();
   assert.ok(states.includes('installing'));
   assert.equal(relaunches.length,1);
-  assert.equal(relaunches[0].execPath,path.join(install,'current','Vellum.exe'));
+  assert.equal(relaunches[0].execPath,path.join(install,'app-r2','Vellum.exe'));
   assert.equal(quit,1);
   assert.equal(fs.readFileSync(path.join(install,'current','Vellum.exe'),'utf8'),'exe-two');
   // The previous build stays for rollback; older ones are pruned.

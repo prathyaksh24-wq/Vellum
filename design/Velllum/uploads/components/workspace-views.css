@@ -157,3 +157,13 @@
 /* The workspace title floats over the chat so backgrounds show through; fade
    messages out before they scroll under it instead of drawing over the title. */
 .workspace-content .main .msgs{-webkit-mask-image:linear-gradient(to bottom,transparent 0,transparent 36px,#000 50px);mask-image:linear-gradient(to bottom,transparent 0,transparent 36px,#000 50px)}
+
+/* Motion Prompt #001 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#001
+   Pop-in for a tab created with Ctrl+T: scale 0 -> 1 on the spring 1 - e^(-6.5t)*cos(15t),
+   sampled over 0.8 s (peaks near 1.28). The demo's rotation is left out for a tab chip. */
+:root{--vellum-pop-spring:linear(0,.293,.65,.963,1.175,1.271,1.27,1.205,1.115,1.03,.968,.935,.929,.942,.964,.987,1.005,1.015,1.018,1.016,1.011,1.005,1,.997,1)}
+@keyframes vellum-tab-pop{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes vellum-tab-fade{from{opacity:0}to{opacity:1}}
+.workspace-view-tab[data-pending]{transform-origin:left center;animation:vellum-tab-pop .8s var(--vellum-pop-spring) both,vellum-tab-fade .15s linear both}
+.workspace-view-tab[data-pending] button{cursor:progress}
+@media (prefers-reduced-motion:reduce){.workspace-view-tab[data-pending]{animation:vellum-tab-fade .15s linear both}}

@@ -52,7 +52,8 @@ function createUpdater({app, broadcast = () => {}, beforeRelaunch = async () => 
       try {
         const executable = await core.installRelease(latest, {root, onProgress: progress => publish({progress})});
         await beforeRelaunch();
-        // Relaunch through the stable junction so the new build owns pins and shortcuts.
+        // Relaunch from the real app-<id> folder (never the `current` junction: DRM
+        // licenses fail through it). The new build rewrites the shortcuts at startup.
         app.relaunch({execPath: executable, args: process.argv.slice(1)});
         app.quit();
         return snapshot();

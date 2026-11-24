@@ -242,6 +242,22 @@ def test_manual_reopen_starts_on_home_without_clearing_cookies(monkeypatch,backg
     asyncio.run(check())
 
 
+def test_open_with_an_address_loads_it_in_the_first_tab_without_the_homepage(monkeypatch):
+    from agent.contracts.browser import BrowserControl
+    async def check():
+        browser=DedicatedBrowser()
+        fresh=SimpleNamespace(url='about:blank',on=lambda *_:None)
+        async def new_page():browser._add_page(fresh);return fresh
+        async def open_():browser.context=SimpleNamespace(new_page=new_page);browser._pages={}
+        async def status():return SimpleNamespace()
+        loads=[]
+        monkeypatch.setattr(browser,'open',open_);monkeypatch.setattr(browser,'status',status)
+        monkeypatch.setattr(browser,'_start_tab_load',lambda page,url:loads.append((page,url)))
+        await browser.ui_control(BrowserControl(operation='open',url='https://www.reddit.com/'))
+        assert loads==[(fresh,'https://www.reddit.com/')]
+    asyncio.run(check())
+
+
 def test_routine_target_validation_ignores_other_content_but_rejects_changed_control():
     import pytest
     from agent.mcp.dedicated_browser import BrowserSessionError

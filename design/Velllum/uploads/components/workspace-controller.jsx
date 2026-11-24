@@ -95,11 +95,21 @@
     },[!!preview]);
     useLayoutEffect(()=>{
       if(!preview)return;
-      let live=true;
+      let live=true;const cleanups=[];
       const frame=requestAnimationFrame(()=>{if(showing.current)setPhase('open');});
       if(tab.kind==='browser'){
         const target=tab.preview_target_id;
-        if(target)window.VellumDesktop?.browser?.mount({preview_only:true,target_id:target}).then(result=>{if(live&&result?.preview)setImage(result.preview);}).catch(()=>{});
+        // Live preview: keep asking for fresh frames (~5 fps) while the card is open, so a
+        // playing video (YouTube) plays in the preview instead of freezing on one frame.
+        let timer=null;
+        const nextFrame=()=>{
+          if(!target||!live)return;
+          window.VellumDesktop?.browser?.mount({preview_only:true,target_id:target,max_age_ms:150})
+            .then(result=>{if(live&&result?.preview)setImage(result.preview);}).catch(()=>{})
+            .finally(()=>{if(live)timer=setTimeout(nextFrame,200);});
+        };
+        nextFrame();
+        cleanups.push(()=>clearTimeout(timer));
       }else{
         const source=tab.kind==='main'?document.querySelector('.workspace-split > .main'):[...document.querySelectorAll('[data-workspace-item]')].find(node=>node.dataset.workspaceItem===tab.id);
         if(source&&previewBody.current){
@@ -114,11 +124,14 @@
           copy.inert=true;previewBody.current.replaceChildren(copy);
         }
       }
-      return()=>{live=false;cancelAnimationFrame(frame);previewBody.current?.replaceChildren();};
+      // Only clear the manual page copy. For browser tabs React owns the <img>; removing
+      // it here made React's own removal throw (NotFoundError) and blanked the whole app.
+      const manual=tab.kind!=='browser'?previewBody.current:null;
+      return()=>{live=false;cleanups.forEach(stop=>stop());cancelAnimationFrame(frame);manual?.replaceChildren();};
     },[preview,tab.id,tab.preview_target_id,tab.url]);
-    return <div className={'workspace-view-tab'+(active?' active':'')} onMouseEnter={reveal} onMouseLeave={dismiss}>
-      <button ref={trigger} type="button" role="tab" data-workspace-tab={tab.id} aria-selected={active} onFocus={reveal} onBlur={dismiss} onClick={()=>{dismiss();onSelect(tab);}}><Icon name={icon} size={15}/><span>{tab.title}</span></button>
-      {onClose&&<button type="button" aria-label={'Close '+tab.title} onClick={()=>{dismiss();onClose(tab);}}><Icon name="X" size={13}/></button>}
+    return <div className={'workspace-view-tab'+(active?' active':'')} data-pending={tab.pending||undefined} onMouseEnter={reveal} onMouseLeave={dismiss}>
+      <button ref={trigger} type="button" role="tab" data-workspace-tab={tab.id} aria-selected={active} onFocus={reveal} onBlur={dismiss} onClick={()=>{dismiss();if(!tab.pending)onSelect(tab);}}><Icon name={icon} size={15}/><span>{tab.title}</span></button>
+      {onClose&&!tab.pending&&<button type="button" aria-label={'Close '+tab.title} onClick={()=>{dismiss();onClose(tab);}}><Icon name="X" size={13}/></button>}
       {preview&&ReactDOM.createPortal(<aside className="workspace-tab-preview" data-phase={phase} role="tooltip" aria-label={tab.title+' preview'} data-shell-overlay="true" style={preview}><strong>{tab.title}</strong><div className="workspace-tab-preview-body" aria-hidden="true" ref={previewBody}>
         {tab.kind==='browser'&&(image?<img src={image} alt=""/>:<div className="workspace-tab-preview-empty"><Icon name="Globe" size={24}/><span>{tab.title}</span></div>)}
       </div></aside>,document.body)}

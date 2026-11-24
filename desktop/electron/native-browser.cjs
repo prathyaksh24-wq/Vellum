@@ -84,16 +84,19 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       tab.view.setVisible(true);
     }
   }
-  async function captureTabPreview(tab) {
+  async function captureTabPreview(tab,{maxAgeMs=2000}={}) {
     const page=tab?.view.webContents;
     if(!page || page.isDestroyed() || page.getURL()==='about:blank')return '';
     const url=page.getURL();
-    if(tab.preview && tab.previewURL===url && Date.now()-tab.previewAt<2000)return tab.preview;
+    if(tab.preview && tab.previewURL===url && Date.now()-tab.previewAt<maxAgeMs)return tab.preview;
     if(tab.previewRequest)return tab.previewRequest;
     const pending=(async()=>{
       try {
         // Capturing a background tab must not bring it forward or change focus.
-        const image=await page.capturePage(undefined,{stayHidden:true,stayAwake:true});
+        // A hidden view playing video can stall capturePage; never let the
+        // hover preview hang on it — fall back to the last good frame.
+        const image=await Promise.race([page.capturePage(undefined,{stayHidden:true,stayAwake:true}),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('Preview capture timed out.')),1200))]);
         if(page.isDestroyed() || image.isEmpty() || page.getURL()!==url)return tab.previewURL===url?tab.preview||'':'';
         tab.preview='data:image/jpeg;base64,'+image.resize({width:480}).toJPEG(70).toString('base64');
         tab.previewAt=Date.now();tab.previewURL=url;
@@ -402,7 +405,9 @@ async function createNativeBrowser(electron, {root, cdpEndpoint, ownerWindow}) {
       // Read only, via the existing trusted-workspace IPC guard. Never select,
       // navigate or mount a page just to show its tab preview.
       if (data.preview_only === true) {
-        return {preview:await captureTabPreview(tabs.get(data.target_id))};
+        // A live hover preview asks for fresh frames (max_age_ms down to 100 ms) so video keeps playing.
+        const maxAgeMs=Number.isFinite(data.max_age_ms)?Math.min(2000,Math.max(100,data.max_age_ms)):2000;
+        return {preview:await captureTabPreview(tabs.get(data.target_id),{maxAgeMs})};
       }
       if (data.focus_chrome === true) { window.webContents.focus(); return; }
       // The still is cosmetic. Chromium cannot capture a hidden or unpainted view

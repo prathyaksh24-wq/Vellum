@@ -3,6 +3,7 @@
 //
 //   npm run release                 build UI + backend, package (EVS-signed), publish
 //   npm run release -- --engines    also rebuild the memory-engine runtimes
+//   npm run release -- --ui-only    rebuild only the UI (reuse the built backend), package, publish
 //   npm run release -- --no-build   publish the existing out/ package as-is
 //   npm run release -- --install    publish, then install it now (first install)
 const {spawnSync, execFileSync} = require('node:child_process');
@@ -46,7 +47,8 @@ async function main() {
   if (process.platform !== 'win32') throw new Error('Vellum desktop releases are built on Windows x64.');
   if (!args.has('--no-build')) {
     step('Building the UI', process.execPath, [path.join(__dirname, 'build-ui.cjs')]);
-    step('Building the backend runtime', process.execPath, [path.join(__dirname, 'build-backend.cjs')]);
+    const backendBuilt = fs.existsSync(path.join(desktop, 'resources/backend-runtime/app/desktop-backend.json'));
+    if (!args.has('--ui-only') || !backendBuilt) step('Building the backend runtime', process.execPath, [path.join(__dirname, 'build-backend.cjs')]);
     if (args.has('--engines') || !fs.existsSync(path.join(desktop, 'resources/engine-runtimes/hindsight/python/python.exe'))) {
       step('Building the memory engines', process.execPath, [path.join(__dirname, 'build-engines.cjs')]);
     }

@@ -244,15 +244,20 @@ class SpotifyClient:
     ) -> dict:
         token = self._get_access_token()
         timeout = min(self.timeout, 4.0) if path.startswith('/me/player') else self.timeout
-        with httpx.Client(transport=self.transport, timeout=timeout) as client:
-            response = client.request(
-                method.upper(),
-                self.API_BASE + "/" + path.lstrip("/"),
-                params=params,
-                json=json_body,
-                content=content,
-                headers={"Authorization": f"Bearer {token}"},
-            )
+        try:
+            with httpx.Client(transport=self.transport, timeout=timeout) as client:
+                response = client.request(
+                    method.upper(),
+                    self.API_BASE + "/" + path.lstrip("/"),
+                    params=params,
+                    json=json_body,
+                    content=content,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+        except httpx.TransportError as exc:
+            # A slow or dropped Spotify connection is a normal, reportable outage, not
+            # a server crash (it used to surface as a 500 and hang the player controls).
+            raise SpotifyAPIError("Spotify did not respond in time. Try again.") from exc
         if response.status_code == 401 and not retried:
             self._get_access_token(rejected_token=token)
             return self._request(

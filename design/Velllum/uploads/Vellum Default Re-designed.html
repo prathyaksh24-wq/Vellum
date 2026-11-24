@@ -6548,7 +6548,12 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
       if (!contract.features?.spotify?.enabled || !contract.features.spotify.endpoints?.playback_token) {
         setPlayback({status:'unavailable',enabled:false,ready:false,message:'This backend does not support playback inside Vellum yet.'}); return;
       }
-      const controller = window.VellumSpotifyPlayback.create({onChange:setPlayback,
+      // Remember that in-app playback was turned on, and turn it back on at launch.
+      const remembered = 'vellum-spotify-playback-enabled';
+      const controller = window.VellumSpotifyPlayback.create({onChange:state => {
+          setPlayback(state);
+          if (state.status === 'ready') localStorage.setItem(remembered,'1');
+        },
         onPlayer:state => {
           playerRevisionRef.current++;
           sdkStateRef.current = {at:Object.hasOwn(state,'track') ? Date.now() : sdkStateRef.current?.at || 0,
@@ -6557,7 +6562,10 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
             device:{...(sdkStateRef.current?.state?.device || {}),...state.device}}};
           setPlayer(prev => ({...(prev || {}),...state,device:{...(prev?.device || {}),...state.device}}));
         }});
-      playbackRef.current = controller; controller.prepare();
+      playbackRef.current = controller;
+      Promise.resolve(controller.prepare()).then(() => {
+        if (!stopped && window.VellumDesktop && localStorage.getItem(remembered) === '1') controller.enable()?.catch?.(() => {});
+      });
     }).catch(() => { if (!stopped) setPlayback({status:'error',enabled:false,ready:false,message:'Could not check Spotify playback availability.'}); });
     return () => { stopped = true; playbackRef.current?.dispose(); playbackRef.current = null; };
   }, [connected, spotify && spotify.web_playback_ready]);
@@ -7942,6 +7950,16 @@ const mergeConversationRecords = (current, serverConversations) => {
   return [...localOnly, ...merged];
 };
 
+// Browser tabs being created right now (Ctrl+T), so the header shows them at once.
+const usePendingBrowserTabs = () => {
+  const [count,setCount] = React.useState(0);
+  React.useEffect(() => {
+    const update = event => setCount(Math.max(0, Number(event.detail) || 0));
+    window.addEventListener('vellum:browser-pending-tabs', update);
+    return () => window.removeEventListener('vellum:browser-pending-tabs', update);
+  }, []);
+  return count;
+};
 const App = ({setupHandoff = null} = {}) => {
   const dictationShortcuts = window.VellumUI.Dictation.useShortcuts();
   const [musicPageTarget, setMusicPageTarget] = useState(null);
@@ -10142,21 +10160,29 @@ const [slashSkills, setSlashSkills] = useState([]);
     try {
       const requestEpoch=++browserRequestEpoch.current;
       const present=async()=>{const receipt=await dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser',layout:mode,active_item:''}},{notify:false,persistence:'session'});if(receipt?.status!=='applied')throw new Error(receipt?.message||'Workspace tabs could not be shown.');};
-      const [status]=await Promise.all([refreshBrowser(),present()]);
+      // With an address, start loading it before the panel appears, so the panel never
+      // shows the current (often blank home) tab first and then jumps to the site.
+      const [status]=await Promise.all([refreshBrowser(),initialUrl?null:present()]);
       if(requestEpoch!==browserRequestEpoch.current)return null;
       if(!status.available)throw new Error(status.reason || 'The embedded browser is unavailable. Check Browser settings.');
-      if(desktopWorkspace && view==='apps')nav('chat');
+      // The browser cannot show over Music or Plugins: return to chat so the new tab is visible.
+      if(desktopWorkspace && ['apps','music'].includes(view))nav('chat');
       browserSuppressed.current=false;
 
       if(requestEpoch!==browserRequestEpoch.current)return null;
       if(!status.running){
-        const receipt=await API.browser.control({operation:'open'},{invocation_conversation_id:activeChatId || ''});
+        // Open straight to the address: the first tab loads it directly.
+        const receipt=await API.browser.control(initialUrl?{operation:'open',url:initialUrl}:{operation:'open'},{invocation_conversation_id:activeChatId || ''});
+        if(initialUrl&&receipt?.status!=='applied')throw new Error(receipt?.message||'The browser could not open that address.');
         applyAppActionReceipt(receipt,{notify:false});
-        if(initialUrl){const navigated=await API.browser.control({operation:'navigate',url:initialUrl},{invocation_conversation_id:activeChatId || ''});if(navigated?.status!=='applied')throw new Error(navigated?.message||'The browser could not open that address.');applyAppActionReceipt(navigated,{notify:false});}
-      }else if(newTab){
-        const applied=await commandWorkspaceBrowser('new_tab',initialUrl?{url:initialUrl}:{});
-        if(!applied)throw new Error('A new browser tab could not be created.');
+      }else if(newTab||initialUrl){
+        // A blank home tab is reused for the address instead of leaving it behind.
+        const active=(status.tabs||[]).find(tab=>tab.active);
+        const reuse=initialUrl&&active&&active.url==='about:blank'&&!active.loading;
+        const applied=reuse?await commandWorkspaceBrowser('navigate',{url:initialUrl}):await commandWorkspaceBrowser('new_tab',initialUrl?{url:initialUrl}:{});
+        if(!applied)throw new Error(reuse?'The browser could not open that address.':'A new browser tab could not be created.');
       }
+      if(initialUrl&&requestEpoch===browserRequestEpoch.current)await present();
       if(requestEpoch===browserRequestEpoch.current)return await refreshBrowser();
     }catch(error){if(throwOnError)throw error;pushToast(error.message);return null;}
   };
@@ -10579,13 +10605,21 @@ const [slashSkills, setSlashSkills] = useState([]);
     if(row.messageId)document.getElementById('m-'+row.messageId)?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'});
   };
   const closeWorkspaceSummary=()=>{setActivityMsg(null);configureChatDetails({visible:false},{notify:false,persistence:'session'});requestAnimationFrame(()=>document.querySelector('.workspace-summary-toggle')?.focus({preventScroll:true}));};
-  const workspaceTabs=[...(browserState.tabs||[]).map(tab=>({id:'browser:'+tab.id,kind:'browser',reference_id:tab.id,preview_target_id:tab.native_target_id||(tab.active?browserState.native_target_id:''),title:tab.title||'New tab',url:tab.url})),...workspaceItems.map(item=>item.kind==='chat'?{...item,title:chats.find(chat=>chat.id===item.reference_id)?.title||item.title}:item)].filter(item=>!closingWorkspaceTabs.includes(item.id));
+  const pendingBrowserTabs=usePendingBrowserTabs();
+  const workspaceTabs=[...(browserState.tabs||[]).map(tab=>({id:'browser:'+tab.id,kind:'browser',reference_id:tab.id,preview_target_id:tab.native_target_id||(tab.active?browserState.native_target_id:''),title:tab.title||'New tab',url:tab.url})),...workspaceItems.map(item=>item.kind==='chat'?{...item,title:chats.find(chat=>chat.id===item.reference_id)?.title||item.title}:item)].filter(item=>!closingWorkspaceTabs.includes(item.id)).concat(Array.from({length:pendingBrowserTabs},(_,index)=>({id:'browser:pending-'+index,kind:'browser',title:'New tab',url:'',pending:true})));
+  // Show what is actually retained. The saved panel can say "workspace" with no
+  // matching item (e.g. only a browser tab survived), which the backend rejects
+  // with "Choose an available workspace view before showing it."
+  const retainedWorkspaceView=()=>workspaceProperties.content==='browser'?{}
+    :workspaceActiveItem?{content:'workspace'}
+    :workspaceItems.length?{content:'workspace',active_item:workspaceItems[0].id}
+    :{content:'browser',active_item:''};
   const workspaceViews={
-    tabs:workspaceTabs,activeId:closingWorkspaceTabs.includes(workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item)?workspaceCloseSelection.current:(workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item),
+    tabs:workspaceTabs,activeId:pendingBrowserTabs?'browser:pending-'+(pendingBrowserTabs-1):closingWorkspaceTabs.includes(workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item)?workspaceCloseSelection.current:(workspaceBrowserSelected?'browser:'+browserState.active_tab_id:workspaceProperties.active_item),
     visible:workspacePanelVisible,mode:workspaceMode,error:workspaceError,browserAvailable:browserFeature,terminalAvailable:workspaceTerminalAvailable,
     open:openWorkspace,select:showWorkspaceItem,close:closeWorkspaceItem,hide:workspaceController.hide,showMain:workspaceController.hide,
-    reveal:()=>runWorkspace(()=>setWorkspace({},true)),
-    layout:mode=>runWorkspace(()=>setWorkspace({layout:mode},true))
+    reveal:()=>runWorkspace(()=>setWorkspace(retainedWorkspaceView(),true)),
+    layout:mode=>runWorkspace(()=>setWorkspace({...retainedWorkspaceView(),layout:mode},true))
   };
   const updateSideSession=(chat,patch,action,args)=>{
     if(!chat.messages.length){setChats(previous=>previous.map(row=>row.id===chat.id?{...row,...patch}:row));return;}
@@ -10780,7 +10814,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             hidden={!workspaceBrowserSelected} sharedTabs layoutMode={workspaceMode} onLayoutModeChange={workspaceController.layout} controllerRef={browserPanelRef} autoFocus={false}
             overlayVisible={notificationState.open || Boolean(toast?.notificationPing)}
             suspended={Boolean(!workspaceBrowserVisible || workspaceMotion || commandScope || settingsOpen || searchOpen || menu || agentSettingsOpen || createOpen || shortcutsOpen || customInstrOpen || spotifyConnectOpen || xConnectOpen || ytConnectOpen || spacePickerChatId)}
-            onHide={workspaceController.hide} onCloseTab={tabId=>closeWorkspaceItem({kind:'browser',reference_id:tabId})} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
+            onHide={workspaceController.hide} onCloseTab={tabId=>closeWorkspaceItem({kind:'browser',reference_id:tabId})} onSettings={section => {if(typeof section==='string'){window.VellumUI.browserSettingsSection=section;window.dispatchEvent(new CustomEvent('vellum:browser-settings-section',{detail:section}));}setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
               applyAppActionReceipt(receipt, {notify:false});
@@ -10958,7 +10992,24 @@ function SetupGate({context}) {
   }
   return <App setupHandoff={handoff}/>;
 }
-ReactDOM.createRoot(document.getElementById('root')).render(<window.VellumUI.Accounts.Root>{context => <SetupGate context={context}/>}</window.VellumUI.Accounts.Root>);
+// Self-healing root: an uncaught render error used to unmount the whole tree and
+// leave a black window. Remount instead (data lives in the backend), and if it keeps
+// failing, show a way back rather than nothing.
+class WorkspaceRecovery extends React.Component {
+  constructor(props){super(props);this.state={generation:0,failures:[],failed:false};}
+  static getDerivedStateFromError(){return {failed:true};}
+  componentDidCatch(error,info){
+    console.error('Vellum recovered from a render error.',error,info?.componentStack);
+    const now=Date.now(),failures=[...this.state.failures.filter(at=>now-at<30000),now];
+    if(failures.length<=3)this.setState(state=>({failures,failed:false,generation:state.generation+1}));
+    else this.setState({failures});
+  }
+  render(){
+    if(this.state.failed)return <div role="alert" style={{display:'grid',placeItems:'center',height:'100vh',gap:12,color:'var(--txt2,#ccc)',font:'14px system-ui'}}><div style={{textAlign:'center'}}><p>Vellum hit a display error.</p><button type="button" className="btn" onClick={()=>location.reload()}>Reload Vellum</button></div></div>;
+    return <React.Fragment key={this.state.generation}>{this.props.children}</React.Fragment>;
+  }
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<WorkspaceRecovery><window.VellumUI.Accounts.Root>{context => <SetupGate context={context}/>}</window.VellumUI.Accounts.Root></WorkspaceRecovery>);
 </script>
 </body>
 </html>

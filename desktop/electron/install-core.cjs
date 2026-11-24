@@ -100,6 +100,10 @@ function removeTree(directory, parent) {
 }
 
 // Point root\current at app-<id>. Removing a junction never touches its target.
+// `current` is bookkeeping only: never launch Vellum through it. Widevine's
+// platform check (castLabs VMP) does not trust a binary reached through a
+// junction, and Spotify then refuses licenses for many tracks (silent playback
+// that skips song after song). Returns the real executable path to launch.
 function activate(root, id) {
   const target = path.join(root, 'app-' + id), current = path.join(root, 'current');
   if (!fs.existsSync(path.join(target, 'Vellum.exe'))) throw new Error('The installed build is incomplete.');
@@ -109,7 +113,22 @@ function activate(root, id) {
   fs.symlinkSync(target, next, 'junction');
   try { fs.unlinkSync(current); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   fs.renameSync(next, current);
-  return path.join(current, 'Vellum.exe');
+  return path.join(target, 'Vellum.exe');
+}
+
+// The real executable a launch should use: resolves junctions such as `current`.
+function realExecutable(executable) {
+  try { return fs.realpathSync.native(executable); } catch { return executable; }
+}
+
+// Windows shortcuts that should open this Vellum: Start menu, desktop and taskbar pins.
+function shortcutPaths(env = process.env) {
+  const appData = env.APPDATA || '', home = env.USERPROFILE || '';
+  const pins = path.join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar');
+  const paths = [path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Vellum.lnk'),
+    path.join(home, 'Desktop', 'Vellum.lnk'), path.join(home, 'OneDrive', 'Desktop', 'Vellum.lnk')];
+  try { for (const name of fs.readdirSync(pins)) if (/^vellum.*\.lnk$/i.test(name)) paths.push(path.join(pins, name)); } catch {}
+  return paths;
 }
 
 // Install a published release as app-<id> and make it current.
@@ -148,4 +167,4 @@ function pruneInstalled(root = installRoot(), keep = 2) {
   return removed;
 }
 
-module.exports = {BUILD_FILE, feedRoot, installRoot, readLatest, isNewer, validBuild, readJSON, writeJSONAtomic, mirrorTree, removeTree, activate, installRelease, pruneInstalled};
+module.exports = {BUILD_FILE, feedRoot, installRoot, readLatest, isNewer, validBuild, readJSON, writeJSONAtomic, mirrorTree, removeTree, activate, installRelease, pruneInstalled, realExecutable, shortcutPaths};

@@ -169,3 +169,19 @@ img.browser-brand-icon{background:none;object-fit:contain}
 @media(max-width:1200px){.browser-heading-actions .browser-status{display:none}.browser-home-content{width:calc(100% - 40px);max-width:640px}.browser-shortcut{min-width:104px;padding:10px}.browser-home-shortcuts{gap:12px}}
 @media(max-width:520px){.browser-heading-actions .secondary{display:none}.browser-brand{display:none}.browser-home-content{width:calc(100% - 32px);padding-bottom:40px}.browser-home-title h1{font-size:32px;letter-spacing:0;font-weight:500}.browser-google-wordmark{width:180px}.browser-shortcut{min-width:104px}.browser-address-row{gap:2px;padding:6px}.browser-address-row>.browser-icon{width:26px}.browser-home-edit{position:relative;top:auto;left:auto;transform:none;box-sizing:border-box;margin:20px auto 0}.browser-home-title{margin-bottom:22px}}
 @media(prefers-reduced-motion:reduce){.browser-panel *{transition:none!important;animation:none!important}}
+
+/* Motion Prompt #001 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#001
+   The browser's own tab strip uses the same pop-in for a tab being created. */
+.browser-tab[data-pending]{transform-origin:left center;animation:vellum-tab-pop .8s var(--vellum-pop-spring,ease-out) both,vellum-tab-fade .15s linear both}
+
+/* Motion Prompt #057 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#057
+   Tabs content swap: the new panel fades in over 0.2 s, 0.1 s after the switch, rising 8 px. */
+@keyframes vellum-panel-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.browser-home{animation:vellum-panel-in .2s cubic-bezier(.65,0,.35,1) .1s both}
+
+/* Motion Prompt #070 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#070
+   Spinner rate: 1.3 turns per second (468 deg/s) while the page reloads; fades in over 0.15 s. */
+@keyframes vellum-reload-spin{to{transform:rotate(360deg)}}
+.browser-reload svg{transition:opacity .15s linear}
+.browser-reload[data-loading] svg{animation:vellum-reload-spin .769s linear infinite}
+@media (prefers-reduced-motion:reduce){.browser-home{animation:none}.browser-reload[data-loading] svg{animation:none;opacity:.55}}

@@ -29,14 +29,35 @@
       }
       return endpoint + encodeURIComponent(String(query || '').trim());
     },
+    // Address-bar engine shortcuts: "@brave cats" searches Brave once, whatever the default.
+    engineKeywords: {google:'google', g:'google', brave:'brave', b:'brave', duckduckgo:'duckduckgo', ddg:'duckduckgo', d:'duckduckgo',
+      startpage:'startpage', s:'startpage', searxng:'searxng', searx:'searxng'},
+    engineHomes: {google:'https://www.google.com/', brave:'https://search.brave.com/', duckduckgo:'https://duckduckgo.com/', startpage:'https://www.startpage.com/'},
+    engineShortcut: function (input) {
+      var match = /^@([a-z]+)(?:\s+([\s\S]*))?$/i.exec(String(input || '').trim());
+      var id = match && this.engineKeywords[match[1].toLowerCase()];
+      return id ? {engine:id, query:(match[2] || '').trim()} : null;
+    },
     addressUrl: function (input, preferences) {
       var value = String(input || '').trim();
       if (!value || /^https?:\/\//i.test(value) || value === 'about:blank') return value;
+      var selected = preferences || this.defaultPreferences;
+      var shortcut = this.engineShortcut(value);
+      if (shortcut) {
+        if (shortcut.query) return this.searchUrl(shortcut.query, Object.assign({}, selected, {search_engine:shortcut.engine}));
+        if (this.engineHomes[shortcut.engine]) return this.engineHomes[shortcut.engine];
+        // SearXNG has no homepage until an instance is set.
+        return shortcut.engine === 'searxng' && selected.searxng_url ? String(selected.searxng_url).trim() : '';
+      }
+      // A search engine's name is a search with the chosen engine ("google" with
+      // Brave selected shows Brave results), unless it names the chosen engine.
+      var lowered = value.toLowerCase(), named = this.engineKeywords[lowered];
+      if (named && lowered.length > 1 && named !== selected.search_engine) return this.searchUrl(value, selected);
       // Exact site names open their destination instead of searching for it.
-      var sites = {google:'https://www.google.com/', youtube:'https://www.youtube.com/',
-        reddit:'https://www.reddit.com/', wikipedia:'https://www.wikipedia.org/',
+      var sites = {google:'https://www.google.com/', brave:'https://search.brave.com/', duckduckgo:'https://duckduckgo.com/',
+        youtube:'https://www.youtube.com/', reddit:'https://www.reddit.com/', wikipedia:'https://www.wikipedia.org/',
         spotify:'https://open.spotify.com/', x:'https://x.com/', twitter:'https://x.com/'};
-      if (Object.prototype.hasOwnProperty.call(sites, value.toLowerCase())) return sites[value.toLowerCase()];
+      if (Object.prototype.hasOwnProperty.call(sites, lowered)) return sites[lowered];
       var host = value.split(/[/?#]/)[0];
       var local = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(host);
       var website = /^(?:[a-z0-9-]+\.)+[a-z0-9-]+(?::\d+)?$/i.test(host) || /^\[[a-f0-9:]+\](?::\d+)?$/i.test(host);
@@ -50,6 +71,19 @@
     addressSuggestions: function (query, tabs, shortcuts, history, preferences, queries) {
       var value = String(query || '').trim();
       var needle = value.toLowerCase();
+      if (value.charAt(0) === '@') {
+        // "@" lists the engines; "@brave cats" offers that one search.
+        var typed = /^@([a-z]*)\s*([\s\S]*)$/i.exec(value) || ['', '', ''];
+        var term = typed[2].trim(), self = this;
+        return this.engines.filter(function (engine) {
+          var keys = Object.keys(self.engineKeywords).filter(function (key) { return self.engineKeywords[key] === engine.id; });
+          return keys.some(function (key) { return key.indexOf(typed[1].toLowerCase()) === 0; });
+        }).map(function (engine) {
+          var url;
+          try { url = term ? self.searchUrl(term, Object.assign({}, preferences || self.defaultPreferences, {search_engine:engine.id})) : self.addressUrl('@' + engine.id, preferences); } catch (_) { return null; }
+          return url && {title:term ? 'Search ' + engine.name + ' for ' + term : engine.name + '  ·  @' + engine.id, url:url, kind:'engine', engine:engine.id};
+        }).filter(Boolean).slice(0, 5);
+      }
       var seen = new Set();
       var items = [];
       (tabs || []).map(function (tab) { return {title:tab.title, url:tab.url, tab_id:tab.id, kind:'tab'}; })

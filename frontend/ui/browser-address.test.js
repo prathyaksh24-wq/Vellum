@@ -29,6 +29,31 @@ test.each([
   expect(window.VellumApi.browser.addressUrl(input)).toBe(expected);
 });
 
+test.each([
+  ['google', 'https://search.brave.com/search?q=google'],
+  ['brave', 'https://search.brave.com/'],
+  ['reddit', 'https://www.reddit.com/'],
+  ['@google cats', 'https://www.google.com/search?q=cats'],
+  ['@ddg cats', 'https://duckduckgo.com/?q=cats'],
+  ['@g', 'https://www.google.com/'],
+  ['cats', 'https://search.brave.com/search?q=cats'],
+])('with Brave chosen, the address bar searches Brave and @ picks an engine once: %s', async (input, expected) => {
+  vi.resetModules();
+  window.VellumApi = {client:{request:vi.fn()}};
+  await import('../../design/Velllum/uploads/api/browser.js');
+  expect(window.VellumApi.browser.addressUrl(input, {search_engine:'brave'})).toBe(expected);
+});
+
+test('typing @ lists the search engines to switch to', async () => {
+  vi.resetModules();
+  window.VellumApi = {client:{request:vi.fn()}};
+  await import('../../design/Velllum/uploads/api/browser.js');
+  const engines = window.VellumApi.browser.addressSuggestions('@', [], [], [], {search_engine:'brave'}).map(item => item.engine);
+  expect(engines).toEqual(['google','brave','duckduckgo','startpage']);
+  const once = window.VellumApi.browser.addressSuggestions('@d cats', [], [], [], {search_engine:'brave'});
+  expect(once).toEqual([expect.objectContaining({kind:'engine', engine:'duckduckgo', url:'https://duckduckgo.com/?q=cats'})]);
+});
+
 test('submitting a recognized website name opens that site without a search intermediary', async () => {
   vi.resetModules();
   loadPublicIcons(React);

@@ -326,3 +326,12 @@ def test_unexposed_resource_404_has_distinct_safe_code(auth_store):
     client=SpotifyClient(auth_store,transport=httpx.MockTransport(lambda request:httpx.Response(404,json={'error':{'message':'hidden provider detail'}})))
     with pytest.raises(SpotifyResourceUnavailable) as exc:client.request('GET','/playlists/Mix/items')
     assert exc.value.code=='resource_unavailable' and 'hidden provider detail' not in str(exc.value)
+
+
+def test_a_slow_spotify_connection_is_a_reportable_error_not_a_crash(auth_store):
+    from plugins.connectors.spotify.errors import SpotifyAPIError
+    def slow(request):
+        raise httpx.ReadTimeout('The read operation timed out', request=request)
+    client = SpotifyClient(auth_store=auth_store, transport=httpx.MockTransport(slow))
+    with pytest.raises(SpotifyAPIError, match='did not respond in time'):
+        client.request('GET', '/me/player/queue')
