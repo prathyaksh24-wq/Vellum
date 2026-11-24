@@ -145,7 +145,9 @@ test.each(['pattern-waves', 'particles', 'nimbus', 'daybreak', 'eclipse', 'dusk'
 
 test('Appearance cards keep a thumbnail until focused and release the live renderer on blur',async()=>{
   const html=readFileSync(resolve(uploads,'Vellum Default Re-designed.html'),'utf8');
-  const source=html.slice(html.indexOf('const BackgroundRenderer ='),html.indexOf('const IcNote ='));
+  // Only the renderer and the card: harness plugin registrations sit between them.
+  const source=html.slice(html.indexOf('const BackgroundRenderer ='),html.indexOf('const VellumBackgroundScene ='))
+    +html.slice(html.indexOf('const BackgroundChoiceCard ='),html.indexOf('const IcNote ='));
   const code=execFileSync(process.execPath,['-e',"const esbuild=require('esbuild');process.stdout.write(esbuild.transformSync(process.argv[1],{loader:'jsx'}).code)",source],{encoding:'utf8'});
   const Card=new Function('React',`const {useState}=React;const IcCheck=()=>null;${code};return BackgroundChoiceCard;`)(React);
   const render=vi.fn(()=>React.createElement('canvas'));

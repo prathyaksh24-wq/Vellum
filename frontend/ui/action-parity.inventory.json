@@ -234,8 +234,8 @@
       "sha256": "77ff8ad08ad3efc28dffe6c68a606617204c8e98896dd000a1d9b91a8a89a17b"
     },
     "design/Velllum/uploads/components/agent-response.js": {
-      "count": 19,
-      "sha256": "425e2db7dbeb616b78e742b164457fe7af916f58744d28cb43c17ba82023e0a7"
+      "count": 41,
+      "sha256": "4f6e1ae344fba9e53f9b8cb1af19c9bce9698a18c7997435b8735cbd7a6182a3"
     },
     "design/Velllum/uploads/components/streaming-text.js": {
       "count": 11,
@@ -2755,6 +2755,22 @@
     {
       "scope": "Scheduled page Refresh ideas",
       "reason": "Re-reads task ideas from GET /api/automations/suggestions?refresh=true. It regenerates a machine-owned suggestion cache and changes no user-owned state; choosing an idea starts an ordinary chat."
+    },
+    {
+      "scope": "Harness self-change approval card (Approve, Deny, Approve and allow all) and the Settings › Self-changes full-access switch",
+      "reason": "Deliberately user-only. These grant or refuse Vellum permission to change its own harness; exposing them as App Actions would let the agent approve its own changes. They call window.VellumHarness directly from the user's click."
+    },
+    {
+      "scope": "Analytics rendered through the ui-analytics harness slot (rail entry, Settings section, full page)",
+      "reason": "Re-hosts the existing Analytics page through the harness plugin slot. onAction forwards to the same dispatcher as before and opening it uses the already-covered 'open ledger' navigation; no new state is introduced."
+    },
+    {
+      "scope": "Browser sign-in hand-off dialog (Sign in, Cancel, Close)",
+      "reason": "Opens a real browser window for the user to sign in themselves and cancels it. Sign-in must be performed by the user, so it is not an agent action."
+    },
+    {
+      "scope": "Browser step page previews in chat (thumbnail hover peek, open viewer, previous/next, close, open page)",
+      "reason": "Presentation only: previewing screenshots of steps the agent already took. Opening the page URL reuses the existing browser open path. No user-owned state changes."
     },
     {
       "scope": "Installed-app update button and install dialog, browser Downloads routing to Settings › Browser, reload spin, pending new-tab chip, live tab hover preview, and the render-error recovery reload",
