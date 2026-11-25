@@ -25,6 +25,23 @@ def test_environment() -> None:
 
 
 @pytest.fixture(autouse=True)
+def no_live_openrouter_catalog():
+    """Tests never fetch OpenRouter's live model list; they see the static catalog.
+
+    Patched by hand, not with monkeypatch: requesting monkeypatch here would
+    reorder its teardown after the cache-reset fixture below.
+    """
+    from agent.llm import openrouter_catalog
+
+    real = openrouter_catalog.fetch_live_catalog
+    openrouter_catalog.reset_cache()
+    openrouter_catalog.fetch_live_catalog = lambda *_a, **_k: ()
+    yield
+    openrouter_catalog.fetch_live_catalog = real
+    openrouter_catalog.reset_cache()
+
+
+@pytest.fixture(autouse=True)
 def user_starts_idle():
     """Chat tests mark the user active; background-work tests must not inherit that."""
     from agent import foreground

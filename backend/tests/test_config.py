@@ -23,8 +23,8 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.primary_model not in settings.reviewed_openrouter_models
     assert settings.cloud_escalation_model in settings.reviewed_openrouter_models
     assert 0 <= settings.min_retrieval_score <= 1
-    assert settings.fast_model == "google/gemma-3-12b-it"
-    assert settings.fast_model != "google/gemma-4-12b-it"
+    # No separate fast model: quick background work uses the active chat model.
+    assert settings.fast_model == ""
     assert settings.apify_mcp_url == "https://mcp.apify.com"
     assert settings.serpapi_base_url == "https://serpapi.com/search.json"
     assert settings.serpapi_log_path.name == "serpapi-searches.jsonl"
