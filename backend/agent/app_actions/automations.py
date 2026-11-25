@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from threading import Lock
 from typing import Any, Awaitable, Callable
@@ -436,12 +435,9 @@ class AutomationActionService:
 
     @staticmethod
     def _run_awaitable(factory: Callable[[], Awaitable[dict[str, Any]]]) -> dict[str, Any]:
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(factory())
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="vellum-automation-run") as executor:
-            return executor.submit(lambda: asyncio.run(factory())).result()
+        from agent.automations import server_loop
+
+        return server_loop.run_and_wait(factory)
 
     @staticmethod
     def _binding(record: dict[str, Any]) -> dict[str, Any]:

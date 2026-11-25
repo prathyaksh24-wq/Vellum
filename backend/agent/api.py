@@ -1670,6 +1670,8 @@ async def lifespan(app: FastAPI):
     watchdog = start_loop_watchdog(asyncio.get_running_loop())
     from agent.desktop_runtime import startup_mark
     startup_mark("workers started")
+    from agent.automations.server_loop import set_server_loop
+    set_server_loop(asyncio.get_running_loop())
     scheduler = start_scheduler()
     app.state.scheduler = scheduler
     startup_mark("scheduler started")
@@ -1684,6 +1686,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         watchdog.set()
+        set_server_loop(None)
         if scheduler is not None:
             shutdown = getattr(scheduler, "shutdown", None)
             if shutdown is not None:
@@ -7521,6 +7524,14 @@ async def setup_ollama_pull(body: SetupPullRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/terminal/approval")
+async def terminal_approval_mode() -> dict[str, object]:
+    """How agent terminal commands are approved; changed with terminal.approval.set."""
+    from agent.terminal.approval import MODES, get_mode
+
+    return {"mode": get_mode(), "modes": list(MODES)}
 
 
 @router.get("/terminal/profiles")

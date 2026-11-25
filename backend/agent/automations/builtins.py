@@ -174,13 +174,15 @@ async def run_builtin(record: dict[str, Any], *, raise_errors: bool = False) -> 
         logger.warning("[AUTOMATIONS] built-in %s failed: %s", key, exc)
 
 
-async def _memory_dreaming_handler() -> None:
+async def _memory_dreaming_handler() -> dict[str, Any]:
     from agent import api  # lazy: the main api module mounts this package's router
 
     store = getattr(api._memory_orchestrator, "store", None)
     if store is not None and not store.get_settings().get("dreaming_enabled", True):
-        return  # the Dreaming switch is off; force only skips the batch threshold
-    await api._maybe_run_dreaming(reason="scheduled", force=True)
+        # the Dreaming switch is off; force only skips the batch threshold
+        return {"summary": "Skipped: Dreaming is turned off in Memory settings."}
+    ran = await api._maybe_run_dreaming(reason="scheduled", force=True)
+    return {"summary": "Dreaming cycle ran." if ran else "Nothing new to dream about."}
 
 
 async def _memory_retention_handler() -> dict[str, Any]:
@@ -206,28 +208,28 @@ async def _memory_provider_sync_handler() -> dict[str, Any]:
     return await asyncio.to_thread(api._memory_orchestrator.flush_provider_sync)
 
 
-async def _nightly_digest_handler() -> None:
+async def _nightly_digest_handler() -> Any:
     from agent.scheduler.digest import run_digest
 
-    await run_digest()
+    return await run_digest()
 
 
-async def _youtube_projection_handler() -> None:
+async def _youtube_projection_handler() -> Any:
     from agent.scheduler.youtube_intelligence import run_projection
 
-    await asyncio.to_thread(run_projection)
+    return await asyncio.to_thread(run_projection)
 
 
-async def _discord_sync_handler() -> None:
+async def _discord_sync_handler() -> Any:
     from agent.scheduler.discord_intelligence import run_sync
 
-    await asyncio.to_thread(run_sync)
+    return await asyncio.to_thread(run_sync)
 
 
-async def _curator_tick_handler() -> None:
+async def _curator_tick_handler() -> Any:
     from agent.skills.curator_runtime import get_curator_runtime
 
-    await asyncio.to_thread(get_curator_runtime().tick)
+    return await asyncio.to_thread(get_curator_runtime().tick)
 
 
 async def _youtube_history_handler() -> dict[str, Any]:
@@ -255,3 +257,34 @@ _HANDLERS: dict[str, Any] = {
     "discord_intelligence_sync": _discord_sync_handler,
     "skill_curator_tick": _curator_tick_handler,
 }
+
+
+def describe_builtin_result(name: str, result: Any) -> str:
+    """A readable report of what a built-in run did, for run history and its chat."""
+    if result is None:
+        return f"{name} finished. It reported no details."
+    if isinstance(result, str):
+        return result.strip() or f"{name} finished."
+    if not isinstance(result, dict):
+        return f"{name} finished: {str(result)[:2000]}"
+    lines: list[str] = []
+    summary = result.get("summary") or result.get("message")
+    if isinstance(summary, str) and summary.strip():
+        lines.append(summary.strip())
+    for key, value in result.items():
+        if key in {"summary", "message"}:
+            continue
+        label = str(key).replace("_", " ").capitalize()
+        if isinstance(value, (str, int, float, bool)) and str(value) != "":
+            lines.append(f"- {label}: {value}")
+        elif isinstance(value, (list, tuple)):
+            preview = ", ".join(str(item.get("title") or item.get("name") or item.get("id") or item)
+                                if isinstance(item, dict) else str(item) for item in list(value)[:5])
+            more = f" (+{len(value) - 5} more)" if len(value) > 5 else ""
+            lines.append(f"- {label}: {len(value)}" + (f" — {preview}{more}" if preview else ""))
+        elif isinstance(value, dict) and value:
+            inner = ", ".join(f"{k}: {v}" for k, v in list(value.items())[:8]
+                              if isinstance(v, (str, int, float, bool)))
+            if inner:
+                lines.append(f"- {label}: {inner}")
+    return "\n".join(lines)[:6000] or f"{name} finished."

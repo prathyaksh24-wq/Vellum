@@ -100,6 +100,7 @@ from agent.tools.web_extract_pages import web_extract_pages
 from agent.tools.web_research import web_research
 from agent.tools.delegation import available_delegation_tool
 from agent.tools.app_actions import app_action, app_action_confirmation_pending
+from agent.tools.terminal_command import run_command
 
 VELLUM_SYSTEM_PROMPT = """## Vellum operating specifics
 These Vellum-specific rules apply within the main agent runtime contract above.
@@ -506,9 +507,11 @@ def core_tool_registry() -> ToolRegistry:
         "plugin_mcp",
         "escalate_to_cloud",
         "cronjob",
+        "run_command",
     }
     tools = [
         app_action,
+        run_command,
         conversation_history,
         context_status,
         search_context,
@@ -1244,15 +1247,26 @@ class LazyAgent:
 
     async def _aget(self, model: str | None = None, reasoning_mode: Any = None):
         key = self._model_key(model, reasoning_mode)
+        loop = asyncio.get_running_loop()
+        loops = self.__dict__.setdefault("_async_agent_loops", {})
+        # The async runtime (checkpointer connection and its lock) is bound to the
+        # loop that built it. A runtime built on another loop would fail every turn
+        # with "bound to a different event loop", so rebuild it for this loop.
+        if key in self._async_agents and loops.get(key, loop) is not loop:
+            self._async_agents.pop(key, None)
+            self._async_build_locks.pop(key, None)
         target = self._async_agents.get(key)
         if target is not None:
             return target
-        lock = self._async_build_locks.setdefault(key, asyncio.Lock())
+        lock = self._async_build_locks.get(key)
+        if lock is None or getattr(lock, "_loop", None) not in (None, loop):
+            lock = self._async_build_locks[key] = asyncio.Lock()
         async with lock:
             target = self._async_agents.get(key)
             if target is None:
                 target = await build_async_agent(model, reasoning_mode=reasoning_mode)
                 self._async_agents[key] = target
+                loops[key] = loop
         return target
 
     async def prepare(self, model: str | None = None, reasoning_mode: Any = None):

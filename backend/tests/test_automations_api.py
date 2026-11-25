@@ -298,10 +298,19 @@ def test_run_now_delivers_new_chat_to_feed(monkeypatch, tmp_path) -> None:
     assert ran.status_code == 200
     assert ran.json()["run"]["status"] == "complete"
     conversations = ConversationLifecycle(path=conversations_path).list()
+    # "New chat" destination: every run gets a chat of its own, named after the task and run time.
     assert len(conversations) == 1
-    assert conversations[0]["title"] == "Automation: Morning brief"
-    texts = [message["text"] for message in conversations[0]["messages"]]
+    run_chat = conversations[0]
+    assert run_chat["id"].startswith("automation-")
+    assert run_chat["title"].startswith("Morning brief · ")
+    texts = [message["text"] for message in run_chat["messages"]]
     assert texts == ["Summarize what changed overnight.", "Feed summary."]
+    assert ran.json()["run"]["conversation_id"] == run_chat["id"]
+    with TestClient(api.app) as client:
+        again = client.post(f"/api/automations/{automation_id}/run")
+    second = again.json()["run"]["conversation_id"]
+    assert second != run_chat["id"]
+    assert len(ConversationLifecycle(path=conversations_path).list()) == 2
 
 
 def test_run_now_appends_to_pinned_existing_chat(monkeypatch, tmp_path) -> None:

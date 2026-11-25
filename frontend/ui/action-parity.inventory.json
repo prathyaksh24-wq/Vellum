@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 971,
-      "sha256": "f405f199547d594e0df0800bfb77326f2114b7d89894052c5b00a92f96664b2b"
+      "count": 1002,
+      "sha256": "d540c1a2c9752656749909003b97b0d471aab175d5e1b1128ff33a524acc08eb"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -70,8 +70,8 @@
       "sha256": "42d09cfd32a7e20e2a3b163735b37417d41a0698c02dfe4446743bc8e9c32c8e"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
-      "count": 21,
-      "sha256": "f4db887c2281e8d618052c413524cf5d73d5f30d7e2278547de784cc43094e71"
+      "count": 22,
+      "sha256": "a763ea6b3ef6b3b29035f6620ff9c3b4011e5160529a37f51a90c6ae50d6f6cf"
     },
     "design/Velllum/uploads/components/PatternWaves.jsx": {
       "count": 0,
@@ -155,7 +155,7 @@
     },
     "design/Velllum/uploads/components/plugin-workspace.jsx": {
       "count": 134,
-      "sha256": "9f0c29872ff34865962f78b982ef2fec5b635139363a861c05858c884115ccbc"
+      "sha256": "266c7e59370b7dc526e770ad2f44f6fd6119f0f967969893afa55551da66b7ac"
     },
     "design/Velllum/uploads/books-entry.js": {
       "count": 0,
@@ -2533,6 +2533,15 @@
         "path": "design/Velllum/uploads/components/vellum-face.jsx",
         "text": "onDeviceSettings({face_color:draft})"
       }
+    },
+    {
+      "surface": "Composer",
+      "name": "terminal command approval mode (ask, approve for me, full access)",
+      "actionId": "terminal.approval.set",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "action_id:'terminal.approval.set'"
+      }
     }
   ],
   "exemptions": [
@@ -2775,6 +2784,18 @@
     {
       "scope": "Installed-app update button and install dialog, browser Downloads routing to Settings › Browser, reload spin, pending new-tab chip, live tab hover preview, and the render-error recovery reload",
       "reason": "Installing an update relaunches the desktop app and is user-only maintenance, never an agent action. Downloads opens the existing Browser settings section (reachable through the existing settings actions); the reload spin, pending chip and hover preview are presentation of existing browser state; the recovery button only reloads the window after a render failure."
+    },
+    {
+      "scope": "Skills directory See more toggle and notification Open chat",
+      "reason": "Expanding the installed-skills list is local presentation, and Open chat only navigates to the automation's existing conversation (conversation.open) after marking the notification read through automation.notifications.read."
+    },
+    {
+      "scope": "Scheduled page tabs, search, filter, sort, New task menu, task page and nested run rows",
+      "reason": "Tabs, search, filter, sort, the New task menu, opening a task page and expanding runs are local presentation. Run now, pause/resume, edit and delete on the task page call the same automation.run, automation.pause, automation.resume, automation.update and automation.remove App Actions as the sidebar menu; run rows only navigate to the run's existing chat."
+    },
+    {
+      "scope": "Settings Automations overview, command approval radios and Scheduled breadcrumb",
+      "reason": "Settings task switches call automation.pause and automation.resume and the approval radios call terminal.approval.set, the same App Actions as the Scheduled page and composer; the chat header breadcrumb only navigates back to the Scheduled page."
     }
   ],
   "deferred": [

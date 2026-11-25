@@ -137,7 +137,7 @@
       </div></aside>,document.body)}
     </div>;
   }
-  function WorkspaceToolbar({controller:c,workspace:w,sidebar,title,conversation,project,sidebarVisible=true,onNewChat,onOpenProject,onDetails,detailsOpen,onOptions,contextMeter=null}) {
+  function WorkspaceToolbar({controller:c,workspace:w,sidebar,title,titlePrefix=null,conversation,project,sidebarVisible=true,onNewChat,onOpenProject,onDetails,detailsOpen,onOptions,contextMeter=null}) {
     const full=w.mode==='full'&&w.tabs.length>0;
     const tabIcon=tab=>tab.kind==='chat'?'Chat':['files','directory'].includes(tab.kind)?'Files':tab.kind==='terminal'?'Terminal':tab.kind==='integration'?'ConnectApps':tab.kind==='launcher'?'Tabs':'Globe';
     const count=w.tabs.length,showRetained=!w.visible&&count>0;
@@ -155,7 +155,7 @@
         if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
         const tabs=[...event.currentTarget.querySelectorAll('[role=tab]')],index=tabs.indexOf(document.activeElement);
         if(index<0)return;event.preventDefault();tabs[event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:tabs.length-1))%tabs.length].focus();
-      }}><WorkspaceTab tab={{id:'main',kind:'main',title:title||'Current chat'}} active={!w.visible} icon="Chat" onSelect={w.showMain}/>{w.tabs.map(tab=><WorkspaceTab key={tab.id} tab={tab} active={w.visible&&w.activeId===tab.id} icon={tabIcon(tab)} onSelect={w.select} onClose={w.close}/>)}</div>{newTab}</div>:<div className="workspace-header-start">{sidebar}{conversation&&!sidebarVisible&&<button type="button" className="tbtn" aria-label="New chat" data-command="chat.new" onClick={onNewChat}><Icon name="PencilSquare" size={18}/></button>}{conversation&&project&&!sidebarVisible&&<button type="button" className="tbtn workspace-project-context" aria-label={'Project: '+project.name} onClick={()=>onOpenProject(project.id)}><Icon name="Folder" size={17}/></button>}<span className="workspace-title">{title}</span></div>}
+      }}><WorkspaceTab tab={{id:'main',kind:'main',title:title||'Current chat'}} active={!w.visible} icon="Chat" onSelect={w.showMain}/>{w.tabs.map(tab=><WorkspaceTab key={tab.id} tab={tab} active={w.visible&&w.activeId===tab.id} icon={tabIcon(tab)} onSelect={w.select} onClose={w.close}/>)}</div>{newTab}</div>:<div className="workspace-header-start">{sidebar}{conversation&&!sidebarVisible&&<button type="button" className="tbtn" aria-label="New chat" data-command="chat.new" onClick={onNewChat}><Icon name="PencilSquare" size={18}/></button>}{conversation&&project&&!sidebarVisible&&<button type="button" className="tbtn workspace-project-context" aria-label={'Project: '+project.name} onClick={()=>onOpenProject(project.id)}><Icon name="Folder" size={17}/></button>}{titlePrefix}<span className="workspace-title">{title}</span></div>}
       {full&&<button type="button" className="tbtn" aria-label={w.visible?'Enter split view':'Enter full view'} data-tip={w.visible?'Enter split view':'Enter full view'} onClick={()=>w.layout(w.visible?'split':'full')}><Icon name={w.visible?'Split':'Full'} size={18}/></button>}
       {actions}{(c.error||w.error)&&<div className="workspace-control-error" role="alert">{w.error||c.error}</div>}
     </header>;

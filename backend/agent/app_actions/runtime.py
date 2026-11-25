@@ -101,6 +101,15 @@ from agent.app_actions.observability import (
     ObservabilityActionError,
     observability_action_definitions,
 )
+from agent.app_actions.terminal_commands import (
+    TERMINAL_ACTION_IDS,
+    TERMINAL_SETTING_ACTION_IDS,
+    TerminalCommandError,
+    confirmation_message as terminal_confirmation_message,
+    execute_terminal_action,
+    normalize_arguments as normalize_terminal_arguments,
+    terminal_action_definitions,
+)
 from agent.app_actions.petdex import (
     PETDEX_ACTION_IDS,
     PETDEX_ACTIVE_SET_ACTION_ID,
@@ -313,6 +322,7 @@ class AppActionRuntime:
                 *automation_action_definitions(),
                 *knowledge_source_action_definitions(),
                 *petdex_action_definitions(),
+                *terminal_action_definitions(),
                 *browser_action_definitions(),
             )
         }
@@ -1871,6 +1881,27 @@ class AppActionRuntime:
             return self._dispatch_knowledge_source(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
             return self._dispatch_petdex_action(request, context, definition)
+        if request.action_id in TERMINAL_SETTING_ACTION_IDS:
+            try:
+                result = execute_terminal_action(request.action_id, dict(request.arguments), context)
+            except TerminalCommandError as exc:
+                return self._error_receipt(request=request, context=context,
+                                           status="unavailable" if exc.unavailable else "failed",
+                                           access_class=definition.access_class, error_code=exc.code,
+                                           message=str(exc), authorized=not exc.unavailable)
+            return self._domain_action_receipt(request, context, definition, result)
+        if request.action_id in TERMINAL_ACTION_IDS:
+            # Never runs on dispatch: the user confirms the exact command first.
+            try:
+                message = terminal_confirmation_message(dict(request.arguments))
+            except TerminalCommandError as exc:
+                return self._error_receipt(request=request, context=context, status="failed",
+                                           access_class=definition.access_class, error_code=exc.code,
+                                           message=str(exc), authorized=True)
+            return self._domain_confirmation_receipt(
+                request, context, definition, target_kind="terminal",
+                target_reference=normalize_terminal_arguments(dict(request.arguments))["cwd"],
+                message=message)
         if request.action_id in BROWSER_SETTINGS_ACTIONS:
             return self._dispatch_browser_settings(request, context, definition)
         if request.action_id == BROWSER_CONTROL_ACTION:
@@ -3500,6 +3531,16 @@ class AppActionRuntime:
         if request.action_id in KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_knowledge_source(request, context, definition, confirmed=True)
+        if request.action_id in TERMINAL_ACTION_IDS:
+            self._receipt_store.remove_confirmation(token)
+            try:
+                result = execute_terminal_action(request.action_id, dict(request.arguments), context)
+            except TerminalCommandError as exc:
+                return self._error_receipt(request=request, context=context,
+                                           status="unavailable" if exc.unavailable else "failed",
+                                           access_class=access_class, error_code=exc.code, message=str(exc),
+                                           authorized=not exc.unavailable)
+            return self._domain_action_receipt(request, context, definition, result)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_plugin_action(request, context, definition, confirmed=True, confirmation_binding=record.binding)

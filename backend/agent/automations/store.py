@@ -226,7 +226,8 @@ class AutomationStore:
 
     def deliver_notification(self, automation_id: str, delivery_id: str, message: str,
                              *, title: str = "", url: str = "", read_at: str | None = None,
-                             created_at: str | None = None, failed: bool = False) -> bool:
+                             created_at: str | None = None, failed: bool = False,
+                             conversation_id: str = "") -> bool:
         """Persist once before the creator outbox is acknowledged; create no chat."""
         with self._lock:
             data = self._read()
@@ -241,7 +242,8 @@ class AutomationStore:
                 return False
             history.append({"id": delivery_id, "automation_id": automation_id,
                 "title": (title or record["name"])[:200], "message": message[:10000],
-                "url": url, "created_at": created_at or utc_now(), "read_at": read_at})
+                "url": url, "conversation_id": conversation_id,
+                "created_at": created_at or utc_now(), "read_at": read_at})
             record["notification_history"] = history[-MAX_NOTIFICATION_HISTORY:]
             self._write(data)
             return True

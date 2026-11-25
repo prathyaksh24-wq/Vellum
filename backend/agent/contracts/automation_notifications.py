@@ -8,6 +8,7 @@ class AutomationNotification(BaseModel):
     title: str
     message: str
     url: str = ""
+    conversation_id: str = ""
     created_at: str
     read_at: str | None = None
 

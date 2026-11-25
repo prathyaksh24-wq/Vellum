@@ -175,3 +175,19 @@ test('another workspace backend is never replaced',async t=>{
   });
   await assert.rejects(manager.start(),/another service or Vellum workspace/);
 });
+
+test('a backend that holds the workspace lease but no longer answers is replaced before starting',async t=>{
+  const killed=[],order=[];
+  const {manager}=ownedBackend(t,{
+    findLeaseHolder:()=>({pid:9911}),
+    terminate:pid=>{killed.push(pid);order.push('terminate');},
+  });
+  await manager.start();
+  assert.deepEqual(killed,[9911]);
+  assert.equal(order[0],'terminate');
+});
+
+test('no recorded lease holder leaves nothing to stop',async t=>{
+  const {manager}=ownedBackend(t,{findLeaseHolder:()=>null,terminate:()=>assert.fail('Nothing should be stopped')});
+  assert.equal((await manager.start()).reused,false);
+});

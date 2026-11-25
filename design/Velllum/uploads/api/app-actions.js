@@ -49,3 +49,11 @@
     prepareAttachments: prepareAttachments,
   };
 })();
+
+// How agent terminal commands are approved (changed with terminal.approval.set).
+(function () {
+  var client = window.VellumApi.client;
+  window.VellumApi.terminal = Object.assign(window.VellumApi.terminal || {}, {
+    approval: function () { return client.request("/api/terminal/approval", {cache: "no-store"}); },
+  });
+})();
