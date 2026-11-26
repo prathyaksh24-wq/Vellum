@@ -581,6 +581,12 @@ def activate_discovered_tool_defs(
                     candidates = [item.get("name") for item in matches if isinstance(item, dict)]
             else:
                 candidates = [result.get("name")]
+        elif isinstance(message, ToolMessage) and message.name == "skill_view":
+            # A loaded skill's instructions name the tools it uses (skill_hub,
+            # github_read...). Declare those registry entries so the model can
+            # call them instead of concluding they are not callable.
+            text = message.content if isinstance(message.content, str) else json.dumps(message.content, default=str)
+            candidates = [name for name in re.findall(r"[A-Za-z][A-Za-z0-9_]{2,}", text) if name in by_name]
         elif isinstance(message, AIMessage):
             for call in message.tool_calls:
                 name = call.get("name")

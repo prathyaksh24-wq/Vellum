@@ -249,11 +249,14 @@ def test_automation_without_opt_in_is_scheduled_and_runs_ask_first(tmp_path) -> 
     assert [record["id"] for record in calls] == [automation["id"]]
     assert calls[0]["_unattended"] is True
     message = run_message(calls[0])
-    assert message.startswith("[Scheduled run") and "approval" in message
+    assert message.startswith("[Automation run") and "approval" in message
     assert message.endswith("Summarize what changed.")
-    # Run now (attended) and opted-in unattended runs get the plain instructions.
-    assert run_message(automation) == "Summarize what changed."
-    assert run_message({**automation, "_unattended": True, "permission": {"full_access": True}}) == "Summarize what changed."
+    # Every run, Run now included, is told to finish without asking questions;
+    # only opted-in runs may take steps that need approval.
+    assert run_message(automation) == message
+    opted_in = run_message({**automation, "_unattended": True, "permission": {"full_access": True}})
+    assert opted_in.startswith("[Automation run") and "Never ask" in opted_in and "approval" not in opted_in
+    assert opted_in.endswith("Summarize what changed.")
 
 
 def _catch_up_jobs(scheduler: FakeScheduler) -> list[dict]:
@@ -467,4 +470,4 @@ def test_run_without_a_model_uses_the_active_chat_model(monkeypatch) -> None:
     }))
 
     assert seen["model"] == "ollama/gemma4:12b"
-    assert seen["content"].startswith("[Scheduled run") and seen["content"].endswith("Summarize.")
+    assert seen["content"].startswith("[Automation run") and seen["content"].endswith("Summarize.")

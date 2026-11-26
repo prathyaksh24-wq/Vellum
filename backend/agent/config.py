@@ -95,7 +95,8 @@ class Settings(BaseSettings):
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     model_picker_provider: Literal['ollama', 'openrouter', 'openai'] | None = Field(default=None, alias='MODEL_PICKER_PROVIDER')
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
-    fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")
+    # Empty: quick background work runs on the user's active chat model.
+    fast_model: str = Field(default="", alias="FAST_MODEL")
     llm_routing_db_path: Path = Field(
         default=Path("data/llm-routing/routing.db"),
         alias="LLM_ROUTING_DB_PATH",

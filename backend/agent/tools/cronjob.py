@@ -164,14 +164,13 @@ def _run_now(automation_id: str) -> dict[str, Any]:
 
     from agent.automations.runner import run_automation_now
 
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop is None:
-        run = asyncio.run(run_automation_now(record, _store()))
+    from agent.automations import server_loop
+
+    # Always on the server loop: a throwaway loop leaves the shared agent runtime
+    # bound to it and breaks every later scheduled run.
+    if server_loop.submit(lambda: run_automation_now(record, _store())) is None:
+        run = server_loop.run_and_wait(lambda: run_automation_now(record, _store()))
         return {"ok": True, "run": run}
-    loop.create_task(run_automation_now(record, _store()))
     return {
         "ok": True,
         "queued": True,

@@ -246,7 +246,11 @@ async def openrouter_chat(
     disclosure_purpose: str = "chat",
 ) -> str:
     settings = get_settings()
-    primary_model = model_override or settings.primary_model
+    if not model_override:
+        from agent.llm.providers import brain_model_id
+
+        model_override = brain_model_id()
+    primary_model = model_override
     fallback_model = settings.fallback_model
 
     if client is None:

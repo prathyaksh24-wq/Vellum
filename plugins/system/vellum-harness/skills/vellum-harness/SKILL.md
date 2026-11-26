@@ -14,6 +14,10 @@ Answer questions about Vellum from the running harness, not from memory, and cha
 
 Loading this skill does not authorize changes. Write bundle files, or run mutating `plugin_manager` actions such as installing, enabling, disabling, or removing, only when the user asks to change Vellum. For a question, design, or review, read-only lookups, including `list_plugins` and `list_bundles`, remain available; report findings and leave files and the profile unchanged. A request for an image, widget, or document that does not target Vellum itself is not a request for a Vellum plugin; deliver the ordinary result the task asks for.
 
+## Use built-in controls first
+
+Many changes to Vellum already have an App Action, which applies at once and needs no bundle: background, theme and accent, personalization, the default model, follow-up behavior (queue or steer), the sidebar, the composer, and the buttons on the navigation rail (hide Search chats, Notifications, Library, Music, Scheduled, Plugins or More with `ui.surface.configure`, `reference: navigation-rail`, `properties.hidden_items`). Look first with `app_action` (`operation: list` and a short query, then `inspect`, then `execute`). Author a bundle only for a change no App Action covers, and say which action you checked.
+
 ## Undo a change
 
 To undo or revert an earlier change, do not author a new bundle on top of it. Find the bundle that made it with `plugin_manager` `list_bundles` (its `rows` and `overrides` show what it changes), then turn it off with `set_bundle` and `enabled: false`, or uninstall it with `remove_bundle`. Either restores what the bundle overrode at once.

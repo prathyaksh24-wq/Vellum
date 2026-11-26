@@ -26,7 +26,8 @@ describe("conversation library frontend", () => {
 
   test("projects include assigned chats while Recents can filter them separately", () => {
     const sidebar=html.slice(html.indexOf('const Sidebar ='),html.indexOf('const RailFly ='));
-    expect(sidebar.includes('chats.filter(chat=>!chat.archived&&!isSideChat(chat))')).toBe(true);
+    // Automation run chats live under Scheduled, not in Recents or Projects.
+    expect(sidebar.includes('chats.filter(chat=>!chat.archived&&!isSideChat(chat)&&!isAutomationChatId(chat.id))')).toBe(true);
     expect(sidebar.includes('sorted.filter(chat=>chat.projectId===project.id).map(row)')).toBe(true);
     expect(sidebar.includes('<SidebarSection id="projects"')).toBe(true);
     expect(sidebar.includes('<SidebarSection id="recents"')).toBe(true);

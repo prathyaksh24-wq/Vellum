@@ -121,7 +121,11 @@ def _google_tool_hint(action_id: str) -> dict:
 @tool
 def app_action(operation: Literal['list','inspect','execute'] = 'list', action_id: str = '', arguments: dict | None = None, query: str = '') -> str:
     """Inspect and change Vellum settings and registered connected-service data.
-    Includes appearance, personalization, models, pets and connector App Actions.
+    Includes appearance, personalization, models, pets and connector App Actions,
+    and interface surfaces through ui.surface.configure: sidebar, composer, chat
+    details and the navigation rail (hide rail buttons such as Search chats with
+    reference navigation-rail and properties.hidden_items). Backgrounds accept a
+    description such as "clouds"; asking again picks another match.
 
     List actions by a short query, inspect an action's argument schema, then execute
     it with that schema. Use this for Vellum controls and confirmed external writes, including
@@ -162,9 +166,35 @@ def app_action(operation: Literal['list','inspect','execute'] = 'list', action_i
         operation = 'list'
     if operation == 'list':
         aliases = {'personality':'personalization','emojis':'emoji','bg':'background','characteristics':'personalization'}
-        terms = [aliases.get(term,term) for term in query.casefold().split()]
-        matches = [action for action in actions.values() if not terms or any(term in f'{action.id} {action.title} {action.description} {json.dumps(action.argument_schema)}'.casefold() for term in terms)]
-        return json.dumps({'actions':[{'id':action.id,'title':action.title,'description':action.description,'confirmation':action.confirmation_rule} for action in matches[:30]],'total_matches':len(matches)})
+        stop = {'the','a','an','of','to','in','on','my','from','for','and','or','with','this','that','it','me','please','vellum'}
+        terms = [aliases.get(term,term) for term in re.findall(r"[a-z0-9]+", query.casefold()) if term not in stop]
+        # Registered interface surfaces (navigation rail, sidebar, composer...)
+        # are configured through ui.surface.configure; let their names find it.
+        surfaces = list(getattr(catalog, 'surfaces', []) or [])
+        surface_text = ' '.join(f"{surface.reference} {surface.title} {' '.join(surface.aliases)} {' '.join(surface.configurable_properties)}"
+                                for surface in surfaces).casefold()
+
+        def score(action):
+            if not terms:
+                return 1
+            head = f'{action.id} {action.title}'.casefold().replace('.', ' ').replace('_', ' ')
+            body = f'{action.description} {json.dumps(action.argument_schema)}'.casefold()
+            if action.id == 'ui.surface.configure':
+                body += ' ' + surface_text
+            return sum(3 if term in head else 1 if term in body else 0 for term in terms)
+
+        ranked = sorted(((score(action), index, action) for index, action in enumerate(actions.values())), key=lambda item: (-item[0], item[1]))
+        matches = [action for points, _, action in ranked if points > 0]
+        matched_surfaces = [
+            {'reference': surface.reference, 'title': surface.title, 'configurable_properties': surface.configurable_properties}
+            for surface in surfaces
+            if terms and any(term in f"{surface.reference} {surface.title} {' '.join(surface.aliases)}".casefold() for term in terms)
+        ]
+        payload = {'actions':[{'id':action.id,'title':action.title,'description':action.description,'confirmation':action.confirmation_rule} for action in matches[:30]],'total_matches':len(matches)}
+        if matched_surfaces:
+            payload['surfaces'] = matched_surfaces[:6]
+            payload['surface_hint'] = 'Change a surface with ui.surface.configure: arguments={"reference": <reference>, "properties": {...}} (and "visible" to show or hide it).'
+        return json.dumps(payload, default=str)
     definition = actions.get(action_id)
     if definition is None:
         if operation == 'execute' and not session.write_results:

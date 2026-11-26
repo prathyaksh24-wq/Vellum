@@ -63,7 +63,7 @@
       {status==='installing'&&<UpdateInstallDialog progress={update.progress}/>}
     </>;
   }
-  function NavigationRail({view,contextualView=view,profile,onHome,onNav,onProfile,onSettings,onSearch,onNotifications,unread=0,notificationsOpen=false,onToggleSidebar,sidebarVisible,onPreviewSidebar,onLeaveSidebar,onDismissPreview}){
+  function NavigationRail({hiddenItems=[],view,contextualView=view,profile,onHome,onNav,onProfile,onSettings,onSearch,onNotifications,unread=0,notificationsOpen=false,onToggleSidebar,sidebarVisible,onPreviewSidebar,onLeaveSidebar,onDismissPreview}){
     const [more,setMore]=useState(false),[position,setPosition]=useState({}),ref=useRef(null),trigger=useRef(null),popup=useRef(null);
     useShellOverlay(more);
     useEffect(()=>{
@@ -71,24 +71,25 @@
       const close=event=>{if(!ref.current?.contains(event.target)&&!popup.current?.contains(event.target))setMore(false);};
       document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close);
     },[more]);
-    const items=[['chat','Home','Home'],['library','Library','BookOpen'],['music','Music','Music'],['scheduled','Scheduled','Calendar'],['apps','Plugins','ConnectApps']];
+    const hidden=new Set(Array.isArray(hiddenItems)?hiddenItems:[]);
+    const items=[['chat','Home','Home'],['library','Library','BookOpen'],['music','Music','Music'],['scheduled','Scheduled','Calendar'],['apps','Plugins','ConnectApps']].filter(([id])=>!hidden.has(id));
     return <nav className="app-destination-rail" aria-label="App destinations" onPointerLeave={onLeaveSidebar}>
       <div className="app-rail-destinations">
         <button type="button" className="app-rail-button web-sidebar-toggle" data-command="sidebar.toggle" title={sidebarVisible?'Hide sidebar':'Show sidebar'} aria-label={sidebarVisible?'Hide sidebar':'Show sidebar'} aria-expanded={sidebarVisible} onClick={onToggleSidebar}><Icon name="SidebarLeft"/></button>
         {items.map(([id,label,icon])=><button key={id} type="button" className="app-rail-button" data-rail-preview-trigger={id} title={label} data-command={{chat:'app.home',library:'library.open'}[id]} data-tip={label} aria-label={label} aria-current={contextualView===id||id==='chat'&&['project','projects','agent'].includes(view)?'page':undefined} onPointerEnter={()=>onPreviewSidebar?.(id)} onFocus={()=>onPreviewSidebar?.(id)} onPointerLeave={id==='scheduled'?onLeaveSidebar:undefined} onBlur={id==='scheduled'?onLeaveSidebar:undefined} onClick={()=>{onDismissPreview?.();id==='chat'?onHome():onNav(id);}}>{id==='chat'?<window.VellumUI.VellumFace animated={false} interactive={false}/>:<Icon name={icon} size={20}/>}</button>)}
         {/* Plugin entries (sidebar.panellist), for example Analytics when placed in the sidebar. */}
         {window.VellumHarness&&<window.VellumHarness.VellumSlot name="sidebar.panellist" props={{app:{view:contextualView,nav:id=>{onDismissPreview?.();onNav(id);}},compact:true,buttonClass:'app-rail-button',iconSize:20}}/>}
-        <div className="app-rail-more" ref={ref} onKeyDown={event=>{
+        {!hidden.has('more')&&<div className="app-rail-more" ref={ref} onKeyDown={event=>{
           if(event.key==='Escape'){setMore(false);trigger.current?.focus();}
           if(more&&['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const rows=[...(popup.current?.querySelectorAll('[role=menuitem]')||[])],index=rows.indexOf(document.activeElement);rows[event.key==='Home'?0:event.key==='End'?rows.length-1:index<0?(event.key==='ArrowDown'?0:rows.length-1):(index+(event.key==='ArrowDown'?1:rows.length-1))%rows.length]?.focus();}
         }}>
           <button ref={trigger} type="button" className="app-rail-button" title="More destinations" data-tip="More destinations" aria-label="More destinations" aria-expanded={more} aria-haspopup="menu" onClick={()=>{onDismissPreview?.();const box=trigger.current.getBoundingClientRect();setPosition({left:box.right+8,top:Math.max(8,Math.min(box.top,window.innerHeight-218))});setMore(!more);}}><Icon name="DotsHorizontal"/></button>
           {more&&ReactDOM.createPortal(<div ref={popup} style={{...position,position:'fixed'}} role="menu" aria-label="More destinations" className="app-rail-menu" data-shell-overlay="true" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setMore(false);trigger.current?.focus();}if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const rows=[...popup.current.querySelectorAll('[role=menuitem]')],index=rows.indexOf(document.activeElement);rows[event.key==='Home'?0:event.key==='End'?rows.length-1:(index+(event.key==='ArrowDown'?1:rows.length-1))%rows.length]?.focus();}}}><window.VellumUI.SharedRowBackground className="app-rail-menu-list" activeSelector='[role="menuitem"]:focus'>{[['projects','Projects','Folder'],['memory','Memory','MemoryOnRemember']].map(([id,label,icon])=><button key={id} type="button" role="menuitem" data-shared-row="" onClick={()=>{setMore(false);onNav(id);}}><Icon name={icon}/>{label}</button>)}</window.VellumUI.SharedRowBackground></div>,document.body)}
-        </div>
+        </div>}
       </div>
       <div className="app-rail-account">
-        <button type="button" className="app-rail-button" title="Search chats" data-command="commands.open" aria-label="Search chats" onClick={onSearch}><Icon name="Search"/></button>
-        <button type="button" className="app-rail-button" title="Notifications" data-tip="Notifications" data-notification-trigger="" aria-controls="notification-panel" aria-expanded={notificationsOpen} aria-label={unread?`Notifications, ${unread} unread`:'Notifications'} onClick={onNotifications}><Icon name="Bell"/>{unread>0&&<span className="app-rail-unread"/>}</button>
+        {!hidden.has('search')&&<button type="button" className="app-rail-button" title="Search chats" data-command="commands.open" aria-label="Search chats" onClick={onSearch}><Icon name="Search"/></button>}
+        {!hidden.has('notifications')&&<button type="button" className="app-rail-button" title="Notifications" data-tip="Notifications" data-notification-trigger="" aria-controls="notification-panel" aria-expanded={notificationsOpen} aria-label={unread?`Notifications, ${unread} unread`:'Notifications'} onClick={onNotifications}><Icon name="Bell"/>{unread>0&&<span className="app-rail-unread"/>}</button>}
         <button type="button" className="app-rail-button" title="Settings" data-command="settings.open" aria-label="Settings" onClick={onSettings}><Icon name="SettingsCog"/></button>
         <UpdateRailButton/>
         <button type="button" className="app-rail-avatar" title={profile.displayName||'Account'} data-tip={profile.displayName||'Account'} aria-label="Open account menu" onClick={onProfile}><window.VellumUI.Profile.Avatar profile={profile}/></button>

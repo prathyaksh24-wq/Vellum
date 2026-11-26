@@ -62,7 +62,7 @@
       {unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
     </button>;
   }
-  function AutomationNotificationCenter({onAction, onPing, onStateChange, browserVisible=false, sidebarPinned=false, suspended=false}) {
+  function AutomationNotificationCenter({onAction, onOpenChat, onPing, onStateChange, browserVisible=false, sidebarPinned=false, suspended=false}) {
     const [snapshot,setSnapshot] = useState({items:[],recent_unread_count:0,total_count:0});
     const [history,setHistory] = useState({items:[],matched_count:0,has_more:false});
     const [mode,setMode] = useState('closed');
@@ -232,7 +232,7 @@
         <div className="notification-items" key={view} aria-busy={loading}>{loading || !available && !error ? <p>{view==='history' ? 'Reading history…' : 'Checking notifications…'}</p> : !items.length && !error && <div className="notification-empty"><strong>{view==='recent' ? 'You’re caught up.' : query ? 'No matching notifications.' : 'No saved notifications yet.'}</strong><p>{view==='recent' ? 'Older and read notifications stay in History.' : 'Try another creator or video title.'}</p></div>}
           {!loading && [...groups].map(([day,entries])=><section className="notification-day" key={day} aria-label={day}><h3>{day}</h3>{entries.map(item => <article key={item.id} className={'notification-item' + (!item.read_at ? ' unread' : '')}>
             <p title={item.message.split('\n')[0]}>{item.message.split('\n')[0]}</p><time dateTime={item.created_at} title={timestamp(item.created_at)}>Received {new Date(item.created_at).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}</time>
-            <div>{/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(item.url) && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => markRead([item.id])}>Watch video ↗</a>}{!item.read_at && <button type="button" disabled={busy} onClick={() => markRead([item.id])}>Mark read</button>}</div>
+            <div>{item.conversation_id && onOpenChat && <button type="button" onClick={() => {markRead([item.id]); close(); onOpenChat(item.conversation_id, item.id);}}>Open chat</button>}{/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(item.url) && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={() => markRead([item.id])}>Watch video ↗</a>}{!item.read_at && <button type="button" disabled={busy} onClick={() => markRead([item.id])}>Mark read</button>}</div>
           </article>)}</section>)}
         </div>
         <footer className="notification-footer">{view==='history' && <div className="notification-pagination"><button type="button" disabled={loading || offset===0} onClick={()=>setOffset(Math.max(0,offset-50))}>Newer</button><span>{history.matched_count ? `${offset+1}–${Math.min(offset+50,history.matched_count)} of ${history.matched_count}` : '0 results'}</span><button type="button" disabled={loading || !history.has_more} onClick={()=>setOffset(offset+50)}>Older</button></div>}

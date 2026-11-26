@@ -111,3 +111,30 @@ def test_provider_credential_write_rolls_back_file_and_environment(monkeypatch, 
     assert env_path.read_text(encoding="utf-8") == "OPENAI_API_KEY=old-value\nUNCHANGED=yes\n"
     assert os.environ["OPENAI_API_KEY"] == "old-value"
     assert "new-secret" not in env_path.read_text(encoding="utf-8")
+
+
+def test_local_picker_follows_whatever_model_ollama_has(monkeypatch) -> None:
+    """Removing one local model and installing another switches Vellum to it."""
+    from agent.memory.engines.llm_routing import memory_engine_llm
+
+    def entry(name: str, capabilities: tuple[str, ...]) -> providers_mod.ModelEntry:
+        return providers_mod.ModelEntry(
+            f"ollama/{name}", name, "ollama", 32_768, "flagship", True,
+            capabilities=capabilities, tool_calling_compatibility="compatible",
+        )
+
+    embedder = entry("embeddinggemma-2:270m-q8_0-text", ("embedding",))
+    installed = [entry("gemma4:12b", ("completion", "tools")), embedder]
+    monkeypatch.setattr(
+        providers_mod, "discover_ollama_models",
+        lambda _url: providers_mod.LocalModelInventory(reachable=True, models=tuple(installed)),
+    )
+    registry = providers_mod.get_provider_registry()
+    assert registry.select_picker_provider("ollama").id == "ollama/gemma4:12b"
+
+    for swapped in ("qwen3.5:9b", "llama3.3:8b"):
+        installed[:] = [entry(swapped, ("completion", "tools")), embedder]
+        registry.refresh_local_models(force=True)
+        assert registry.current_model().id == f"ollama/{swapped}"
+        assert [m.id for m in registry.list_picker_models("ollama")] == [f"ollama/{swapped}"]
+        assert memory_engine_llm(registry=registry, installed=[swapped, embedder.id[7:]]).model == swapped

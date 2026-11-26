@@ -97,7 +97,23 @@ function stalledVellumBackend(port=8000) {
   } catch { return null; }
 }
 
-function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupied=portOccupied,findStalled=stalledVellumBackend,terminate=killTree,timeoutMs=120000,pollMs=300,stopTimeoutMs=15000,busyWaitMs=20000,onExit=()=>{}}={}) {
+// The backend that holds this workspace's lease (it writes its PID beside the
+// lock). Only a live process running Vellum's own backend entry point counts.
+function leaseHolderBackend(workspaceRoot) {
+  if (process.platform !== 'win32') return null;
+  try {
+    const recorded=JSON.parse(fs.readFileSync(path.join(workspaceRoot,'.api-runtime','backend.pid'),'utf8'));
+    const pid=Number(recorded?.pid);
+    if (!Number.isInteger(pid) || pid<=0 || pid===process.pid) return null;
+    const script=`$p=Get-CimInstance Win32_Process -Filter "ProcessId=${pid}";if($p){[string]$p.ProcessId+"|"+$p.CommandLine}`;
+    const result=require('node:child_process').spawnSync('powershell',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,encoding:'utf8',timeout:15000});
+    const [found,...command]=String(result.stdout||'').trim().split('|');
+    if (Number(found)!==pid || !/-m\s+agent\.desktop_entry\b/.test(command.join('|'))) return null;
+    return {pid};
+  } catch { return null; }
+}
+
+function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupied=portOccupied,findStalled=stalledVellumBackend,findLeaseHolder=leaseHolderBackend,terminate=killTree,timeoutMs=120000,pollMs=300,stopTimeoutMs=15000,busyWaitMs=20000,onExit=()=>{}}={}) {
   let child=null, exitPromise=null, exited=false, stopping=false;
   const outdated=identity=>{
     try {
@@ -135,6 +151,14 @@ function createBackendManager(spec,{spawnProcess=spawn,probe=readIdentity,occupi
         const freed=Date.now()+10000;
         while (Date.now()<freed && await occupied()) await new Promise(resolve=>setTimeout(resolve,pollMs));
       }
+    }
+    // Nothing answers on the port, yet a backend may still hold the workspace
+    // lease (one stuck while shutting down). Starting another would fail on the
+    // lease forever, so the unresponsive holder is replaced.
+    const holder=findLeaseHolder(spec.workspaceRoot);
+    if (holder) {
+      terminate(holder.pid);
+      await new Promise(resolve=>setTimeout(resolve,1500));
     }
     onProgress('Starting your workspace…');
     const directory=path.join(spec.workspaceRoot,'.api-runtime');
@@ -199,4 +223,4 @@ async function backendResponds(base=BACKEND,timeoutMs=4000) {
   } catch { return false; }
 }
 
-module.exports={BACKEND,UI_PORT,sourceBuildId,validateIdentity,launchSpec,createBackendManager,backendResponds,killTree};
+module.exports={BACKEND,UI_PORT,sourceBuildId,validateIdentity,launchSpec,createBackendManager,backendResponds,killTree,leaseHolderBackend};

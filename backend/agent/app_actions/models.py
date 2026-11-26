@@ -44,6 +44,7 @@ def _default_surfaces() -> dict[str, SurfacePresentation]:
         "settings": SurfacePresentation(visible=False, location="overlay"),
         "right-panel": SurfacePresentation(visible=False, location="right"),
         "chat-details": SurfacePresentation(visible=False, location="right", properties={"pinned": False}),
+        "navigation-rail": SurfacePresentation(visible=True, location="left", properties={"hidden_items": []}),
         "composer": SurfacePresentation(
             visible=True,
             location="bottom",
@@ -163,6 +164,7 @@ class DeviceSettingsValues(BaseModel):
     preview_rail_position: Literal["left", "right"] = "left"
     preview_rail_visibility: Literal["visible", "hover", "hidden"] = "visible"
     number_shortcuts: Literal["tabs", "chats"] = "tabs"
+    follow_up_mode: Literal["queue", "steer"] = "steer"
     computer_use_preview: bool | None = None
     streaming: DeviceStreamingSettings = Field(default_factory=DeviceStreamingSettings)
     personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)

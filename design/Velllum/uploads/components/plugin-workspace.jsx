@@ -613,6 +613,7 @@
       } = useX(),
       [tab, setTab] = useState('Personal'),
       [q, setQ] = useState(''),
+      [showAll, setShowAll] = useState(false),
       rows = skills.filter(s => name(s).toLowerCase().includes(q.toLowerCase())),
       personal = s => !s.owner_plugin && !['builtin', 'system'].includes(s.origin);
     return <div className="cc"><div className="hd"><div><h1>Skills</h1><p className="sub">Extend Vellum with task-specific skills</p></div><div className="tl"><Search q={q} setQ={setQ} ph="Search skills" /><button className="ib" aria-label="Refresh skills" onClick={refresh}><Ic n="refresh" /></button><button className="ib" aria-label="Manage skills" onClick={() => go({
@@ -624,16 +625,13 @@
         marginTop: 34
       }}>Installed</h2><div className="sgrid" style={{
         marginTop: 14
-      }}>{rows.slice(0, 6).map(s => <div className="sk3" role="button" tabIndex={0} key={s.id || s.name} onClick={() => setDlg({
+      }}>{(showAll ? rows : rows.slice(0, 6)).map(s => <div className="sk3" role="button" tabIndex={0} key={s.id || s.name} onClick={() => setDlg({
           t: 'skill',
           s
         })} onKeyDown={e => e.target === e.currentTarget && e.key === 'Enter' && setDlg({
           t: 'skill',
           s
-        })}><Ic n="cubeo" s={32} /><div className="m"><b>{name(s)}</b><span>{s.description}</span></div><span className="ok2"><Ic n="check" /></span></div>)}</div>{rows.length > 6 && <ActionLink className="more" onClick={() => go({
-        v: 'settings',
-        tab: 'skills'
-      })}>See {rows.length - 6} more</ActionLink>}<div className="seg" style={{
+        })}><Ic n="cubeo" s={32} /><div className="m"><b>{name(s)}</b><span>{s.description}</span></div><span className="ok2"><Ic n="check" /></span></div>)}</div>{rows.length > 6 && <ActionLink className="more" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? 'Show less' : 'See ' + (rows.length - 6) + ' more'}</ActionLink>}<div className="seg" style={{
         marginTop: 40
       }}>{['Personal', 'System'].map(t => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div><div style={{
         marginTop: 14
@@ -1261,6 +1259,13 @@
       }
       if (receipt?.status !== 'applied') throw Error(receipt?.message || 'The change was not applied.');
       const mutation = receipt.result?.mutation;
+      if (mutation?.status === 'pending' && action_id === 'skill.mutation.submit' && args?.operation === 'install') {
+        // Clicking Add/Install is the approval; apply the staged package instead of leaving it pending.
+        const approved = await onSkillAction('skill.mutation.approve', {mutation_id: mutation.id});
+        if (approved?.status !== 'applied') throw Error(approved?.message || 'The skill could not be installed.');
+        await refresh();
+        return approved;
+      }
       if (mutation?.status === 'pending') {
         const p = {
           mutation,

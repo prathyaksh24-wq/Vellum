@@ -294,8 +294,9 @@ class ProviderRegistry:
 
     def _picker_entries(self, source: str) -> list[ModelEntry]:
         if source == 'ollama':
-            # Keep the user's chat model distinct from other installed workers.
-            return [entry for entry in self._local_models if entry.id.casefold() == 'ollama/gemma4:12b' and _is_chat_model(entry)]
+            # Every installed chat model, whatever it is; embedders stay hidden.
+            # Swapping the local model in Ollama is picked up on the next refresh.
+            return [entry for entry in self._local_models if _is_chat_model(entry)]
         keys = configured_provider_keys()
         if not keys.get(source):
             return []
@@ -310,14 +311,21 @@ class ProviderRegistry:
             raise ValueError('Choose Local, OpenRouter, or OpenAI.')
         models = self.list_picker_models(provider)
         if not models:
-            raise ValueError('Gemma 4 12B is not available locally.' if provider == 'ollama' else f'Connect {provider} before choosing its models.')
-        selected = next((entry for entry in models if entry.id == self._active.id), models[0])
+            raise ValueError('No local chat model is installed in Ollama.' if provider == 'ollama' else f'Connect {provider} before choosing its models.')
+        by_id = {entry.id: entry for entry in models}
+        settings = get_settings()
+        # Keep the current model when the source serves it; otherwise the configured
+        # cloud models, not whatever OpenRouter happened to list first.
+        preferred = (self._active.id, settings.fallback_model, settings.cloud_escalation_model)
+        selected = next((by_id[canonical_model_id(i)] for i in preferred if i and canonical_model_id(i) in by_id), models[0])
         self._picker_provider = provider
         self._active = selected
         return selected
 
     def _catalog(self) -> tuple[ModelEntry, ...]:
-        return (*self._local_models, *_CATALOG)
+        from agent.llm.openrouter_catalog import cached_live_models
+
+        return (*self._local_models, *cached_live_models(), *_CATALOG)
 
     def _find_by_id(self, model_id: str) -> ModelEntry | None:
         model_id = canonical_model_id(model_id)
@@ -506,6 +514,19 @@ def get_provider_registry() -> ProviderRegistry:
     return ProviderRegistry()
 
 
+def brain_model_id() -> str:
+    """The model background work uses: the user's active chat model.
+
+    Follows whatever local model Ollama has (or the chosen cloud model), so
+    nothing has to be pinned in .env. PRIMARY_MODEL is only a last resort.
+    """
+    try:
+        active = get_provider_registry().current_available_model()
+    except Exception:  # noqa: BLE001 - registry unavailable: use the configured seed
+        active = None
+    return active.id if active is not None else get_settings().primary_model
+
+
 def canonical_model_id(model_id: str) -> str:
     normalized = model_id.strip()
     return _MODEL_ALIASES.get(normalized.casefold(), normalized)
@@ -564,6 +585,15 @@ def available_models(local_models: tuple[ModelEntry, ...] = ()) -> list[ModelEnt
         if value and value.strip()
     }
     visible: list[ModelEntry] = [entry for entry in local_models if _is_chat_model(entry)]
+    if has_openrouter:
+        # OpenRouter's own live list (tool-capable, zero-data-retention models);
+        # the reviewed static catalog only until the first fetch succeeds.
+        from agent.llm.openrouter_catalog import live_openrouter_models
+
+        live = live_openrouter_models(ModelEntry)
+        if live:
+            visible.extend(live)
+            return visible
     for entry in _CATALOG:
         if has_openrouter:
             if entry.id in approved:

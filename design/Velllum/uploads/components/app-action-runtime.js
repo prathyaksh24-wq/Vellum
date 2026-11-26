@@ -33,6 +33,7 @@
     preview_rail_position: "left",
     preview_rail_visibility: "visible",
     number_shortcuts: "tabs",
+    follow_up_mode: "steer",
     computer_use_preview: false,
     profile: {},
     personalization: {
@@ -49,6 +50,7 @@
     settings: { visible: false, location: "overlay", properties: {} },
     "right-panel": { visible: false, location: "right", properties: {} },
     "chat-details": { visible: false, location: "right", properties: {pinned:false} },
+    "navigation-rail": { visible: true, location: "left", properties: { hidden_items: [] } },
     composer: { visible: true, location: "bottom", properties: { size: "comfortable" } },
     "composer.send": { visible: true, location: "composer-action", properties: { label: "Send", size: "medium" } },
   };
@@ -60,6 +62,7 @@
     { reference: "settings", title: "Settings", supportedLocations: ["overlay"], configurableProperties: [], controlKernel: false },
     { reference: "right-panel", title: "Right panel", supportedLocations: ["right"], configurableProperties: ["content", "chat_ratio", "layout", "items", "active_item"], controlKernel: false },
     { reference: "chat-details", title: "Chat details", supportedLocations: ["right"], configurableProperties: ["pinned"], controlKernel: false },
+    { reference: "navigation-rail", title: "Navigation rail", supportedLocations: ["left"], configurableProperties: ["hidden_items"], controlKernel: false },
     { reference: "composer", title: "Composer", supportedLocations: ["bottom"], configurableProperties: ["size"], controlKernel: true },
     { reference: "composer.send", title: "Send button", supportedLocations: ["composer-action"], configurableProperties: ["label", "size"], controlKernel: true },
   ];

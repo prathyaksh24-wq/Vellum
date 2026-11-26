@@ -63,6 +63,8 @@ class RoutingEngine:
         self.secret_resolver = secret_resolver
         self.adapters = adapters
         self.max_targets = max_targets
+        # OpenRouter models that no host in the strict provider allowlist serves.
+        self._relaxed_route_models: set[str] = set()
         self.max_transient_retries = max_transient_retries
         self.async_sleep = async_sleep
         self.jitter = jitter
@@ -170,7 +172,8 @@ class RoutingEngine:
             transient_retries = 0
             malformed_retries = 0
             retry_without_tools = False
-            retry_relaxed_policy = False
+            # Models whose strict route already failed start on the wider route.
+            retry_relaxed_policy = target.model in self._relaxed_route_models
 
             while True:
                 try:
@@ -294,16 +297,21 @@ class RoutingEngine:
                     continue
                 if failure.kind in {FailureKind.model_unavailable, FailureKind.route_unavailable}:
                     await self.pool.release(lease)
-                    if failure.kind is FailureKind.route_unavailable and tools and not retry_without_tools:
-                        retry_without_tools = True
-                        preferred_id = credential.id
-                        continue
+                    # A strict provider allowlist can exclude every host of a model
+                    # (OpenAI models are not served by the default open-weight hosts).
+                    # Widen the route first and keep the tools: a reply without its
+                    # tools cannot act, and the model then says its tools are missing.
                     if (
                         failure.kind is FailureKind.route_unavailable
                         and target.provider == "openrouter"
                         and not retry_relaxed_policy
                     ):
                         retry_relaxed_policy = True
+                        self._relaxed_route_models.add(target.model)
+                        preferred_id = credential.id
+                        continue
+                    if failure.kind is FailureKind.route_unavailable and tools and not retry_without_tools:
+                        retry_without_tools = True
                         preferred_id = credential.id
                         continue
                     break
@@ -406,7 +414,8 @@ class RoutingEngine:
             transient_retries = 0
             empty_retries = 0
             retry_without_tools = False
-            retry_relaxed_policy = False
+            # Models whose strict route already failed start on the wider route.
+            retry_relaxed_policy = target.model in self._relaxed_route_models
             while True:
                 try:
                     lease = await self.pool.lease(
@@ -572,16 +581,21 @@ class RoutingEngine:
                             correlation_id=plan.correlation_id,
                             failures=failures,
                         )
-                    if failure.kind is FailureKind.route_unavailable and tools and not retry_without_tools:
-                        retry_without_tools = True
-                        preferred_id = credential.id
-                        continue
+                    # A strict provider allowlist can exclude every host of a model
+                    # (OpenAI models are not served by the default open-weight hosts).
+                    # Widen the route first and keep the tools: a reply without its
+                    # tools cannot act, and the model then says its tools are missing.
                     if (
                         failure.kind is FailureKind.route_unavailable
                         and target.provider == "openrouter"
                         and not retry_relaxed_policy
                     ):
                         retry_relaxed_policy = True
+                        self._relaxed_route_models.add(target.model)
+                        preferred_id = credential.id
+                        continue
+                    if failure.kind is FailureKind.route_unavailable and tools and not retry_without_tools:
+                        retry_without_tools = True
                         preferred_id = credential.id
                         continue
                     break

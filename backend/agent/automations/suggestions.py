@@ -104,8 +104,12 @@ class AutomationSuggestions:
             cache = self._read()  # a synchronous refresh has already written its result
         refreshing = self._refreshing()
         suggestions = cache.get("suggestions") if cache.get("source") == "learned" else None
+        # The cache can predate a task the user just created from one of these ideas.
+        existing = _existing_tasks()
+        suggestions = [item for item in suggestions or [] if not covered_by_task(item, existing)]
+        starters = [dict(item) for item in STARTER_SUGGESTIONS if not covered_by_task(item, existing)]
         return {
-            "suggestions": suggestions or [dict(item) for item in STARTER_SUGGESTIONS],
+            "suggestions": suggestions or starters,
             "source": "learned" if suggestions else "starter",
             "status": "refreshing" if refreshing else cache.get("status", "ready"),
             "reason": cache.get("reason", ""),
@@ -214,6 +218,40 @@ def parse_suggestions(raw: str, *, existing: list[str] | None = None) -> list[di
         if len(result) == MAX_SUGGESTIONS:
             break
     return result
+
+
+_STOPWORDS = {"every", "each", "daily", "weekly", "monthly", "with", "from", "that", "this", "about", "into",
+              "your", "mine", "what", "when", "then", "them", "they", "have", "will", "tell", "give", "send",
+              "check", "morning", "evening", "night", "week", "today", "summary", "summarize"}
+
+
+def _words(text: Any) -> set[str]:
+    return {word for word in re.findall(r"[a-z0-9]+", str(text or "").lower())
+            if len(word) > 3 and word not in _STOPWORDS}
+
+
+def _existing_tasks() -> list[dict[str, Any]]:
+    try:
+        from agent.automations.api import get_store
+
+        return [task for task in get_store().list() if not task.get("builtin")]
+    except Exception:  # noqa: BLE001 — filtering is best effort
+        return []
+
+
+def covered_by_task(idea: dict[str, Any], tasks: list[dict[str, Any]]) -> bool:
+    """True when an existing task already does what this idea suggests."""
+    name_key = _key(str(idea.get("name") or ""))
+    idea_words = _words(idea.get("name")) | _words(idea.get("request"))
+    for task in tasks:
+        if name_key and name_key == _key(str(task.get("name") or "")):
+            return True
+        task_words = _words(task.get("name")) | _words(task.get("instructions"))
+        if idea_words and task_words:
+            overlap = len(idea_words & task_words) / min(len(idea_words), len(task_words))
+            if overlap >= 0.6:
+                return True
+    return False
 
 
 def collect_signals() -> dict[str, Any]:

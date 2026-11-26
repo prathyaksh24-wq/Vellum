@@ -72,6 +72,7 @@ def test_catalog_exposes_actions_and_registered_surface_contracts() -> None:
         "settings",
         "right-panel",
         "chat-details",
+        "navigation-rail",
         "composer",
         "composer.send",
     }

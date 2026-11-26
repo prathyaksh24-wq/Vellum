@@ -92,6 +92,12 @@ def acquire_workspace_lease() -> None:
         handle.close()
         raise RuntimeError("This Vellum workspace already has a backend. Use that instance or quit it first.") from None
     _lease = handle  # OS releases the lock on process exit, including a crash.
+    # Name the holder so a new desktop launch can replace a backend that holds the
+    # lease but no longer serves (for example one stuck while shutting down).
+    try:
+        (directory / "backend.pid").write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def start_loop_watchdog(loop, *, interval: float = 5.0, stall_after: float = 10.0, log_path: Path | None = None) -> threading.Event:
@@ -186,6 +192,24 @@ def startup_mark(phase: str) -> None:
         print(f"[Vellum startup] {phase}: {time.perf_counter() - _STARTED:.2f}s", file=sys.stderr, flush=True)
 
 
+GRACEFUL_SHUTDOWN_SECONDS = 10
+FORCED_EXIT_SECONDS = 30
+
+
+def force_exit_after(seconds: float) -> threading.Thread:
+    """A shutdown that hangs must not keep holding the workspace lease and port."""
+    def deadline() -> None:
+        import time
+
+        time.sleep(seconds)
+        print(f"[Vellum] shutdown did not finish in {seconds:.0f}s; exiting.", file=sys.stderr, flush=True)
+        os._exit(0)
+
+    thread = threading.Thread(target=deadline, name="vellum-shutdown-deadline", daemon=True)
+    thread.start()
+    return thread
+
+
 def main(*, standalone: bool = False) -> None:
     global _serving, _STARTED
     import time
@@ -208,7 +232,9 @@ def main(*, standalone: bool = False) -> None:
 
     host = os.environ.get("API_HOST", "127.0.0.1") if standalone else "127.0.0.1"
     port = int(os.environ.get("API_PORT", "8000")) if standalone else 8000
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, access_log=False))
+    # Open streams (notifications, chat) would otherwise hold shutdown open forever.
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, access_log=False,
+                                           timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS))
 
     def parent_control():
         # This pipe belongs only to the spawning desktop process. EOF also
@@ -217,6 +243,7 @@ def main(*, standalone: bool = False) -> None:
             if line.strip() == "stop":
                 break
         server.should_exit = True
+        force_exit_after(FORCED_EXIT_SECONDS)
 
     if not standalone:
         threading.Thread(target=parent_control, daemon=True).start()

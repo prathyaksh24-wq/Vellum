@@ -115,6 +115,16 @@ class DestinationPolicy:
             raise ValueError("external model destinations must disable response caching")
 
 
+def _live_approved(destination: DestinationPolicy, model: str) -> bool:
+    """OpenRouter models from its live list, which keeps only zero-data-retention,
+    tool-capable models; every request still carries zdr and data_collection deny."""
+    if destination.name.casefold() != "openrouter":
+        return False
+    from agent.llm.openrouter_catalog import live_model_ids
+
+    return model in live_model_ids()
+
+
 @dataclass(frozen=True)
 class DisclosurePolicy:
     mode: ProtectionMode
@@ -374,7 +384,7 @@ class DisclosureBroker:
                 reason="destination_not_reviewed",
             )
             raise DisclosureBlocked("external destination is not approved")
-        if model not in destination_policy.approved_models:
+        if model not in destination_policy.approved_models and not _live_approved(destination_policy, model):
             self._block(
                 destination=destination,
                 model=model,

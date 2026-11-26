@@ -50,10 +50,12 @@ async def run_digest(
         logger.info("[DIGEST] No new facts to digest.")
         return None
 
+    from agent.llm.providers import brain_model_id
+
     summary = await openrouter_chat(
         system=DIGEST_SYSTEM_PROMPT,
         user=build_digest_prompt(facts),
-        model_override=settings.fast_model,
+        model_override=settings.fast_model or brain_model_id(),
         max_tokens=700,
         temperature=0.2,
         session_id=f"digest-{now.strftime('%Y-%m-%d')}",

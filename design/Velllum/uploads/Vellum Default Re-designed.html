@@ -684,6 +684,41 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 /* model picker */
 .model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
 .model-pill:hover{background:var(--hover);color:var(--txt)}
+.approval-picker{position:relative;flex-shrink:0}
+.approval-pill{display:flex;align-items:center;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.approval-pill:hover,.approval-pill.select-open{background:var(--hover);color:var(--txt)}
+.approval-pill.danger{color:#F0A35E}
+.approval-menu{position:fixed;z-index:2147483000;box-sizing:border-box;max-height:calc(100vh - 16px);overflow:auto;padding:6px;border-radius:14px;background:var(--modal);border:1px solid var(--line2);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.followup-tray{display:flex;flex-direction:column;gap:0;margin:0 14px -1px;border:1px solid var(--line2);border-bottom:none;border-radius:16px 16px 0 0;background:color-mix(in srgb,var(--modal) 92%,transparent);backdrop-filter:blur(14px);overflow:visible;position:relative;z-index:2}
+.followup-row{display:flex;align-items:center;gap:10px;min-height:42px;padding:6px 10px 6px 14px;font-size:14px;color:var(--fg)}
+.followup-row+.followup-row{border-top:1px solid var(--line)}
+.followup-icon{display:inline-flex;color:var(--dim);flex:none}
+.followup-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.followup-error{color:var(--dim);font-size:12px;white-space:nowrap}
+.followup-steer,.followup-state{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;border:0;background:transparent;color:var(--dim);font:inherit;font-size:13px;cursor:pointer;flex:none}
+.followup-steer:hover{background:var(--hover,rgba(255,255,255,.06));color:var(--fg)}
+.followup-state{cursor:default}
+.followup-spinner{width:11px;height:11px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:followup-spin .8s linear infinite}
+@keyframes followup-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.followup-spinner{animation:none}}
+.followup-icon-btn{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;border:0;background:transparent;color:var(--dim);cursor:pointer;flex:none}
+.followup-icon-btn:hover{background:var(--hover,rgba(255,255,255,.06));color:var(--fg)}
+.followup-more-wrap{position:relative;display:inline-flex}
+.followup-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:160px;padding:5px;border-radius:12px;background:var(--modal);border:1px solid var(--line2);box-shadow:0 14px 40px rgba(0,0,0,.35);z-index:70;display:flex;flex-direction:column}
+.followup-menu button{text-align:left;padding:8px 10px;border-radius:8px;border:0;background:transparent;color:var(--fg);font:inherit;font-size:13.5px;cursor:pointer}
+.followup-menu button:hover{background:var(--hover,rgba(255,255,255,.06))}
+.followup-row.steering .followup-text{color:var(--dim)}
+.approval-menu-head{padding:8px 10px 6px;color:var(--dim);font-size:12.5px}
+.approval-option{display:grid;grid-template-columns:18px minmax(0,1fr) 16px;align-items:start;column-gap:10px;width:100%;padding:9px 10px;border:none;border-radius:10px;background:none;color:var(--txt);font:inherit;text-align:left;cursor:pointer}
+.approval-option:hover,.approval-option:focus-visible{background:var(--hover);outline:none}
+.approval-option svg{margin-top:2px;color:var(--dim)}
+.approval-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.approval-option b{font-weight:500;font-size:13px}
+.approval-option small{color:var(--dim);font-size:11.5px;line-height:1.35}
+.approval-option.danger b,.approval-option.danger small,.approval-option.danger svg{color:#F0A35E}
+.approval-check{color:var(--txt);font-size:13px;line-height:18px;text-align:right}
+.approval-error{margin:6px 10px;color:#F28B82;font-size:12px}
+.dictation-active .crow-rel > .approval-picker{display:none}
 .model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-drop{position:absolute;right:44px;bottom:44px;z-index:50;width:232px;border:1px solid var(--line2);border-radius:12px;padding-bottom:4px;box-shadow:0 14px 50px rgba(0,0,0,.4);background:var(--modal)}
 .drop-lbl{font-size:12px;color:var(--dim2);padding:9px 13px 4px;letter-spacing:0;text-transform:none;display:flex;justify-content:space-between;align-items:center}
@@ -1715,6 +1750,16 @@ body{font-size:14px;font-family:var(--font-ui)}
 .au-search:focus-within{border-color:var(--ember)}
 .au-sidebar-new,.au-group-label{width:100%;border:0;border-radius:8px;display:flex;align-items:center;gap:8px;background:transparent;text-align:left;color:var(--txt2);font:inherit;cursor:pointer;padding:8px;min-height:34px}
 .au-sidebar-new{font-size:13px;margin-block:4px 6px}
+.au-task .au-runs-toggle{flex:0 0 auto;width:20px;height:20px;margin-right:-4px;align-self:center}
+.au-runs{display:flex;flex-direction:column;gap:1px;margin:0 0 6px 22px;padding-left:8px;border-left:1px solid var(--line)}
+.au-run-row{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:4px 8px;border:0;border-radius:8px;background:transparent;color:var(--txt2);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.au-run-row:hover,.au-run-row[data-selected=true]{background:var(--hover);color:var(--txt)}
+.au-run-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.au-run-dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;background:var(--dim)}
+.au-run-dot.ok{background:#7FD6C8}.au-run-dot.failed{background:#F28B82}.au-run-dot.running{background:#F0C35E}
+.au-run-state{color:#F28B82;font-size:11.5px}
+.au-run-more{border:0;background:transparent;color:var(--dim);font:inherit;font-size:12px;text-align:left;padding:4px 8px;cursor:pointer}
+.au-run-more:hover{color:var(--txt)}
 .au-sidebar-new:hover,.au-group-label:hover{background:var(--hover)}
 .au-task-list{flex:1;min-height:0;overflow:auto;padding:0 0 12px;scrollbar-width:thin}
 .au-group-label{font-size:12px;color:var(--dim);margin-block:3px}
@@ -1733,6 +1778,74 @@ body{font-size:14px;font-family:var(--font-ui)}
 .au-task-actions-menu button:disabled{opacity:.45;cursor:default}
 .au-task-actions-menu button.danger{color:var(--danger)}
 .au-page{padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:0;color:var(--txt)}
+.au-home,.au-detail{max-width:1000px;margin:clamp(12px,5vh,56px) auto 0}
+.au-home h1{font-family:var(--font-d);font-size:30px;font-weight:600;margin:0 0 22px;color:var(--txt)}
+.au-home-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.au-tabs{display:flex;gap:4px}
+.au-tabs button{border:0;border-radius:9px;padding:7px 14px;background:transparent;color:var(--txt2);font:inherit;font-size:14px;cursor:pointer}
+.au-tabs button:hover{color:var(--txt)}
+.au-tabs button.on{background:var(--hover);color:var(--txt)}
+.au-home-tools{display:flex;align-items:center;gap:8px}
+.au-home-search{height:32px;width:200px;border:1px solid var(--line2);border-radius:9px;background:transparent;color:var(--txt);font:inherit;font-size:13px;padding:0 10px}
+.au-new-wrap{position:relative}
+.au-new-task{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:0;border-radius:9px;background:var(--txt);color:var(--bg,#111);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer}
+.au-new-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:200px;padding:6px;border-radius:12px;background:var(--modal);border:1px solid var(--line2);box-shadow:0 14px 40px rgba(0,0,0,.35)}
+.au-new-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--txt);font:inherit;font-size:13.5px;text-align:left;cursor:pointer}
+.au-new-menu button:hover{background:var(--hover)}
+.au-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
+.au-card{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--glass);color:var(--txt);font:inherit;text-align:left;cursor:pointer;min-width:0}
+.au-card:hover{border-color:var(--line2);background:var(--hover)}
+.au-card strong{font-weight:500;font-size:14.5px}
+.au-card-desc{color:var(--txt2);font-size:13.5px;font-weight:400;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.au-card-meta,.au-dim{color:var(--dim);font-size:12.5px}
+.au-cards-empty{grid-column:1/-1}
+.au-home-note{margin-top:28px;color:var(--dim);font-size:12.5px}
+.au-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:16px;margin-bottom:24px;border-bottom:1px solid var(--line)}
+.au-crumbs{display:flex;align-items:center;gap:10px;min-width:0;font-size:14.5px}
+.au-crumbs button{border:0;background:transparent;color:var(--dim);font:inherit;cursor:pointer;padding:0}
+.au-crumbs button:hover{color:var(--txt)}
+.au-crumbs span{color:var(--dim)}
+.au-crumbs strong{font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.au-detail-actions{display:flex;align-items:center;gap:6px}
+.au-run-now{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;background:transparent;color:var(--txt);font:inherit;font-size:13.5px;cursor:pointer}
+.au-run-now:hover{background:var(--hover)}
+.au-run-now:disabled{opacity:.55;cursor:default}
+.au-detail-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:40px}
+@media(max-width:860px){.au-detail-grid{grid-template-columns:minmax(0,1fr)}}
+.au-detail section{margin-bottom:22px}
+.au-detail h3{margin:0 0 8px;color:var(--dim);font-size:13px;font-weight:500}
+.au-detail p{margin:0;color:var(--txt);font-size:14px;line-height:1.5}
+.au-status-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.au-switch{position:relative;width:34px;height:20px;border:0;border-radius:10px;background:var(--line2);cursor:pointer;padding:0}
+.au-switch i{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}
+.au-switch.on{background:#4F8CFF}.au-switch.on i{transform:translateX(14px)}
+.au-status-chip{padding:2px 8px;border-radius:7px;background:var(--hover);font-size:12.5px;color:var(--txt)}
+.au-allowed{padding:12px 14px;border-radius:12px;background:var(--glass);border:1px solid var(--line);font-size:13.5px}
+.au-instructions{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;overflow:hidden}
+.au-instructions.open{display:block}
+.au-more{margin-top:6px;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12.5px;cursor:pointer;padding:0}
+.au-more:hover{color:var(--txt)}
+.au-history{display:flex;flex-direction:column;gap:6px}
+.au-history-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border:0;border-radius:10px;background:var(--glass);color:var(--txt);font:inherit;font-size:13.5px;text-align:left;cursor:pointer}
+.au-history-row:hover:not(:disabled){background:var(--hover)}
+.au-history-row:disabled{cursor:default}
+.au-history-row .au-unread-dot{margin-left:auto}
+.au-set-summary{display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding:14px 16px;margin-bottom:8px;border:1px solid var(--line);border-radius:12px;background:var(--glass)}
+.au-set-summary>div{display:flex;flex-direction:column;gap:2px}
+.au-set-summary strong{font-size:20px;font-weight:600;color:var(--txt)}
+.au-set-summary div span{font-size:12px;color:var(--dim)}
+.au-set-actions{margin-left:auto;display:flex;gap:8px}
+.au-set-h{margin-top:26px}
+.au-set-note{margin:-6px 0 6px}
+.au-set-copy{min-width:0;flex:1}
+.au-set-copy.danger{color:#F0A35E}
+.au-radio{position:relative;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line2);background:transparent;cursor:pointer;padding:0}
+.au-radio.on{border-color:#4F8CFF}
+.au-radio.on i{position:absolute;inset:3px;border-radius:50%;background:#4F8CFF}
+.au-chat-crumb{display:flex;align-items:center;gap:6px;min-width:0;flex-shrink:1;font-size:13px;color:var(--dim)}
+.au-chat-crumb button{border:0;background:transparent;color:var(--dim);font:inherit;cursor:pointer;padding:3px 6px;border-radius:6px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.au-chat-crumb button:hover{color:var(--txt);background:var(--hover)}
+.au-chat-crumb+.workspace-title{margin-left:6px}
 .au-page-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;padding:24px clamp(14px,4%,40px) 36px}
 .au-page-notice{max-width:740px;margin:0 auto 16px;padding:8px 12px;border:1px solid var(--line2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;background:var(--glass)}
 .au-page-scroll>.au-form-error{max-width:740px;margin:0 auto 12px}
@@ -3392,20 +3505,19 @@ const SidebarSection = ({id, label, count, open, onToggle, actions, children}) =
 };
 
 const scheduledTaskConversationId = id => 'scheduled-task-' + id;
+// Automation chats (a task's own chat and each run's chat) live only in the Scheduled sidebar.
+const isAutomationChatId = id => /^(automation-|scheduled-task-)/.test(String(id || ''));
 
 const Sidebar = ({chats, conversationLibrary, projects, automations=[], onOpenTask, activeChatId, view, renamingId, projRenamingId, secOpen, expandedProj, onToggleSec, onToggleProj, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onChatAction, onRename, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onProjectNewChat, onMoveToProject, onProjectAction, projectMenuId, hoverEnabled=true}) => {
   const [activityOnly,setActivityOnly]=useState(false),[recentLimit,setRecentLimit]=useState(16);
   const [projectSort,setProjectSort]=useState('recent'),[recentSort,setRecentSort]=useState('recent'),[recentFilter,setRecentFilter]=useState('unassigned');
   const sort=(a,b)=>recentSort==='name'?a.title.localeCompare(b.title):(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0);
-  const sorted=chats.filter(chat=>!chat.archived&&!isSideChat(chat)).sort(sort),status=window.VellumUI.chatStatus;
+  const sorted=chats.filter(chat=>!chat.archived&&!isSideChat(chat)&&!isAutomationChatId(chat.id)).sort(sort),status=window.VellumUI.chatStatus;
   const projectRows=projects.slice().sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(projectSort==='name'?a.name.localeCompare(b.name):(Date.parse(b.updated_at)||0)-(Date.parse(a.updated_at)||0)));
   const Menu=window.VellumUI.SidebarSectionMenu;
   const attention=sorted.filter(chat=>status(chat));
   const pinnedChats=sorted.filter(chat=>chat.pinned);
-  const taskIds=new Set(automations.map(task=>scheduledTaskConversationId(task.id)));
-  const taskRows=recentFilter==='attention'?[]:automations.filter(task=>!task.builtin && !chats.some(chat=>chat.id===scheduledTaskConversationId(task.id)))
-    .map(task=>({id:scheduledTaskConversationId(task.id),title:task.name,created_at:task.created_at,scheduledTask:task}));
-  const rows=activityOnly?attention:[...sorted.filter(chat=>recentFilter==='all'||(recentFilter==='attention'?!!status(chat):!chat.projectId||taskIds.has(chat.id))),...taskRows].sort(sort);
+  const rows=activityOnly?attention:sorted.filter(chat=>recentFilter==='all'||(recentFilter==='attention'?!!status(chat):!chat.projectId)).sort(sort);
   const recentRow=chat=>chat.scheduledTask
     ? <button key={chat.id} type="button" className="sb-row au-recent-task" title={chat.title} onClick={()=>onOpenTask(chat.scheduledTask)}>
         <span className="sb-ic"><IcGCal size={15}/></span><span className="chat-title">{chat.title}</span>
@@ -3573,7 +3685,7 @@ const vellumReply = (text, exclude) => {
   return pick.replace('{q}', q);
 };
 
-const MODEL_SOURCES = [{value:'ollama',label:'Local · Gemma 4 12B',icon:'provider-icons/ollama-color.svg'},{value:'openrouter',label:'OpenRouter',icon:'provider-icons/openrouter-color.svg'},{value:'openai',label:'OpenAI',icon:'provider-icons/openai.svg'}];
+const MODEL_SOURCES = [{value:'ollama',label:'Local',icon:'provider-icons/ollama-color.svg'},{value:'openrouter',label:'OpenRouter',icon:'provider-icons/openrouter-color.svg'},{value:'openai',label:'OpenAI',icon:'provider-icons/openai.svg'}];
 const modelVendorIcon = model => {
   const id=String(model.id || '').toLowerCase();
   const vendor=id.split('/')[0];
@@ -3589,33 +3701,29 @@ const responseModelSnapshot = (id, models) => {
 };
 const pickerModels = data => {
   const source=data.model_provider || (data.active?.provider==='ollama'?'ollama':data.provider_keys?.openrouter?'openrouter':'openai');
-  return (data.models || []).filter(model=>source==='ollama'?model.id==='ollama/gemma4:12b':source==='openai'?model.provider==='openai':model.provider!=='ollama').map(model=>({...model,label:model.label || model.id,route_provider:source}));
+  return (data.models || []).filter(model=>source==='ollama'?model.provider==='ollama':source==='openai'?model.provider==='openai':model.provider!=='ollama').map(model=>({...model,label:model.label || model.id,route_provider:source}));
 };
 const ModelLogo = ({model}) => {
   const icon=modelVendorIcon(model || {});
   if(icon && /(?:google-deepmind|ollama-color|openai|openrouter-color|kimi-color|grok|zai)\.svg$/.test(icon))return <span className="model-vendor-icon model-monochrome-mark" style={{maskImage:`url(${icon})`,WebkitMaskImage:`url(${icon})`}} aria-hidden="true"/>;
   return icon ? <img className="model-vendor-icon" src={icon} alt=""/> : <IcGlobe size={18}/>;
 };
-const modelVendor = model => String(model.id || '').split('/')[0].toLowerCase() || model.provider || 'other';
-const MODEL_VENDOR_NAMES = {ollama:'Ollama',anthropic:'Anthropic',openai:'OpenAI',google:'Google',moonshotai:'Kimi',moonshot:'Kimi',kimi:'Kimi',qwen:'Qwen',nvidia:'NVIDIA',deepseek:'DeepSeek',mistralai:'Mistral',minimax:'MiniMax','meta-llama':'Meta',meta:'Meta','x-ai':'xAI',xai:'xAI',cohere:'Cohere','z-ai':'Z.ai','bytedance-seed':'ByteDance'};
 const ModelDrop = ({model, models = MODELS, drop, onPick, onClose, reasoningMode='', onReasoningChange, providerSources=[], modelProvider, onProviderChange}) => {
   const [q,setQ]=useState('');
-  const [vendor,setVendor]=useState('all');
   const [switching,setSwitching]=useState('');
   const [providerError,setProviderError]=useState('');
   const [idx,setIdx]=useState(0);
   const listId=React.useId();
-  const vendors=[...new Set(models.map(modelVendor))];
   const source=MODEL_SOURCES.find(item=>item.value===models[0]?.route_provider)?.label || 'Models';
   const query=q.toLowerCase().trim();
-  const hits=models.filter(item=>(vendor==='all' || modelVendor(item)===vendor) && (!query || (item.label || item.id).toLowerCase().includes(query) || item.id.toLowerCase().includes(query)));
-  useEffect(()=>{setVendor('all');setQ('');},[models]);
-  useEffect(()=>{setIdx(Math.max(0,hits.findIndex(item=>item.id===model)));},[q,vendor,models,model]);
+  const hits=models.filter(item=>(!query || (item.label || item.id).toLowerCase().includes(query) || item.id.toLowerCase().includes(query)));
+  useEffect(()=>{setQ('');},[models]);
+  useEffect(()=>{setIdx(Math.max(0,hits.findIndex(item=>item.id===model)));},[q,models,model]);
   const changeProvider=async source=>{
     if(switching || (source.value===modelProvider && models.length))return;
-    if(!source.available){setProviderError(source.value==='ollama'?'Start Ollama and install Gemma 4 12B to use the local provider.':'Connect '+source.label+' in Configuration to use its models.');return;}
+    if(!source.available){setProviderError(source.value==='ollama'?'Start Ollama and install a local model to use the local provider.':'Connect '+source.label+' in Configuration to use its models.');return;}
     setSwitching(source.value);setProviderError('');
-    try{await onProviderChange(source.value);setVendor('all');setQ('');}
+    try{await onProviderChange(source.value);setQ('');}
     catch(error){setProviderError(error?.message || 'The provider could not be changed. Try again.');}
     finally{setSwitching('');}
   };
@@ -3635,15 +3743,12 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose, reasoningMode
     else if(event.key==='Enter'){event.preventDefault();if(!switching && hits[idx])onPick(hits[idx].id);}
   };
   return <Popover className={'model-drop agent-model-picker select-motion'+(drop==='down'?' down':'')} role="dialog" label="Choose model and effort" onKeyDown={onKey} onClose={()=>onClose(false)}>
-    <window.VellumUI.SharedRowBackground className="agent-model-rail" role="group" label="Model vendors" activeSelector='[data-provider-active="true"]' refreshKey={modelProvider+':'+vendor}>
+    <window.VellumUI.SharedRowBackground className="agent-model-rail" role="group" label="Model providers" activeSelector='[data-provider-active="true"]' refreshKey={modelProvider}>
       {providerSources.map(source=><button type="button" key={'source-'+source.value} data-shared-row="" data-provider-active={source.value===modelProvider} aria-label={'Use '+source.label} aria-pressed={source.value===modelProvider} aria-disabled={!!switching || !source.available} data-tip={source.label+(source.available?'':' · Not connected')} onClick={()=>changeProvider(source)}><ModelLogo model={{id:source.value+'/'}}/></button>)}
-      {providerSources.length>0 && vendors.length>1 && <hr/>}
-      {vendors.length>1 && <button type="button" data-shared-row="" aria-label="All model vendors" data-tip="All models" aria-pressed={vendor==='all'} onClick={()=>setVendor('all')}><IcGrid size={20}/></button>}
-      {vendors.length>1 && vendors.map(key=><button type="button" key={key} data-shared-row="" aria-label={MODEL_VENDOR_NAMES[key] || key} data-tip={MODEL_VENDOR_NAMES[key] || key} aria-pressed={vendor===key || (vendors.length===1 && vendor==='all')} onClick={()=>setVendor(key)}><ModelLogo model={models.find(item=>modelVendor(item)===key)}/></button>)}
     </window.VellumUI.SharedRowBackground>
     <div className="agent-model-panel">
-      <div className="agent-model-header"><b>{vendor==='all'?source:MODEL_VENDOR_NAMES[vendor] || vendor}</b><span>{hits.length}</span><label className="agent-model-search"><IcSearch size={13}/><input autoFocus aria-label="Search models" role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={hits[idx]?listId+'-'+idx:undefined} placeholder="Search" value={q} onChange={event=>setQ(event.target.value)}/></label></div>
-      <window.VellumUI.SharedRowBackground id={listId} className="agent-model-list" role="listbox" label="Available models" activeSelector='[data-highlight="true"]' refreshKey={vendor+':'+q+':'+idx}>
+      <div className="agent-model-header"><b>{source}</b><span>{hits.length}</span><label className="agent-model-search"><IcSearch size={13}/><input autoFocus aria-label="Search models" role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={hits[idx]?listId+'-'+idx:undefined} placeholder="Search" value={q} onChange={event=>setQ(event.target.value)}/></label></div>
+      <window.VellumUI.SharedRowBackground id={listId} className="agent-model-list" role="listbox" label="Available models" activeSelector='[data-highlight="true"]' refreshKey={q+':'+idx}>
         {!switching && hits.map((item,i)=><div key={item.id} id={listId+'-'+i} role="option" tabIndex={i===idx?0:-1} aria-selected={model===item.id} aria-disabled={!!switching} data-highlight={i===idx} data-shared-row="" className="agent-model-row" onPointerMove={()=>{if(i!==idx)setIdx(i);}} onFocus={()=>setIdx(i)} onClick={()=>{if(!switching)onPick(item.id);}}><ModelLogo model={item}/><b>{item.label || item.id}</b>{model===item.id && <span className="drop-check"><IcCheck size={13}/></span>}</div>)}
         {switching && <div className="agent-model-empty" role="status">Loading {MODEL_SOURCES.find(source=>source.value===switching)?.label || 'provider'} models…</div>}
         {providerError && <div className="agent-model-error" role="alert">{providerError}</div>}
@@ -3663,7 +3768,90 @@ const DEFAULT_MODEL = 'ollama/gemma4:12b';
 const AttachmentRuntime = window.VellumUI && window.VellumUI.Attachments;
 let APPLICATION_DEFAULT_MODEL = DEFAULT_MODEL;
 const readDefaultModel = () => APPLICATION_DEFAULT_MODEL;
-const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : (id===DEFAULT_MODEL ? 'Gemma 4 12B (Local)' : id || 'Choose a model'); };
+const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : (id || 'Choose a model'); };
+// How Vellum's terminal commands are approved. The mode lives on the backend and
+// only this control (the user) can change it; the agent cannot raise its own access.
+const COMMAND_APPROVAL_MODES = [
+  {id:'ask', label:'Ask for approval', hint:'Always ask before running a terminal command or installing a skill', icon:'ShieldCheck'},
+  {id:'auto', label:'Approve for me', hint:'Only ask for commands that could change something', icon:'Terminal'},
+  {id:'full', label:'Full access', hint:'Run any command on this computer without asking', icon:'Terminal', danger:true},
+];
+const CommandApprovalPicker = () => {
+  const [mode, setMode] = useState('ask');
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [place, setPlace] = useState(null);
+  const box = useRef(null);
+  const menuRef = useRef(null);
+  // Open just above the composer, aligned with this pill. The menu renders in a
+  // portal on document.body: the composer sits in transformed/blurred layers,
+  // which turn position:fixed into "relative to that layer" and threw the menu
+  // to the window's right edge or top.
+  const measure = () => {
+    const pill = box.current, composer = pill?.closest('.cpill') || pill;
+    if (!pill || !composer || !pill.isConnected) { setOpen(false); return; }
+    const own = pill.getBoundingClientRect(), outer = composer.getBoundingClientRect();
+    const width = Math.min(380, window.innerWidth - 24);
+    const height = menuRef.current?.offsetHeight || 230;
+    const left = Math.max(12, Math.min(own.left, window.innerWidth - width - 12));
+    // Prefer above the composer; flip below the pill when there is no room.
+    const above = outer.top - 8;
+    if (above - height >= 8) setPlace({left, top: above - height, width});
+    else setPlace({left, top: Math.min(window.innerHeight - height - 8, own.bottom + 8), width});
+  };
+  useLayoutEffect(() => {
+    if (!open) return;
+    measure();
+    let frame = 0;
+    const follow = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
+    window.addEventListener('resize', follow);
+    window.addEventListener('scroll', follow, true);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(follow) : null;
+    const composer = box.current?.closest('.cpill');
+    if (observer && composer) observer.observe(composer);
+    if (observer && menuRef.current) observer.observe(menuRef.current);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', follow); window.removeEventListener('scroll', follow, true); observer?.disconnect(); };
+  }, [open]);
+  useEffect(() => {
+    let alive = true;
+    API.terminal?.approval?.().then(data => { if (alive && data?.mode) setMode(data.mode); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const outside = event => { if (!box.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false); };
+    const key = event => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', outside); window.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', key); };
+  }, [open]);
+  const choose = async next => {
+    if (busy || next === mode) { setOpen(false); return; }
+    setBusy(true); setError('');
+    try {
+      const receipt = await API.appActions.dispatch({action_id:'terminal.approval.set', arguments:{mode:next}}, {source:'ui'});
+      if (receipt?.status !== 'applied') throw new Error(receipt?.message || 'Approval could not be changed.');
+      setMode(receipt.result?.mode || next); setOpen(false);
+    } catch (failure) { setError(failure.message || 'Approval could not be changed.'); }
+    finally { setBusy(false); }
+  };
+  const current = COMMAND_APPROVAL_MODES.find(item => item.id === mode) || COMMAND_APPROVAL_MODES[0];
+  return <div className="approval-picker" ref={box}>
+    <button type="button" className={'approval-pill' + (current.danger ? ' danger' : '') + (open ? ' select-open' : '')} aria-haspopup="menu" aria-expanded={open}
+      data-tip="Change permissions" onClick={() => setOpen(value => !value)}>{current.label}</button>
+    {open && ReactDOM.createPortal(<div ref={menuRef} className="approval-menu" role="menu" aria-label="How should Vellum's commands be approved?" style={place ? {left:place.left, top:place.top, width:place.width} : {visibility:'hidden', left:0, top:0}}>
+      <div className="approval-menu-head">How should Vellum's commands be approved?</div>
+      {COMMAND_APPROVAL_MODES.map(item => <button key={item.id} type="button" role="menuitemradio" aria-checked={item.id === mode} disabled={busy}
+        className={'approval-option' + (item.danger ? ' danger' : '')} onClick={() => choose(item.id)}>
+        <window.VellumUI.AppIcon name={item.icon} size={16}/>
+        <span className="approval-text"><b>{item.label}</b><small>{item.hint}</small></span>
+        {item.id === mode && <span className="approval-check" aria-hidden="true">✓</span>}
+      </button>)}
+      {error && <p className="approval-error" role="alert">{error}</p>}
+    </div>, document.body)}
+  </div>;
+};
+
 const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onWeb, onClose}) => {
   const [sub, setSub] = useState(null);
   return (
@@ -3870,7 +4058,37 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange, onOpenContext}) => {
+const FollowUpTray = ({items = [], mode = 'steer', onSteer, onDelete, onEdit}) => {
+  const [menu, setMenu] = useState(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = event => { if (!event.target.closest?.('.followup-menu, .followup-more')) setMenu(null); };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [menu]);
+  if (!items.length) return null;
+  return <div className="followup-tray" role="list" aria-label="Follow-up messages">
+    {items.map(item => <div className={'followup-row' + (item.status === 'steering' ? ' steering' : '')} role="listitem" key={item.id}>
+      <span className="followup-icon" aria-hidden="true"><I d="M4 5v6a4 4 0 0 0 4 4h12M16 11l4 4-4 4" size={15}/></span>
+      <span className="followup-text" title={item.text}>{item.text}</span>
+      {item.error && <span className="followup-error" role="alert">{item.error}</span>}
+      {item.status === 'steering'
+        ? <span className="followup-state" role="status"><span className="followup-spinner" aria-hidden="true"/>Steering</span>
+        : <button type="button" className="followup-steer" title="Add this to the current response without stopping it" onClick={() => onSteer?.(item.id)}><I d="M4 12h12M12 6l6 6-6 6" size={14}/>Steer</button>}
+      <button type="button" className="followup-icon-btn" aria-label="Delete follow-up" title="Delete" onClick={() => onDelete?.(item.id)}><IcTrash size={15}/></button>
+      <span className="followup-more-wrap">
+        <button type="button" className="followup-icon-btn followup-more" aria-label="More follow-up actions" aria-haspopup="menu" aria-expanded={menu === item.id} onClick={() => setMenu(open => open === item.id ? null : item.id)}><IcDots size={15}/></button>
+        {menu === item.id && <div className="followup-menu" role="menu">
+          <button type="button" role="menuitem" onClick={() => { setMenu(null); onEdit?.(item); }}>Edit message</button>
+          {item.status !== 'steering' && <button type="button" role="menuitem" onClick={() => { setMenu(null); onSteer?.(item.id); }}>Steer now</button>}
+          <button type="button" role="menuitem" onClick={() => { setMenu(null); onDelete?.(item.id); }}>Delete</button>
+        </div>}
+      </span>
+    </div>)}
+  </div>;
+};
+
+const Composer = ({followUps = [], followUpMode = 'steer', onSteerFollowUp, onDeleteFollowUp, pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange, onOpenContext}) => {
   const [attach, setAttach] = useState([]);
   const [contextSignal, setContextSignal] = useState(0);
   const [attachError, setAttachError] = useState('');
@@ -4040,7 +4258,8 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
     if(item.kind==='project')onOpenProject?.(item.raw.id);
     if(item.kind==='agent')onOpenAgent?.(item.raw.id);
   };
-  const send = () => {
+  const send = (submitOptions) => {
+    const invertFollowUp = !!(submitOptions && submitOptions.invert === true);
     if (!['idle','error'].includes(voiceState) || dictationActive) return;
     if (busy && !text.trim()) {
       if (onStop) onStop();
@@ -4048,7 +4267,7 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
     }
     if (!text.trim()) return;
     const refs=composerRuntime?.referenceAttachments(taRef.current?.getReferences() || [],library) || [];
-    onSend(text.trim(), [...attach,...refs], {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? 'steer' : 'send', reasoningMode});
+    onSend(text.trim(), [...attach,...refs], {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? ((followUpMode === 'steer') !== invertFollowUp ? 'steer' : 'queue') : 'send', invertFollowUp: busy && invertFollowUp, reasoningMode});
     setText(''); setAttach([]);
     setAttachError('');
     setSearchMode(false);
@@ -4069,6 +4288,8 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
         </div>);
   return (
     <div className={'composer-wrap composer-size-' + composerSize + (dictationActive ? ' dictation-active' : '')} data-ui-reference="composer">
+      <FollowUpTray items={followUps} mode={followUpMode} onSteer={onSteerFollowUp} onDelete={onDeleteFollowUp}
+        onEdit={item => { onDeleteFollowUp?.(item.id); setText(item.text); setTimeout(() => taRef.current?.focus(), 0); }}/>
       {voiceState !== 'idle' && <div className="voice-status">{voiceState === 'connecting' ? 'Connecting to voice' : 'Start talking'}</div>}
       <div className={'cpill' + (animated && glow?' glowing':'') + (voiceState !== 'idle' ? ' voicing' : '')} ref={cpillRef}
         onDragOver={event => { if (event.dataTransfer && event.dataTransfer.files.length) event.preventDefault(); }}
@@ -4128,6 +4349,7 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
               e.target.value = '';
             }}/>
           <button className="cbtn" data-command="files.add" aria-label="Attach files" data-tip="Attach files" onClick={() => setPlusOpen(true)}><IcPlus/></button>
+          <CommandApprovalPicker/>
           {searchMode && (
             <button className="search-pill" title="Turn off web search" onClick={() => setSearchMode(false)}>
               <span className="sp-globe"><IcGlobe size={14}/></span>
@@ -5710,7 +5932,12 @@ const createSkillActivity = job => {const next={id:`skill-${Date.now()}-${Math.r
 const useSkillActivities = () => {const [jobs,setJobs]=useState(skillActivities);useEffect(()=>{skillActivityListeners.add(setJobs);return()=>skillActivityListeners.delete(setJobs);},[]);return jobs;};
 const runLearnActivity = async job => {updateSkillActivity(job.id,{status:'LEARNING',error:''});try{const result=await API.plugins.learn(job.source,'skills-hub','community');if(!result||result.status!=='pending'||!result.mutation||!result.mutation.id)throw new Error('The skill was not persisted in Pending.');updateSkillActivity(job.id,{status:'LEARNT',mutation:result.mutation,name:result.mutation.identity});await skillStagePause(500);updateSkillActivity(job.id,{status:'DRAFT_APPROVED'});await skillStagePause(650);updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL'});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
 const startLearnActivity = source => {primeSkillNotificationAudio();const job=createSkillActivity({type:'learn',source,status:'LEARNING'});void runLearnActivity(job);return job;};
-const runInstallActivity = async (job,onSkillAction) => {updateSkillActivity(job.id,{status:'INSTALLING',error:''});try{const response=onSkillAction?await onSkillAction('skill.mutation.submit',{operation:'install',identifier:job.item.identifier,category:'community'}):await API.plugins.hubMutation('install',{identifier:job.item.identifier,category:'community'});const mutation=onSkillAction?(response&&response.result&&response.result.mutation):(response&&response.result);if(!mutation||!mutation.id)throw new Error('The install request was not persisted in Pending.');updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL',mutation,name:mutation.identity||skillName(job.item)});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
+const runInstallActivity = async (job,onSkillAction) => {updateSkillActivity(job.id,{status:'INSTALLING',error:''});try{const response=onSkillAction?await onSkillAction('skill.mutation.submit',{operation:'install',identifier:job.item.identifier,category:'community'}):await API.plugins.hubMutation('install',{identifier:job.item.identifier,category:'community'});const mutation=onSkillAction?(response&&response.result&&response.result.mutation):(response&&response.result);if(!mutation||!mutation.id)throw new Error('The install request could not be prepared.');const name=mutation.identity||skillName(job.item);updateSkillActivity(job.id,{status:'INSTALLING',mutation,name,message:'Installing the skill package.'});
+  // The Install click is the user's approval: apply the staged package now instead of leaving it waiting in Review.
+  const approved=onSkillAction?await onSkillAction('skill.mutation.approve',{mutation_id:mutation.id}):await API.plugins.pendingApprove(mutation.id);
+  if(approved&&approved.status&&approved.status!=='applied')throw new Error(approved.message||'The skill could not be installed.');
+  const applied=approved&&approved.result&&(approved.result.result||approved.result);if(applied&&applied.ok===false)throw new Error(applied.error||'The skill could not be installed.');
+  updateSkillActivity(job.id,{status:'INSTALLED',mutation,name,message:'Installed. It now shows in your skills.'});window.dispatchEvent(new CustomEvent('vellum:skills-changed'));}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
 const startInstallActivity = (item,onSkillAction) => {primeSkillNotificationAudio();const job=createSkillActivity({type:'install',item,status:'INSTALLING',name:skillName(item)});void runInstallActivity(job,onSkillAction);return job;};
 const retrySkillActivity = (job,onSkillAction=skillActionDispatcher) => {if(job.type==='learn')void runLearnActivity(job);else if(job.type==='install')void runInstallActivity(job,onSkillAction);};
 const isValidSkillLearnInput = value => {const clean=value.trim();if(/^(skills-sh|skills\.sh|skillsmp|clawhub|official)\//i.test(clean))return true;try{const url=new URL(clean);if((url.protocol==='http:'||url.protocol==='https:')&&url.hostname&&!url.username&&!url.password&&!/\s/.test(clean))return true;}catch(_){}return clean.length>=12&&/\s/.test(clean);};
@@ -5739,6 +5966,8 @@ const SkillsHubView = ({onSkillAction, embedded=false, initialSkill=null, initia
   const openItem=async item=>{setSelected(item);setDetail(null);setDetailLoading(true);setCodeTab('skill-md');setSkillMdOpen(false);try{let data;if(tab==='discover')data=(await API.plugins.hubInspect(item.identifier)).skill;else if(tab==='review'&&item._reviewType==='pending')data=(await API.plugins.skillAction({action:'pending_diff',name:item.id})).result;else if(tab==='review')data=item;else data=await API.plugins.skillDetail(skillName(item));setDetail(data);}catch(e){setDetail({error:String(e.message||e)});}finally{setDetailLoading(false);setTimeout(()=>drawerRef.current&&drawerRef.current.focus(),0);}};
   const submitLearn=e=>{e.preventDefault();const sourceValue=learnSource.trim();if(!isValidSkillLearnInput(sourceValue)){setLearnError('Enter a valid public skill URL or a meaningful procedure.');return;}setLearnOpen(false);setLearnSource('');setLearnError('');startLearnActivity(sourceValue);};
   const reviewActivity=async job=>{if(!job||!job.mutation)return;setTab('review');setQuery('');setCategory('all');setSelected({...job.mutation,_reviewType:'pending'});setDetail(null);setDetailLoading(true);try{setDetail((await API.plugins.skillAction({action:'pending_diff',name:job.mutation.id})).result);}catch(e){setDetail({error:String(e.message||e)});}finally{setDetailLoading(false);setTimeout(()=>drawerRef.current&&drawerRef.current.focus(),0);}};
+  const skillsRefreshRef=useRef(null);skillsRefreshRef.current=()=>Promise.all([refreshOverview(),loadList(false,'')]);
+  useEffect(()=>{const handler=()=>{void skillsRefreshRef.current?.().catch(()=>{});};window.addEventListener('vellum:skills-changed',handler);return()=>window.removeEventListener('vellum:skills-changed',handler);},[]);
   useEffect(()=>{const handler=e=>{const detail=e.detail||{};if(detail.mode==='installed'){setTab('installed');setQuery(detail.job&&detail.job.name||'');return;}reviewActivity(detail.job);};window.addEventListener('vellum:skills-activity',handler);return()=>window.removeEventListener('vellum:skills-activity',handler);},[]);
   const mutate=async(action,payload)=>{
     const activity=activities.find(job=>job.mutation&&job.mutation.id===payload.id);
@@ -6731,7 +6960,7 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onOpenMemory, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({followUpMode="steer", onAutomationAction, onAutomationsChange, numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onOpenMemory, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => setTab(next);
@@ -6855,7 +7084,7 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
 
           {tab === 'Voice' && <window.VellumUI.Dictation.Settings onAction={onDictationAction} onConfirm={onDictationConfirm} onCancel={onDictationCancel}/>}
           {tab === 'Responses' && <window.VellumUI.StreamingSettings preferences={streamingPreferences} onDeviceSettings={onDeviceSettings}/>}
-          {tab === 'General' && <window.VellumUI.SettingsOverview.General theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} previewRail={previewRail} onDeviceSettings={onDeviceSettings} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
+          {tab === 'General' && <window.VellumUI.SettingsOverview.General followUpMode={followUpMode} theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} previewRail={previewRail} onDeviceSettings={onDeviceSettings} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
           {tab === 'Appearance' && (
             <React.Fragment>
               <div className="set-h">Appearance</div>
@@ -6949,14 +7178,9 @@ const SettingsModal = ({numberShortcuts="tabs", onTryPlugin, onCreatePlugin, plu
               </div>} renderSkills={(skill,add)=><SkillsHubView embedded initialSkill={skill} initialAdd={add} onSkillAction={onSkillAction}/>} apps={apps} catalogState={pluginCatalogState} onRetry={onRetryPlugins} onPluginState={onPluginState} onCalendarAction={onCalendarAction} youtubeIntelligence={youtubeIntelligence} onOpenSkills={onOpenSkills} onBrowse={onBrowsePlugins}/>
             </React.Fragment>
           )}
-          {tab === 'Automations' && (
-            <React.Fragment>
-              <div className="set-h">Scheduled</div>
-              <div className="set-note">Scheduled tasks have their own workspace for creating, editing, pausing, and reviewing runs.</div>
-              <div className="set-row"><div>Scheduled tasks<span className="sr-sub">{automations.length} task{automations.length === 1 ? '' : 's'} currently saved.</span></div><span className="sr-end"><button className="btn primary" onClick={() => { onClose(); if (onOpenScheduled) onOpenScheduled(); }}>Open Scheduled</button></span></div>
-              <div className="set-row"><div>Chat-guided setup<span className="sr-sub">Ask Vellum to draft the schedule in a new project chat.</span></div><span className="sr-end"><button className="btn" onClick={() => { onClose(); if (onStartAutomationChat) onStartAutomationChat(); }}>Create with Vellum</button></span></div>
-            </React.Fragment>
-          )}
+          {tab === 'Automations' && <AutomationSettings automations={automations} onAction={onAutomationAction} onItemsChange={onAutomationsChange}
+            onOpenScheduled={() => { onClose(); if (onOpenScheduled) onOpenScheduled(); }}
+            onStartChat={() => { onClose(); if (onStartAutomationChat) onStartAutomationChat(); }}/>}
           {tab === 'Petdex' && (
             <PetdexTab manifest={petManifest} loading={petLoading} error={petError} installed={petInstalled} active={petActive} size={petSize} hidden={petHidden} onToggleInstall={onPetToggleInstall} onSetActive={onPetSetActive} onSize={onPetSize} onHidden={onPetHidden}/>
           )}
@@ -7341,6 +7565,13 @@ const automationStatus = (task, schedulerAvailable) => {
   if (!schedulerAvailable) return 'Scheduler unavailable';
   return task.next_run_at ? 'Active' : 'No run queued';
 };
+// "Nov 25 at 1:48 PM" (the year only when it is not this year), in the viewer's time zone.
+const automationShortDate = value => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = date.toLocaleDateString(undefined, {month:'short', day:'numeric', ...(date.getFullYear() !== new Date().getFullYear() ? {year:'numeric'} : {})});
+  return day + ' at ' + date.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+};
 const AutomationIcon = ({name, size=16}) => <window.VellumUI.AppIcon name={name} size={size}/>;
 const AutomationConfirmModal = ({record, builtin, onCancel, onConfirm, busy, error}) => {
   const title = (builtin ? 'Reset ' : 'Delete ') + record.name + '?';
@@ -7357,9 +7588,110 @@ const AutomationConfirmModal = ({record, builtin, onCancel, onConfirm, busy, err
   </AutomationDialog>;
 };
 
+// Settings → Automations: an overview of every scheduled task with on/off switches,
+// the built-in background jobs, and how Vellum's commands are approved.
+const AutomationSettings = ({automations = [], onAction, onItemsChange, onOpenScheduled, onStartChat}) => {
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const [approval, setApproval] = useState('ask');
+  useEffect(() => {
+    let alive = true;
+    API.automations?.list?.().then(data => { if (alive && Array.isArray(data?.automations)) onItemsChange?.(data.automations); }).catch(() => {});
+    API.terminal?.approval?.().then(data => { if (alive && data?.mode) setApproval(data.mode); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const refresh = async () => {
+    const data = await API.automations.list();
+    if (Array.isArray(data?.automations)) onItemsChange?.(data.automations);
+  };
+  const toggle = async task => {
+    if (busy || task.schedule_ended) return;
+    setBusy(task.id); setError('');
+    try {
+      const receipt = await onAction(task.state === 'active' ? 'automation.pause' : 'automation.resume', {automation_id:task.id}, {notify:false});
+      if (receipt?.status !== 'applied') throw new Error(receipt?.message || 'The task could not be changed.');
+      await refresh();
+    } catch (failure) { setError(failure.message || 'The task could not be changed.'); }
+    finally { setBusy(''); }
+  };
+  const chooseApproval = async mode => {
+    if (busy || mode === approval) return;
+    setBusy('approval'); setError('');
+    try {
+      const receipt = await API.appActions.dispatch({action_id:'terminal.approval.set', arguments:{mode}}, {source:'ui'});
+      if (receipt?.status !== 'applied') throw new Error(receipt?.message || 'Approval could not be changed.');
+      setApproval(receipt.result?.mode || mode);
+    } catch (failure) { setError(failure.message || 'Approval could not be changed.'); }
+    finally { setBusy(''); }
+  };
+  const yours = automations.filter(task => !task.builtin);
+  const system = automations.filter(task => task.builtin);
+  const active = automations.filter(task => automationGroup(task) === 'active').length;
+  const lastRun = task => {
+    const run = (task.run_history || []).slice().sort((a,b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
+    if (!run) return 'Never run';
+    return (run.status === 'failed' ? 'Last run failed ' : run.status === 'running' ? 'Running since ' : 'Last run ') + automationShortDate(run.started_at);
+  };
+  const row = task => <div className="set-row au-set-row" key={task.id}>
+    <div className="au-set-copy">{task.name}<span className="sr-sub">{scheduleLabel(task.schedule)} · {lastRun(task)}</span></div>
+    <span className="sr-end">
+      {task.schedule_ended ? <span className="au-dim">Completed</span>
+        : <button type="button" role="switch" aria-checked={task.state === 'active'} aria-label={(task.state === 'active' ? 'Pause ' : 'Resume ') + task.name}
+            disabled={!!busy} className={'au-switch' + (task.state === 'active' ? ' on' : '')} onClick={() => toggle(task)}><i/></button>}
+    </span>
+  </div>;
+  return <React.Fragment>
+    <div className="set-h">Automations</div>
+    <div className="au-set-summary">
+      <div><strong>{automations.length}</strong><span>tasks</span></div>
+      <div><strong>{active}</strong><span>active</span></div>
+      <div><strong>{automations.length - active}</strong><span>paused or done</span></div>
+      <span className="au-set-actions">
+        <button className="btn" onClick={onStartChat}>Create with Vellum</button>
+        <button className="btn primary" onClick={onOpenScheduled}>Open Scheduled</button>
+      </span>
+    </div>
+    {error && <p className="au-form-error" role="alert">{error}</p>}
+    <div className="set-h au-set-h">Your tasks</div>
+    {yours.length ? yours.map(row) : <div className="set-row"><div>No tasks yet<span className="sr-sub">Create one with Vellum, set one up in Scheduled, or start from a template.</span></div></div>}
+    <div className="set-h au-set-h">Background jobs</div>
+    <div className="set-note au-set-note">Built-in jobs that keep Vellum's memory, skills and feeds up to date. Pausing one stops it until you resume it.</div>
+    {system.map(row)}
+    <div className="set-h au-set-h">Command approval</div>
+    <div className="set-note au-set-note">How Vellum's terminal commands and skill installs are approved. The same choice is in the message box.</div>
+    {COMMAND_APPROVAL_MODES.map(mode => <div className="set-row au-set-row" key={mode.id}>
+      <div className={'au-set-copy' + (mode.danger ? ' danger' : '')}>{mode.label}<span className="sr-sub">{mode.hint}</span></div>
+      <span className="sr-end"><button type="button" role="radio" aria-checked={approval === mode.id} aria-label={mode.label} disabled={!!busy}
+        className={'au-radio' + (approval === mode.id ? ' on' : '')} onClick={() => chooseApproval(mode.id)}><i/></button></span>
+    </div>)}
+    <div className="set-note">Scheduled tasks run while Vellum is open on this computer; a run missed while it was closed catches up shortly after you open it.</div>
+  </React.Fragment>;
+};
+
 const ScheduledView = ({automations = [], projects = [], chats = [], models = MODELS, showPage, sidebarTarget,
-  sidebarVisible, activeTaskId, onEnsureContext, onStartChat, onOpenChat, onOpenTask, onItemsChange, onAction, onSidebarEnter, onSidebarLeave}) => {
+  sidebarVisible, activeTaskId, activeChatId, focusTask, onEnsureContext, onStartChat, onOpenChat, onOpenTask, onItemsChange, onAction, onSidebarEnter, onSidebarLeave}) => {
   const [loading, setLoading] = useState(true);
+  const [runsOpen, setRunsOpen] = useState({});
+  const [pageTab, setPageTab] = useState('yours');
+  const [pageTaskId, setPageTaskId] = useState(null);
+  const [pageQuery, setPageQuery] = useState('');
+  const [pageSearchOpen, setPageSearchOpen] = useState(false);
+  const [pageFilter, setPageFilter] = useState('all');
+  const [pageSort, setPageSort] = useState('next');
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  useEffect(()=>{
+    if(!newMenuOpen)return;
+    const outside=event=>{if(!event.target.closest?.('.au-new-wrap'))setNewMenuOpen(false);};
+    const key=event=>{if(event.key==='Escape')setNewMenuOpen(false);};
+    document.addEventListener('pointerdown',outside);window.addEventListener('keydown',key);
+    return ()=>{document.removeEventListener('pointerdown',outside);window.removeEventListener('keydown',key);};
+  },[newMenuOpen]);
+  // "Back" from a task's run chat lands on the task list or that task's page.
+  useEffect(()=>{if(focusTask){setPageTab('yours');setPageTaskId(focusTask.id||null);}},[focusTask?.nonce]);
+  // A task deleted elsewhere closes its page.
+  useEffect(()=>{if(pageTaskId && !automations.some(item=>item.id===pageTaskId))setPageTaskId(null);},[automations,pageTaskId]);
+  const [runsShown, setRunsShown] = useState({});
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [schedulerAvailable, setSchedulerAvailable] = useState(false);
@@ -7417,13 +7749,31 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
     };
   },[]);
   const ideaPoll = useRef({timer:null, tries:0, alive:true});
+  // Ideas the user already opened a setup chat for stay hidden for a week, so a picked
+  // idea does not come straight back while its chat is still being finished.
+  const STARTED_IDEAS_KEY = 'vellum-started-automation-ideas';
+  const startedIdeas = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STARTED_IDEAS_KEY) || '{}');
+      const cutoff = Date.now() - 7*24*60*60*1000;
+      return Object.fromEntries(Object.entries(saved).filter(([,at])=>Number(at) > cutoff));
+    } catch { return {}; }
+  };
+  const rememberStartedIdea = name => {
+    try { localStorage.setItem(STARTED_IDEAS_KEY, JSON.stringify({...startedIdeas(), [String(name).toLowerCase()]:Date.now()})); } catch {}
+    setIdeas(current=>({...current, suggestions:withoutStartedIdeas(current.suggestions)}));
+  };
+  const withoutStartedIdeas = items => {
+    const started = startedIdeas();
+    return (items || []).filter(item=>!started[String(item?.name || '').toLowerCase()]);
+  };
   const loadIdeas = async (refresh=false) => {
     clearTimeout(ideaPoll.current.timer);
     if(refresh)ideaPoll.current.tries=0;
     try{
       const data = await API.automations.suggestions(refresh);
       if(!ideaPoll.current.alive)return;
-      if(Array.isArray(data?.suggestions) && data.suggestions.length)setIdeas(data);
+      if(Array.isArray(data?.suggestions) && data.suggestions.length)setIdeas({...data, suggestions:withoutStartedIdeas(data.suggestions)});
       else setIdeas(current=>({...current, status:data?.status || 'ready'}));
       // Suggestions are generated in the background; check back until they land.
       if(data?.status === 'refreshing' && ideaPoll.current.tries++ < 40)ideaPoll.current.timer=setTimeout(()=>loadIdeas(),4000);
@@ -7450,6 +7800,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   const editTask = record=>{onEnsureContext?.();closeMenu(true);setEditing({mode:'edit',record});setError('');};
   const startChat = async idea=>{
     if(starting)return;
+    if(idea?.name)rememberStartedIdea(idea.name);
     setStarting(idea?.name || 'guided');
     try{await onStartChat(idea);}
     catch(_){setError('Setup chat could not open. Try again.');}
@@ -7517,6 +7868,12 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   const menuRecord = menu && automations.find(item=>item.id===menu.id);
   const search = query.trim().toLowerCase();
   const filtered = automations.filter(item=>filters.includes(automationGroup(item)) && item.name?.toLowerCase().includes(search));
+  // Page view: the user's own tasks (built-in maintenance jobs stay in the sidebar).
+  const pageTask = pageTaskId ? automations.find(item=>item.id===pageTaskId) || null : null;
+  const pageTasks = automations.filter(item=>!item.builtin && (pageFilter==='all' || automationGroup(item)===pageFilter)
+      && (!pageQuery.trim() || (item.name + ' ' + (item.description || '') + ' ' + (item.instructions || '')).toLowerCase().includes(pageQuery.trim().toLowerCase())))
+    .sort((a,b)=>pageSort==='name' ? String(a.name).localeCompare(String(b.name))
+      : (Date.parse(a.next_run_at) || Infinity) - (Date.parse(b.next_run_at) || Infinity));
   const sidebar = <aside className="sidebar au-sidebar" aria-label="Scheduled sidebar">
     <header className="au-sidebar-head"><h2>Scheduled</h2><div className="au-sidebar-controls">
       <button ref={filterButton} type="button" className="au-icon-btn" data-tip="Filter tasks" aria-label="Filter tasks" aria-expanded={!!filterOpen}
@@ -7554,14 +7911,34 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
             const next = status === 'Active' ? automationRunDay(record.next_run_at,zone) : '';
             const exactNext = next && automationDate(record.next_run_at,zone);
             const unread = (record.run_history || []).some(automationUnread);
-            return <div key={record.id} className="au-task" data-shared-row="" data-selected={record.id===activeTaskId} data-menu-open={menu?.id===record.id}>
+            // Each run delivered to a new chat is listed under its task, newest first.
+            const runChats = (record.run_history || [])
+              .filter(run => run.conversation_id && run.conversation_id !== scheduledTaskConversationId(record.id) && !run.archived_at)
+              .sort((a,b) => String(b.started_at).localeCompare(String(a.started_at)));
+            const runsExpanded = runChats.length > 0 && (runsOpen[record.id] ?? runChats.some(run => run.conversation_id === activeChatId));
+            const shownRuns = runChats.slice(0, runsShown[record.id] || 8);
+            return <React.Fragment key={record.id}><div className="au-task" data-shared-row="" data-selected={record.id===activeTaskId && !runChats.some(run => run.conversation_id === activeChatId)} data-menu-open={menu?.id===record.id}>
+              {runChats.length > 0 && <button type="button" className="au-icon-btn au-runs-toggle" aria-expanded={runsExpanded}
+                aria-label={(runsExpanded ? 'Hide runs of ' : 'Show runs of ') + record.name} data-tip={runChats.length + (runChats.length === 1 ? ' run' : ' runs')}
+                onClick={() => setRunsOpen(current => ({...current, [record.id]: !runsExpanded}))}><AutomationIcon name={runsExpanded ? 'ChevronDown' : 'ChevronRight'} size={13}/></button>}
               <button type="button" className="au-task-select" aria-label={unread ? record.name + ', unread runs' : undefined} aria-current={record.id===activeTaskId?'true':undefined} onClick={()=>onOpenTask(record)}>
                 <span className="au-task-title" title={record.name}>{record.name}{unread && <i className="au-unread-dot" aria-hidden="true"/>}</span>
                 <span className="au-task-meta" title={exactNext ? 'Next run ' + exactNext + ' · ' + scheduleLabel(record.schedule) : scheduleLabel(record.schedule)}>{next ? next + ' · ' : status + ' · '}{scheduleLabel(record.schedule)}</span>
               </button>
               <button type="button" className="au-icon-btn au-task-menu" data-tip="Task actions" aria-label={'Actions for ' + record.name} aria-expanded={menu?.id===record.id}
                 onClick={event=>{const trigger=event.currentTarget,rect=trigger.getBoundingClientRect();setMenu(menu?.id===record.id?null:{id:record.id,trigger,x:rect.right+8,y:rect.top});setFilterOpen(false);}}><IcDots size={16}/></button>
-            </div>;
+            </div>
+            {runsExpanded && <div className="au-runs" role="group" aria-label={'Runs of ' + record.name}>
+              {shownRuns.map(run => <button key={run.id} type="button" className="au-run-row" data-shared-row="" data-selected={run.conversation_id === activeChatId}
+                aria-current={run.conversation_id === activeChatId ? 'true' : undefined} onClick={() => onOpenChat(run.conversation_id, run.message_id)}>
+                <span className={'au-run-dot ' + (run.status === 'failed' ? 'failed' : run.status === 'running' ? 'running' : 'ok')} aria-hidden="true"/>
+                <span className="au-run-label">{automationRunDay(run.started_at, automationScheduleZone(record.schedule)) || 'Run'}{' · '}{new Date(run.started_at).toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'})}</span>
+                {run.status === 'failed' && <span className="au-run-state">Failed</span>}
+                {automationUnread(run) && <i className="au-unread-dot" aria-label="Unread"/>}
+              </button>)}
+              {runChats.length > shownRuns.length && <button type="button" className="au-run-more" onClick={() => setRunsShown(current => ({...current, [record.id]: shownRuns.length + 20}))}>Show {Math.min(20, runChats.length - shownRuns.length)} more</button>}
+            </div>}
+            </React.Fragment>;
           })}
         </section>;
       })}
@@ -7575,20 +7952,93 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
       <div className="au-page-scroll">
         {(loadError || !loading && !schedulerAvailable) && <div className="au-page-notice" role="status">{loadError || 'The local scheduler is offline. Tasks can run when the Vellum backend is available.'}<button type="button" className="btn" onClick={refresh}>Retry</button></div>}
         {error && <p className="au-form-error" role="alert">{error}</p>}
-        <div className="au-start">
-          <div className="au-start-icon" aria-hidden="true">{'\u{1f553}'}</div>
-          <h1>Schedule a task</h1><p>Have Vellum handle recurring tasks and bring you the results.</p>
-          <div className="au-ideas-head">
-            <span>{ideas.source==='learned' ? 'Suggested for you' : 'Ideas to start with'}{ideas.status==='refreshing' || ideas.status==='loading' ? ' · Updating…' : ''}</span>
-            <button type="button" className="btn" disabled={ideas.status==='refreshing' || ideas.status==='loading'} onClick={()=>loadIdeas(true)}>Refresh ideas</button>
+        {pageTask ? <div className="au-detail">
+          <header className="au-detail-head">
+            <nav className="au-crumbs" aria-label="Breadcrumb"><button type="button" onClick={()=>setPageTaskId(null)}>Scheduled tasks</button><span aria-hidden="true">/</span><strong>{pageTask.name}</strong></nav>
+            <div className="au-detail-actions">
+              <button type="button" className="au-icon-btn" data-tip="Edit" aria-label={'Edit ' + pageTask.name} onClick={()=>editTask(pageTask)}><AutomationIcon name="Edit"/></button>
+              <button type="button" className="au-icon-btn" data-tip={pageTask.builtin ? 'Reset task' : 'Delete'} aria-label={(pageTask.builtin ? 'Reset ' : 'Delete ') + pageTask.name} onClick={()=>{setError('');setConfirm(pageTask);}}><AutomationIcon name="Trash"/></button>
+              <button type="button" className="au-run-now" disabled={!!busy || automationRunning(pageTask)} onClick={()=>runNow(pageTask)}><AutomationIcon name="Play" size={14}/>{automationRunning(pageTask) ? 'Running…' : 'Run now'}</button>
+            </div>
+          </header>
+          <div className="au-detail-grid">
+            <div className="au-detail-facts">
+              {pageTask.description && <section><h3>Description</h3><p>{pageTask.description}</p></section>}
+              <section><h3>Status</h3><div className="au-status-line">
+                {!pageTask.schedule_ended && <button type="button" role="switch" aria-checked={pageTask.state==='active'} aria-label={pageTask.state==='active' ? 'Pause task' : 'Resume task'} disabled={!!busy}
+                  className={'au-switch' + (pageTask.state==='active' ? ' on' : '')} onClick={()=>toggleState(pageTask)}><i/></button>}
+                <span className="au-status-chip">{pageTask.schedule_ended ? 'Completed' : pageTask.state==='paused' ? 'Paused' : automationRunning(pageTask) ? 'Running now' : 'Active'}</span>
+                {pageTask.state==='active' && pageTask.next_run_at && <span className="au-dim">Next run: {automationShortDate(pageTask.next_run_at)}</span>}
+              </div></section>
+              <section><h3>Repeats</h3><p>{scheduleLabel(pageTask.schedule)}</p></section>
+              <section><h3>Results go to</h3><p>{pageTask.destination?.kind === 'existing_chat' ? 'An existing chat' : pageTask.destination?.kind === 'notification' ? 'A notification' : 'A new chat for each run'}</p></section>
+              <section><h3>Always allowed</h3><div className="au-allowed">{pageTask.permission?.full_access ? 'Acts without asking' : 'Asks before anything that needs your approval'}</div></section>
+            </div>
+            <div className="au-detail-main">
+              {pageTask.instructions && <section><h3>Instructions</h3>
+                <p className={'au-instructions' + (instructionsOpen ? ' open' : '')}>{pageTask.instructions}</p>
+                {pageTask.instructions.length > 400 && <button type="button" className="au-more" onClick={()=>setInstructionsOpen(open=>!open)}>{instructionsOpen ? 'Show less' : 'Show more'}</button>}
+              </section>}
+              <section><h3>History</h3>
+                {!(pageTask.run_history || []).length && <p className="au-dim">No runs yet.</p>}
+                <div className="au-history">{(pageTask.run_history || []).slice().sort((a,b)=>String(b.started_at).localeCompare(String(a.started_at))).slice(0, 30).map(run=>
+                  <button type="button" key={run.id} className="au-history-row" disabled={!run.conversation_id} title={run.error || ''}
+                    onClick={()=>run.conversation_id && onOpenChat(run.conversation_id, run.message_id)}>
+                    <span className={'au-run-dot ' + (run.status === 'failed' ? 'failed' : run.status === 'running' ? 'running' : 'ok')} aria-hidden="true"/>
+                    <span>{automationShortDate(run.started_at)}</span>
+                    {run.status === 'failed' && <span className="au-run-state">Failed</span>}
+                    {automationUnread(run) && <i className="au-unread-dot" aria-label="Unread"/>}
+                  </button>)}</div>
+              </section>
+            </div>
           </div>
-          <section className="au-ideas" aria-label="Task ideas" aria-busy={ideas.status==='refreshing' || ideas.status==='loading'}>
-            {ideas.suggestions.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
-              <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon] || AUTOMATION_IDEA_ICONS.research}</span>
-              <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span>{idea.reason && <small>{idea.reason}</small>}</span>
-            </button>)}
-          </section>
-        </div>
+        </div> : <div className="au-home">
+          <h1>Scheduled tasks</h1>
+          <div className="au-home-bar">
+            <div className="au-tabs" role="tablist" aria-label="Scheduled tasks">
+              {[['yours','Yours'],['templates','Templates']].map(([id,label])=><button key={id} type="button" role="tab" aria-selected={pageTab===id} className={pageTab===id ? 'on' : ''} onClick={()=>setPageTab(id)}>{label}</button>)}
+            </div>
+            <div className="au-home-tools">
+              {pageTab==='yours' && <>
+                {pageSearchOpen && <input className="au-home-search" type="search" autoFocus placeholder="Search tasks" aria-label="Search tasks" value={pageQuery} onChange={event=>setPageQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'){setPageQuery('');setPageSearchOpen(false);}}}/>}
+                <button type="button" className="au-icon-btn" data-tip="Search" aria-label="Search tasks" aria-pressed={pageSearchOpen} onClick={()=>{setPageSearchOpen(open=>!open);setPageQuery('');}}><AutomationIcon name="Search"/></button>
+                <button type="button" className="au-icon-btn" data-tip={'Show: ' + ({all:'All', active:'Active', paused:'Paused', ended:'Completed'})[pageFilter]} aria-label="Filter tasks"
+                  onClick={()=>setPageFilter(current=>({all:'active', active:'paused', paused:'ended', ended:'all'})[current])}><I d="M4 6h16M7 12h10M10 18h4" size={16}/></button>
+                <button type="button" className="au-icon-btn" data-tip={pageSort==='next' ? 'Sorted by next run' : 'Sorted by name'} aria-label="Sort tasks"
+                  onClick={()=>setPageSort(current=>current==='next' ? 'name' : 'next')}><I d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4" size={16}/></button>
+              </>}
+              <div className="au-new-wrap">
+                <button type="button" className="au-new-task" aria-haspopup="menu" aria-expanded={newMenuOpen} onClick={()=>setNewMenuOpen(open=>!open)}>New task<AutomationIcon name="ChevronDown" size={13}/></button>
+                {newMenuOpen && <div className="au-new-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={()=>{setNewMenuOpen(false);startChat();}}><AutomationIcon name="Chat"/>Create with Vellum</button>
+                  <button type="button" role="menuitem" onClick={()=>{setNewMenuOpen(false);newTask();}}><AutomationIcon name="SettingsCog"/>Set up manually</button>
+                </div>}
+              </div>
+            </div>
+          </div>
+          {pageTab==='yours' ? <>
+            <div className="au-cards">
+              {pageTasks.map(task=><button type="button" key={task.id} className="au-card" onClick={()=>{setInstructionsOpen(false);setPageTaskId(task.id);}}>
+                <strong>{task.name}</strong>
+                {(task.description || task.instructions) && <span className="au-card-desc">{task.description || task.instructions}</span>}
+                <span className="au-card-meta">{task.schedule_ended ? 'Completed' : task.state==='paused' ? 'Paused' : automationRunning(task) ? 'Running now' : 'Active'}{' · '}{scheduleLabel(task.schedule)}</span>
+              </button>)}
+              {!pageTasks.length && <p className="au-dim au-cards-empty">{loading ? 'Loading tasks…' : pageQuery || pageFilter!=='all' ? 'No matching tasks.' : 'No scheduled tasks yet. Use New task, or start from a template.'}</p>}
+            </div>
+            <p className="au-home-note">Scheduled tasks run while Vellum is open on this computer. A run missed while it was closed catches up shortly after you open it.</p>
+          </> : <>
+            <div className="au-ideas-head">
+              <span>{ideas.source==='learned' ? 'Suggested for you' : 'Ideas to start with'}{ideas.status==='refreshing' || ideas.status==='loading' ? ' · Updating…' : ''}</span>
+              <button type="button" className="btn" disabled={ideas.status==='refreshing' || ideas.status==='loading'} onClick={()=>loadIdeas(true)}>Refresh ideas</button>
+            </div>
+            <section className="au-ideas" aria-label="Task templates" aria-busy={ideas.status==='refreshing' || ideas.status==='loading'}>
+              {ideas.suggestions.map(idea=><button type="button" className="au-idea" key={idea.name} disabled={!!starting} onClick={()=>startChat(idea)}>
+                <span className="au-idea-icon" aria-hidden="true">{AUTOMATION_IDEA_ICONS[idea.icon] || AUTOMATION_IDEA_ICONS.research}</span>
+                <span className="au-idea-copy"><strong>{starting===idea.name?'Starting...':idea.name}</strong><span>{idea.request}</span>{idea.reason && <small>{idea.reason}</small>}</span>
+              </button>)}
+            </section>
+          </>}
+        </div>}
       </div>
     </section>}
     {menuRecord && <Popover portal sidebarOverlay anchor={menu.trigger} role="group" className="ctx-menu au-task-actions-menu" style={clampMenuPosition(menu,174,210)} label={'Actions for ' + menuRecord.name}
@@ -9423,11 +9873,14 @@ const [slashSkills, setSlashSkills] = useState([]);
     const scheduledChat = opts.scheduledChat || scheduledChatScopes.current.get(chatId) ||
       (task && {task_id:task.id,time_zone:AUTOMATION_LOCAL_ZONE});
     updateTurn(chatId,assistantId,m=>({...m,responseModel:responseModelSnapshot(modelId,models)}));
+    activeRunsRef.current.add(chatId);
+    let turnAborted = false;
     try {
       await API.chat.stream(
         {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId), ...(scheduledChat ? {scheduled_chat:scheduledChat} : {})},
         {
           playbackRequest: opts.playbackRequest,
+          steerAccepted: data => acceptSteers(chatId, assistantId, data.steers || []),
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
             ctl.chatId = chatId;
@@ -9552,7 +10005,74 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (err) {
       finishTurn(assistantId);
       const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
+      turnAborted = !!aborted;
       updateTurn(chatId, assistantId, m => ({...m, text: m.text || '', error: aborted ? '' : API.chat.failureMessage(err), responseStatus:aborted ? 'cancelled' : 'error', phase:'done', streaming: false}), true);
+    } finally {
+      activeRunsRef.current.delete(chatId);
+      setTimeout(() => { void releaseFollowUps(chatId, {aborted: turnAborted}); }, 0);
+    }
+  };
+
+  // Follow-ups sent while a reply runs, as in Codex. Steer hands the message
+  // to the running turn (it joins before the model's next step, without
+  // interrupting it); Queue holds it here and sends it when the reply ends.
+  const followUpMode = deviceSettings.values.follow_up_mode === 'queue' ? 'queue' : 'steer';
+  const [followUps, setFollowUps] = useState({});
+  const followUpsRef = useRef({});
+  const activeRunsRef = useRef(new Set());
+  const followUpThread = chatId => threadRef.current[chatId] || chats.find(c => c.id === chatId)?.thread_id || chatId;
+  const setChatFollowUps = (chatId, update) => {
+    const next = {...followUpsRef.current, [chatId]: update(followUpsRef.current[chatId] || [])};
+    if (!next[chatId].length) delete next[chatId];
+    followUpsRef.current = next;
+    setFollowUps(next);
+  };
+  const removeFollowUp = (chatId, id) => setChatFollowUps(chatId, items => items.filter(item => item.id !== id));
+  const sendFollowUpNow = (chatId, item) => {
+    removeFollowUp(chatId, item.id);
+    sendMessage(item.text, item.attach, {...item.opts, conversationId: chatId, followUpRelease: true});
+  };
+  const steerFollowUp = async (chatId, id) => {
+    const item = (followUpsRef.current[chatId] || []).find(entry => entry.id === id);
+    if (!item || item.status === 'steering') return;
+    if (!activeRunsRef.current.has(chatId)) { sendFollowUpNow(chatId, item); return; }
+    setChatFollowUps(chatId, items => items.map(entry => entry.id === id ? {...entry, status:'steering', error:''} : entry));
+    try {
+      const result = await API.chat.steer({thread_id: followUpThread(chatId), message: item.text, id});
+      // The reply ended before the steer arrived: send it as its own message.
+      if (result?.status === 'no_active_turn') sendFollowUpNow(chatId, item);
+    } catch {
+      setChatFollowUps(chatId, items => items.map(entry => entry.id === id ? {...entry, status:'queued', error:'Could not steer. It will send after this response.'} : entry));
+    }
+  };
+  const acceptSteers = (chatId, assistantId, steers) => {
+    const ids = new Set((steers || []).map(steer => steer.id));
+    if (!ids.size) return;
+    const pending = followUpsRef.current[chatId] || [];
+    setChatFollowUps(chatId, items => items.filter(item => !ids.has(item.id)));
+    // The steer joined the running turn: show it as your message, with the
+    // reply (which now takes it into account) continuing below it.
+    updateChat(chatId, chat => {
+      const index = chat.messages.findIndex(message => message.id === assistantId);
+      if (index < 0) return chat;
+      const steered = steers.map(steer => {
+        const item = pending.find(entry => entry.id === steer.id);
+        return {id: 'steer-' + steer.id, role: 'user', steered: true, text: item?.text || steer.text, attachments: [], sent_at: new Date().toISOString()};
+      });
+      const messages = chat.messages.filter(message => message.id !== assistantId);
+      return {...chat, messages: [...messages, ...steered, chat.messages[index]]};
+    }, true);
+  };
+  const releaseFollowUps = async (chatId, {aborted = false} = {}) => {
+    for (const item of [...(followUpsRef.current[chatId] || [])]) {
+      if (item.status === 'steering') {
+        const result = await API.chat.reclaimSteer({thread_id: followUpThread(chatId), id: item.id}).catch(() => null);
+        if (result && result.status !== 'reclaimed') { removeFollowUp(chatId, item.id); continue; }
+      }
+      // A stopped reply keeps its follow-ups here (as Codex restores them);
+      // a finished one sends them in order.
+      if (aborted) setChatFollowUps(chatId, items => items.map(entry => entry.id === item.id ? {...entry, status:'queued', error:''} : entry));
+      else sendFollowUpNow(chatId, item);
     }
   };
 
@@ -9561,6 +10081,14 @@ const [slashSkills, setSlashSkills] = useState([]);
     if(!opts.background)navigationEpochRef.current += 1;
     let chatId = opts.forceNew ? null : (opts.conversationId || activeChatId);
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
+    if (FEATURE_FLAGS.realChat && chatId && !opts.followUpRelease && !opts.background && activeRunsRef.current.has(chatId)) {
+      const mode = opts.invertFollowUp ? (followUpMode === 'steer' ? 'queue' : 'steer') : followUpMode;
+      const item = {id: uid(), text, attach: attach || [], opts: {...opts, invertFollowUp: false}, status: 'queued', error: ''};
+      setChatFollowUps(chatId, items => [...items, item]);
+      // Files go with a normal turn; text-only follow-ups can steer.
+      if (mode === 'steer' && !(attach || []).length) steerFollowUp(chatId, item.id);
+      return chatId;
+    }
     const turnReasoningMode = existingChat ? existingChat.reasoning_mode || '' : opts.reasoningMode ?? draftReasoningMode;
     const requestedModel = (existingChat && existingChat.model) || selModel;
     const turnModel = models.some(model => model.id === requestedModel) ? requestedModel : selModel;
@@ -9761,6 +10289,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         : receipt.action_id === 'memory.settings.update' ? 'Apply'
         : receipt.action_id === 'memory.entry.delete' ? 'Delete'
         : receipt.action_id === 'memory.dreaming.run' ? 'Run'
+        : receipt.action_id === 'terminal.command.run' ? 'Run command'
         : receipt.action_id === 'memory.conversations.import' ? 'Import'
         : receipt.action_id === 'memory.import.apply' ? 'Add to memory'
         : receipt.action_id === 'provider.credential.configure' ? 'Save key'
@@ -9994,14 +10523,30 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!feed || !feed.pluginId) return;
     await dispatchKnowledgeAction('plugin.state.set', {plugin_id:feed.pluginId, enabled:!feed.on});
   };
+  // A confirmed terminal command's output lands in the chat that asked for it.
+  const appendTerminalOutput = (chatId, receipt) => {
+    const result = receipt.result || {};
+    const fence = text => '```\n' + String(text).replace(/```/g, "'''") + '\n```';
+    const status = receipt.status !== 'applied' ? (receipt.message || 'The command could not run.')
+      : result.timed_out ? `Stopped after ${result.duration_seconds}s (time limit).` : `Exit code ${result.exit_code} · ${result.duration_seconds}s`;
+    const parts = [`**Ran** \`${String(result.command || '').slice(0, 300)}\`${result.cwd ? ` in \`${result.cwd}\`` : ''}`, status];
+    if (result.stdout) parts.push(fence(result.stdout));
+    if (result.stderr) parts.push('stderr:\n' + fence(result.stderr));
+    if (receipt.status === 'applied') parts.push('Ask me to continue and I will pick up from this output.');
+    const message = {id:'terminal-' + receipt.receipt_id, role:'assistant', text:parts.join('\n\n'), actionReceipts:[receipt], streaming:false, phase:'done', sources:[], tools:[]};
+    updateChat(chatId, chat => chat.messages.some(item => item.id === message.id) ? chat : {...chat, messages:[...chat.messages, message]}, true);
+  };
   const confirmAppAction = async receipt => {
     try {
       const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
       const credentialChatId = receipt?.action_id === 'provider.credential.configure' ? providerCredentialChatsRef.current[String(receipt.target?.id || '').split(':').pop()] : null;
-      const confirmationConversationId = credentialChatId || (receipt && receipt.action_id === 'memory.conversation.set'
+      const terminalRun = receipt && receipt.action_id === 'terminal.command.run';
+      const confirmationConversationId = credentialChatId || (receipt && (receipt.action_id === 'memory.conversation.set' || terminalRun)
         ? (agentConversationId || (activeChat && (activeChat.thread_id || activeChat.id)) || activeChatId)
         : activeChatId);
+      const outputChatId = activeChatId;
       const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:confirmationConversationId});
+      if (terminalRun && confirmed && outputChatId) appendTerminalOutput(outputChatId, confirmed);
       return applyAppActionReceipt(confirmed);
     } catch (_) {
       pushToast('Confirmation is unavailable.');
@@ -10409,7 +10954,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   const workspaceBrowserVisible=workspacePanelVisible && workspaceBrowserSelected && browserFeature;
   const workspaceMode=workspaceLayout.surfaces['right-panel'].properties.layout==='full'?'full':'split';
   const featureOwnsSidebar=['apps','music'].includes(view);
-  const activeScheduledTask = automations.find(task=>scheduledTaskConversationId(task.id)===activeChatId);
+  const [scheduledFocus, setScheduledFocus] = useState(null);
+  // A task's own chat or one of its run chats keeps the Scheduled sidebar and its task selected.
+  const activeScheduledTask = activeChatId ? automations.find(task => 'scheduled-task-' + task.id === activeChatId
+    || (task.run_history || []).some(run => run.conversation_id === activeChatId)) : undefined;
   // Chats opened from Scheduled (task chats, run results, setup chats from ideas) stay in the
   // Scheduled page: the chat shows with the Scheduled sidebar, like any chat otherwise.
   const scheduledContext=view==='scheduled' || view==='chat' && (Boolean(activeScheduledTask) || Boolean(scheduledChatId) && scheduledChatId===activeChatId);
@@ -10739,7 +11287,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} data-rail-preview={railPreview||''} className={'body app-shell' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
-          <window.VellumUI.NavigationRail view={view} contextualView={scheduledContext?'scheduled':view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
+          <window.VellumUI.NavigationRail view={view} hiddenItems={workspaceLayout.surfaces['navigation-rail']?.properties?.hidden_items||[]} contextualView={scheduledContext?'scheduled':view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
 
           <div className="main-sidebar-slot" id="main-sidebar" data-shell-overlay={sidebarPeeking?'true':undefined} data-state={shellSidebarVisible?'open':'closed'} data-pinned={shellSidebarPinned} data-peeking={sidebarPeeking&&!shellSidebarPinned} data-context={mainSidebarContext} style={{"--scheduled-sidebar-width":scheduledSidebarWidth+"px"}} data-variant="inset" data-collapsible="offcanvas" onPointerEnter={revealSidebar} onPointerLeave={hideSidebarPeek} inert={!shellSidebarVisible} aria-hidden={!shellSidebarVisible}>{mainSidebarContext==='scheduled'?<div className='au-sidebar-host' ref={setScheduledSidebarTarget}/>:mainSidebarContext==='library'?<window.VellumUI.LibrarySidebar section={librarySection} onSection={section=>{setLibrarySection(section);if(view!=='library'){dismissSidebarPreview();nav('library');}}} items={libraryProjection} projects={projects}/>:<Sidebar hoverEnabled={!settingsOpen&&shellSidebarVisible} notificationState={notificationState} chats={chats} automations={automations} onOpenTask={openScheduledTask} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
@@ -10762,6 +11310,10 @@ const [slashSkills, setSlashSkills] = useState([]);
           {workspaceHasHeader && <window.VellumUI.WorkspaceToolbar controller={workspaceController} workspace={workspaceViews}
 
             title={workspaceConversation?.title || (view==='agent'?activeAgent?.name:'') || ''}
+            titlePrefix={view==='chat' && activeScheduledTask ? <nav className="au-chat-crumb" aria-label="Scheduled task">
+              <button type="button" onClick={()=>{setScheduledFocus({id:null,nonce:Date.now()});nav('scheduled');}}>Scheduled tasks</button><span aria-hidden="true">/</span>
+              {'scheduled-task-' + activeScheduledTask.id !== activeChatId && <><button type="button" onClick={()=>{setScheduledFocus({id:activeScheduledTask.id,nonce:Date.now()});nav('scheduled');}}>{activeScheduledTask.name}</button><span aria-hidden="true">/</span></>}
+            </nav> : null}
             conversation={workspaceConversation} sidebarVisible={contextualSidebarVisible} project={view==='chat'?activeChatProject:null} onNewChat={newChat} onOpenProject={openProject} detailsOpen={workspaceDetailsVisible}
             onDetails={()=>{setActivityMsg(null);configureChatDetails({visible:!workspaceDetailsVisible},{notify:false,persistence:'session'});}}
             onShare={()=>activeChatId && dispatchConversationAction('conversation.share',{conversation_id:activeChatId})}
@@ -10785,7 +11337,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={null}
               onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider, onOpenContext:workspaceHasHeader && workspaceConversation ? () => setContextSignal(n => n + 1) : undefined}}/>}
+              composerExtras={{followUps: followUps[activeChatId] || [], followUpMode, onSteerFollowUp: id => steerFollowUp(activeChatId, id), onDeleteFollowUp: id => removeFollowUp(activeChatId, id), pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider, onOpenContext:workspaceHasHeader && workspaceConversation ? () => setContextSignal(n => n + 1) : undefined}}/>}
             {view === 'library' && <LibraryView projects={projects} items={libraryProjection} section={librarySection} onSection={setLibrarySection} onUpdate={updateLibraryItems} onUpload={uploadLibraryFiles} onOpenChat={openChat}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -10797,7 +11349,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               composerExtras={{pluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {(scheduledContext || mainSidebarContext==='scheduled') && <ScheduledView automations={automations} projects={projects} chats={chats} models={models}
-              showPage={view==='scheduled'} activeTaskId={activeScheduledTask?.id} sidebarTarget={scheduledSidebarTarget} sidebarVisible={shellSidebarVisible && mainSidebarContext==='scheduled'}
+              showPage={view==='scheduled'} focusTask={scheduledFocus} activeTaskId={activeScheduledTask?.id} activeChatId={view==='chat'?activeChatId:null} sidebarTarget={scheduledSidebarTarget} sidebarVisible={shellSidebarVisible && mainSidebarContext==='scheduled'}
               onEnsureContext={()=>{if(!scheduledContext)nav('scheduled');}} onStartChat={startAutomationChat}
               onSidebarEnter={revealSidebar} onSidebarLeave={hideSidebarPeek}
               onOpenChat={openScheduledRunChat} onOpenTask={openScheduledTask} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
@@ -10881,7 +11433,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} onDeleteArchivedChats={deleteArchivedChats} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} faceColor={deviceSettings.values.face_color} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onOpenMemory={() => nav('memory')} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal followUpMode={followUpMode} profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} onDeleteArchivedChats={deleteArchivedChats} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} faceColor={deviceSettings.values.face_color} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onOpenMemory={() => nav('memory')} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }
@@ -10892,6 +11444,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onMemoryChanged={refreshMemoryData}
           onStartAutomationChat={startAutomationChat}
           onOpenScheduled={() => nav('scheduled')}
+          onAutomationAction={dispatchAutomationAction} onAutomationsChange={setAutomations}
           onAddPlugin={dispatchKnowledgeAction} onConfirmPlugin={confirmAppAction} onCancelPlugin={cancelAppAction} onSkillAction={dispatchSkillAction} pluginCatalogState={pluginCatalog} onRetryPlugins={refreshPlugins} youtubeIntelligence={ytIntelligence} onCalendarAction={dispatchKnowledgeAction}
           onPluginState={(pluginId,enabled)=>dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}
           onBrowsePlugins={()=>{setPluginDirectoryRevision(value=>value+1);dispatchSurfacePresentation('settings',{visible:false});nav('apps');}}
@@ -10934,7 +11487,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAction={dispatchKnowledgeAction}
           onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>
         }
-        <div hidden={settingsOpen}><AutomationNotificationCenter suspended={settingsOpen} onAction={dispatchAutomationAction} onPing={pushToast} onStateChange={setNotificationState} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned && view!=='apps'}/></div>{toast && <div className={'toast'+(toast.notificationPing?' notification-ping'+(browserPanelVisible && view !== 'music'?' browser-notification-ping':''):'')+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true"><IcBell size={18}/></span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
+        <div hidden={settingsOpen}><AutomationNotificationCenter suspended={settingsOpen} onAction={dispatchAutomationAction} onOpenChat={openScheduledRunChat} onPing={pushToast} onStateChange={setNotificationState} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned && view!=='apps'}/></div>{toast && <div className={'toast'+(toast.notificationPing?' notification-ping'+(browserPanelVisible && view !== 'music'?' browser-notification-ping':''):'')+(toast.googleReview?' google-review-toast':toast.linearReview?' linear-review-toast':'')} role="status">{toast.googleReview&&window.VellumUI.GoogleActionReview?<window.VellumUI.GoogleActionReview review={toast.googleReview}/>:toast.linearReview&&window.VellumUI.LinearActionReview?<window.VellumUI.LinearActionReview review={toast.linearReview}/>:<span>{toast.message}</span>}{toast.notificationPing && <span aria-hidden="true"><IcBell size={18}/></span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
       </window.VellumUI.Droplets>
     </div>
