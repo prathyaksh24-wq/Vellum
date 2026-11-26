@@ -688,7 +688,26 @@ body{background:#050404;color:var(--txt);font-family:var(--font-ui);font-size:13
 .approval-pill{display:flex;align-items:center;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 .approval-pill:hover,.approval-pill.select-open{background:var(--hover);color:var(--txt)}
 .approval-pill.danger{color:#F0A35E}
-.approval-menu{position:fixed;z-index:60;padding:6px;border-radius:14px;background:var(--modal);border:1px solid var(--line2);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.approval-menu{position:fixed;z-index:2147483000;box-sizing:border-box;max-height:calc(100vh - 16px);overflow:auto;padding:6px;border-radius:14px;background:var(--modal);border:1px solid var(--line2);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.followup-tray{display:flex;flex-direction:column;gap:0;margin:0 14px -1px;border:1px solid var(--line2);border-bottom:none;border-radius:16px 16px 0 0;background:color-mix(in srgb,var(--modal) 92%,transparent);backdrop-filter:blur(14px);overflow:visible;position:relative;z-index:2}
+.followup-row{display:flex;align-items:center;gap:10px;min-height:42px;padding:6px 10px 6px 14px;font-size:14px;color:var(--fg)}
+.followup-row+.followup-row{border-top:1px solid var(--line)}
+.followup-icon{display:inline-flex;color:var(--dim);flex:none}
+.followup-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.followup-error{color:var(--dim);font-size:12px;white-space:nowrap}
+.followup-steer,.followup-state{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;border:0;background:transparent;color:var(--dim);font:inherit;font-size:13px;cursor:pointer;flex:none}
+.followup-steer:hover{background:var(--hover,rgba(255,255,255,.06));color:var(--fg)}
+.followup-state{cursor:default}
+.followup-spinner{width:11px;height:11px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:followup-spin .8s linear infinite}
+@keyframes followup-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.followup-spinner{animation:none}}
+.followup-icon-btn{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;border:0;background:transparent;color:var(--dim);cursor:pointer;flex:none}
+.followup-icon-btn:hover{background:var(--hover,rgba(255,255,255,.06));color:var(--fg)}
+.followup-more-wrap{position:relative;display:inline-flex}
+.followup-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:160px;padding:5px;border-radius:12px;background:var(--modal);border:1px solid var(--line2);box-shadow:0 14px 40px rgba(0,0,0,.35);z-index:70;display:flex;flex-direction:column}
+.followup-menu button{text-align:left;padding:8px 10px;border-radius:8px;border:0;background:transparent;color:var(--fg);font:inherit;font-size:13.5px;cursor:pointer}
+.followup-menu button:hover{background:var(--hover,rgba(255,255,255,.06))}
+.followup-row.steering .followup-text{color:var(--dim)}
 .approval-menu-head{padding:8px 10px 6px;color:var(--dim);font-size:12.5px}
 .approval-option{display:grid;grid-template-columns:18px minmax(0,1fr) 16px;align-items:start;column-gap:10px;width:100%;padding:9px 10px;border:none;border-radius:10px;background:none;color:var(--txt);font:inherit;text-align:left;cursor:pointer}
 .approval-option:hover,.approval-option:focus-visible{background:var(--hover);outline:none}
@@ -3764,19 +3783,35 @@ const CommandApprovalPicker = () => {
   const [error, setError] = useState('');
   const [place, setPlace] = useState(null);
   const box = useRef(null);
-  // Open above the whole composer (not over the message box), aligned with this pill.
+  const menuRef = useRef(null);
+  // Open just above the composer, aligned with this pill. The menu renders in a
+  // portal on document.body: the composer sits in transformed/blurred layers,
+  // which turn position:fixed into "relative to that layer" and threw the menu
+  // to the window's right edge or top.
   const measure = () => {
     const pill = box.current, composer = pill?.closest('.cpill') || pill;
-    if (!pill || !composer) return;
+    if (!pill || !composer || !pill.isConnected) { setOpen(false); return; }
     const own = pill.getBoundingClientRect(), outer = composer.getBoundingClientRect();
     const width = Math.min(380, window.innerWidth - 24);
-    setPlace({left:Math.max(12, Math.min(own.left, window.innerWidth - width - 12)), bottom:window.innerHeight - outer.top + 8, width});
+    const height = menuRef.current?.offsetHeight || 230;
+    const left = Math.max(12, Math.min(own.left, window.innerWidth - width - 12));
+    // Prefer above the composer; flip below the pill when there is no room.
+    const above = outer.top - 8;
+    if (above - height >= 8) setPlace({left, top: above - height, width});
+    else setPlace({left, top: Math.min(window.innerHeight - height - 8, own.bottom + 8), width});
   };
   useLayoutEffect(() => {
     if (!open) return;
     measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    let frame = 0;
+    const follow = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
+    window.addEventListener('resize', follow);
+    window.addEventListener('scroll', follow, true);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(follow) : null;
+    const composer = box.current?.closest('.cpill');
+    if (observer && composer) observer.observe(composer);
+    if (observer && menuRef.current) observer.observe(menuRef.current);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', follow); window.removeEventListener('scroll', follow, true); observer?.disconnect(); };
   }, [open]);
   useEffect(() => {
     let alive = true;
@@ -3785,7 +3820,7 @@ const CommandApprovalPicker = () => {
   }, []);
   useEffect(() => {
     if (!open) return;
-    const outside = event => { if (!box.current?.contains(event.target)) setOpen(false); };
+    const outside = event => { if (!box.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false); };
     const key = event => { if (event.key === 'Escape') setOpen(false); };
     document.addEventListener('pointerdown', outside); window.addEventListener('keydown', key);
     return () => { document.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', key); };
@@ -3804,7 +3839,7 @@ const CommandApprovalPicker = () => {
   return <div className="approval-picker" ref={box}>
     <button type="button" className={'approval-pill' + (current.danger ? ' danger' : '') + (open ? ' select-open' : '')} aria-haspopup="menu" aria-expanded={open}
       data-tip="Change permissions" onClick={() => setOpen(value => !value)}>{current.label}</button>
-    {open && <div className="approval-menu" role="menu" aria-label="How should Vellum's commands be approved?" style={place ? {left:place.left, bottom:place.bottom, width:place.width} : {visibility:'hidden'}}>
+    {open && ReactDOM.createPortal(<div ref={menuRef} className="approval-menu" role="menu" aria-label="How should Vellum's commands be approved?" style={place ? {left:place.left, top:place.top, width:place.width} : {visibility:'hidden', left:0, top:0}}>
       <div className="approval-menu-head">How should Vellum's commands be approved?</div>
       {COMMAND_APPROVAL_MODES.map(item => <button key={item.id} type="button" role="menuitemradio" aria-checked={item.id === mode} disabled={busy}
         className={'approval-option' + (item.danger ? ' danger' : '')} onClick={() => choose(item.id)}>
@@ -3813,7 +3848,7 @@ const CommandApprovalPicker = () => {
         {item.id === mode && <span className="approval-check" aria-hidden="true">✓</span>}
       </button>)}
       {error && <p className="approval-error" role="alert">{error}</p>}
-    </div>}
+    </div>, document.body)}
   </div>;
 };
 
@@ -4023,7 +4058,37 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange, onOpenContext}) => {
+const FollowUpTray = ({items = [], mode = 'steer', onSteer, onDelete, onEdit}) => {
+  const [menu, setMenu] = useState(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = event => { if (!event.target.closest?.('.followup-menu, .followup-more')) setMenu(null); };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [menu]);
+  if (!items.length) return null;
+  return <div className="followup-tray" role="list" aria-label="Follow-up messages">
+    {items.map(item => <div className={'followup-row' + (item.status === 'steering' ? ' steering' : '')} role="listitem" key={item.id}>
+      <span className="followup-icon" aria-hidden="true"><I d="M4 5v6a4 4 0 0 0 4 4h12M16 11l4 4-4 4" size={15}/></span>
+      <span className="followup-text" title={item.text}>{item.text}</span>
+      {item.error && <span className="followup-error" role="alert">{item.error}</span>}
+      {item.status === 'steering'
+        ? <span className="followup-state" role="status"><span className="followup-spinner" aria-hidden="true"/>Steering</span>
+        : <button type="button" className="followup-steer" title="Add this to the current response without stopping it" onClick={() => onSteer?.(item.id)}><I d="M4 12h12M12 6l6 6-6 6" size={14}/>Steer</button>}
+      <button type="button" className="followup-icon-btn" aria-label="Delete follow-up" title="Delete" onClick={() => onDelete?.(item.id)}><IcTrash size={15}/></button>
+      <span className="followup-more-wrap">
+        <button type="button" className="followup-icon-btn followup-more" aria-label="More follow-up actions" aria-haspopup="menu" aria-expanded={menu === item.id} onClick={() => setMenu(open => open === item.id ? null : item.id)}><IcDots size={15}/></button>
+        {menu === item.id && <div className="followup-menu" role="menu">
+          <button type="button" role="menuitem" onClick={() => { setMenu(null); onEdit?.(item); }}>Edit message</button>
+          {item.status !== 'steering' && <button type="button" role="menuitem" onClick={() => { setMenu(null); onSteer?.(item.id); }}>Steer now</button>}
+          <button type="button" role="menuitem" onClick={() => { setMenu(null); onDelete?.(item.id); }}>Delete</button>
+        </div>}
+      </span>
+    </div>)}
+  </div>;
+};
+
+const Composer = ({followUps = [], followUpMode = 'steer', onSteerFollowUp, onDeleteFollowUp, pluginDraft, onPluginDraftConsumed, text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, chats = [], browserTabs = [], onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true, animated=false, reasoningMode='', onReasoningChange, providerSources, modelProvider, onProviderChange, onOpenContext}) => {
   const [attach, setAttach] = useState([]);
   const [contextSignal, setContextSignal] = useState(0);
   const [attachError, setAttachError] = useState('');
@@ -4193,7 +4258,8 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
     if(item.kind==='project')onOpenProject?.(item.raw.id);
     if(item.kind==='agent')onOpenAgent?.(item.raw.id);
   };
-  const send = () => {
+  const send = (submitOptions) => {
+    const invertFollowUp = !!(submitOptions && submitOptions.invert === true);
     if (!['idle','error'].includes(voiceState) || dictationActive) return;
     if (busy && !text.trim()) {
       if (onStop) onStop();
@@ -4201,7 +4267,7 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
     }
     if (!text.trim()) return;
     const refs=composerRuntime?.referenceAttachments(taRef.current?.getReferences() || [],library) || [];
-    onSend(text.trim(), [...attach,...refs], {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? 'steer' : 'send', reasoningMode});
+    onSend(text.trim(), [...attach,...refs], {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? ((followUpMode === 'steer') !== invertFollowUp ? 'steer' : 'queue') : 'send', invertFollowUp: busy && invertFollowUp, reasoningMode});
     setText(''); setAttach([]);
     setAttachError('');
     setSearchMode(false);
@@ -4222,6 +4288,8 @@ const Composer = ({pluginDraft, onPluginDraftConsumed, text, setText, model, set
         </div>);
   return (
     <div className={'composer-wrap composer-size-' + composerSize + (dictationActive ? ' dictation-active' : '')} data-ui-reference="composer">
+      <FollowUpTray items={followUps} mode={followUpMode} onSteer={onSteerFollowUp} onDelete={onDeleteFollowUp}
+        onEdit={item => { onDeleteFollowUp?.(item.id); setText(item.text); setTimeout(() => taRef.current?.focus(), 0); }}/>
       {voiceState !== 'idle' && <div className="voice-status">{voiceState === 'connecting' ? 'Connecting to voice' : 'Start talking'}</div>}
       <div className={'cpill' + (animated && glow?' glowing':'') + (voiceState !== 'idle' ? ' voicing' : '')} ref={cpillRef}
         onDragOver={event => { if (event.dataTransfer && event.dataTransfer.files.length) event.preventDefault(); }}
@@ -6892,7 +6960,7 @@ const SpotifyPlayer = ({musicNavigation,onMusicRouteChange,spotify, dockSide='to
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({onAutomationAction, onAutomationsChange, numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onOpenMemory, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({followUpMode="steer", onAutomationAction, onAutomationsChange, numberShortcuts="tabs", onTryPlugin, onCreatePlugin, pluginTarget, initialProvider, onAddPlugin, onConfirmPlugin, onCancelPlugin, onSkillAction, speechPreferences, appearancePreferences, faceColor='#06a3ff', streamingPreferences, pluginCatalogState, onRetryPlugins, onPluginState, onCalendarAction, youtubeIntelligence, onBrowsePlugins, onOpenSkills, theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, previewRail, profile, onProfileSave, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, onModelProvider, backendSettings, chats = [], onRestoreChat, onDeleteChat, onDeleteArchivedChats, analyticsControl, onAnalyticsAction, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onTabChange, onProviderKey, onMemorySettings, onMemoryAction, onOpenMemory, onDictationAction, onDictationConfirm, onDictationCancel, dictationShortcuts, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const tab = ['Reflections','Saved','Feeds'].includes(initialTab) ? 'General' : initialTab === 'Accounts' ? 'Account' : initialTab || 'General';
   const setTab = onTabChange;
   const selectSettingsTab = next => setTab(next);
@@ -7016,7 +7084,7 @@ const SettingsModal = ({onAutomationAction, onAutomationsChange, numberShortcuts
 
           {tab === 'Voice' && <window.VellumUI.Dictation.Settings onAction={onDictationAction} onConfirm={onDictationConfirm} onCancel={onDictationCancel}/>}
           {tab === 'Responses' && <window.VellumUI.StreamingSettings preferences={streamingPreferences} onDeviceSettings={onDeviceSettings}/>}
-          {tab === 'General' && <window.VellumUI.SettingsOverview.General theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} previewRail={previewRail} onDeviceSettings={onDeviceSettings} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
+          {tab === 'General' && <window.VellumUI.SettingsOverview.General followUpMode={followUpMode} theme={theme} onTheme={onTheme} dockPosition={dockPosition} onDockPosition={onDockPosition} dockLocked={dockLocked} onDockLocked={onDockLocked} previewRail={previewRail} onDeviceSettings={onDeviceSettings} onNavigate={setTab} model={models.find(item=>item.id===model)} ModelIcon={ModelLogo}/>}
           {tab === 'Appearance' && (
             <React.Fragment>
               <div className="set-h">Appearance</div>
@@ -9805,11 +9873,14 @@ const [slashSkills, setSlashSkills] = useState([]);
     const scheduledChat = opts.scheduledChat || scheduledChatScopes.current.get(chatId) ||
       (task && {task_id:task.id,time_zone:AUTOMATION_LOCAL_ZONE});
     updateTurn(chatId,assistantId,m=>({...m,responseModel:responseModelSnapshot(modelId,models)}));
+    activeRunsRef.current.add(chatId);
+    let turnAborted = false;
     try {
       await API.chat.stream(
         {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId), ...(scheduledChat ? {scheduled_chat:scheduledChat} : {})},
         {
           playbackRequest: opts.playbackRequest,
+          steerAccepted: data => acceptSteers(chatId, assistantId, data.steers || []),
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
             ctl.chatId = chatId;
@@ -9934,7 +10005,74 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (err) {
       finishTurn(assistantId);
       const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
+      turnAborted = !!aborted;
       updateTurn(chatId, assistantId, m => ({...m, text: m.text || '', error: aborted ? '' : API.chat.failureMessage(err), responseStatus:aborted ? 'cancelled' : 'error', phase:'done', streaming: false}), true);
+    } finally {
+      activeRunsRef.current.delete(chatId);
+      setTimeout(() => { void releaseFollowUps(chatId, {aborted: turnAborted}); }, 0);
+    }
+  };
+
+  // Follow-ups sent while a reply runs, as in Codex. Steer hands the message
+  // to the running turn (it joins before the model's next step, without
+  // interrupting it); Queue holds it here and sends it when the reply ends.
+  const followUpMode = deviceSettings.values.follow_up_mode === 'queue' ? 'queue' : 'steer';
+  const [followUps, setFollowUps] = useState({});
+  const followUpsRef = useRef({});
+  const activeRunsRef = useRef(new Set());
+  const followUpThread = chatId => threadRef.current[chatId] || chats.find(c => c.id === chatId)?.thread_id || chatId;
+  const setChatFollowUps = (chatId, update) => {
+    const next = {...followUpsRef.current, [chatId]: update(followUpsRef.current[chatId] || [])};
+    if (!next[chatId].length) delete next[chatId];
+    followUpsRef.current = next;
+    setFollowUps(next);
+  };
+  const removeFollowUp = (chatId, id) => setChatFollowUps(chatId, items => items.filter(item => item.id !== id));
+  const sendFollowUpNow = (chatId, item) => {
+    removeFollowUp(chatId, item.id);
+    sendMessage(item.text, item.attach, {...item.opts, conversationId: chatId, followUpRelease: true});
+  };
+  const steerFollowUp = async (chatId, id) => {
+    const item = (followUpsRef.current[chatId] || []).find(entry => entry.id === id);
+    if (!item || item.status === 'steering') return;
+    if (!activeRunsRef.current.has(chatId)) { sendFollowUpNow(chatId, item); return; }
+    setChatFollowUps(chatId, items => items.map(entry => entry.id === id ? {...entry, status:'steering', error:''} : entry));
+    try {
+      const result = await API.chat.steer({thread_id: followUpThread(chatId), message: item.text, id});
+      // The reply ended before the steer arrived: send it as its own message.
+      if (result?.status === 'no_active_turn') sendFollowUpNow(chatId, item);
+    } catch {
+      setChatFollowUps(chatId, items => items.map(entry => entry.id === id ? {...entry, status:'queued', error:'Could not steer. It will send after this response.'} : entry));
+    }
+  };
+  const acceptSteers = (chatId, assistantId, steers) => {
+    const ids = new Set((steers || []).map(steer => steer.id));
+    if (!ids.size) return;
+    const pending = followUpsRef.current[chatId] || [];
+    setChatFollowUps(chatId, items => items.filter(item => !ids.has(item.id)));
+    // The steer joined the running turn: show it as your message, with the
+    // reply (which now takes it into account) continuing below it.
+    updateChat(chatId, chat => {
+      const index = chat.messages.findIndex(message => message.id === assistantId);
+      if (index < 0) return chat;
+      const steered = steers.map(steer => {
+        const item = pending.find(entry => entry.id === steer.id);
+        return {id: 'steer-' + steer.id, role: 'user', steered: true, text: item?.text || steer.text, attachments: [], sent_at: new Date().toISOString()};
+      });
+      const messages = chat.messages.filter(message => message.id !== assistantId);
+      return {...chat, messages: [...messages, ...steered, chat.messages[index]]};
+    }, true);
+  };
+  const releaseFollowUps = async (chatId, {aborted = false} = {}) => {
+    for (const item of [...(followUpsRef.current[chatId] || [])]) {
+      if (item.status === 'steering') {
+        const result = await API.chat.reclaimSteer({thread_id: followUpThread(chatId), id: item.id}).catch(() => null);
+        if (result && result.status !== 'reclaimed') { removeFollowUp(chatId, item.id); continue; }
+      }
+      // A stopped reply keeps its follow-ups here (as Codex restores them);
+      // a finished one sends them in order.
+      if (aborted) setChatFollowUps(chatId, items => items.map(entry => entry.id === item.id ? {...entry, status:'queued', error:''} : entry));
+      else sendFollowUpNow(chatId, item);
     }
   };
 
@@ -9943,6 +10081,14 @@ const [slashSkills, setSlashSkills] = useState([]);
     if(!opts.background)navigationEpochRef.current += 1;
     let chatId = opts.forceNew ? null : (opts.conversationId || activeChatId);
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
+    if (FEATURE_FLAGS.realChat && chatId && !opts.followUpRelease && !opts.background && activeRunsRef.current.has(chatId)) {
+      const mode = opts.invertFollowUp ? (followUpMode === 'steer' ? 'queue' : 'steer') : followUpMode;
+      const item = {id: uid(), text, attach: attach || [], opts: {...opts, invertFollowUp: false}, status: 'queued', error: ''};
+      setChatFollowUps(chatId, items => [...items, item]);
+      // Files go with a normal turn; text-only follow-ups can steer.
+      if (mode === 'steer' && !(attach || []).length) steerFollowUp(chatId, item.id);
+      return chatId;
+    }
     const turnReasoningMode = existingChat ? existingChat.reasoning_mode || '' : opts.reasoningMode ?? draftReasoningMode;
     const requestedModel = (existingChat && existingChat.model) || selModel;
     const turnModel = models.some(model => model.id === requestedModel) ? requestedModel : selModel;
@@ -11141,7 +11287,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div inert={settingsOpen?'':undefined} aria-hidden={settingsOpen?true:undefined} data-rail-preview={railPreview||''} className={'body app-shell' + (view==='music'?' music-active':'') + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--workspace-sidebar-width':sidebarWidth+'px'}}>
-          <window.VellumUI.NavigationRail view={view} contextualView={scheduledContext?'scheduled':view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
+          <window.VellumUI.NavigationRail hiddenItems={workspaceLayout.surfaces['navigation-rail']?.properties?.hidden_items||[]} view={view} contextualView={scheduledContext?'scheduled':view} profile={profile} onHome={()=>{navigationEpochRef.current+=1;applyNewChatNavigation();}} onNav={nav} onProfile={openProfileMenu} onSearch={()=>openSearch()} onNotifications={openNotifications} unread={notificationState.unread} notificationsOpen={notificationState.open} sidebarVisible={contextualSidebarVisible} onPreviewSidebar={previewSidebar} onLeaveSidebar={hideSidebarPeek} onDismissPreview={dismissSidebarPreview} onToggleSidebar={toggleContextualSidebar} onSettings={()=>{setSettingsTab('General');dispatchSurfacePresentation('settings',{visible:true});}}/>
 
           <div className="main-sidebar-slot" id="main-sidebar" data-shell-overlay={sidebarPeeking?'true':undefined} data-state={shellSidebarVisible?'open':'closed'} data-pinned={shellSidebarPinned} data-peeking={sidebarPeeking&&!shellSidebarPinned} data-context={mainSidebarContext} style={{"--scheduled-sidebar-width":scheduledSidebarWidth+"px"}} data-variant="inset" data-collapsible="offcanvas" onPointerEnter={revealSidebar} onPointerLeave={hideSidebarPeek} inert={!shellSidebarVisible} aria-hidden={!shellSidebarVisible}>{mainSidebarContext==='scheduled'?<div className='au-sidebar-host' ref={setScheduledSidebarTarget}/>:mainSidebarContext==='library'?<window.VellumUI.LibrarySidebar section={librarySection} onSection={section=>{setLibrarySection(section);if(view!=='library'){dismissSidebarPreview();nav('library');}}} items={libraryProjection} projects={projects}/>:<Sidebar hoverEnabled={!settingsOpen&&shellSidebarVisible} notificationState={notificationState} chats={chats} automations={automations} onOpenTask={openScheduledTask} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
@@ -11191,7 +11337,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={null}
               onCloseActivity={() => { setActivityMsg(null); configureChatDetails( {visible:false}, {persistence:'session'}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider, onOpenContext:workspaceHasHeader && workspaceConversation ? () => setContextSignal(n => n + 1) : undefined}}/>}
+              composerExtras={{followUps: followUps[activeChatId] || [], followUpMode, onSteerFollowUp: id => steerFollowUp(activeChatId, id), onDeleteFollowUp: id => removeFollowUp(activeChatId, id), pluginDraft, onPluginDraftConsumed:consumePluginDraft, voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, chats, browserTabs:browserState.tabs || [], onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation, reasoningMode:currentReasoningMode, onReasoningChange:selectReasoning, providerSources:composerSources, modelProvider:composerProvider, onProviderChange:selectComposerProvider, onOpenContext:workspaceHasHeader && workspaceConversation ? () => setContextSignal(n => n + 1) : undefined}}/>}
             {view === 'library' && <LibraryView projects={projects} items={libraryProjection} section={librarySection} onSection={setLibrarySection} onUpdate={updateLibraryItems} onUpload={uploadLibraryFiles} onOpenChat={openChat}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -11287,7 +11433,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); accounts.add(); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} onDeleteArchivedChats={deleteArchivedChats} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} faceColor={deviceSettings.values.face_color} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onOpenMemory={() => nav('memory')} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal followUpMode={followUpMode} profile={profile} onProfileSave={saveProfile} numberShortcuts={deviceSettings.values.number_shortcuts||'tabs'} onTryPlugin={tryPlugin} onCreatePlugin={createPlugin} pluginTarget={settingsPluginTarget} initialProvider={settingsProviderTarget} chats={chats} onRestoreChat={restoreChat} onDeleteChat={deleteChat} onDeleteArchivedChats={deleteArchivedChats} analyticsControl={observabilityControl} onAnalyticsAction={dispatchObservabilityAction} appearancePreferences={deviceSettings.values.appearance} faceColor={deviceSettings.values.face_color} streamingPreferences={deviceSettings.values.streaming} theme={theme} initialTab={settingsTab} onTabChange={setSettingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} previewRail={previewRail} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onModelProvider={selectModelProvider} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} onOpenMemory={() => nav('memory')} onDictationAction={dispatchDictationAction} onDictationConfirm={confirmAppAction} onDictationCancel={cancelAppAction} dictationShortcuts={dictationShortcuts} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }

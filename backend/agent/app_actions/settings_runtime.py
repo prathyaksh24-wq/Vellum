@@ -24,6 +24,91 @@ BACKGROUND_IDS = (
     "twilight", "riptide", "seascape", "bokeh",
     "ember-clouds", "teal-horizon", "serenox-home",
 )
+# Labels and descriptions shown in Settings > Appearance, so a spoken name
+# ("clouds", "gold rays", "the forest one") resolves to a registered background.
+BACKGROUND_CATALOG = {
+    "galaxy": ("Galaxy", "Interactive stars with a quiet cursor response. space night"),
+    "liquid-metal": ("Liquid Metal", "Layered domain warping over a flowing chrome surface."),
+    "drifting-clouds": ("Drifting Clouds", "Soft warped clouds rolling across a clear blue sky."),
+    "god-rays": ("Gold Rays", "Warm volumetric rays streaming from a glowing core. god light"),
+    "grain-pastel": ("Grain Pastel", "A softly animated pastel grain-gradient field."),
+    "pattern-waves": ("Pattern Waves", "Fine dots flowing over a softly lit silk surface."),
+    "particles": ("Particles", "Warm luminous particles drifting through a deep, quiet field."),
+    "rocket-blast": ("Rocket Blast", "ASCII rocket exhaust rendered from the original animation."),
+    "nimbus": ("Nimbus", "Wind-swept golden clouds over a deep blue sky."),
+    "daybreak": ("Daybreak", "A warm sunrise with the original breathing glow and heat shimmer."),
+    "eclipse": ("Eclipse", "A mint-lit eclipse with the original drift and film grain."),
+    "dusk": ("Dusk", "The original flowing amber and blue dusk."),
+    "meadow": ("Meadow", "A flower-filled meadow with depth parallax and drifting petals."),
+    "stratosphere": ("Stratosphere", "The original glowing horizon with sparse twinkling stars."),
+    "cloudline": ("Cloudline", "The original volumetric cloud sea at dawn."),
+    "grotto": ("Grotto", "The original animated grotto cave with depth parallax."),
+    "evergreen": ("Evergreen", "The original evergreen forest and drifting light."),
+    "sunset-ridge": ("Sunset Ridge", "The original sunset ridge with its clean sky plate."),
+    "orbit-ascii": ("Orbit ASCII", "The original ringed planet rendered with its glyph atlas."),
+    "twilight": ("Twilight", "The original twilight scene and motion."),
+    "riptide": ("Riptide", "The original flowing riptide ocean scene."),
+    "seascape": ("Seascape", "The original procedural sea and sunlit horizon."),
+    "bokeh": ("Bokeh", "The original glowing bokeh scene and motion."),
+    "ember-clouds": ("Ember Clouds", "Painterly clouds glowing in deep blue and ember light."),
+    "teal-horizon": ("Teal Horizon", "An abstract teal world swept by molten gold currents."),
+    "serenox-home": ("Serenox Home", "A quiet hillside home in rose-gold evening light."),
+}
+_BACKGROUND_STOPWORDS = {"the", "a", "an", "one", "bg", "background", "wallpaper", "theme", "with", "of",
+                         "some", "something", "please", "to", "in", "and", "like", "my", "that", "this",
+                         "different", "another", "other", "new"}
+
+
+def _stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
+def resolve_background(value: str, current: str = "") -> tuple[str | None, list[str]]:
+    """Resolve a requested background to a registered id.
+
+    Returns (id, candidates). An exact id or label wins. Otherwise each catalog
+    entry is scored on the words of its id and label first, then its
+    description, and the best match that is not the current background is
+    chosen, so asking for "clouds" again moves to the other cloud background.
+    """
+    text = str(value or "").strip().casefold()
+    slug = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    if slug in BACKGROUND_IDS:
+        return slug, [slug]
+    for background_id, (label, _) in BACKGROUND_CATALOG.items():
+        if slug == re.sub(r"[^a-z0-9]+", "-", label.casefold()).strip("-"):
+            return background_id, [background_id]
+    words = [_stem(word) for word in re.findall(r"[a-z0-9]+", text) if word not in _BACKGROUND_STOPWORDS]
+    if not words:
+        return None, []
+    scored: list[tuple[float, str]] = []
+    for index, background_id in enumerate(BACKGROUND_IDS):
+        label, description = BACKGROUND_CATALOG.get(background_id, (background_id, ""))
+        name_words = {_stem(word) for word in re.findall(r"[a-z0-9]+", f"{background_id} {label}".casefold())}
+        description_words = {_stem(word) for word in re.findall(r"[a-z0-9]+", description.casefold())}
+        score = 0.0
+        for word in words:
+            if word in name_words:
+                score += 3
+            elif any(name.startswith(word) or word.startswith(name) for name in name_words if len(name) > 3 and len(word) > 3):
+                score += 2
+            elif word in description_words:
+                score += 1
+        if score:
+            scored.append((score, background_id))
+    if not scored:
+        return None, []
+    best = max(score for score, _ in scored)
+    # Name matches first (Drifting Clouds, Ember Clouds, Cloudline), then
+    # description-only matches (Nimbus) as further alternatives.
+    candidates = [background_id for score, background_id in sorted(scored, key=lambda item: -item[0])]
+    top = [background_id for score, background_id in scored if score == best]
+    choice = next((background_id for background_id in top if background_id != current), None)
+    if choice is None:
+        choice = next((background_id for background_id in candidates if background_id != current), top[0])
+    return choice, candidates
+
+
 MEMORY_SETTINGS_UPDATE_ACTION_ID = "memory.settings.update"
 MEMORY_ENTRY_CREATE_ACTION_ID = "memory.entry.create"
 MEMORY_ENTRY_UPDATE_ACTION_ID = "memory.entry.update"
@@ -123,6 +208,7 @@ _DEVICE_SETTING_KEYS = frozenset({
     "face_color",
     "dock_position",
     "number_shortcuts",
+    "follow_up_mode",
     "dock_locked",
     "preview_rail_position",
     "preview_rail_visibility",
@@ -363,10 +449,20 @@ class SettingsRuntimeActionService:
             if previous not in BACKGROUND_IDS:
                 raise SettingsRuntimeActionError('PREVIOUS_BACKGROUND_UNAVAILABLE', 'There is no previous background saved on this device yet.', unavailable=True)
             patch['background'] = previous
-        if str(patch.get("background") or "").casefold() == "next":
+        if str(patch.get("background") or "").casefold() in {"next", "another", "different", "random", "new", "other"}:
             previous = current.get("background", "galaxy")
             index = BACKGROUND_IDS.index(previous) if previous in BACKGROUND_IDS else -1
             patch["background"] = BACKGROUND_IDS[(index + 1) % len(BACKGROUND_IDS)]
+        elif "background" in patch:
+            requested = str(patch.get("background") or "")
+            resolved, candidates = resolve_background(requested, str(current.get("background", "galaxy")))
+            if resolved is None:
+                raise SettingsRuntimeActionError(
+                    "INVALID_ACTION_ARGUMENTS",
+                    f"No background matches \"{requested}\". Choose one of: "
+                    + ", ".join(label for label, _ in BACKGROUND_CATALOG.values()) + ".",
+                )
+            patch["background"] = resolved
         normalized = self._validate_device_patch(patch)
         appearance_patch = normalized.get('appearance', {})
         selected = appearance_patch.get('dark_theme', appearance_patch.get('light_theme'))
@@ -413,7 +509,7 @@ class SettingsRuntimeActionService:
             },
             "_target_kind": "device_setting",
             "_target_id": context.device_id,
-            "_message": (f"Background changed to {str(next_values['background']).replace('-', ' ').title()}." if changed and 'background' in normalized else "Device settings updated." if changed else "Device settings were already set."),
+            "_message": (f"Background changed to {BACKGROUND_CATALOG.get(str(next_values['background']), (str(next_values['background']).replace('-', ' ').title(),))[0]}." if changed and 'background' in normalized else "Device settings updated." if changed else "Device settings were already set."),
         }
 
     @staticmethod
@@ -438,6 +534,11 @@ class SettingsRuntimeActionService:
                 if not isinstance(value, bool):
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", f"{key} must be true or false")
                 normalized[key] = value
+            elif key == "follow_up_mode":
+                mode = str(value or "").strip().casefold()
+                if mode not in {"queue", "steer"}:
+                    raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose queue or steer for follow-up behavior.")
+                normalized[key] = mode
             elif key == "number_shortcuts":
                 if not isinstance(value, str) or value not in {"tabs", "chats"}:
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Choose tabs or chats for number shortcuts.")
@@ -471,7 +572,11 @@ class SettingsRuntimeActionService:
             elif key == "background":
                 background = str(value or "").strip().casefold()
                 if background not in BACKGROUND_IDS:
-                    raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Unsupported background.")
+                    raise SettingsRuntimeActionError(
+                        "INVALID_ACTION_ARGUMENTS",
+                        "Unsupported background. Choose one of: "
+                        + ", ".join(label for label, _ in BACKGROUND_CATALOG.values()) + ".",
+                    )
                 normalized[key] = background
             elif key == 'profile':
                 from agent.contracts.profile import ProfileDetails
@@ -1131,13 +1236,17 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
     device_properties = {
         'appearance': DeviceAppearanceSettings.model_json_schema(),
         'streaming': DeviceStreamingSettings.model_json_schema(),
-        'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
+        'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous'],
+            'description':'Background id. next picks another one; previous restores the last one. Labels: '
+                + '; '.join(f'{key} = {label}: {description}' for key, (label, description) in BACKGROUND_CATALOG.items())},
         'accent':{'type':'string'},
         'face_color':{'type':'string','pattern':'^#[0-9a-fA-F]{6}$'},
         'dock_position':{'type':'string','enum':['auto','top','right','bottom','left']},
         'preview_rail_position':{'type':'string','enum':['left','right']},
         'preview_rail_visibility':{'type':'string','enum':['visible','hover','hidden']},
         'number_shortcuts':{'type':'string','enum':['tabs','chats']},
+        'follow_up_mode':{'type':'string','enum':['queue','steer'],
+            'description':'What a message sent while a reply runs does: steer adds it to the running reply without interrupting it; queue sends it after the reply ends.'},
         'dock_locked':{'type':'boolean'}, 'computer_use_preview':{'type':'boolean'},
         'personalization':personalization_schema,
         'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','maxLength':120},'email':{'type':'string','maxLength':254},'website':{'type':'string','maxLength':2048},'accountId':{'type':'string','maxLength':200}}},
@@ -1178,6 +1287,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "face_color": device_properties['face_color'],
                 "dock_position": {"type": "string"},
                 "number_shortcuts": {"type":"string", "enum":["tabs","chats"]},
+                "follow_up_mode": device_properties['follow_up_mode'],
                 "dock_locked": {"type": "boolean"},
                 "preview_rail_position": device_properties['preview_rail_position'],
                 "preview_rail_visibility": device_properties['preview_rail_visibility'],

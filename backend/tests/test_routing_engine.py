@@ -321,7 +321,7 @@ def test_tools_are_bound_on_the_selected_attempt(tmp_path) -> None:
     asyncio.run(scenario())
 
 
-def test_model_unavailable_with_tools_retries_same_model_without_tools(tmp_path) -> None:
+def test_route_unavailable_with_tools_keeps_tools_on_relaxed_route(tmp_path) -> None:
     async def scenario() -> None:
         store, engine, adapter, openai = build_engine(
             tmp_path,
@@ -349,7 +349,10 @@ def test_model_unavailable_with_tools_retries_same_model_without_tools(tmp_path)
             ("google/primary", "or-key"),
             ("google/primary", "or-key"),
         ]
-        assert adapter.bound_tools_history == [tools]
+        # The wider route is tried with the tools still bound; dropping them
+        # left the model unable to act (it then said its tools were missing).
+        assert adapter.bound_tools_history == [tools, tools]
+        assert adapter.kwargs_history[1]["policy"].require_parameters is False
         assert openai.calls == []
         attempts = store.list_attempts(limit=10, offset=0)
         assert [attempt.outcome for attempt in attempts] == ["failure", "success"]
@@ -426,7 +429,7 @@ def test_stream_falls_back_when_primary_fails_before_visible_chunk(tmp_path) -> 
     asyncio.run(scenario())
 
 
-def test_stream_model_unavailable_with_tools_retries_same_model_without_tools(tmp_path) -> None:
+def test_stream_route_unavailable_with_tools_keeps_tools_on_relaxed_route(tmp_path) -> None:
     async def scenario() -> None:
         store, engine, adapter, fallback = build_engine(
             tmp_path,
@@ -457,7 +460,7 @@ def test_stream_model_unavailable_with_tools_retries_same_model_without_tools(tm
             ("google/primary", "or-key"),
             ("google/primary", "or-key"),
         ]
-        assert adapter.bound_tools_history == [tools]
+        assert adapter.bound_tools_history == [tools, tools]
         assert fallback.calls == []
 
     asyncio.run(scenario())

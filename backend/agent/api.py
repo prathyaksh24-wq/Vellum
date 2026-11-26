@@ -5067,7 +5067,7 @@ async def _stream_agent_turn_scoped(
     direct_skill = re.match(r"Load ([a-z][a-z0-9_-]*) with skill_view", clean_message, re.I)
     if direct_skill:
         stream_skill_usage.activate(direct_skill.group(1), "direct_slash")
-    async with _agent_turns.hold(active_thread_id):
+    async with _agent_turns.hold(active_thread_id), _steering_turn(active_thread_id):
         answer_parts: list[str] = []
         tool_names: list[str] = list(delegated_tools)
         sources: list[dict] = list(live_sources)
@@ -5167,6 +5167,11 @@ async def _stream_agent_turn_scoped(
                         item_id='context-' + str(event.get('run_id') or 'primary'), name='conversation_context',
                         status='completed' if context_done else 'in_progress',
                         metadata=_context_meter(event.get('data', {}).get('output')) if context_done else None)
+                if kind == "on_custom_event" and event.get("name") == "vellum_steer_accepted":
+                    # A follow-up sent while this turn ran has joined it.
+                    yield _sse("steer.accepted", {"thread_id": active_thread_id, "response_id": response_id,
+                                                  "steers": list((event.get("data") or {}).get("steers") or [])})
+                    continue
                 if kind == "on_custom_event" and event.get("name") == "vellum_context_compacting":
                     compaction_row = 'compaction-' + str(event.get('run_id') or uuid4().hex)
                     yield _agent_activity_event(
@@ -6024,6 +6029,55 @@ async def computer_use_events() -> StreamingResponse:
     return StreamingResponse(events(), media_type="text/event-stream")
 
 
+@asynccontextmanager
+async def _steering_turn(thread_id: str):
+    from agent.graph.steering import get_steering_inbox
+    inbox = get_steering_inbox()
+    inbox.begin(thread_id)
+    try:
+        yield
+    finally:
+        inbox.end(thread_id)
+
+
+class SteerRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=20000)
+    id: str = Field(default="", max_length=100)
+
+
+class SteerReclaimRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=200)
+    id: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/chat/steer")
+async def chat_steer(request: SteerRequest) -> dict[str, Any]:
+    """Add a follow-up to the running turn without interrupting it (Codex turn/steer).
+
+    status "pending" means the next model step will read it; "no_active_turn"
+    means nothing is running, so the client sends it as a normal message.
+    """
+    from agent.graph.steering import get_steering_inbox
+    try:
+        held = get_steering_inbox().submit(request.thread_id, request.message, request.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if held is None:
+        return {"status": "no_active_turn", "id": request.id}
+    return {"status": "pending", "id": held.id}
+
+
+@router.post("/chat/steer/reclaim")
+async def chat_steer_reclaim(request: SteerReclaimRequest) -> dict[str, Any]:
+    """Take back a follow-up the finished turn never read, to send it as its own turn."""
+    from agent.graph.steering import get_steering_inbox
+    message = get_steering_inbox().reclaim(request.thread_id, request.id)
+    if message is None:
+        return {"status": "consumed", "id": request.id}
+    return {"status": "reclaimed", "id": message.id, "message": message.text}
+
+
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     from agent.skills.curator_runtime import get_curator_runtime
@@ -6069,6 +6123,14 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             action_receipts = await asyncio.to_thread(_app_action_runtime.dispatch_many, submitted_actions, action_context)
         else:
             action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)
+
+        if (action_receipts and not action_turn.is_mixed
+                and all(receipt.status != "applied" and receipt.error_code in {"INVALID_ACTION_ARGUMENTS", "INVALID_SURFACE_PROPERTY", "UI_REFERENCE_UNAVAILABLE", "UI_REFERENCE_REQUIRED"}
+                        for receipt in action_receipts)):
+            submitted_actions = []
+            action_receipts = []
+            from agent.app_actions.runtime import AppActionTurn
+            action_turn = AppActionTurn(conversation_message=resolved_action_message or clean_message)
 
         # UI playback controls share the canonical specialist context so a
         # subsequent navigation correction sees the successful control.
@@ -6192,11 +6254,14 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield _response_created(response_id=response_id, thread_id=active_thread_id)
             async for event in action_events():
                 yield event
-            if any(action.action_id == "spotify.playback.control" for action in submitted_actions):
-                # Keep playback-only turns in the same conversation checkpoint
-                # as MusicAgent turns. This is chat history, not memory learning.
+            # Keep direct-action turns (playback, background, settings...) in the
+            # same conversation checkpoint as model turns, so "again" or "try a
+            # different one" next has the context. Chat history, not memory learning.
+            try:
                 async with _agent_turns.hold(active_thread_id):
                     await _checkpoint_specialist_exchange(action_message, response_text, active_thread_id, effective_model)
+            except Exception:  # noqa: BLE001 - history is best effort; the action already applied
+                pass
             yield _response_output_text_delta(
                 response_id=response_id,
                 thread_id=active_thread_id,

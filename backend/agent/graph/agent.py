@@ -271,7 +271,6 @@ def _assemble_vellum_prompt(state, config=None, *, runtime_model: str | None = N
         f"Runtime user timezone: {user_timezone}. For a time in another location, convert to that location's timezone, including its date. When presenting event times, show the user's local time first "
         "and retain the source timezone when it helps disambiguate the conversion. "
         f"Runtime selected model: {active_model.id} ({active_model.label}). "
-        f"Runtime tool-calling compatibility: {active_model.tool_calling_compatibility}. "
         "If asked which model is being used, answer with this runtime value; "
         "do not infer from model weights or provider defaults. "
         "Do not answer from training cutoff dates; use the runtime current date for year/currentness questions."
@@ -740,6 +739,23 @@ _ANNOUNCEMENT = re.compile(
 # A write still goes through Vellum's own confirmation, so acting is safe.
 _PERMISSION_ASK = re.compile(
     r"\b(?:would you like me to|do you want me to|shall I (?:go ahead|proceed|do that|check)|want me to)\b[^?]{0,80}\?$", re.IGNORECASE)
+# "That tool isn't available/callable in this session" said before trying any tool.
+_CAPABILITY_DENIAL = re.compile(
+    r"\b(?:(?:isn['’]t|is not|aren['’]t|are not|wasn['’]t|not)\s+(?:currently\s+|actually\s+|yet\s+)?"
+    r"(?:callable|exposed|available|registered|initiali[sz]ed|loaded|connected|enabled)"
+    r"|(?:don['’]t|do not|doesn['’]t|does not)\s+(?:currently\s+|actually\s+)?(?:have|expose|include)\s+"
+    r"(?:the\s+|a\s+|any\s+)?(?:[\w\-]+\s+){0,3}(?:tool|tools|control|action|capability|access)"
+    r"|(?:can['’]t|cannot|unable to)\s+(?:\w+\s+){0,8}(?:from|in)\s+this\s+(?:session|chat|conversation)"
+    r"|(?:reload|refresh|restart|reconnect|expose|enable)\s+(?:the\s+|this\s+)?(?:chat|session|agent|runtime|tools?|plugin|skill))",
+    re.IGNORECASE)
+CAPABILITY_NUDGE = (
+    "You said a tool, control or capability is unavailable, but you did not try any tool for this request. "
+    "Your visible tools are real and callable now. Before saying something cannot be done: for a Vellum setting, "
+    "interface, background, sidebar or navigation rail change call app_action with operation='list' and a short query; "
+    "for skills, plugins or the harness call skill_view, harness_inspect or plugin_manager; for anything else call "
+    "tool_search to load hidden tools (after skill_view, the tools that skill names, such as skill_hub, are callable). "
+    "Do that now. Only report something unavailable after a tool result shows it, and say what that result was."
+)
 _NEEDS_STEP = re.compile(r"\b(?:I'?ll need to|I need to|I would need to|I can use|I'd need to)\b", re.IGNORECASE)
 
 
@@ -748,6 +764,30 @@ def _latest_human_id(state) -> str:
         if getattr(message, "type", "") == "human":
             return str(getattr(message, "id", "") or "")
     return ""
+
+
+def _tool_used_this_turn(state) -> bool:
+    for message in reversed(list((state or {}).get("messages", []))):
+        kind = getattr(message, "type", "")
+        if kind in {"human", "user"}:
+            return False
+        if kind == "tool":
+            return True
+    return False
+
+
+def _denied_capability_without_trying(state) -> bool:
+    messages = list((state or {}).get("messages", []))
+    if not messages or getattr(messages[-1], "type", "") != "ai" or getattr(messages[-1], "tool_calls", None):
+        return False
+    last = messages[-1]
+    text = last.content if isinstance(last.content, str) else " ".join(
+        str(part.get("text") or "") for part in last.content or [] if isinstance(part, dict))
+    text = text or ""
+    # Only a claim about Vellum's own abilities, not "that film is not available on Netflix".
+    about_capability = re.search(r"\b(?:tools?|actions?|controls?|skills?|plugins?|settings?|capabilit\w*|harness|runtime|"
+                                 r"session|installer|integration|callable|permission)\b", text, re.IGNORECASE)
+    return bool(about_capability and _CAPABILITY_DENIAL.search(text)) and not _tool_used_this_turn(state)
 
 
 def _announced_without_acting(state) -> bool:
@@ -762,7 +802,8 @@ def _announced_without_acting(state) -> bool:
     text = last.content if isinstance(last.content, str) else " ".join(
         str(part.get("text") or "") for part in last.content or [] if isinstance(part, dict))
     text = text.strip()
-    if not text or len(text) > 1200:
+    denied = _denied_capability_without_trying(state)
+    if not text or (len(text) > 1200 and not denied):
         return False
     sentences = re.split(r"(?<=[.!?])\s+", text)
     tail = " ".join(sentences[-2:])
@@ -774,6 +815,8 @@ def _announced_without_acting(state) -> bool:
     else:
         announced = _ANNOUNCEMENT.search(tail)
     if not announced and _DONE_CLAIM.search(text) and not _change_confirmed_this_turn(state):
+        announced = True
+    if not announced and denied:
         announced = True
     latest = _latest_human_id(state)
     return bool(announced) and bool(latest) and (state or {}).get("vellum_nudged_for") != latest
@@ -817,25 +860,57 @@ def _make_model_node(bound_model, *, runtime_model: str | None = None, model_for
         if (state.get("vellum_nudged_for") and state.get("vellum_nudged_for") == _latest_human_id(state)
                 and history and getattr(history[-1], "type", "") == "ai" and not getattr(history[-1], "tool_calls", None)):
             # Transient: the announcement stays in history, the nudge does not.
-            messages.append(SystemMessage(content=ACT_NOW_NUDGE))
+            messages.append(SystemMessage(content=CAPABILITY_NUDGE if _denied_capability_without_trying(state) else ACT_NOW_NUDGE))
         return messages
+
+    def take_steers(state, config):
+        """Follow-ups sent while this turn runs join it before the next model call."""
+        if final_answer:
+            return state, []
+        from agent.graph.steering import STEER_PREFIX, get_steering_inbox
+        thread_id = str(((config or {}).get("configurable") or {}).get("thread_id") or "")
+        steers = get_steering_inbox().drain(thread_id) if thread_id else []
+        if not steers:
+            return state, []
+        added = [HumanMessage(content=STEER_PREFIX + steer.text, id="steer-" + steer.id) for steer in steers]
+        return {**state, "messages": [*state.get("messages", []), *added]}, list(zip(steers, added))
+
+    def steer_payload(accepted):
+        return {"steers": [{"id": steer.id, "text": steer.text} for steer, _ in accepted]}
+
     def model_node(state, config):
+        state, accepted = take_steers(state, config)
+        if accepted:
+            from langchain_core.callbacks.manager import dispatch_custom_event
+            try:
+                dispatch_custom_event("vellum_steer_accepted", steer_payload(accepted), config=config)
+            except Exception:  # noqa: BLE001 - outside a traced run there is no listener
+                pass
         messages = prompt(state, config)
         current_model = model_for_state(state) if model_for_state else bound_model
         response = current_model.invoke(messages, config)
-        return {"messages": [_repair_skill_calls(response, state)]}
+        return {"messages": [*(message for _, message in accepted), _repair_skill_calls(response, state)]}
 
     async def async_model_node(state, config):
-        messages = prompt(state, config)
         current_model = model_for_state(state) if model_for_state else bound_model
         if not hasattr(current_model, "astream"):
             return await asyncio.to_thread(model_node, state, config)
+        state, accepted = take_steers(state, config)
+        if accepted:
+            from langchain_core.callbacks.manager import adispatch_custom_event
+            try:
+                await adispatch_custom_event("vellum_steer_accepted", steer_payload(accepted), config=config)
+            except Exception:  # noqa: BLE001
+                pass
+        messages = prompt(state, config)
+        current_model = model_for_state(state) if model_for_state else bound_model
         combined = None
         async for chunk in current_model.astream(messages, config):
             combined = chunk if combined is None else combined + chunk
         if combined is None:
             raise RuntimeError("The selected model returned no response.")
-        return {"messages": [_repair_skill_calls(message_chunk_to_message(combined), state)]}
+        return {"messages": [*(message for _, message in accepted),
+                             _repair_skill_calls(message_chunk_to_message(combined), state)]}
 
     return RunnableLambda(model_node, afunc=async_model_node)
 

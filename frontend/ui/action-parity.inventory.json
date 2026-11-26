@@ -6,8 +6,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "design/Velllum/uploads/Vellum Default Re-designed.html": {
-      "count": 1002,
-      "sha256": "d540c1a2c9752656749909003b97b0d471aab175d5e1b1128ff33a524acc08eb"
+      "count": 1011,
+      "sha256": "3ec8450041de26bbd43452e5d67294f419ad2a1f5523ec6fe25672b913596bce"
     },
     "design/Velllum/uploads/components/v-select.jsx": {
       "count": 5,
@@ -230,8 +230,8 @@
       "sha256": "e75860c4507a110d34fc5e012376dd2f657b14ed8de5d07fa12baf1788805b36"
     },
     "design/Velllum/uploads/components/settings-overview.jsx": {
-      "count": 19,
-      "sha256": "77ff8ad08ad3efc28dffe6c68a606617204c8e98896dd000a1d9b91a8a89a17b"
+      "count": 20,
+      "sha256": "aa421933da7fcaad79794270b6e13e47a05646a87a42f7fbd767473cc322866f"
     },
     "design/Velllum/uploads/components/agent-response.js": {
       "count": 41,
@@ -263,7 +263,7 @@
     },
     "design/Velllum/uploads/components/composer-editor.js": {
       "count": 19,
-      "sha256": "c8ecbd5574a0a90932424ec9c89ed7c60e71f60c5c6041a1ae17a59ac86416b4"
+      "sha256": "5532eda19c28f26f13d2cf173c24b4c2af4906c98d3b04d5f72d622284b4be1c"
     },
     "design/Velllum/uploads/components/composer-providers.js": {
       "count": 0,
@@ -2542,6 +2542,24 @@
         "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
         "text": "action_id:'terminal.approval.set'"
       }
+    },
+    {
+      "surface": "General settings",
+      "name": "follow-up behavior queue or steer",
+      "actionId": "settings.device.update",
+      "probe": {
+        "path": "design/Velllum/uploads/components/settings-overview.jsx",
+        "text": "onDeviceSettings({follow_up_mode:value})"
+      }
+    },
+    {
+      "surface": "Navigation rail",
+      "name": "hide or show rail buttons such as Search chats",
+      "actionId": "ui.surface.configure",
+      "probe": {
+        "path": "design/Velllum/uploads/Vellum Default Re-designed.html",
+        "text": "surfaces['navigation-rail']?.properties?.hidden_items"
+      }
     }
   ],
   "exemptions": [
@@ -2796,6 +2814,10 @@
     {
       "scope": "Settings Automations overview, command approval radios and Scheduled breadcrumb",
       "reason": "Settings task switches call automation.pause and automation.resume and the approval radios call terminal.approval.set, the same App Actions as the Scheduled page and composer; the chat header breadcrumb only navigates back to the Scheduled page."
+    },
+    {
+      "scope": "Composer follow-up tray (Steer, Steer now, Edit message, Delete) and Ctrl+Enter follow-up inversion",
+      "reason": "Transient delivery of a message the user already sent while a reply runs: steer hands it to the running turn through POST /api/chat/steer, queue sends it as a normal chat turn when the reply ends, and Edit returns the text to the composer. Nothing persistent changes; the persisted choice is follow_up_mode through settings.device.update."
     }
   ],
   "deferred": [

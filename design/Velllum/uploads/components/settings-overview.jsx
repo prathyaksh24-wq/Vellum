@@ -53,7 +53,7 @@
       <p className="cfg-connection-footnote">A saved key is a connection setting. Available models and account access are managed separately.</p>
     </div>;
   }
-  function General({theme,onTheme,dockPosition,onDockPosition,dockLocked,onDockLocked,previewRail,onDeviceSettings,onNavigate,model,ModelIcon}) {
+  function General({theme,onTheme,dockPosition,onDockPosition,dockLocked,onDockLocked,previewRail,followUpMode='steer',onDeviceSettings,onNavigate,model,ModelIcon}) {
     return <div className="settings-overview settings-general-view">
       <header className="settings-view-head"><div><h1>General</h1><p>Appearance, workspace, and privacy</p></div></header>
       <section className="settings-preference-section"><div className="settings-section-heading"><h2>Appearance</h2><p>Choose how Vellum looks</p></div><div className="settings-preference-list">
@@ -75,6 +75,11 @@
           <VSelect className="dock-pos-select" ariaLabel="Preview rail visibility" value={previewRail.visibility}
             onValueChange={visibility => onDeviceSettings({preview_rail_visibility:visibility})}
             options={[{value:'visible',label:'Always visible'},{value:'hover',label:'On hover'},{value:'hidden',label:'Hidden'}]}/>
+        </div>
+      </div></section>
+      <section className="settings-preference-section"><div className="settings-section-heading"><h2>Composer</h2><p>Messages you send while Vellum is replying</p></div><div className="settings-preference-list">
+        <div className="settings-preference-row"><div><strong>Follow-up behavior</strong><p>Queue follow-ups while Vellum runs or steer the current run. Press Ctrl+Enter to do the opposite for one message.</p></div>
+          <div className="settings-segmented" role="radiogroup" aria-label="Follow-up behavior">{[['queue','Queue'],['steer','Steer']].map(([value,label])=><button type="button" role="radio" key={value} aria-checked={followUpMode===value} className={followUpMode===value?'on':''} onClick={()=>{if(followUpMode!==value)onDeviceSettings({follow_up_mode:value});}}>{label}</button>)}</div>
         </div>
       </div></section>
       <section className="settings-preference-section"><div className="settings-section-heading"><h2>Personalization & privacy</h2><p>Memory, responses, and your account</p></div><div className="settings-preference-list"><button type="button" className="settings-preference-row settings-preference-link" onClick={()=>onNavigate('Personalization')}><span><strong>Personalization</strong><span className="settings-row-description">Response preferences, memory, and sharing controls.</span></span><Arrow/></button><button type="button" className="settings-preference-row settings-preference-link" onClick={()=>onNavigate('Account')}><span><strong>Your account</strong><span className="settings-row-description">Manage the accounts you use with Vellum.</span></span><Arrow/></button></div></section>

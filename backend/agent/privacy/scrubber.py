@@ -220,12 +220,19 @@ class PrivacyScrubber:
         return detections
 
 
+_DATE_IN_NUMBER = re.compile(r"(?<!\d)(?:19|20)\d{2}-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?(?!\d)")
+
+
 def _looks_like_credit_card(text: str, match: re.Match[str]) -> bool:
     prefix = text[max(0, match.start() - 64):match.start()]
     if _ends_with_isbn_label(prefix):
         return False
     digits = re.sub(r"\D", "", match.group(0))
     if not 13 <= len(digits) <= 19 or len(set(digits)) == 1:
+        return False
+    # Dates and date ranges ("2024-10-07 2029-10") are not card numbers, even
+    # when their digits happen to pass the Luhn check (about 1 in 10 do).
+    if _DATE_IN_NUMBER.search(match.group(0)):
         return False
     checksum = 0
     parity = len(digits) % 2

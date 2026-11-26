@@ -219,6 +219,11 @@
         if (handlers.actionRequested) handlers.actionRequested(data.request || data, {turn_kind:data.turn_kind || 'action'});
         return;
       }
+      if (ev === 'steer.accepted') {
+        // A follow-up joined this running turn (POST /api/chat/steer).
+        if (handlers.steerAccepted) handlers.steerAccepted(data);
+        return;
+      }
       if (ev === 'app.action.receipt') {
         if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data, {turn_kind:data.turn_kind || 'action'});
         return;
@@ -332,5 +337,13 @@
     try { return await streamOnce(payload, handlers); }
     finally { activeStreams = Math.max(0, activeStreams - 1); }
   }
-  window.VellumApi.chat = { stream: stream, failureMessage: failureMessage, get activeStreams() { return activeStreams; } };
+  // Follow-ups for a running turn (Codex turn/steer). "pending" means the next
+  // model step reads it; "no_active_turn" means send it as a normal message.
+  function steer(body) {
+    return client.request('/api/chat/steer', client.jsonOptions('POST', body));
+  }
+  function reclaimSteer(body) {
+    return client.request('/api/chat/steer/reclaim', client.jsonOptions('POST', body));
+  }
+  window.VellumApi.chat = { stream: stream, steer: steer, reclaimSteer: reclaimSteer, failureMessage: failureMessage, get activeStreams() { return activeStreams; } };
 })();

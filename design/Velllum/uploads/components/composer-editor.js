@@ -231,14 +231,20 @@ export function composerComponent(React,ReactDOM){
           const ready=active && current.menu.key===active.key && !current.menu.loading;
           const items=ready?current.menu.items:active?.trigger==='/'?commandCandidates(active,current.commands):[];
           const index=ready?current.menu.index:0;
-          if(active && event.key==='Escape'){            event.preventDefault();event.stopPropagation();            const scope=active.query.split(':')[0],scoped=active.query.includes(':') && (active.trigger==='@'?current.providers.some(provider=>provider.id===scope):Object.values(commandGroups).some(([id])=>id===scope));            if(scoped){let tr=view.state.tr.insertText(active.trigger,active.from,active.to);tr=tr.setSelection(TextSelection.create(tr.doc,active.from+1));view.dispatch(tr.scrollIntoView());}            else dismiss();            return true;          }
+          if(active && event.key==='Escape'){
+            event.preventDefault();event.stopPropagation();
+            const scope=active.query.split(':')[0],scoped=active.query.includes(':') && (active.trigger==='@'?current.providers.some(provider=>provider.id===scope):Object.values(commandGroups).some(([id])=>id===scope));
+            if(scoped){let tr=view.state.tr.insertText(active.trigger,active.from,active.to);tr=tr.setSelection(TextSelection.create(tr.doc,active.from+1));view.dispatch(tr.scrollIntoView());}
+            else dismiss();
+            return true;
+          }
           if(active && items.length){
             if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();navigation.current='keyboard';setReveal(value=>value+1);setMenu(menu=>({...menu,key:active.key,items,index:Math.max(0,Math.min(items.length-1,(menu.key===active.key?menu.index:0)+(event.key==='ArrowDown'?1:-1))),loading:false,error:''}));return true;}
             if(!event.shiftKey && (event.key==='Tab'||event.key==='Enter')){event.preventDefault();select(items[index]);return true;}
           }
           // An unfinished reference query must not accidentally send a message.
           if(active && !ready && !event.shiftKey && (event.key==='Tab'||event.key==='Enter')){event.preventDefault();return true;}
-          if(event.key==='Enter'){event.preventDefault();if(event.shiftKey){view.dispatch(view.state.tr.replaceSelectionWith(schema.nodes.hard_break.create()).scrollIntoView());}else current.onSubmit?.();return true;}
+          if(event.key==='Enter'){event.preventDefault();if(event.shiftKey){view.dispatch(view.state.tr.replaceSelectionWith(schema.nodes.hard_break.create()).scrollIntoView());}else current.onSubmit?.({invert:!!(event.ctrlKey||event.metaKey)});return true;}
           return false;
         },
         handlePaste(_view,event){

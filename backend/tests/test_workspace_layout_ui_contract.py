@@ -76,7 +76,13 @@ def test_composer_queues_a_message_while_a_turn_is_running() -> None:
     assert "const turnQueueRef = useRef({});" in ui_source
     assert "const enqueueTurn = (queueKey, task) =>" in ui_source
     assert "if (busy && !text.trim())" in ui_source
-    assert "deliveryMode: busy ? 'steer' : 'send'" in ui_source
+    # A follow-up sent while a turn runs steers it (default) or waits in the
+    # follow-up tray; Ctrl+Enter does the opposite once.
+    assert "deliveryMode: busy ? ((followUpMode === 'steer') !== invertFollowUp ? 'steer' : 'queue') : 'send'" in ui_source
+    assert "API.chat.steer({thread_id: followUpThread(chatId)" in ui_source
+    assert "API.chat.reclaimSteer(" in ui_source
+    assert "steerAccepted: data => acceptSteers(chatId, assistantId" in ui_source
+    assert "<FollowUpTray items={followUps}" in ui_source
     assert "enqueueTurn('chat:' + chatId" in ui_source
     assert "Queued — this message will run after the current response." in ui_source
     assert "m.streaming && !m.queued" in ui_source

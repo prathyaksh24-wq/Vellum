@@ -4140,7 +4140,10 @@ class AppActionRuntime:
     def _configure_surface(self, payload: dict[str, Any]) -> dict[str, Any]:
         arguments = payload.get("arguments") or {}
         context = AppActionContext.model_validate(payload.get("context"))
-        surface = self._resolve_surface(str(arguments.get("reference") or ""), context)
+        reference = str(arguments.get("reference") or arguments.get("surface") or "")
+        if not reference.strip():
+            reference = self._infer_surface_reference(arguments, context)
+        surface = self._resolve_surface(reference, context)
         current = self._current_presentation(surface.reference, context)
         visible_supplied = "visible" in arguments
         location_supplied = "location" in arguments
@@ -4355,6 +4358,25 @@ class AppActionRuntime:
             result["adaptive_ui_patch"] = patch
         return result
 
+    def _infer_surface_reference(self, arguments: dict[str, Any], context: AppActionContext) -> str:
+        """A call that omits reference but names properties only one surface
+        has (hidden_items is the navigation rail's) can only mean that surface."""
+        surfaces = self._surface_map(context)
+        properties = arguments.get("properties") if isinstance(arguments.get("properties"), dict) else {}
+        if properties:
+            owners = [surface.reference for surface in surfaces.values()
+                      if set(properties) <= set(surface.configurable_properties)]
+            if len(owners) == 1:
+                return owners[0]
+        raise SurfaceActionError(
+            "UI_REFERENCE_REQUIRED",
+            "Name the surface in reference, for example {\"reference\": \"navigation-rail\", \"properties\": "
+            "{\"hidden_items\": [\"search\"]}}. Registered surfaces: "
+            + ", ".join(f"{surface.reference} ({', '.join(surface.configurable_properties) or 'visible'})"
+                        for surface in surfaces.values()) + ".",
+            details={"candidates": list(surfaces)},
+        )
+
     def _resolve_surface(self, reference: str, context: AppActionContext) -> UISurfaceDefinition:
         normalized = self._normalize_reference(reference)
         surfaces = self._surface_map(context)
@@ -4425,6 +4447,27 @@ class AppActionRuntime:
             if len({item.id for item in items}) != len(items) or any(item.kind != "terminal" and not item.reference_id for item in items):
                 raise SurfaceActionError("INVALID_SURFACE_PROPERTY", "Workspace views need unique identities and a content reference.")
             return [item.model_dump() for item in items]
+        if schema.get("type") == "array":
+            if isinstance(value, str):
+                value = [value]
+            if not isinstance(value, list) or len(value) > int(schema.get("maxItems", 32)):
+                raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be a list.")
+            allowed_items = (schema.get("items") or {}).get("enum")
+            items: list[str] = []
+            for item in value:
+                text = re.sub(r"[\s_]+", "-", str(item or "").strip().casefold())
+                text = {"search-chats": "search", "search-chat": "search", "chat-search": "search",
+                        "plugins": "apps", "plugin": "apps", "notification": "notifications", "bell": "notifications",
+                        "more-destinations": "more", "calendar": "scheduled", "schedule": "scheduled"}.get(text, text)
+                if allowed_items and text not in allowed_items:
+                    raise SurfaceActionError(
+                        "INVALID_SURFACE_PROPERTY",
+                        f"{item} is not a supported {name} entry for {surface.title}.",
+                        details={"allowed_values": allowed_items},
+                    )
+                if text not in items:
+                    items.append(text)
+            return items
         if schema.get("type") == "string" and not isinstance(value, str):
             raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be text.")
         if schema.get("type") == "boolean" and not isinstance(value, bool):
@@ -4532,6 +4575,18 @@ class AppActionRuntime:
                 default_presentation=SurfacePresentation(visible=False, location="right", properties={"pinned": False}),
                 supported_locations=["right"],
                 configurable_properties={"pinned": {"type": "boolean"}},
+            ),
+            UISurfaceDefinition(
+                reference="navigation-rail", owner="workspace-layout", title="Navigation rail",
+                aliases=["navigation rail", "nav rail", "rail", "app rail", "left rail", "destination rail", "dock"],
+                default_presentation=SurfacePresentation(visible=True, location="left", properties={"hidden_items": []}),
+                supported_locations=["left"],
+                configurable_properties={"hidden_items": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["library", "music", "scheduled", "apps", "more", "search", "notifications"]},
+                    "description": "Rail buttons to hide. search is the Search chats button, apps is Plugins, "
+                                   "scheduled is Scheduled, more is More destinations. Send the full list; [] shows all.",
+                }},
             ),
             UISurfaceDefinition(
                 reference="composer", owner="control-kernel", title="Composer",
