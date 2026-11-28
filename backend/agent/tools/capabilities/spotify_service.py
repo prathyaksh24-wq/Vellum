@@ -265,7 +265,8 @@ class SpotifyCapabilityService:
         exact, partial = [], []
         wanted = playlist_key(plan.query)
         emoji_request = bool(re.fullmatch(r'(?:the\s+)?emojis?(?:\s+only)?', wanted))
-        for playlist in self.saved_playlists(invoke):
+        saved = self.saved_playlists(invoke)
+        for playlist in saved:
             label = playlist_key(playlist.get("name", ""))
             if emoji_request and label and not any(c.isalnum() for c in label):
                 exact.append(playlist)
@@ -273,6 +274,10 @@ class SpotifyCapabilityService:
                 exact.append(playlist)
             elif not emoji_request and wanted and re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", label):
                 partial.append(playlist)
+        if not exact and not emoji_request and wanted:
+            # Singular/plural slips: "classic" for "Classics", "hindi songs" for "Hindi Song".
+            singular = lambda text: ' '.join(w[:-1] if len(w) > 3 and w.endswith('s') and not w.endswith('ss') else w for w in text.split())
+            exact = [p for p in saved if singular(playlist_key(p.get('name', ''))) == singular(wanted)]
         matches = exact or partial
         if len(matches) == 1:
             return matches[0]

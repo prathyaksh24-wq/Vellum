@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from agent.app_actions.models import AppActionDefinition, AppActionRequest
 from agent.contracts.local_music import (MusicImportRequest, MusicDownloadRequest,
     MusicFileImportRequest, MusicJobRequest, MusicRemoveRequest, MusicRefreshRequest,
-    LocalPlaybackRequest, MusicPlaylistListRequest)
+    LocalPlaybackRequest, MusicPlaylistListRequest, LocalNowPlayingRequest)
 from agent.music_library import get_music_library, MusicLibraryError
 from agent.plugins.contributions import PluginActionContribution, PluginContribution, PluginContributionActionError
 
@@ -22,6 +22,7 @@ def local_music_contribution(library_provider=get_music_library):
             if action == 'remove': return library.remove(request.collection_id,request.entry_id)
             if action == 'refresh': return library.refresh_playlist(request.collection_id)
             if action == 'list_playlists': return library.list_playlists()
+            if action == 'now_playing': return library.now_playing(request.detail)
             return library.playback(request)
         except (MusicLibraryError, ValidationError) as exc:
             raise PluginContributionActionError('LOCAL_MUSIC_INVALID',str(exc)) from exc
@@ -38,12 +39,13 @@ def local_music_contribution(library_provider=get_music_library):
         ('remove',MusicRemoveRequest,'Remove local music','Remove a playlist or song from the local library and cancel its downloads.'),
         ('refresh',MusicRefreshRequest,'Refresh playlist songs','Read the linked playlist again and add newly exposed songs while retaining downloaded audio.'),
         ('list_playlists',MusicPlaylistListRequest,'List Local Music playlists','Read the names and song counts of saved local playlists.'),
-        ('playback',LocalPlaybackRequest,'Control local playback','Queue a command for Vellum’s persistent local player; measured status reports application.'),
+        ('playback',LocalPlaybackRequest,'Control local playback','Control Vellum’s local player: play, pause, skip, seek, volume, shuffle, repeat, like.'),
+        ('now_playing',LocalNowPlayingRequest,'What is playing in Local Music','Read the current song, artist, album, playlist, like status and what plays next.'),
     ]
     return PluginContribution(owner='local_music',actions=tuple(PluginActionContribution(
         definition=AppActionDefinition(id='local_music.'+action,version='1',owner='local_music',plugin_id='local_music',
-            title=title,description=description,scope='device',access_class='read' if action=='list_playlists' else 'write',executor_location='server',
-            supports_undo=False,idempotent=action in {'remove','list_playlists'},confirmation_rule='current_user_intent',
+            title=title,description=description,scope='device',access_class='read' if action in {'list_playlists','now_playing'} else 'write',executor_location='server',
+            supports_undo=False,idempotent=action in {'remove','list_playlists','now_playing'},confirmation_rule='current_user_intent',
             argument_schema=model.model_json_schema(),result_schema={'type':'object','required':['changed']},
             ui_reference='music.local',audit_label='local_music.'+action,required_permissions=['local_music.library']),
         adapter=lambda payload, action=action, model=model: execute(action,model,payload),
@@ -58,14 +60,17 @@ def match_local_music_command(text):
     command = text.strip().rstrip('.!?')
     spans = list(re.finditer(r'\S+', command))
     words = [span[0].casefold() for span in spans]
-    words = ['local' if word == 'loacl' else word for word in words]
+    # Structure words are spell-corrected; titles keep the user's spelling.
+    from agent.contracts.music import fix_music_word
+    words = [fix_music_word(word) for word in words]
     start = int(words[:1] == ['please'])
     if words[start:start+1] in (['can'], ['could'], ['would']) and words[start+1:start+2] == ['you']:
         start += 2
     end = len(words)
     explicit = False
-    for ending in (('local', 'music', 'player'), ('local', 'music', 'library'),
-                   ('local', 'music'), ('local', 'library'), ('local', 'player')):
+    for ending in (('local', 'music', 'player'), ('local', 'music', 'library'), ('local', 'music', 'playlists'),
+                   ('local', 'music', 'playlist'), ('local', 'music'), ('local', 'library'), ('local', 'player'),
+                   ('local', 'playlists'), ('local', 'playlist'), ('local', 'songs'), ('local', 'files')):
         suffix = end - len(ending)
         if suffix <= start or tuple(words[suffix:end]) != ending:
             continue
@@ -73,6 +78,9 @@ def match_local_music_command(text):
             suffix -= 1
         if suffix > start and words[suffix-1] in {'on', 'in', 'from', 'using'}:
             explicit, end = True, suffix-1
+        elif suffix == start + 1 and words[start] in {'play', 'shuffle'}:
+            # "play my local playlists", "play local music": any local song.
+            return AppActionRequest(action_id='local_music.playback',arguments={'action':'play','pick_any':True})
         break
     local_library_mentioned = any(a == 'local' and b in {'music', 'library', 'playlist', 'playlists'}
                                   for a, b in zip(words, words[1:]))
@@ -90,7 +98,10 @@ def match_local_music_command(text):
         return AppActionRequest(action_id='local_music.playback',arguments={'action':control})
     if words[start:start+1] == ['play']:
         title_start = start + 1
-        if explicit and ' '.join(words[title_start:end]) in {'something', 'anything', 'a song', 'some music', 'a random song'}:
+        if explicit and ' '.join(words[title_start:end]) in {'something', 'anything', 'a song', 'some music', 'a random song',
+                'something random', 'anything random', 'some songs', 'songs', 'music', 'random', 'a random track', 'a track',
+                'any song', 'random songs', 'a playlist', 'any playlist', 'a random playlist', 'one of my playlists',
+                'some of my songs', 'my music', 'my songs', 'something good', 'anything good'}:
             return AppActionRequest(action_id='local_music.playback',arguments={'action':'play','pick_any':True})
         kind = title_start + int(words[title_start:title_start+1] in (['my'], ['the']))
         if kind+1 < end and words[kind] in {'playlist', 'song', 'track'}:

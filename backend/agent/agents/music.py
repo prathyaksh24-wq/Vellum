@@ -106,11 +106,37 @@ class LocalMusicPlanner:
         return json.loads(content)
 
 
+def _dispatch_live_player(text: str):
+    """(message, applied) for a whole player instruction, or None."""
+    from agent.app_actions.models import AppActionContext
+    from agent.app_actions.runtime import get_app_action_runtime
+    runtime = get_app_action_runtime()
+    request = runtime.match_player_submission(text)
+    if request is None:
+        return None
+    receipt = runtime.dispatch(request, AppActionContext(source='nlp'))
+    return receipt.message, receipt.status == 'applied'
+
+
 class MusicAgent:
     name = "MusicAgent"
 
+    def handles_directly(self, query: str) -> bool:
+        """The deterministic handler answers this task without a model loop."""
+        from agent.contracts.music import match_player_request
+        clean = self._clean(query)
+        try:
+            return (match_player_request(clean) is not None or self._fast_plan(clean) is not None
+                    or self._current_detail(clean) is not None)
+        except ValueError:
+            return False
+
     def __init__(self, *, tool_registry: ToolRegistry, integrations: Mapping[str, MusicIntegration] | None = None,
-                 planner=None, skill_loader=None, now=None):
+                 planner=None, skill_loader=None, now=None, player_dispatch=None):
+        # Live-player instructions go to whichever player is playing (Local
+        # Music or Spotify). Injected integrations keep tests on their fakes.
+        self.player_dispatch = player_dispatch if player_dispatch is not None else (
+            _dispatch_live_player if integrations is None else None)
         if integrations is None:
             from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
             integrations = {"spotify":SpotifyCapabilityService()}
@@ -1038,6 +1064,12 @@ class MusicAgent:
 
     def _answer_single(self, query: str, context: dict, *, suggestion_context: dict | None = None, resolved_plan: MusicPlan | None = None, verify_playback: bool = False) -> SpecialistResponse:
         clean = self._clean(query)
+        if resolved_plan is None and self.player_dispatch is not None:
+            live = self.player_dispatch(clean)
+            if live is not None:
+                message, applied = live
+                return SpecialistResponse(agent=self.name, status='answered' if applied else 'error',
+                    summary=message or ('Done.' if applied else 'The music player could not do that.'), confidence=1.0)
         events = []
         plan = None
         collection_suggestion = False

@@ -36,6 +36,12 @@ class SpotifyPlayerActionRequest(BaseModel):
 
 class SpotifyPlaybackControlRequest(SpotifyPlayerActionRequest):
     model_config = ConfigDict(extra="forbid")
+    action: Literal["play", "pause", "next", "previous", "seek", "set_volume", "set_shuffle", "set_repeat", "transfer",
+                    "seek_by", "volume_by", "mute", "unmute", "save_current", "remove_current"]
+    # Relative change: milliseconds for seek_by, percentage points for volume_by.
+    delta: int | None = Field(default=None, ge=-86400000, le=86400000)
+    # Display name of context_uri, used only in the reply.
+    context_name: str | None = Field(default=None, min_length=1, max_length=200)
     query: str | None = Field(default=None, min_length=1, max_length=500)
     context_uri: str | None = Field(default=None, pattern=r'^spotify:(?:album|playlist):[A-Za-z0-9]+$')
     uris: list[str] | None = Field(default=None, min_length=1, max_length=50)
@@ -310,14 +316,94 @@ def _result(text: str) -> dict:
     return result.get("data") or {}
 
 
+_SPOTIFY_UNMUTED: dict[str, int] = {}
+
+
+def _spotify_title(state: dict) -> str:
+    track = state.get("track") or {}
+    if not track.get("name"):
+        return ""
+    artists = ", ".join(a for a in state.get("artists") or [] if a)
+    return "“" + track["name"] + "”" + (" by " + artists if artists else "")
+
+
+def _spotify_live(service) -> dict:
+    """Vellum's own player answers without a network call; others use the Web API."""
+    state = _result(_spotify_module.tools._result(service.get_player))
+    return state if isinstance(state, dict) else {}
+
+
+def _spotify_device_args(state: dict) -> dict:
+    device_id = (state.get("device") or {}).get("id")
+    return {"device_id": device_id} if device_id else {}
+
+
+def _relative_spotify_control(args: SpotifyPlaybackControlRequest, service) -> dict:
+    state = _spotify_live(service)
+    if args.action in {"seek_by", "save_current", "remove_current"} and not (state.get("track") or {}).get("uri"):
+        raise PluginContributionActionError("NOTHING_PLAYING", "Nothing is playing on Spotify right now.")
+    if args.action == "seek_by":
+        delta = int(args.delta or 0)
+        duration = int(state.get("duration_ms") or 0)
+        position = max(0, int(state.get("progress_ms") or 0) + delta)
+        if duration:
+            position = min(position, max(0, duration - 1000))
+        _result(spotify_playback({"action": "seek", "position_ms": position, **_spotify_device_args(state)}, service=service))
+        seconds = abs(delta) // 1000
+        span = (f"{seconds // 60} min" + (f" {seconds % 60} s" if seconds % 60 else "")) if seconds >= 60 else f"{seconds} seconds"
+        return {"changed": True, "position_ms": position,
+                "_message": ("Skipped ahead " if delta >= 0 else "Went back ") + span + "."}
+    if args.action in {"save_current", "remove_current"}:
+        uri = state["track"]["uri"]
+        if not uri.startswith("spotify:track:"):
+            raise PluginContributionActionError("NOT_A_SONG", "Only songs can be added to Liked Songs.")
+        save = args.action == "save_current"
+        _result(_spotify_module.tools.spotify_library({"action": "save" if save else "remove", "kind": "tracks", "uris": [uri]}, service=service))
+        name = _spotify_title(state) or "this song"
+        return {"changed": True, "liked": save, "track_uri": uri,
+                "_message": (f"Added {name} to your Liked Songs." if save else f"Removed {name} from your Liked Songs.")}
+    device = state.get("device") or {}
+    current = device.get("volume_percent")
+    key = str(device.get("id") or "")
+    if args.action == "unmute":
+        target = _SPOTIFY_UNMUTED.pop(key, None) or (current if current else 50)
+    elif current is None:
+        raise PluginContributionActionError("VOLUME_UNAVAILABLE", "Spotify did not report this device's volume, so I left it unchanged.")
+    elif args.action == "mute":
+        if current:
+            _SPOTIFY_UNMUTED[key] = int(current)
+        target = 0
+    else:
+        target = max(0, min(100, int(current) + int(args.delta or 0)))
+    _result(spotify_playback({"action": "set_volume", "volume_percent": int(target), **_spotify_device_args(state)}, service=service))
+    message = "Muted." if args.action == "mute" else ("Unmuted. " if args.action == "unmute" else "") + f"Volume is {int(target)}%."
+    return {"changed": True, "volume_percent": int(target), "_message": message}
+
+
 def execute_spotify_control(payload: dict) -> dict:
     args = SpotifyPlaybackControlRequest.model_validate(payload.get("arguments") or {})
     service = spotify_client()
-    body = args.model_dump(exclude_none=True, exclude={"query"})
+    if args.action in {"seek_by", "volume_by", "mute", "unmute", "save_current", "remove_current"}:
+        if args.action in {"seek_by", "volume_by"} and args.delta is None:
+            raise PluginContributionActionError("INVALID_ARGUMENTS", "Say how far to move.")
+        try:
+            return _relative_spotify_control(args, service)
+        except SpotifyError as exc:
+            raise PluginContributionActionError(str(getattr(exc, "code", "") or "SPOTIFY_FAILED"), str(exc)) from exc
+    body = args.model_dump(exclude_none=True, exclude={"query", "delta", "context_name"})
     if args.offset_position is not None:
         body.pop('offset_position')
         body['offset'] = {'position':args.offset_position}
-    message = {"play": "Spotify playback requested.", "pause": "Spotify paused.", "next": "Skipped to the next track.", "previous": "Previous track requested."}.get(args.action, "Spotify control applied.")
+    message = {"play": "Resumed.", "pause": "Paused.", "next": "Skipped to the next song.", "previous": "Went back to the previous song.",
+               "set_shuffle": "Shuffle is " + ("on." if args.shuffle else "off."),
+               "set_repeat": {"track": "Repeating this song.", "context": "Repeating this playlist.", "off": "Repeat is off."}.get(args.state or "off", "Repeat updated."),
+               "set_volume": f"Volume is {args.volume_percent}%.", "transfer": "Moved playback to that device."}.get(args.action, "Done.")
+    if args.action == "play" and args.context_uri:
+        message = f"Playing your “{args.context_name}” playlist." if args.context_name else "Playing that playlist."
+    elif args.action == "play" and args.uris:
+        message = "Playing."
+    if args.action == "seek" and args.position_ms is not None:
+        message = "Back to the start." if args.position_ms == 0 else f"Moved to {args.position_ms // 60000}:{args.position_ms // 1000 % 60:02d}."
     if args.query:
         if args.action != "play":
             raise PluginContributionActionError("INVALID_ARGUMENTS", "A song title is only valid with play.")
@@ -339,6 +425,95 @@ def execute_spotify_control(payload: dict) -> dict:
     handler = spotify_devices if args.action == "transfer" else spotify_playback
     result = _result(handler(body, service=service))
     return {"changed": True, **result, "_message": message}
+
+
+class SpotifyPlaybackStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    detail: Literal["song", "artist", "album", "next", "queue", "playlist", "liked"] = "song"
+
+
+def _queue_title(item: dict) -> str:
+    artists = [a.get("name", "") for a in item.get("artists") or [] if isinstance(a, dict)]
+    show = item.get("show") if isinstance(item.get("show"), dict) else {}
+    by = ", ".join(a for a in artists if a) or show.get("name", "")
+    return "“" + str(item.get("name") or "Untitled") + "”" + (" by " + by if by else "")
+
+
+def _spotify_context_name(service, context: dict) -> str:
+    kind, uri = str(context.get("type") or ""), str(context.get("uri") or "")
+    identifier = uri.rsplit(":", 1)[-1]
+    if kind == "collection" or uri.endswith(":collection"):
+        return "your Liked Songs"
+    if kind == "playlist" and identifier:
+        for link in service.get_linked_playlists() if hasattr(service, "get_linked_playlists") else []:
+            if (link.get("id") == identifier or str(link.get("uri") or "").endswith(":" + identifier)) and link.get("name"):
+                return "your “" + str(link["name"]) + "” playlist"
+        try:
+            playlist = _result(_spotify_module.tools.spotify_playlists({"action": "get", "playlist_id": identifier}, service=service))
+            if playlist.get("name"):
+                return "the “" + playlist["name"] + "” playlist"
+        except PluginContributionActionError:
+            pass
+        return "a playlist Spotify did not name for Vellum"
+    if kind == "album" and identifier:
+        try:
+            album = _result(_spotify_module.tools.spotify_albums({"action": "get", "album_id": identifier}, service=service))
+            if album.get("name"):
+                return "the album “" + album["name"] + "”"
+        except Exception:
+            pass
+        return "an album"
+    if kind == "artist":
+        return "an artist radio or page"
+    return ""
+
+
+def execute_spotify_status(payload: dict) -> dict:
+    """Read live Spotify playback for a direct reply; no model sees this data."""
+    args = SpotifyPlaybackStatusRequest.model_validate(payload.get("arguments") or {})
+    service = spotify_client()
+    try:
+        if args.detail in {"next", "queue"}:
+            queue = _result(_spotify_module.tools.spotify_queue({"action": "get"}, service=service))
+            items = [item for item in queue.get("queue") or [] if isinstance(item, dict)][:5]
+            names = [_queue_title(item) for item in items]
+            if not names:
+                message = "Nothing is queued on Spotify after this song."
+            elif args.detail == "next":
+                message = "Up next: " + names[0] + "."
+            else:
+                message = "Up next: " + "; ".join(f"{i}. {name}" for i, name in enumerate(names, 1)) + "."
+            return {"changed": False, "next": names, "_message": message}
+        state = _spotify_live(service)
+        track = state.get("track") or {}
+        name = _spotify_title(state)
+        result = {"changed": False, "playing": bool(state.get("is_playing")), "title": track.get("name", ""),
+                  "artists": list(state.get("artists") or []), "album": str(state.get("album") or ""), "track_uri": track.get("uri", "")}
+        if not name:
+            return {**result, "_message": "Nothing is playing on Spotify right now."}
+        if args.detail == "artist":
+            artists = ", ".join(a for a in result["artists"] if a)
+            message = f"“{track['name']}” is by {artists}." if artists else f"Spotify did not list an artist for “{track['name']}”."
+        elif args.detail == "album":
+            message = f"{name} is from {result['album']}." if result["album"] else f"Spotify did not list an album for {name}."
+        elif args.detail == "liked":
+            liked = False
+            if str(track.get("uri", "")).startswith("spotify:track:"):
+                contains = _result(_spotify_module.tools.spotify_library({"action": "contains", "kind": "tracks", "uris": [track["uri"]]}, service=service))
+                liked = (contains.get("items") or [False])[0] is True if isinstance(contains, dict) else bool(contains and contains[0])
+            result["liked"] = liked
+            message = f"{name} is " + ("in" if liked else "not in") + " your Liked Songs."
+        elif args.detail == "playlist":
+            raw = service.request("GET", "/me/player")
+            context = raw.get("context") if isinstance(raw, dict) and isinstance(raw.get("context"), dict) else {}
+            source = _spotify_context_name(service, context) if context else ""
+            result["context_uri"] = str(context.get("uri") or "")
+            message = f"{name} is playing from {source}." if source else f"{name} is not playing from a playlist."
+        else:
+            message = ("Now playing " if result["playing"] else "Paused on ") + name + "."
+        return {**result, "_message": message}
+    except SpotifyError as exc:
+        raise PluginContributionActionError(str(getattr(exc, "code", "") or "SPOTIFY_FAILED"), str(exc)) from exc
 
 
 class SpotifyPlaybackSessionRequest(BaseModel):
@@ -435,7 +610,19 @@ def _spotify_playback_actions() -> tuple[PluginActionContribution, ...]:
             required_permissions=["spotify.playback", "spotify.search"],
         ), adapter=execute_spotify_control,
     )
-    return (control, PluginActionContribution(
+    status = PluginActionContribution(
+        definition=AppActionDefinition(
+            id="spotify.playback.status", version="1", owner="spotify", plugin_id="spotify",
+            title="What is playing on Spotify", description="Read the current song, artist, album, playlist, like status or queue.",
+            scope="user", access_class="read", executor_location="server",
+            supports_undo=False, idempotent=True, confirmation_rule="current_user_intent",
+            argument_schema=SpotifyPlaybackStatusRequest.model_json_schema(),
+            result_schema={"type": "object", "required": ["changed"]},
+            ui_reference="spotify.player", audit_label="spotify.playback.status",
+            required_permissions=["spotify.playback"],
+        ), adapter=execute_spotify_status, allowed_agents=frozenset({"VellumAgent", "VellumUI", "MusicAgent"}),
+    )
+    return (control, status, PluginActionContribution(
         definition=AppActionDefinition(
             id="spotify.playback.session", version="1", owner="spotify", plugin_id="spotify",
             title="Play Spotify inside Vellum", description="Enable or disable this window's Spotify Connect player.",

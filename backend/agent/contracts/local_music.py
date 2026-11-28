@@ -117,7 +117,8 @@ class MusicPlaylistListRequest(BaseModel):
 
 class LocalPlaybackRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    action: Literal['play', 'pause', 'resume', 'next', 'previous', 'seek', 'volume', 'shuffle', 'repeat']
+    action: Literal['play', 'pause', 'resume', 'next', 'previous', 'seek', 'volume', 'shuffle', 'repeat',
+                    'seek_by', 'volume_by', 'mute', 'unmute', 'like', 'unlike']
     entry_ids: list[str] = Field(default_factory=list, max_length=5000)
     query: str = Field(default='', max_length=500)
     pick_any: bool = False
@@ -127,6 +128,8 @@ class LocalPlaybackRequest(BaseModel):
     volume: float = Field(default=0.7, ge=0, le=1, allow_inf_nan=False)
     enabled: bool = False
     repeat: Literal['off', 'all', 'one'] = 'off'
+    # Relative change: seconds for seek_by, a 0-1 volume fraction for volume_by.
+    delta: float = Field(default=0, ge=-86400, le=86400, allow_inf_nan=False)
 
     @model_validator(mode='after')
     def validate_pick(self):
@@ -157,6 +160,12 @@ class LocalPlayerState(BaseModel):
     repeat: Literal['off', 'all', 'one'] = 'off'
     observed: dict = Field(default_factory=dict)
     owner_available: bool = False
+    muted_volume: float | None = None
+
+
+class LocalNowPlayingRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    detail: Literal['song', 'artist', 'album', 'next', 'queue', 'playlist', 'liked'] = 'song'
 
 
 class LocalMusicJob(BaseModel):

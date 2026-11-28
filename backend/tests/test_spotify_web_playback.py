@@ -91,7 +91,7 @@ def test_typed_connection_reuses_saved_app_and_retains_playback_actions(service,
     contribution = spotify_controls.spotify_plugin_contribution(controls, authenticated=lambda: True)
     assert {action.definition.id for action in contribution.actions} == {
         "spotify.connection.start", "spotify.connection.disconnect",
-        "spotify.playback.control", "spotify.playback.session",
+        "spotify.playback.control", "spotify.playback.session", "spotify.playback.status",
         "spotify.playlist.edit", "spotify.playlists.link",
     }
     runtime = AppActionRuntime(plugin_registry=PluginRegistry(
@@ -365,7 +365,7 @@ def test_chat_stream_executes_music_control_even_with_a_selected_x_agent(service
             "action_context":{"source":"nlp", "active_agent":"XAgent"}})
     assert response.status_code == 200
     assert 'spotify.playback.control' in response.text
-    assert 'Spotify paused.' in response.text
+    assert '"output_text": "Paused."' in response.text
     assert len(requests) == 1
 
 
@@ -381,7 +381,7 @@ def test_skip_turn_is_checkpointed_with_its_own_acknowledgement(service, monkeyp
     with TestClient(api.app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000)) as web:
         response = web.post("/api/chat/stream", json={"message":"skip", "thread_id":"music-skip-qa", "store":False})
     assert response.status_code == 200
-    assert checkpoints == [("skip", "Skipped to the next track.", "music-skip-qa")]
+    assert checkpoints == [("skip", "Skipped to the next song.", "music-skip-qa")]
     assert len(requests) == 1
 
 

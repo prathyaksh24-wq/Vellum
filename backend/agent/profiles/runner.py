@@ -150,6 +150,9 @@ def run_profile(*, profile, executor, model, goal, context, thread_id, memory_re
     core_defs = to_openai_defs(tools)
     tool_guide = ('Use tool_search for profile-approved capabilities, then call discovered tools directly; tool_describe/tool_call are compatibility helpers. '
         'Only the required schemas are loaded. Other profiles\' capabilities are unavailable.')
+    if action_handler is not None:
+        tool_guide += (' For an action, or a question about live state that the discovered tools do not answer, '
+                       'call specialist_action once instead of searching again.')
     if not native_tools:
         tool_guide += '\nAvailable tools:\n' + '\n'.join(f'{tool.name}: {tool.description}; input={json.dumps(tool.args_schema.model_json_schema())}' for tool in tools)
     messages = [SystemMessage(content=(
@@ -165,8 +168,19 @@ def run_profile(*, profile, executor, model, goal, context, thread_id, memory_re
     execution = get_profile_execution()
     if execution is not None:
         messages = execution.messages(messages)
+    # A specialist whose own deterministic handler understands the task runs
+    # it at once; the model loop is for tasks that need reading and reasoning.
+    handles_directly = getattr(executor, "handles_directly", None)
+    if action_handler is not None and callable(handles_directly):
+        try:
+            direct = bool(handles_directly(goal))
+        except Exception:
+            direct = False
+        if direct:
+            return action_handler()
     deadline = time.monotonic() + (profile.delegation.timeout_seconds or 60)
     errors = 0
+    discovery_rounds = 0
     for _ in range(min(profile.delegation.max_iterations, 12)):
         if time.monotonic() >= deadline:
             break
@@ -208,6 +222,14 @@ def run_profile(*, profile, executor, model, goal, context, thread_id, memory_re
             break
         if len(calls) > 4:
             break
+        # Searching for tools again and again finds nothing new; hand the
+        # unchanged task to the exact handler instead of timing out.
+        if all(call.get("name") in {"tool_search", "tool_describe"} for call in calls):
+            discovery_rounds += 1
+            if discovery_rounds >= 3 and action_handler is not None:
+                return action_handler()
+        else:
+            discovery_rounds = 0
         messages.append(output if native_tools else AIMessage(content=json.dumps(step.model_dump())))
         for call in calls:
             if time.monotonic() >= deadline:
