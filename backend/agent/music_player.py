@@ -13,7 +13,7 @@ import re
 import time
 
 from agent.app_actions.models import AppActionRequest
-from agent.contracts.music import _PLAYER_POLITE, _PLAYER_PROVIDER, PlayerCommand, fix_music_spelling, match_player_request
+from agent.contracts.music import _PLAYER_POLITE, PlayerCommand, fix_music_spelling, match_player_request, split_player_provider
 
 # Without one of these words a phrase such as "like it" or "louder" is only a
 # player instruction while one of Vellum's players has something loaded.
@@ -161,11 +161,9 @@ def match_playlist_action(text: str, *, spotify_available: bool) -> AppActionReq
     raw = ' '.join(str(text or '').split()).casefold().replace('’', "'").rstrip(' .!?')
     for candidate in dict.fromkeys((raw, fix_music_spelling(raw))):
         t = _PLAYER_POLITE.sub('', candidate).strip()
-        suffix = _PLAYER_PROVIDER.search(t)
-        if suffix:
-            if 'spotify' not in (suffix[1] or suffix[2] or ''):
-                return None
-            t = t[:suffix.start()].strip()
+        t, provider = split_player_provider(t)
+        if provider == 'local':
+            return None
         found = _PLAY_PLAYLIST.fullmatch(t)
         if not found:
             continue

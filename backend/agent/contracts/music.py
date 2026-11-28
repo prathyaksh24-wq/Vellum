@@ -51,7 +51,41 @@ class PlayerCommand(BaseModel):
 
 
 _PLAYER_POLITE = re.compile(r"^(?:(?:hey|ok|okay|so|um|uh)[, ]+)*(?:please\s+)?(?:(?:can|could|would|will)\s+(?:you|u)\s+)?(?:please\s+)?(?:(?:just|quickly)\s+)?")
-_PLAYER_PROVIDER = re.compile(r"\s+(?:on|in|from|for|using)\s+(?:my\s+|the\s+)?(spotify|local(?:\s+(?:music|player|library))?(?:\s+(?:player|library))?)$|\s+(spotify)$")
+_PROVIDER_ENDINGS = (('local', 'music', 'player'), ('local', 'music', 'library'), ('local', 'music'),
+                     ('local', 'player'), ('local', 'library'), ('local',), ('spotify',))
+_TRAILING_FILLERS = (('for', 'me'), ('please',), ('pls',), ('plz',), ('now',))
+
+
+def split_player_provider(text: str) -> tuple[str, str]:
+    """('play x', 'spotify') from 'play x on spotify'.
+
+    Word comparisons, not a trailing regex search, so the time is linear.
+    """
+    words = text.split()
+    for ending in _PROVIDER_ENDINGS:
+        size = len(ending)
+        if len(words) <= size or tuple(words[-size:]) != ending:
+            continue
+        rest = words[:-size]
+        if rest and rest[-1] in {'my', 'the'}:
+            rest = rest[:-1]
+        if rest and rest[-1] in {'on', 'in', 'from', 'for', 'using'}:
+            rest = rest[:-1]
+        elif ending != ('spotify',):
+            # "local" alone only names the player after on/in/from/for/using.
+            continue
+        if rest:
+            return ' '.join(rest), 'spotify' if ending == ('spotify',) else 'local'
+    return text, ''
+
+
+def strip_trailing_filler(text: str) -> str:
+    words = text.split()
+    for filler in _TRAILING_FILLERS:
+        size = len(filler)
+        if len(words) > size and tuple(words[-size:]) == filler:
+            return ' '.join(words[:-size])
+    return text
 _UNIT = r"(s|secs?|seconds?|sec|sens|m|mins?|minutes?)"
 _IT = r"(?:(?:this|the|current|this\s+current|the\s+current|that)\s+)?(?:song|track|tune|music|one)"
 _CURRENT = r"(?:it|this|that|" + _IT + r")"
@@ -129,12 +163,8 @@ def match_player_request(text: str) -> PlayerCommand | None:
     t = raw.casefold().replace('’', "'").rstrip(' .!?>')
     t = fix_music_spelling(t)
     t = _PLAYER_POLITE.sub('', t).strip()
-    t = re.sub(r"\s+(?:please|pls|plz|now|for me)$", '', t)
-    provider = ''
-    suffix = _PLAYER_PROVIDER.search(t)
-    if suffix:
-        provider = 'spotify' if 'spotify' in (suffix[1] or suffix[2] or '') else 'local'
-        t = t[:suffix.start()].strip()
+    t = strip_trailing_filler(t)
+    t, provider = split_player_provider(t)
     if not t:
         return None
     command = _match_player_text(t)
