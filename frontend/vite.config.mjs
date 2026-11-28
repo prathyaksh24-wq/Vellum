@@ -27,7 +27,7 @@ function copyStaticUiAssets() {
       // Vite emits hashed WOFF2 assets. Keep their redistribution license and
       // source provenance in both web and desktop distributions as well.
       mkdirSync(resolve(outDir, 'assets/fonts'), {recursive:true});
-      for (const name of ['LICENSE.SN-Pro.txt','SN-Pro.provenance.json']) {
+      for (const name of ['LICENSE.Geist.txt','Geist.provenance.json']) {
         cpSync(resolve(designUploadsRoot, 'assets/fonts', name), resolve(outDir, 'assets/fonts', name));
       }
       const apiTarget = resolve(outDir, 'api');
