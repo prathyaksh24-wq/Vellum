@@ -630,6 +630,17 @@ class AppActionRuntime:
             })
         return surfaces
 
+    def match_player_submission(self, message: str) -> AppActionRequest | None:
+        """A whole player instruction for whichever music player is live."""
+        if not self._plugin_contributions:
+            return None
+        local_available = self._plugin_contributions.action_available("local_music.playback")
+        spotify_available = self._plugin_contributions.action_available("spotify.playback.control")
+        if not (local_available or spotify_available):
+            return None
+        from agent.music_player import match_player_action
+        return match_player_action(message, local_available=local_available, spotify_available=spotify_available)
+
     def match_submission(self, message: str) -> AppActionRequest | None:
         """Match only complete, explicitly submitted presentation instructions."""
 
@@ -686,6 +697,11 @@ class AppActionRuntime:
             music_action = match_spotify_command(submitted)
             if music_action is not None:
                 return music_action
+        # Seek, volume, likes and "what's playing" questions run on the live
+        # player directly, the same way pause and skip do.
+        player_action = self.match_player_submission(submitted)
+        if player_action is not None:
+            return player_action
         if normalized in {"list adaptive ui rules", "show adaptive ui rules", "list interface rules", "show interface rules"}:
             return AppActionRequest(action_id=adaptive_ui.RULE_LIST)
         if normalized in {"why did my interface change", "why did the interface change", "explain the last ui change"}:

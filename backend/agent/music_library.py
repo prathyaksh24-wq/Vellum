@@ -1148,12 +1148,25 @@ class MusicLibrary:
             return key[1:-1].strip()
         return key
 
+    @staticmethod
+    def _loose_name(value):
+        """Case, punctuation and singular/plural insensitive playlist name."""
+        words = re.sub(r"[^\w\s]", ' ', unicodedata.normalize('NFKC', value).casefold()).split()
+        return ' '.join(word[:-1] if len(word) > 3 and word.endswith('s') and not word.endswith('ss') else word for word in words)
+
     def _matching_playlists(self, db, query):
         key = self._play_query_key(query)
         without_prefix = key.removeprefix('my ').removeprefix('the ')
         rows = db.execute('SELECT id,name FROM collections WHERE pending_import=0').fetchall()
-        for candidate in dict.fromkeys((key, without_prefix, key.removesuffix(' playlist'), without_prefix.removesuffix(' playlist'))):
+        candidates = tuple(dict.fromkeys((key, without_prefix, key.removesuffix(' playlist'), without_prefix.removesuffix(' playlist'),
+                                          without_prefix.removesuffix(' playlists'))))
+        for candidate in candidates:
             matches = [row['id'] for row in rows if row['name'].casefold() == candidate]
+            if matches:
+                return matches
+        for candidate in candidates:
+            loose = self._loose_name(candidate)
+            matches = [row['id'] for row in rows if loose and self._loose_name(row['name']) == loose]
             if matches:
                 return matches
         return []
@@ -1207,6 +1220,21 @@ class MusicLibrary:
             return row['id'], row['title']
         raise MusicLibraryError('Local Music has no playable songs yet. Import audio or finish downloading a playlist first.')
 
+    def _shuffled_followers(self, db, first: str, limit: int = 199) -> list[str]:
+        """Other playable songs in random order, one entry per recording."""
+        first_asset = db.execute('SELECT asset_id FROM entries WHERE id=?', (first,)).fetchone()
+        seen = {first_asset['asset_id']} if first_asset else set()
+        followers = []
+        for row in db.execute('''SELECT e.id, a.id AS asset, a.suffix FROM entries e JOIN assets a ON a.id=e.asset_id
+                JOIN collections c ON c.id=e.collection_id WHERE c.pending_import=0 ORDER BY random()'''):
+            if row['asset'] in seen or not (self.assets / (row['asset'] + row['suffix'])).is_file():
+                continue
+            seen.add(row['asset'])
+            followers.append(row['id'])
+            if len(followers) >= limit:
+                break
+        return followers
+
     def _player(self, db):
         row = db.execute('SELECT * FROM player WHERE id=1').fetchone()
         return LocalPlayerState(**{**json.loads(row['state']),'owner_available':bool(row['owner'] and row['expires']>time.time())})
@@ -1214,44 +1242,221 @@ class MusicLibrary:
     def player_state(self):
         with self.db() as db: return self._player(db)
 
+    @staticmethod
+    def _title(entry: dict | None) -> str:
+        if not entry:
+            return 'this song'
+        title = '“' + str(entry.get('title') or 'Untitled') + '”'
+        return title + (' by ' + entry['artist'] if entry.get('artist') else '')
+
+    def _entry_metadata(self, db, identity: str) -> dict | None:
+        if not identity:
+            return None
+        row = db.execute('SELECT e.metadata, e.collection_id, e.asset_id, c.name AS collection FROM entries e '
+                         'JOIN collections c ON c.id=e.collection_id WHERE e.id=?', (identity,)).fetchone()
+        if row is None:
+            return None
+        return {**json.loads(row['metadata']), 'collection_id':row['collection_id'], 'collection':row['collection'], 'asset_id':row['asset_id']}
+
+    @staticmethod
+    def _live_seconds(state) -> float:
+        """Position now, from the player's last report plus the time since it."""
+        observed = state.observed or {}
+        current = state.queue[state.index] if state.queue and state.index < len(state.queue) else ''
+        if observed.get('entry_id') != current or not MusicLibrary._report_is_current(state):
+            return state.seconds
+        seconds = float(observed.get('seconds') or 0)
+        if observed.get('playing') and observed.get('at'):
+            seconds += max(0.0, time.time() - float(observed['at']))
+        return seconds
+
+    @staticmethod
+    def _report_is_current(state) -> bool:
+        return (state.observed or {}).get('revision', state.revision) == state.revision
+
+    @staticmethod
+    def _current_identity(state) -> str:
+        """The entry the player is actually holding; the queue is the fallback."""
+        observed = state.observed or {}
+        # A report from before the latest command (skip, play) describes the
+        # old song; the command's queue position is the truth until it catches up.
+        current_report = observed.get('revision', state.revision) == state.revision
+        if observed.get('entry_id') and current_report and (not state.queue or observed['entry_id'] in state.queue):
+            return observed['entry_id']
+        return state.queue[state.index] if state.queue and state.index < len(state.queue) else ''
+
     def playback(self, request: LocalPlaybackRequest):
-        message = 'Local playback command queued; the player reports whether it was applied.'
+        message = ''
         with self.db() as db:
             state = self._player(db)
             if request.expected_revision is not None and (request.expected_revision != state.revision or not state.playing):
                 return {'changed':False,'revision':state.revision,'_message':'The local queue has already moved on or paused.'}
             current = state.queue[state.index] if state.queue and state.index<len(state.queue) else ''
-            if state.observed.get('entry_id') == current:
+            if state.observed.get('entry_id') == current and self._report_is_current(state):
                 state.seconds = state.observed.get('seconds',state.seconds)
+            if request.action in {'like', 'unlike'}:
+                return self._set_liked(db, state, request.action == 'like')
             if request.action == 'play':
                 if request.pick_any:
-                    identity, title = self._pick_playable_song(db)
-                    request = request.model_copy(update={'entry_ids':[identity]})
-                    message = f'Queued “{title}” from Local Music.'
+                    # A random pick continues through the rest of the library, so
+                    # "skip" and "what's next" have somewhere to go.
+                    identity, _title = self._pick_playable_song(db)
+                    request = request.model_copy(update={'entry_ids':[identity, *self._shuffled_followers(db, identity)]})
                 elif request.query:
                     choices = self._resolve_play_query(db, request.query)
                     if not choices: raise MusicLibraryError('No unique, playable local song or playlist matches that name. Select the recording in Music → Local library.')
                     request = request.model_copy(update={'entry_ids':choices,'position':0})
-                    message = f'Queued {request.query} from Local Music.'
+                    groups = self._matching_playlists(db, request.query)
+                    if len(groups) == 1:
+                        name = db.execute('SELECT name FROM collections WHERE id=?', groups).fetchone()['name']
+                        self._validate_play_queue(db, request.entry_ids)
+                        state.queue,state.index,state.seconds,state.playing = request.entry_ids,0,0,True
+                        state.revision += 1
+                        db.execute('UPDATE player SET state=? WHERE id=1',(state.model_dump_json(),))
+                        first = self._title(self._entry_metadata(db, choices[0]))
+                        return {'changed':True,'revision':state.revision,'_message':f'Playing your “{name}” playlist, starting with {first}.'}
                 if not request.entry_ids or request.position >= len(request.entry_ids): raise MusicLibraryError('Choose a local song to play.')
                 self._validate_play_queue(db, request.entry_ids)
                 state.queue,state.index,state.seconds,state.playing = request.entry_ids,request.position,0,True
-            elif request.action == 'pause': state.playing = False
+                message = 'Playing ' + self._title(self._entry_metadata(db, state.queue[state.index])) + '.'
+            elif request.action == 'pause':
+                state.playing = False
+                message = 'Paused.'
             elif request.action == 'resume':
                 if not state.queue: raise MusicLibraryError('Choose a local song first.')
                 self.asset_path(state.queue[state.index]); state.playing = True
                 if state.observed.get('duration',0) and state.seconds >= state.observed['duration']-0.2: state.seconds = 0
+                message = 'Playing ' + self._title(self._entry_metadata(db, state.queue[state.index])) + '.'
             elif request.action in {'next','previous'}:
                 if not state.queue: raise MusicLibraryError('The local queue is empty.')
                 state.index = (random.SystemRandom().randrange(len(state.queue)) if state.shuffle else (state.index+(1 if request.action=='next' else -1))%len(state.queue))
                 state.seconds = 0
-            elif request.action == 'seek': state.seconds = request.seconds
-            elif request.action == 'volume': state.volume = request.volume
-            elif request.action == 'shuffle': state.shuffle = request.enabled
-            elif request.action == 'repeat': state.repeat = request.repeat
+                message = 'Playing ' + self._title(self._entry_metadata(db, state.queue[state.index])) + '.'
+            elif request.action == 'seek':
+                state.seconds = request.seconds
+                message = 'Back to the start.' if request.seconds == 0 else f'Moved to {int(request.seconds)//60}:{int(request.seconds)%60:02d}.'
+            elif request.action == 'seek_by':
+                if not state.queue: raise MusicLibraryError('Nothing is playing in Local Music.')
+                duration = float(state.observed.get('duration') or 0)
+                target = self._live_seconds(state) + request.delta
+                state.seconds = max(0.0, min(target, duration - 1) if duration > 1 else target)
+                amount = abs(int(request.delta))
+                span = (f'{amount // 60} min' + (f' {amount % 60} s' if amount % 60 else '')) if amount >= 60 else f'{amount} seconds'
+                message = ('Skipped ahead ' if request.delta >= 0 else 'Went back ') + span + '.'
+            elif request.action in {'volume', 'volume_by', 'mute', 'unmute'}:
+                if request.action == 'mute':
+                    if state.volume > 0:
+                        state.muted_volume = state.volume
+                    state.volume = 0
+                    message = 'Muted.'
+                else:
+                    if request.action == 'volume':
+                        state.volume = request.volume
+                    elif request.action == 'volume_by':
+                        state.volume = round(max(0.0, min(1.0, state.volume + request.delta)), 2)
+                    else:
+                        state.volume = state.muted_volume or (state.volume if state.volume > 0 else 0.7)
+                    if state.volume > 0:
+                        state.muted_volume = None
+                    message = ('Unmuted. ' if request.action == 'unmute' else '') + f'Volume is {round(state.volume*100)}%.'
+            elif request.action == 'shuffle':
+                state.shuffle = request.enabled
+                message = 'Shuffle is ' + ('on.' if request.enabled else 'off.')
+            elif request.action == 'repeat':
+                state.repeat = request.repeat
+                message = {'off':'Repeat is off.','all':'Repeating this queue.','one':'Repeating this song.'}[request.repeat]
             state.revision += 1
             db.execute('UPDATE player SET state=? WHERE id=1',(state.model_dump_json(),))
-        return {'changed':True,'revision':state.revision,'_message':message}
+        return {'changed':True,'revision':state.revision,'_message':message or 'Done.'}
+
+    LIKED_ID = 'liked'
+
+    def _set_liked(self, db, state, liked: bool):
+        identity = self._current_identity(state)
+        entry = self._entry_metadata(db, identity)
+        if entry is None or not entry.get('asset_id'):
+            raise MusicLibraryError('Nothing is playing in Local Music to like.')
+        name = self._title(entry)
+        existing = [row['id'] for row in db.execute(
+            'SELECT id FROM entries WHERE collection_id=? AND asset_id=?', (self.LIKED_ID, entry['asset_id']))]
+        if liked:
+            if existing:
+                return {'changed':False,'liked':True,'_message':f'{name} is already in your Liked Songs.'}
+            db.execute("INSERT OR IGNORE INTO collections(id,name,source_url,completeness,note,pending_import,auto_import) VALUES(?,?,'','complete','',0,0)",
+                (self.LIKED_ID, 'Liked Songs'))
+            position = db.execute('SELECT coalesce(max(position),-1)+1 FROM entries WHERE collection_id=?', (self.LIKED_ID,)).fetchone()[0]
+            metadata = {key:value for key,value in entry.items() if key in MusicSourceEntry.model_fields}
+            db.execute('INSERT INTO entries VALUES(?,?,?,?,?)', (uuid4().hex, self.LIKED_ID, position, json.dumps(metadata), entry['asset_id']))
+            return {'changed':True,'liked':True,'_message':f'Added {name} to your Liked Songs.'}
+        if not existing:
+            return {'changed':False,'liked':False,'_message':f'{name} is not in your Liked Songs.'}
+        # Keep playback going when it runs from Liked Songs itself: point the
+        # queue at another copy of the same recording before removing the like.
+        alternative = db.execute('SELECT id FROM entries WHERE asset_id=? AND collection_id<>? LIMIT 1',
+                                 (entry['asset_id'], self.LIKED_ID)).fetchone()
+        removed = set(existing)
+        if alternative:
+            queue = [alternative['id'] if item in removed else item for item in state.queue]
+            position = state.index
+        else:
+            queue = [item for item in state.queue if item not in removed]
+            position = sum(item not in removed for item in state.queue[:state.index])
+        if queue != state.queue:
+            state.queue, state.index = queue, min(position, max(0, len(queue)-1))
+            state.playing = state.playing and bool(queue)
+            state.revision += 1
+            db.execute('UPDATE player SET state=? WHERE id=1',(state.model_dump_json(),))
+        db.executemany('DELETE FROM entries WHERE id=?', [(item,) for item in existing])
+        if not db.execute('SELECT 1 FROM entries WHERE collection_id=?', (self.LIKED_ID,)).fetchone():
+            db.execute('DELETE FROM collections WHERE id=?', (self.LIKED_ID,))
+        return {'changed':True,'liked':False,'_message':f'Removed {name} from your Liked Songs.'}
+
+    def now_playing(self, detail: str = 'song'):
+        """Answer from what the player holds right now, never from chat history."""
+        with self.db() as db:
+            state = self._player(db)
+            identity = self._current_identity(state)
+            entry = self._entry_metadata(db, identity)
+            liked = bool(entry and entry.get('asset_id') and db.execute(
+                'SELECT 1 FROM entries WHERE collection_id=? AND asset_id=?', (self.LIKED_ID, entry['asset_id'])).fetchone())
+            index = state.queue.index(identity) if identity in state.queue else state.index
+            upcoming = [] if state.shuffle else [self._entry_metadata(db, item) for item in state.queue[index+1:index+6]]
+            if not upcoming and state.repeat == 'all' and not state.shuffle and state.queue:
+                upcoming = [self._entry_metadata(db, item) for item in state.queue[:min(5, index)]]
+        upcoming = [item for item in upcoming if item]
+        playing = bool(state.owner_available and (state.observed.get('playing') if self._report_is_current(state) else state.playing))
+        result = {'changed':False, 'playing':playing, 'liked':liked, 'entry_id':identity,
+                  'title':(entry or {}).get('title',''), 'artist':(entry or {}).get('artist',''),
+                  'album':(entry or {}).get('album',''), 'playlist':(entry or {}).get('collection',''),
+                  'next':[{'title':item.get('title',''),'artist':item.get('artist','')} for item in upcoming]}
+        if entry is None:
+            return {**result, '_message':'Nothing is playing in Local Music right now.'}
+        name = self._title(entry)
+        if detail == 'artist':
+            message = f'“{entry.get("title") or "This song"}” is by {entry["artist"]}.' if entry.get('artist') else f'Local Music has no artist saved for {name}.'
+        elif detail == 'album':
+            message = f'{name} is from {entry["album"]}.' if entry.get('album') else f'Local Music has no album saved for {name}.'
+        elif detail == 'playlist':
+            message = f'{name} is playing from your “{entry["collection"]}” playlist.'
+        elif detail == 'next':
+            if state.shuffle:
+                message = 'Shuffle is on, so the next song is picked when this one ends.'
+            elif upcoming:
+                message = 'Up next: ' + self._title(upcoming[0]) + '.'
+            else:
+                message = 'Nothing is queued after this song.'
+        elif detail == 'queue':
+            if state.shuffle:
+                message = f'Shuffle is on across {len(state.queue)} songs, so there is no fixed order.'
+            elif upcoming:
+                message = 'Up next: ' + '; '.join(f'{i}. {self._title(item)}' for i, item in enumerate(upcoming, 1)) + '.'
+            else:
+                message = 'Nothing is queued after this song.'
+        elif detail == 'liked':
+            message = f'{name} is ' + ('in' if liked else 'not in') + ' your Liked Songs.'
+        else:
+            message = ('Now playing ' if playing else 'Paused on ') + name + '.'
+        return {**result, '_message':message}
 
     def report(self, report):
         with self.db() as db:
@@ -1260,8 +1465,11 @@ class MusicLibrary:
                 return {'accepted':False,'player':self._player(db).model_dump()}
             state = self._player(db)
             if report.revision == state.revision:
-                state.observed = {'entry_id':report.entry_id,'playing':report.playing,'seconds':report.seconds,
-                    'duration':report.duration,'error':report.error,'at':time.time()}
+                previous, now = state.observed or {}, time.time()
+                state.observed = {'entry_id':report.entry_id,'playing':report.playing,'seconds':report.seconds,'revision':report.revision,
+                    'duration':report.duration,'error':report.error,'at':now,
+                    'playing_since':(previous.get('playing_since') if previous.get('playing') else now) if report.playing else previous.get('playing_since', 0),
+                    'last_playing_at':now if report.playing else previous.get('last_playing_at', 0)}
             db.execute('UPDATE player SET state=?,owner=?,expires=? WHERE id=1',(state.model_dump_json(),report.owner_id,time.time()+8))
             return {'accepted':True,'player':state.model_dump()}
 

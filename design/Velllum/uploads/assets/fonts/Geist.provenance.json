@@ -1,0 +1,13 @@
+{
+  "publisher": "Vercel",
+  "source": "https://registry.npmjs.org/geist/-/geist-1.9.2.tgz",
+  "homepage": "https://vercel.com/font",
+  "license": "OFL-1.1",
+  "files": [
+    {
+      "file": "GeistSerifVF.woff2",
+      "bytes": 49036,
+      "sha256": "022e59b139ab2ce6962d91fe08539ea9e5f4a734d1bdffbf6fbbb9bc46921e96"
+    }
+  ]
+}

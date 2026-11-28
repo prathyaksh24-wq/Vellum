@@ -6118,7 +6118,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             ])),
         })
         # Music actions read provider or local library data. Keep the API event loop responsive.
-        if any(action.action_id == "spotify.playback.control" or action.action_id.startswith("local_music.")
+        if any(action.action_id.startswith(("spotify.playback.", "local_music."))
                for action in submitted_actions):
             action_receipts = await asyncio.to_thread(_app_action_runtime.dispatch_many, submitted_actions, action_context)
         else:

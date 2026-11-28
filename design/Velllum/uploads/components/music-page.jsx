@@ -435,6 +435,35 @@
     const footerVisible=!isLocal || !!local.library?.collections.length;
     const displayCollections=isLocal?local.library?.collections || []:isApple?[]:playlists;
     const navigate=id => {setScreen(id);clearSearch();closeCollection();};
+    // Heart: liked state of the current song, read from the same App Actions
+    // that chat uses ("like this song"), for Spotify and Local Music alike.
+    const [likedNow,setLikedNow]=useState(null);
+    const [likeBusy,setLikeBusy]=useState(false);
+    const likeKey=(isLocal?'local:':'spotify:')+(now?.uri || '');
+    useEffect(() => {
+      setLikedNow(null);
+      if (!now?.uri || isApple || !canPlay) return;
+      let cancelled=false;
+      const request=isLocal?{action_id:'local_music.now_playing',arguments:{detail:'liked'}}:{action_id:'spotify.playback.status',arguments:{detail:'liked'}};
+      window.VellumApi.appActions.dispatch(request,{source:'ui'}).then(receipt => {
+        if (!cancelled && receipt?.status==='applied' && typeof receipt.result?.liked==='boolean') setLikedNow(receipt.result.liked);
+      }).catch(() => {});
+      return () => {cancelled=true;};
+    }, [likeKey, canPlay]);
+    const toggleLike=async () => {
+      if (!now?.uri || likeBusy || isApple) return;
+      const like=!likedNow;
+      setLikeBusy(true);
+      try {
+        const receipt=await window.VellumApi.appActions.dispatch(isLocal?{action_id:'local_music.playback',arguments:{action:like?'like':'unlike'}}:{action_id:'spotify.playback.control',arguments:{action:like?'save_current':'remove_current'}},{source:'ui'});
+        if (receipt?.status==='applied') {
+          setLikedNow(typeof receipt.result?.liked==='boolean'?receipt.result.liked:like);
+          // Spotify saves to the account's Liked Songs; refresh its card count.
+          if (isLocal) local.refresh(true).catch(() => {}); else refreshLiked();
+        }
+      } catch (_) {}
+      finally {setLikeBusy(false);}
+    };
     useEffect(() => {
       if (!navigationRequest) return;
       const route = navigationRequest.route;
@@ -620,7 +649,7 @@
         </div>}
       </main>
       {footerVisible && <footer className="mw-player" aria-label="Music player">
-        <button className="mw-player-info" aria-label="Open now playing" onClick={() => {setScreen('queue');setQueueExpanded(false);}}><Artwork item={now || {name:'No song selected',kind:'track'}}/><span><b>{now?.name || 'Choose a song'}</b><small>{now?artists(now):isApple?'Apple Music · Coming later':isLocal?'Your local library':'Spotify'}</small></span></button><button className="mw-icon-button mw-player-heart" aria-label="Favorite current song" disabled title="Favorites are not available yet"><Icon name="heart"/></button>
+        <button className="mw-player-info" aria-label="Open now playing" onClick={() => {setScreen('queue');setQueueExpanded(false);}}><Artwork item={now || {name:'No song selected',kind:'track'}}/><span><b>{now?.name || 'Choose a song'}</b><small>{now?artists(now):isApple?'Apple Music · Coming later':isLocal?'Your local library':'Spotify'}</small></span></button><button className="mw-icon-button mw-player-heart" aria-label={likedNow?'Remove from Liked Songs':'Add to Liked Songs'} aria-pressed={!!likedNow} data-liked={likedNow?'true':undefined} disabled={!now?.uri || !canPlay || likeBusy || isApple} title={likedNow?'Remove from Liked Songs':'Add to Liked Songs'} onClick={toggleLike}><Icon name="heart"/></button>
         <div className="mw-player-center">{transport()}{seek()}</div><div className="mw-player-right"><button className="mw-icon-button" aria-label="Open music queue" onClick={() => {setScreen('queue');setQueueExpanded(false);}}><Icon name="queue"/></button><button className="mw-icon-button" aria-label={level===0?'Unmute music':'Mute music'} disabled={!canPlay || controlBusy || level==null} onClick={() => {if(isLocal)control('set_volume',{volume:level===0 ? .7 : 0});else volumeToggle();}}><Icon name={level===0?'mute':'volume'}/></button><Range label="Music volume" value={level ?? 0} max={100} disabled={!canPlay || controlBusy || level==null} onCommit={volume_percent => control('set_volume',isLocal?{volume:volume_percent/100}:{volume_percent})}/><output className="mw-sr-only">{level==null?'Unknown volume':level+'%'}</output></div>
       </footer>}
       <nav className="mw-mobile-tabs" aria-label="Mobile music navigation">{[['home','Home','home'],['search','Search','search'],['playlists','Library','list'],[isLocal?'add':'sources','Sources','sources']].map(([id,label,icon]) => <button key={id} aria-current={screen===id?'page':undefined} onClick={() => navigate(id)}><Icon name={icon}/>{label}</button>)}</nav>

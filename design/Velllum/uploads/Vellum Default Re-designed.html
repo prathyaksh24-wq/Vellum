@@ -147,7 +147,7 @@
   --color-1:var(--ember);--color-2:var(--accent2);--color-3:color-mix(in srgb,var(--ember) 55%,var(--txt2));--color-4:var(--txt2);--color-5:color-mix(in srgb,var(--accent2) 70%,var(--ember));
   --font-d:var(--font-ui);
   --font-m:"Cascadia Mono",Consolas,"Liberation Mono",monospace;
-  --font-ui:"SN Pro","Segoe UI","Nirmala UI",system-ui,sans-serif;
+  --font-ui:"Geist Serif","Times New Roman",Times,serif;
   --ui-space:4px;
   --ui-control-radius:8px;
   --ui-panel-radius:12px;
@@ -1977,7 +1977,7 @@ body{font-size:14px;font-family:var(--font-ui)}
 <link rel="stylesheet" href="components/sidebar-inset.css?v=20261030-clean-music"/>
 <link rel="stylesheet" href="components/navigation-shell.css"/>
 <script type="text/babel" data-presets="react" src="components/navigation-shell.jsx?v=20261123-harness1"></script>
-<link rel="preload" href="assets/fonts/SNPro-VariableRegular.woff2" as="font" type="font/woff2" crossorigin/>
+<link rel="preload" href="assets/fonts/GeistSerifVF.woff2" as="font" type="font/woff2" crossorigin/>
 <link rel="stylesheet" href="components/typography.css"/>
 </head>
 <body>
@@ -10032,43 +10032,74 @@ const [slashSkills, setSlashSkills] = useState([]);
     removeFollowUp(chatId, item.id);
     sendMessage(item.text, item.attach, {...item.opts, conversationId: chatId, followUpRelease: true});
   };
-  const steerFollowUp = async (chatId, id) => {
+  // Steer sends at once: the message appears in the chat immediately and is
+  // handed to the running reply without stopping it. If the reply ends
+  // before reading it, it goes out as the next message instead.
+  const steersInFlightRef = useRef({});
+  const showSteerBubble = (chatId, item) => updateChat(chatId, chat => {
+    const bubble = {id: 'steer-' + item.id, role: 'user', steered: true, text: item.text, attachments: [], sent_at: new Date().toISOString()};
+    let index = -1;
+    for (let i = chat.messages.length - 1; i >= 0; i--) if (chat.messages[i].role === 'assistant' && chat.messages[i].streaming) { index = i; break; }
+    if (index < 0) return {...chat, messages: [...chat.messages, bubble]};
+    return {...chat, messages: [...chat.messages.slice(0, index), bubble, ...chat.messages.slice(index)]};
+  }, true);
+  const dropSteerBubble = (chatId, id) => updateChat(chatId, chat => ({...chat, messages: chat.messages.filter(message => message.id !== 'steer-' + id)}), true);
+  const steerFollowUp = (chatId, id) => {
     const item = (followUpsRef.current[chatId] || []).find(entry => entry.id === id);
-    if (!item || item.status === 'steering') return;
-    if (!activeRunsRef.current.has(chatId)) { sendFollowUpNow(chatId, item); return; }
-    setChatFollowUps(chatId, items => items.map(entry => entry.id === id ? {...entry, status:'steering', error:''} : entry));
+    // Files go with a normal turn, so they wait for the reply to finish.
+    if (!item || (item.attach || []).length) return;
+    removeFollowUp(chatId, id);
+    if (!activeRunsRef.current.has(chatId)) { sendMessage(item.text, item.attach, {...item.opts, conversationId: chatId, followUpRelease: true}); return; }
+    steersInFlightRef.current[chatId] = {...(steersInFlightRef.current[chatId] || {}), [id]: {item, held: false}};
+    showSteerBubble(chatId, item);
+    deliverSteer(chatId, id);
+  };
+  // The reply accepts a steer once its model loop runs; until then retry quietly.
+  const deliverSteer = async (chatId, id) => {
+    const entry = steersInFlightRef.current[chatId]?.[id];
+    if (!entry || entry.held || !activeRunsRef.current.has(chatId)) return;
     try {
-      const result = await API.chat.steer({thread_id: followUpThread(chatId), message: item.text, id});
-      // The reply ended before the steer arrived: send it as its own message.
-      if (result?.status === 'no_active_turn') sendFollowUpNow(chatId, item);
-    } catch {
-      setChatFollowUps(chatId, items => items.map(entry => entry.id === id ? {...entry, status:'queued', error:'Could not steer. It will send after this response.'} : entry));
-    }
+      const result = await API.chat.steer({thread_id: followUpThread(chatId), message: entry.item.text, id});
+      if (result?.status === 'pending') { entry.held = true; return; }
+    } catch {}
+    setTimeout(() => deliverSteer(chatId, id), 700);
   };
   const acceptSteers = (chatId, assistantId, steers) => {
     const ids = new Set((steers || []).map(steer => steer.id));
     if (!ids.size) return;
+    const inFlight = steersInFlightRef.current[chatId] || {};
+    for (const id of ids) delete inFlight[id];
     const pending = followUpsRef.current[chatId] || [];
     setChatFollowUps(chatId, items => items.filter(item => !ids.has(item.id)));
-    // The steer joined the running turn: show it as your message, with the
-    // reply (which now takes it into account) continuing below it.
+    // The steer joined the running turn: show it as your message (unless the
+    // Steer click already did), with the reply continuing below it.
     updateChat(chatId, chat => {
       const index = chat.messages.findIndex(message => message.id === assistantId);
       if (index < 0) return chat;
-      const steered = steers.map(steer => {
+      const shown = new Set(chat.messages.map(message => message.id));
+      const steered = steers.filter(steer => !shown.has('steer-' + steer.id)).map(steer => {
         const item = pending.find(entry => entry.id === steer.id);
         return {id: 'steer-' + steer.id, role: 'user', steered: true, text: item?.text || steer.text, attachments: [], sent_at: new Date().toISOString()};
       });
+      if (!steered.length) return chat;
       const messages = chat.messages.filter(message => message.id !== assistantId);
       return {...chat, messages: [...messages, ...steered, chat.messages[index]]};
     }, true);
   };
   const releaseFollowUps = async (chatId, {aborted = false} = {}) => {
-    for (const item of [...(followUpsRef.current[chatId] || [])]) {
-      if (item.status === 'steering') {
+    // Steers the reply never read: take them back and send them as messages.
+    const inFlight = steersInFlightRef.current[chatId] || {};
+    delete steersInFlightRef.current[chatId];
+    for (const {item, held} of Object.values(inFlight)) {
+      if (held) {
         const result = await API.chat.reclaimSteer({thread_id: followUpThread(chatId), id: item.id}).catch(() => null);
-        if (result && result.status !== 'reclaimed') { removeFollowUp(chatId, item.id); continue; }
+        if (!result || result.status !== 'reclaimed') continue;
       }
+      dropSteerBubble(chatId, item.id);
+      if (aborted) setChatFollowUps(chatId, items => [...items, {...item, status: 'queued', error: ''}]);
+      else sendMessage(item.text, item.attach, {...item.opts, conversationId: chatId, followUpRelease: true});
+    }
+    for (const item of [...(followUpsRef.current[chatId] || [])]) {
       // A stopped reply keeps its follow-ups here (as Codex restores them);
       // a finished one sends them in order.
       if (aborted) setChatFollowUps(chatId, items => items.map(entry => entry.id === item.id ? {...entry, status:'queued', error:''} : entry));
@@ -10085,8 +10116,9 @@ const [slashSkills, setSlashSkills] = useState([]);
       const mode = opts.invertFollowUp ? (followUpMode === 'steer' ? 'queue' : 'steer') : followUpMode;
       const item = {id: uid(), text, attach: attach || [], opts: {...opts, invertFollowUp: false}, status: 'queued', error: ''};
       setChatFollowUps(chatId, items => [...items, item]);
-      // Files go with a normal turn; text-only follow-ups can steer.
-      if (mode === 'steer' && !(attach || []).length) steerFollowUp(chatId, item.id);
+      // Follow-ups wait in the tray with a Steer button; they send when the
+      // reply finishes, or at once when Steer is clicked.
+      void mode;
       return chatId;
     }
     const turnReasoningMode = existingChat ? existingChat.reasoning_mode || '' : opts.reasoningMode ?? draftReasoningMode;

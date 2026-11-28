@@ -130,7 +130,18 @@ class SpotifyClient:
             if diagnostics:
                 self._web_player["diagnostics"] = [*self._web_player.get("diagnostics", []), *diagnostics][-32:]
             if device_id and observation is not None:
-                self._web_player.update(observation=observation, observed_at=time.monotonic())
+                was_playing = bool((self._web_player.get('observation') or {}).get('is_playing'))
+                if observation.get('is_playing'):
+                    if not was_playing:
+                        self._web_player['playing_since'] = time.time()
+                    self._web_player['last_playing_at'] = time.time()
+                self._web_player.update(observation=observation, observed_at=time.monotonic(), confirmed_at=time.monotonic())
+            elif device_id and 'observation' in self._web_player:
+                # The player samples every second and only resends its state
+                # when it changes, so a heartbeat confirms the last state.
+                self._web_player['confirmed_at'] = time.monotonic()
+                if self._web_player['observation'].get('is_playing'):
+                    self._web_player['last_playing_at'] = time.time()
             if device_id and volume_percent is not None:
                 self._web_player.update(volume_percent=volume_percent, volume_observed_at=time.monotonic())
             pending = self._web_player.get('volume_request')
@@ -174,9 +185,16 @@ class SpotifyClient:
             now = time.monotonic()
             if not current or not current.get('device_id') or current['expires_at'] <= now:
                 return None
-            if 'observation' not in current or now-current.get('observed_at',0) > 5:
+            confirmed = max(current.get('observed_at',0), current.get('confirmed_at',0))
+            if 'observation' not in current or now-confirmed > 5:
                 return None
             state = dict(current['observation'])
+            if state.get('is_playing') and state.get('progress_ms') is not None:
+                # Unchanged playback keeps moving; project the position forward.
+                elapsed = int((now-current.get('observed_at',now))*1000)
+                duration = int(state.get('duration_ms') or 0)
+                progress = int(state['progress_ms']) + max(0, elapsed)
+                state['progress_ms'] = min(progress, duration) if duration else progress
             device = {'id':current['device_id'], 'name':'Vellum', 'is_active':True}
             if now-current.get('volume_observed_at',0) <= 5 and 'volume_percent' in current:
                 device.update(volume_percent=current['volume_percent'], supports_volume=True)
@@ -205,6 +223,8 @@ class SpotifyClient:
             live = current["expires_at"] > time.monotonic()
             return {"status": "ready" if live and current["device_id"] else "reconnecting",
                     "device_id": current['device_id'] if live else '',
+                    "playing_since": float(current.get('playing_since') or 0),
+                    "last_playing_at": float(current.get('last_playing_at') or 0),
                     "diagnostics": list(current.get("diagnostics", [])),
                     "commands": dict(current.get("commands", {}))}
 

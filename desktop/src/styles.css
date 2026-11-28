@@ -1,3 +1,10 @@
+@font-face {
+  font-family: "Geist Serif";
+  src: url("../assets/fonts/GeistSerifVF.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   --graphite: #0c0c0e;
   --parchment: #ece6db;
@@ -12,7 +19,7 @@ body {
   min-height: 100vh;
   background: var(--graphite);
   color: var(--parchment);
-  font-family: "Segoe UI", sans-serif;
+  font-family: "Geist Serif", "Times New Roman", serif;
 }
 
 .desktop-shell {
@@ -23,7 +30,7 @@ body {
 }
 
 .mark {
-  font-family: Georgia, serif;
+  font-family: "Geist Serif", "Times New Roman", serif;
   font-size: 42px;
   letter-spacing: 0;
 }

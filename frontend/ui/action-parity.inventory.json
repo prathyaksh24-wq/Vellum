@@ -66,8 +66,8 @@
       "sha256": "43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"
     },
     "design/Velllum/uploads/components/music-page.jsx": {
-      "count": 111,
-      "sha256": "42d09cfd32a7e20e2a3b163735b37417d41a0698c02dfe4446743bc8e9c32c8e"
+      "count": 112,
+      "sha256": "212e9cc1f18f0438d1626d66077129cd19a7c4861f0cf39aefb74ecda3668759"
     },
     "design/Velllum/uploads/components/automation-notifications.jsx": {
       "count": 22,
@@ -2379,6 +2379,15 @@
       "probe": {
         "path": "design/Velllum/uploads/components/music-page.jsx",
         "text": "offset_position:item.position"
+      }
+    },
+    {
+      "surface": "Music",
+      "name": "like or unlike the current song from the player heart",
+      "actionId": "spotify.playback.control",
+      "probe": {
+        "path": "design/Velllum/uploads/components/music-page.jsx",
+        "text": "action:like?'save_current':'remove_current'"
       }
     },
     {
